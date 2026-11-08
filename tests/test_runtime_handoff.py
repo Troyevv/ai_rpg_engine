@@ -31,7 +31,7 @@ def imported(client, value=None):
     return r.json()['save']
 
 def arrival(actor='viktoria_solovyova', evidence=NARRATIVE):
-    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
+    return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
                 movements=[dict(actor_id=actor,to_location_id='ilya_cabinet',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)],
                 events=[dict(id='arrival',text=evidence,participants=[actor],location_id='ilya_cabinet',medium='action')])
 

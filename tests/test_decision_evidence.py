@@ -212,6 +212,7 @@ def test_npc_proposal_or_independent_decision_needs_no_player_quote(game, decisi
     for key in ('actor_id', 'target_ids', 'player_action_id'):
         raw['events'][0].pop(key)
     raw['player_agency']['actions'] = []
+    raw['player_agency']['narrative_audit'] = []  # This control now describes only NPC decisions.
     text = 'Вера решила убрать свои фотографии.' if decision else 'Вера предлагает разобрать фотографии.'
     raw['events'][0].update(text=text, evidence='Разговор о фотографиях продолжается. ' + text)
     raw['continuity_beats'][0].update(actor_id='qa_vera', target_ids=[ACTOR_ID], evidence=text,

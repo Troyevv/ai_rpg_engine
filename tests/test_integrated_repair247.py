@@ -70,11 +70,16 @@ def history(repo, sid):
         return read_history(db, repo.get_snapshot(sid)['history_head'])[0]
 
 
-def execute(repo, sid, data, replies, *, retry=None, kind='turn', config=None):
+def execute(repo, sid, data, replies, *, retry=None, kind='turn', config=None, legacy=True):
     config = config or CONFIG
     if retry:
         repo.retry_job(retry, config)
     jid = retry or repo.begin_job(sid, data['player_input'] if kind=='turn' else '', kind, config)
+    if legacy and not retry and kind != 'regenerate':
+        with repo.connect() as db:
+            saved = json.loads(repo.get_job(jid)['config_json'])
+            saved.pop('_extraction_contract', None)
+            db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (json.dumps(saved), jid))
     calls = []
     replies = iter(deepcopy(replies))
     def stream(**kw):

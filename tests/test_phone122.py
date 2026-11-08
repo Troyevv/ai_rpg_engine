@@ -190,7 +190,7 @@ def test_reschedule_cancel_one_id_and_no_read_side_effects(tmp_path):
                 remote_source_ids=[authored['id'],reply['id']],remote_time_source_id=authored['id'],
                 player_assertion='explicit_choice',player_evidence=text)
             if assertion=='rescheduled':row['temporal']={'day_offset':1,'day_period':'evening'}
-            return dict(player_agency=dict(status='preserved', actions=[]),final_scene=data['final_scene'],scheduled_event_changes=[row])
+            return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=data['final_scene'],scheduled_event_changes=[row])
         known=deepcopy(repo.get_save(sid)['state']['world']['scheduled_events']['phone-meeting'])
         jid=dispatch(repo,client,sid,text,'phone122-change-'+str(i));execute(repo,jid,transform=transform)
         perceived=repo.get_save(sid)['state']['world']['scheduled_events']['phone-meeting']
@@ -212,7 +212,7 @@ def test_full_smoke_skip_stops_at_meeting_then_evidence_resolves_and_next_turn(t
     state=repo.get_snapshot(sid)['world_state'];deadline=scheduled_window(state,state['scheduled_events']['phone-meeting'])['start_minute']
     def run(text,records,skip=None):
         camera=repo.get_snapshot(sid)['world_state']['camera']
-        payload=dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),scheduled_event_changes=records)
+        payload=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),scheduled_event_changes=records)
         with patch('engine.launch'):
             res=client.post(f'/api/saves/{sid}/turns',json=dict(text=text,kind='turn',config=CONFIG,revision=repo.get_save(sid)['revision'],**({'time_skip':dict(duration=skip,reason='Дождаться встречи')} if skip else {})))
         assert res.status_code==200,res.text
@@ -224,7 +224,7 @@ def test_full_smoke_skip_stops_at_meeting_then_evidence_resolves_and_next_turn(t
             camera=json.loads(current.split('\n',1)[1])['camera'] if current else payload['final_scene']
             raw=deepcopy(payload)
             if camera.get('controlled_actor_id') is None:
-                raw=dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0))
+                raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0))
             yield json.dumps(raw,ensure_ascii=False) if kw.get('response_format') else text
         with patch('engine.find_loaded_model',return_value={'config':{}}), patch('engine.chat_stream',side_effect=provider):
             engine.run_job(repo.path,jid,engine.Worker())
@@ -285,7 +285,7 @@ def test_call_agreement_mixed_physical_event_and_owner_switch(tmp_path):
     camera=state['camera'];speech='Давай встретимся завтра.'
     physical='За дверью раздался стук.'
     answer='Вера ответила по телефону: «Да, договорились».'
-    raw=dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),events=[
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),events=[
         dict(id='voice',text=answer,evidence=answer,participants=['qa_kirill','qa_vera'],witnesses=['qa_kirill','qa_vera'],medium='conversation',interaction_channel='call'),
         dict(id='knock',text=physical,evidence=physical,participants=['qa_kirill'],witnesses=['qa_kirill'],medium='observation',interaction_channel='physical')],
         scheduled_event_changes=[dict(id='call-meeting',description='Встреча после звонка',character_ids=['qa_kirill','qa_vera'],temporal=dict(day_offset=1),assertion='agreed',evidence=answer,player_assertion='explicit_choice',player_evidence=speech)])
@@ -329,7 +329,7 @@ def test_autonomous_incoming_reply_uses_ordinary_extraction_without_recap(tmp_pa
         current=json.loads(next(m['content'].split('\n',1)[1] for m in ms if m['content'].startswith('Текущее состояние / GM-only\n')))
         rows=current['communication']['accepted_semantic_messages'];camera=current['camera']
         value=extract(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),accepted_messages=rows,controlled_actor_id='qa_kirill'))
-        value['player_agency'] = dict(status='preserved', actions=[])
+        value['player_agency'] = dict(status='preserved', actions=[], narrative_audit=[])
         yield json.dumps(value,ensure_ascii=False)
     jid=repo.begin_job(sid,'Посмотреть в окно.','turn',CONFIG)
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):

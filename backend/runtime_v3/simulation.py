@@ -10,6 +10,15 @@ from backend.runtime_v3.models import assert_world_state_v3_invariants,fatal
 from backend.services.world_delta_errors import StructuralDeltaError
 
 
+def background_resolver_options(state):
+    """Shared hidden-simulation boundary for production and offline/live QA."""
+    visible = set(state['camera']['present_character_ids']) | set(state['camera'].get('observed_character_ids', []))
+    return dict(observed=False, mode='background',
+                protected_actor_id=state['camera']['controlled_actor_id'],
+                protected_knowledge_actor_ids=visible, require_player_agency=False,
+                agency_audit_required=False)
+
+
 def simulate(before_snapshot, snapshot, history_batch, context_length, config, generate,cancelled,warnings,on_repair,world_history=None):
     before,state=before_snapshot['world_state'],snapshot['world_state']
     batch=[]
@@ -21,8 +30,9 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         candidate=background_candidate(before,state)
     if not candidate or cancelled.is_set():return snapshot,history_batch
     camera=observe(snapshot,actor_id=candidate['actor_id'],allow_protagonist=True)
-    protected=state['camera']['controlled_actor_id']
-    visible_actors = set(state['camera']['present_character_ids']) | set(state['camera'].get('observed_character_ids', []))
+    boundary=background_resolver_options(state)
+    protected=boundary['protected_actor_id']
+    visible_actors=boundary['protected_knowledge_actor_ids']
     if batch: camera['_background_actor_ids']=list({cid for item in batch for cid in item['actor_ids']})
     instruction=('Фоновая симуляция: '+candidate['reason']+'. Продолжи только эту ситуацию до текущего времени мира. '
         'elapsed_minutes=0. Не действуй за управляемого персонажа '+str(protected)+'. Не добавляй его в сцену. '
@@ -41,7 +51,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            resolved=StateResolver(camera['world_state'],narrative,'',letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,protected_knowledge_actor_ids=visible_actors,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
+            resolved=StateResolver(camera['world_state'],narrative,'',letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],**boundary,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 relationship_query=(world_history or {}).get('_relationship_query'),relationship_receipts=history_batch.get('relationship_changes',[]),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:

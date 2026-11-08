@@ -21,7 +21,7 @@ def run(repo,job,raw):
 
 def raw_for(snapshot):
     camera=snapshot['world_state']['camera']
-    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+    return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
         choices=[dict(action='Действие '+str(i),speech='') for i in range(6)])
 
 
@@ -102,7 +102,7 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
             block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
             state=json.loads(block.split('\n',1)[1]);camera=state['camera']
             current=camera['controlled_actor_id'] or camera['present_character_ids'][0]
-            raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=('hall' if step%2 else 'room') if kind=='turn' else camera['location_id'],present_character_ids=[current],elapsed_minutes=1),
+            raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=('hall' if step%2 else 'room') if kind=='turn' else camera['location_id'],present_character_ids=[current],elapsed_minutes=1),
                 character_changes=[dict(id=current,situation='У окна',emotion='ревнует',evidence='Разговор продолжается.')],
                 facts=[dict(id='f'+str(step),text='Факт '+str(step),evidence='Разговор продолжается.')],
                 events=[dict(id='e',text='Разговор',participants=[current],witnesses=[current],fact_ids=['f'+str(step)],medium='conversation',evidence='Разговор продолжается.')],
@@ -140,7 +140,7 @@ def test_optional_background_uses_v3_and_preserves_main_camera(db):
         if not kw.get('response_format'):yield 'Разговор продолжается.';return
         block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
         current=json.loads(block.split('\n',1)[1]);camera=current['camera'];background=camera['mode']=='observer'
-        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if background else 1))
+        raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if background else 1))
         if background:raw['character_changes']=[dict(id='b',situation='Закончил разговор',evidence='Разговор продолжается.')]
         yield json.dumps(raw)
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):engine.run_job(repo.path,job,engine.Worker())

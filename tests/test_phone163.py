@@ -28,7 +28,7 @@ def run(repo, jid, reply, transform=None):
                 value['action']['content'] = reply
         else:
             calls.append('semantic')
-            value = dict(player_agency=dict(status='preserved', actions=[]), final_scene=data['final_scene'])
+            value = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=data['final_scene'])
             rows = data['accepted_messages']
             offer = next((r for r in rows if r['content'] == OFFER), None)
             assent = next((r for r in rows if offer and r['ordinal'] > offer['ordinal'] and r['content'].startswith('Да,')), None)
@@ -183,7 +183,7 @@ def test_unusable_repair_preserves_original_valid_records(tmp_path, repair_kind)
     def invalid(raw, data):
         if 'repair' in data:
             if repair_kind == 'provider_failure': raise RuntimeError('Controlled repair transport failure')
-            return 'not an extraction object' if repair_kind == 'invalid_json_shape' else dict(player_agency=dict(status='preserved', actions=[]), final_scene=data['final_scene'])
+            return 'not an extraction object' if repair_kind == 'invalid_json_shape' else dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=data['final_scene'])
         bad = deepcopy(raw['scheduled_event_changes'][0]); bad.update(id='bad', location_id='unknown')
         raw['scheduled_event_changes'].append(bad)
         return raw

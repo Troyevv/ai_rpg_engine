@@ -111,7 +111,7 @@ def test_one_hour_meeting_in_either_direction_without_narrative_recap(tmp_path,c
             rows=data['accepted_messages']
             offer=next((e for e in rows if e['content']==proposal),None)
             assent=next((e for e in rows if offer and e['ordinal']>offer['ordinal'] and e['sender_id']!=offer['sender_id'] and e['content']=='Да, согласен.'),None)
-            raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=data['final_scene'])
+            raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=data['final_scene'])
             if assent:
                 player=offer if offer['sender_id']==data['controlled_actor_id'] else assent
                 raw['scheduled_event_changes']=[dict(id='one-hour',description='Встреча',assertion='agreed',

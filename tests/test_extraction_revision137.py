@@ -14,7 +14,7 @@ TEXT = 'Виктория молча пододвинула записку к И�
 
 def payload():
     raw = arrival()
-    raw['player_agency'] = dict(status='preserved', actions=[])
+    raw['player_agency'] = dict(status='preserved', actions=[], narrative_audit=[])
     raw['events'] += [dict(id='note', text=TEXT, participants=['ilya', NPC],
                          witnesses=['ilya'], medium='observation')]
     return raw

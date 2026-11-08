@@ -57,22 +57,10 @@ are not declarations. physical_state="" requires evidenced resolution; keep unre
 sleep alone is no cure. Directed feelings need prior relationship_evidence, or explicit current
 player override with player_assertion=explicit_directed_feelings and exact player_evidence.
 
-CONTRASTS (partial JSON)
-Intent «Workshop tonight; he leaves now» => {"movements":[]} + departure Event/END absence.
-Arrival «He reaches the workshop and enters» => Movement with that endpoint + arrival source
-Event at the same order; register a genuinely new location. Preparation alone keeps membership.
-Input «I open the folder»; prose adds hand/paper detail => {"player_agency":{"status":"preserved",
-"actions":[{"id":"open","player_evidence":"I open the folder","target_ids":[],
-"narrative_target_ids":[],"outcome":"completed","meaning":"preserved"}]}}.
-Same input + nod accepting invitation => {"player_agency":{"status":"violated",
-"actions":[]}}: reauthor even without a nod Event. Refusal gestures are also decisions.
-B seen across courtyard => observation subject B, witness A; no question/touch. Doorway talk
-=> conversation with established shared place, not observed proof.
-Unidentified clinician announces observed sex => {"source_actor_id":null,
-"source_assertion":"direct_observation","perceived_by":["listener"]} in sex_observations;
-use actual listeners, not a named mother's ID as speaker. Without disclosure: basis=not_disclosed.
-Background NPC reaches new inn => location + arrival Event/Movement; {"knowledge_gained":[]}
-if unwitnessed. Later report teaches its listeners via its own Event.
+Unidentified clinician discloses directly observed sex: sex_observations source_actor_id=null,
+source_assertion=direct_observation, perceived_by=actual listeners, not a substitute speaker.
+Without disclosure: basis=not_disclosed. Unwitnessed background arrival teaches nobody;
+a later report teaches only its own listeners.
 '''
 
 NARRATIVE_CONTRACT = '''

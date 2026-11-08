@@ -61,7 +61,7 @@ def test_skip_interrupt_and_budget():
  ('goals','Получить документы','Я получил документы.')])
 def test_complete_retains_history_and_projects_active(field,text,evidence):
     state=initial();state['characters']['a'][field]=[Motivation(id='item',text=text).model_dump()]
-    p=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',**{field+'_updates':[dict(id='item',status='completed',evidence=evidence)]})])
+    p=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',**{field+'_updates':[dict(id='item',status='completed',evidence=evidence)]})])
     resolved=StateResolver(state,evidence,evidence).resolve(p)
     assert resolved.state['characters']['a'][field][0]['status']=='completed'
     snapshot=snapshot_fixture();snapshot['world_state']=resolved.state
@@ -73,7 +73,7 @@ def test_complete_retains_history_and_projects_active(field,text,evidence):
 
 def test_agency_and_obligation_explicit_source():
     state=initial();quote='Хорошо, завтра отвезу тебя.'
-    p=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',situation='У двери',emotion='злится',evidence='Я сжал кулак у двери.',
+    p=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',situation='У двери',emotion='злится',evidence='Я сжал кулак у двери.',
       intentions_updates=[dict(text='Ударить Юру',status='active',evidence='Я сжал кулак у двери.')],
       obligations_updates=[dict(text='Отвезти тебя завтра',status='active',evidence=quote)])])
     result=StateResolver(state,'Я сжал кулак у двери.',quote).resolve(p)
@@ -89,14 +89,14 @@ def test_agency_and_obligation_explicit_source():
 
 def test_auxiliary_quote_does_not_override_extracted_completion():
     state=initial();state['characters']['a']['intentions']=[Motivation(id='x',text='Получить документы').model_dump()]
-    p=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',intentions_updates=[dict(id='x',status='completed',evidence='Я посмотрел в окно.')])])
+    p=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',intentions_updates=[dict(id='x',status='completed',evidence='Я посмотрел в окно.')])])
     r=StateResolver(state,'Он закрыл дверь.','').resolve(p)
     assert r.state['characters']['a']['intentions'][0]['status']=='completed'
 
 
 def test_relationship_semantics_hidden_new_pairs():
     state=initial();state['relationships']['a:b']=Relationship(source_id='a',target_id='b',dimensions=dict(trust=10,irritation=0)).model_dump()
-    p=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a']),relationship_changes=[dict(source_id='a',target_id='b',dimensions=dict(trust=15,irritation=5),evidence='Разговор окончен.',source_event_ids=['prior'],assertion='grounded_feelings',rationale='Поддержка и разногласие.')])
+    p=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a']),relationship_changes=[dict(source_id='a',target_id='b',dimensions=dict(trust=15,irritation=5),evidence='Разговор окончен.',source_event_ids=['prior'],assertion='grounded_feelings',rationale='Поддержка и разногласие.')])
     reader=lambda pair,ids:[dict(id='prior',participants=['a','b'],player_interaction=True)]
     result=StateResolver(state,'Разговор окончен.','',relationship_query=reader).resolve(p)
     notice=notifications(result.state,result.history)[0]
@@ -166,7 +166,7 @@ def test_long_skip_batch_hidden_state_and_knowledge(db):
         calls.append(kw)
         if not kw.get('response_format'):yield 'Разговор окончен.';return
         current=json.loads(next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние')).split('\n',1)[1]);camera=current['camera'];hidden=camera['mode']=='observer'
-        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0))
+        raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0))
         if hidden:
             raw.update(facts=[dict(id='secret',text='Тайна',evidence='Разговор окончен.')],events=[dict(id='e',text='Тайный разговор',participants=['b','c'],witnesses=['b','c'],fact_ids=['secret'],medium='conversation',evidence='Разговор окончен.')],
                 knowledge_gained=[dict(actor_id=cid,fact_id='secret',source_event_id='e',evidence='Разговор окончен.') for cid in ['a','b','c']],
@@ -187,7 +187,7 @@ def test_long_skip_batch_hidden_state_and_knowledge(db):
 def test_confirmed_scene_can_refresh_controlled_situation_without_emotion():
     state=initial();state['characters']['a']['situation']='Сидит дома'
     evidence='Разговор окончен. Все стоят у двери.'
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a'],situation='Стоит у двери после разговора',situation_evidence=evidence))
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a'],situation='Стоит у двери после разговора',situation_evidence=evidence))
     result=StateResolver(state,evidence,'').resolve(raw)
     assert result.state['characters']['a']['situation']=='Стоит у двери после разговора'
     assert not result.state['characters']['a']['emotion']
@@ -213,7 +213,7 @@ def test_lifecycle_rollback_and_regeneration(db):
 def test_answering_is_complete_but_promised_trip_is_still_active():
     state=initial();state['characters']['a']['intentions']=[Motivation(id='answer',text='Ответить Юре про стоматолога').model_dump()]
     quote='Хорошо, завтра отвезу тебя.'
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='room',present_character_ids=['a','b']),character_changes=[dict(id='a',
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='room',present_character_ids=['a','b']),character_changes=[dict(id='a',
         intentions_updates=[dict(id='answer',status='completed',evidence='Юра кивнул.')],
         obligations_updates=[dict(text='Отвезти тебя завтра',status='active',evidence=quote)])])
     result=StateResolver(state,'Юра кивнул.',quote,actor_names={'b':'Юра'}).resolve(raw)

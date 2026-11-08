@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def ordinary_job(repo, sid, kind='turn'):
     before = repo.get_snapshot(sid)
     camera = before['world_state']['camera']
-    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
         choices=[dict(action=f'Рассмотреть деталь {i}', speech='') for i in range(6)])
     def stream(**kwargs):

@@ -355,7 +355,7 @@ def test_atomic_event_first_retry_regenerate_variants_and_rollback(
                 raise RuntimeError("Deterministic extraction outage")
             yield json.dumps(
                 dict(
-                    player_agency=dict(status='preserved', actions=[]),
+                    player_agency=dict(status='preserved', actions=[], narrative_audit=[]),
                     final_scene=dict(
                         location_id=camera["location_id"],
                         present_character_ids=camera["present_character_ids"],
@@ -401,7 +401,7 @@ def test_atomic_event_first_retry_regenerate_variants_and_rollback(
         yield (
             json.dumps(
                 dict(
-                    player_agency=dict(status='preserved', actions=[]),
+                    player_agency=dict(status='preserved', actions=[], narrative_audit=[]),
                     final_scene=dict(
                         location_id=camera["location_id"],
                         present_character_ids=camera["present_character_ids"],

@@ -19,7 +19,7 @@ from test_due_scene import HELP, SIGNS, block
 
 def ongoing(state, minutes=0, *, assessed=False):
     camera = state['camera']
-    raw = dict(player_agency=dict(status='preserved', actions=[]),
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),
         final_scene=dict(location_id=camera['location_id'],
             present_character_ids=camera['present_character_ids'], elapsed_minutes=minutes),
         events=[dict(id='labor', text=SIGNS, evidence=SIGNS, medium='observation',

@@ -21,22 +21,36 @@ class PlayerAction(BaseModel):
     target_mode: Literal['interaction', 'reference'] = 'interaction'
 
 
+# Producer version is recorded by the server, never selected by model output.
+EXTRACTION_VERSION = 2
+
+
+class NarrativeAgencyItem(BaseModel):
+    """Compact semantic finding, not a reasoning trace or a prose parser."""
+    model_config = ConfigDict(extra='forbid', strict=True)
+    narrative_evidence: str = Field(min_length=1)
+    classification: Literal['authorized', 'execution_detail', 'involuntary',
+                            'npc_interpretation', 'unauthorized_choice', 'uncertain']
+    player_action_id: str | None
+
+
 class PlayerAgencyReview(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    status: Literal['preserved', 'violated', 'uncertain']
     actions: list[PlayerAction]
+    narrative_audit: list[NarrativeAgencyItem] | None = None
+    status: Literal['preserved', 'violated', 'uncertain']
 
 
 NARRATIVE_CONTRACT = '''
-PLAYER ACTION AGENCY: preserve the player's chosen addressee, target and meaning.
-An unavailable addressee does not authorize addressing someone else. Describe an
-unsuccessful attempt/no reply, or an independent NPC response, without inventing a
-new choice for the controlled actor. Mentioning someone is not addressing them.
-Do not invent presence, calls or messages. Group/partial/deferred actions retain
-their chosen targets. NPC initiative is welcome; it never substitutes player agency.
+PLAYER ACTION AGENCY: retain meaning/targets, partial/deferred/group too.
+Absent addressee: attempt/no reply, no substitute. Mention isn't contact; no invented contact.
+An unanswered NPC question stays open: no unchosen player reply/consent/refusal/promise via
+speech, gesture, silence or continued activity. NPCs may misread silence, granting no player
+choice/commitment. Allow execution detail/involuntary reactions/external consequences.
+Keep NPCs and the environment moving; choices stay open.
 '''
 
-EXTRACTION_CONTRACT = '''
+LEGACY_EXTRACTION_CONTRACT = '''
 PLAYER ACTION REVIEW: both directions over WHOLE Narrative, beyond Events:
 (1) Account for every input action: meaning, targets, actual outcome.
 (2) Find new EXTERNAL speech/reply/consent/refusal (also gestures)/promise/choice absent from
@@ -56,9 +70,34 @@ sets match without contact; JSON mismatch is repairable, impossible prose contac
 '''
 
 
+EXTRACTION_CONTRACT = """
+PLAYER ACTION REVIEW: evidence-first, WHOLE prose beyond Events; no reasoning.
+actions: all input acts. Only current input authorizes.
+narrative_audit: significant acts + NEW replies/consent/refusal/promises/choices (also gestures).
+authorized/execution_detail links verified action; involuntary is no choice;
+npc_interpretation grants no player decision. Others use null action ID.
+unauthorized_choice/changed act or target/impossible contact => violated; uncertain => uncertain.
+Audit BEFORE status. Deleting Events cannot repair prose; use reauthor/abandon.
+Omit duplicate Event quote; reject explicit conflicts. Keep NPC reply/facts/ALL learning.
+partial=subset; attempted=chosen; deferred/not_performed may have actual=[]; untargeted=[].
+interaction needs delivery, not reply.
+NarrativeAgencyItem examples: a=verified "Open folder" action:
+{"narrative_evidence":"Turns a page","classification":"execution_detail","player_action_id":"a"}
+{"narrative_evidence":"Agrees to travel","classification":"unauthorized_choice","player_action_id":null}
+"""
+
+
+
 def required(state, player_input, kind='turn'):
     return bool(state['camera']['controlled_actor_id'] and player_input.strip()
                 and kind not in ('background', 'pov'))
+
+
+def resolver_options(state, player_input, kind='turn', contract_version=1, *, time_skip=False):
+    """The ordinary production/QA boundary; no caller guesses agency by mode."""
+    needed = required(state, player_input, kind)
+    return dict(require_player_agency=needed, agency_audit_required=needed and contract_version >= 2,
+                require_elapsed=kind == 'turn' and not time_skip)
 
 
 def review(resolver, raw):
@@ -77,9 +116,19 @@ def review(resolver, raw):
               'player_agency_invalid', repairable=True, section='player_agency')
     if parsed.status != 'preserved':
         narrative_conflict()
+    for i, finding in enumerate(parsed.narrative_audit or []):
+        if finding.classification in ('unauthorized_choice', 'uncertain'):
+            narrative_conflict(reason='audit_status_conflict', section='player_agency',
+                               path=f'player_agency.narrative_audit[{i}]')
+    if resolver.agency_audit_required and parsed.narrative_audit is None:
+        fatal('Новый Extraction требует narrative_audit всего Narrative, даже вне Events.',
+              'player_agency_audit_missing', repairable=True, section='player_agency')
     actions = {}
     for i, action in enumerate(parsed.actions):
         path = dict(section='player_agency', path=f'player_agency.actions[{i}]')
+        if resolver.agency_audit_required and 'target_mode' not in action.model_fields_set:
+            fatal('Укажите явный target_mode: interaction или reference.',
+                  'player_action_target_mode_missing', repairable=True, **path)
         if (resolver.mode != 'turn' or not resolver.protected_actor_id
                 or action.id in actions or not normalized(action.player_evidence)
                 or normalized(action.player_evidence) not in normalized(resolver.player_input)):
@@ -100,6 +149,15 @@ def review(resolver, raw):
                   'не подменяйте цели ради сохранения.',
                   'player_action_targets_inconsistent', repairable=True, **path)
         actions[action.id] = action
+    for i, finding in enumerate(parsed.narrative_audit or []):
+        path = dict(section='player_agency', path=f'player_agency.narrative_audit[{i}]')
+        reference = finding.player_action_id
+        if ((reference is not None and reference not in actions)
+                or (finding.classification in ('authorized', 'execution_detail') and reference is None)
+                or (finding.classification == 'npc_interpretation' and reference is not None)):
+            fatal('Audit должен ссылаться на проверенный PlayerAction текущего ввода; '
+                  'интерпретация NPC не является разрешением игрока.',
+                  'player_agency_audit_reference_invalid', repairable=True, **path)
     return actions
 
 
@@ -157,6 +215,10 @@ def event_provenance(resolver, item, event, index, actions):
     if not valid_targets or action and not set(targets) <= set(action.narrative_target_ids):
         invalid('target_ids', 'target_ids_mismatch', 'target_ids должны быть собственным подмножеством narrative_target_ids связанного PlayerAction.')
     quote = item.get('player_evidence')
+    # Only absence is inherited. Explicit null/empty/conflicting quotes stay errors.
+    # Wrong actor/targets above still reject; never mutate the original response.
+    if 'player_evidence' not in item and action and resolver.agency_audit_required:
+        quote = action.player_evidence
     if not isinstance(quote, str) or not normalized(quote):
         invalid('player_evidence', 'missing_player_evidence', 'отсутствует player_evidence; скопируйте точную цитату связанного PlayerAction.', completion=completed)
     elif action and normalized(quote) != normalized(action.player_evidence):
@@ -239,8 +301,9 @@ def validate_completions(resolver, actions, events, indices, written_sources, *,
                   + ', '.join(sorted(missing)) + '. '
                   'Если Narrative подтверждает обращение игрока, добавьте отдельный Event этого обращения: '
                   f'actor_id={resolver.protected_actor_id}, player_action_id={action.id}, '
-                  f'player_evidence={action.player_evidence!r}, target_ids — фактически достигнутые адресаты. '
-                  'Сохраните отдельный Event ответа NPC с его настоящим actor_id; не превращайте ответ NPC в действие игрока. '
+                  + ('target_ids — фактически достигнутые адресаты; цитата наследуется из PlayerAction. ' if resolver.agency_audit_required
+                   else f'player_evidence={action.player_evidence!r}, target_ids — фактически достигнутые адресаты. ')
+                  + 'Сохраните отдельный Event ответа NPC с его настоящим actor_id; не превращайте ответ NPC в действие игрока. '
                   'Ответ не обязателен для доставленного обращения. Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative. '
                   'Пассивное наблюдение/упоминание использует target_mode=reference; обращение требует interaction. '
                   'Не создавайте фиктивный контакт для наблюдения.',

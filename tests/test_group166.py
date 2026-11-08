@@ -185,7 +185,7 @@ def test_relationship_and_thread_consequences_use_common_resolver_and_receipts(t
     eid=list(s['world_state']['remote_events'])[-1]
     s,_=apply(s,dict(action='read',event_id=eid,operation_id='read-work'),actor_id='c',autonomous=True)
     camera=s['world_state']['camera']
-    payload=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),
+    payload=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),
         relationship_changes=[dict(source_id='c',target_id='b',dimensions=dict(trust=3),assertion='grounded_feelings',
             source_event_ids=[eid],rationale='Прочитал предложение помощи.',evidence='Помогу с работой.')],
         thread_changes=[dict(id='work-help',description='Совместная работа',character_ids=['b','c'],status='active',

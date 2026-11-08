@@ -64,6 +64,12 @@ def test_phone_provider_jobs_contract_reload(phone, name, mode):
     good = deepcopy(case['payload']); good.pop('movements')
     bad = deepcopy(case['payload'])
     for raw in (good, bad):
+        # Explicit protocol annotation of these synthetic movement controls.
+        # The on-disk historical fixtures remain unchanged.
+        review = raw['player_agency']
+        review['narrative_audit'] = [dict(narrative_evidence='Кирилл занимается фотографиями.',
+            classification='authorized', player_action_id=a['id']) for a in review['actions']]
+        for action in review['actions']:action['target_mode'] = 'reference'
         for event in raw.get('events', []):
             if 'minute' in event:
                 event['minute'] = before['world_state']['meta']['world_time']
@@ -77,7 +83,7 @@ def test_phone_provider_jobs_contract_reload(phone, name, mode):
     for call in calls[1:]:
         system = call['messages'][0]['content']
         assert 'future_intent' in system and 'completed_narrative' in system
-        assert 'Workshop tonight' in system
+        assert 'Place creation/time/plans prove no arrival.' in system
         assert json.dumps(case['narrative'], ensure_ascii=False) in '\n'.join(m['content'] for m in call['messages'])
     fresh = Repository(repo.path)
     if mode == 'repeat':

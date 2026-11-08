@@ -29,7 +29,7 @@ def fixture():
 
 
 def payload(camera, elapsed, background=True):
-    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=elapsed))
     if background:
         raw.update(character_changes=[dict(id=NPC,situation='Закончил сверку карты.',evidence=NARRATIVE)],

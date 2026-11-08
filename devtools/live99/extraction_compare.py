@@ -22,11 +22,12 @@ from backend.runtime_v3.resolver import StateResolver
 from backend.services.world_delta_errors import StructuralDeltaError
 from .evidence import write
 
+C_BASELINE = '4dc593e798892f0cfb3d1764468dd5516ce3bb85'
 BASELINE = '87abdb8dbe67fbe191cadd30fe2aa785672bde01'
 CASES = {
     'crisis': 'live248-finish/crisis/crisis/000',
-    'phone_departure': 'live248-finish/phone/phone/001',
-    'phone_agency': 'live248-finish/phone/phone/002',
+    'phone_refusal_001': 'live248-finish/phone/phone/001',
+    'phone_npc_interpretation_002': 'live248-finish/phone/phone/002',
     'family_ongoing1': 'live248-finish/family/family/001',
     'family_ongoing2': 'live248-finish/family/family/002',
     'family_ongoing3': 'live248-finish/family/family/003',
@@ -46,9 +47,9 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def baseline_contracts():
+def baseline_contracts(ref=BASELINE):
     # Fixed trusted repository source; no import/execution of archived QA scripts.
-    source = subprocess.check_output(['git', 'show', BASELINE + ':backend/runtime_v3/context_contract.py'], text=True)
+    source = subprocess.check_output(['git', 'show', ref + ':backend/runtime_v3/context_contract.py'], text=True)
     values = {}
     def constant(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, str): return node.value
@@ -63,7 +64,7 @@ def baseline_contracts():
                 values[name.id] = value
         elif isinstance(node, ast.AugAssign):
             values[node.target.id] += constant(node.value)
-    source = subprocess.check_output(['git', 'show', BASELINE + ':backend/runtime_v3/player_actions.py'], text=True)
+    source = subprocess.check_output(['git', 'show', ref + ':backend/runtime_v3/player_actions.py'], text=True)
     action = next(ast.literal_eval(node.value) for node in ast.parse(source).body
                   if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'EXTRACTION_CONTRACT' for t in node.targets))
     return values['EXTRACTION_CONTRACT'], action
@@ -74,10 +75,11 @@ def variants(messages, legacy, old_contract, old_action):
     assert b[0]['content'].startswith('Постоянные правила\n' + legacy + '\n')
     b[0]['content'] = b[0]['content'].replace(legacy + '\n', '', 1)
     assert b[0]['content'].count(old_contract) == 1
+    c_contract, c_action = baseline_contracts(C_BASELINE)
     c = deepcopy(b)
-    c[0]['content'] = c[0]['content'].replace(old_contract, context_contract.EXTRACTION_CONTRACT, 1)
+    c[0]['content'] = c[0]['content'].replace(old_contract, c_contract, 1)
     assert c[0]['content'].count(old_action) == 1
-    c[0]['content'] = c[0]['content'].replace(old_action, player_actions.EXTRACTION_CONTRACT, 1)
+    c[0]['content'] = c[0]['content'].replace(old_action, c_action, 1)
     assert b[1:] == c[1:] == messages[1:]
     return dict(A=messages, B=b, C=c)
 
@@ -155,9 +157,11 @@ def prepare(source, output):
             snap = read(source/CASES[case['source']]/'before.json.gz')['snapshot']
             snap = observe(snap, 'qa_timur')
             c = build_context(snap, [], '', 'background', data['config']['context_length'], data['config']['max_tokens'],
-                              extraction_text=case['narrative'])
+                              extraction_text=case['narrative'], extraction_contract=1)
+            c_contract,_ = baseline_contracts(C_BASELINE)
             assert context_contract.EXTRACTION_CONTRACT in c[0]['content']
-            b = deepcopy(c); b[0]['content'] = b[0]['content'].replace(context_contract.EXTRACTION_CONTRACT,old_contract,1)
+            c[0]['content']=c[0]['content'].replace(context_contract.EXTRACTION_CONTRACT,c_contract,1)
+            b = deepcopy(c); b[0]['content'] = b[0]['content'].replace(c_contract,old_contract,1)
             a = deepcopy(b); a[0]['content'] = a[0]['content'].replace('Постоянные правила\n','Постоянные правила\n'+legacy+'\n',1)
             data.update(before=snap['world_state'],kind='background',messages=dict(A=a,B=b,C=c))
         for messages in data['messages'].values():

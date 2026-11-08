@@ -60,6 +60,8 @@ class EngineStorage:
     def begin_job(self, save_id, user_text, kind, config):
         if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication'):
             raise ValueError('Неизвестный тип хода.')
+        from backend.runtime_v3.player_actions import EXTRACTION_VERSION
+        config = dict(config, _extraction_contract=EXTRACTION_VERSION)
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
@@ -142,8 +144,11 @@ class EngineStorage:
                         raise ValueError('Подтверди откат последующих ходов.')
                 v = db.execute('SELECT context_json,memory_before_json,job_id FROM response_variants WHERE id=?', (last['active_variant_id'],)).fetchone()
                 context_json, memory_before = (v[0],v[1]) if v else (None,None)
+                config['_extraction_contract'] = 1  # Recorded pre-version variants stay legacy.
                 if v and v['job_id']:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
+                    if original:
+                        config['_extraction_contract'] = json.loads(original[0]).get('_extraction_contract', 1)
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
                         for key in ('_context_selection','long_term_advance','communication','interaction_channel','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
@@ -252,7 +257,7 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id','communication','remote_command')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','_extraction_contract','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 

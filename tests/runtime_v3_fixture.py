@@ -81,7 +81,7 @@ def reviewed(payload):
     """
     raw = deepcopy(payload)
     if isinstance(raw, dict) and 'final_scene' in raw:
-        raw.setdefault('player_agency', dict(status='preserved', actions=[]))
+        raw.setdefault('player_agency', dict(status='preserved', actions=[], narrative_audit=[]))
     return raw
 
 
@@ -89,9 +89,9 @@ def player_action(raw, actor, targets, quote, event_id, action_id='input-1'):
     """Explicit fixture declaration, no parsing of language or inferred targets."""
     event = next(e for e in raw['events'] if e['id'] == event_id)
     event.update(actor_id=actor, target_ids=targets, player_action_id=action_id, player_evidence=quote)
-    raw['player_agency'] = dict(status='preserved', actions=[dict(
+    raw['player_agency'] = dict(status='preserved', narrative_audit=[dict(narrative_evidence=event.get('text') or quote, classification='authorized', player_action_id=action_id)], actions=[dict(
         id=action_id, player_evidence=quote, target_ids=targets,
-        narrative_target_ids=targets, outcome='completed', meaning='preserved')])
+        narrative_target_ids=targets, outcome='completed', meaning='preserved', target_mode='interaction')])
     return raw
 
 

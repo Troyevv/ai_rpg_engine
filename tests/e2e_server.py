@@ -57,6 +57,7 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+agency249=None
 integrated247_case=None
 integrated247_live=False
 integrated247_repeat=False
@@ -73,6 +74,12 @@ due240_responses=None
 def scripted_stream(**kwargs):
     global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if agency249 and kwargs.get('model') == 'agency249-test':
+        from copy import deepcopy
+        raw=deepcopy(agency249['raw'])
+        if agency249['mode']=='missing':raw['player_agency'].pop('narrative_audit')
+        yield json.dumps(raw,ensure_ascii=False) if kwargs.get('response_format') else agency249['narrative']
+        return
     if integrated247_case and kwargs.get('model') == 'integrated-test':
         from test_integrated_repair247 import archived, corrected
         if integrated247_live:
@@ -82,6 +89,13 @@ def scripted_stream(**kwargs):
             integrated247_extractions += 1
             raw = data['responses'][0]['payload'] if integrated247_extractions == 1 or integrated247_repeat else corrected(data)
             if integrated247_live and integrated247_case=='family':raw=corrected(data)
+            from copy import deepcopy
+            raw=deepcopy(raw)
+            review=raw.get('player_agency')
+            if review:
+                review['narrative_audit']=[dict(narrative_evidence=data['narrative'][:160],
+                    classification='authorized',player_action_id=a['id']) for a in review['actions']]
+                for action in review['actions']:action.setdefault('target_mode','interaction')
             yield json.dumps(raw, ensure_ascii=False)
         else:
             yield data['narrative']
@@ -389,6 +403,12 @@ def scripted_stream(**kwargs):
             if kwargs.get('response_format'):
                 provenance238_extractions += 1
                 raw = data['responses']['extraction'] if provenance238_extractions == 1 or provenance238_repeat else corrected(data, provenance238_case)
+                from copy import deepcopy
+                raw=deepcopy(raw)
+                review=raw['player_agency']
+                review['narrative_audit']=[dict(narrative_evidence=data['narrative'][:160],
+                    classification='authorized',player_action_id=a['id']) for a in review['actions']]
+                for action in review['actions']:action.setdefault('target_mode','interaction')
                 yield json.dumps(raw, ensure_ascii=False)
             else:
                 yield data['narrative']
@@ -626,7 +646,7 @@ def generation_fixture(prep, jid, config, *args):
 draft_generation.run = generation_fixture
 
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152}.get(model, 32768)}
+    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152}.get(model, 32768)}
 }
 def authoring_stream(**kwargs):
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
@@ -1015,6 +1035,32 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/agency249-seed')
+    def agency249_seed(mode: str = 'saved'):
+        global agency249
+        from test_extraction_semantics248 import final_live
+        from test_integrated_repair247 import seed
+        data=final_live('phone');selection=seed(app.state.repository,data)
+        state=app.state.repository.get_snapshot(selection['save'])['world_state']
+        action='Продолжаю сортировать фотографии.'
+        narrative='Кирилл переворачивает снимок, читает дату на обороте и кладёт его в стопку.'
+        audit=[dict(narrative_evidence=narrative,classification='execution_detail',player_action_id='sort')]
+        if mode=='reauthor':
+            narrative+=' Вера предлагает подвезти его. Кирилл кивает, соглашаясь.'
+            audit.append(dict(narrative_evidence='Кирилл кивает, соглашаясь.',classification='unauthorized_choice',player_action_id=None))
+        raw=dict(final_scene=dict(location_id=state['camera']['location_id'],
+            present_character_ids=state['camera']['present_character_ids'],elapsed_minutes=1),
+            player_agency=dict(actions=[dict(id='sort',player_evidence=action,target_ids=[],
+                narrative_target_ids=[],target_mode='reference',outcome='completed',meaning='preserved')],
+                narrative_audit=audit,status='preserved'))
+        agency249=dict(raw=raw,narrative=narrative,mode=mode)
+        return dict(world=selection['world'],save=selection['save'],action=action)
+
+    @app.post('/test/agency249-allow')
+    def agency249_allow():
+        agency249['mode']='saved'
+        return {'ok':True}
 
     @app.post('/test/integrated247-seed')
     def integrated247_seed(case: str = 'knowledge', repeat: bool = False, live: bool = False):

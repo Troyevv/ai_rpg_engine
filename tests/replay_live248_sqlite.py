@@ -38,7 +38,7 @@ def replay_final(source, output):
         responses = [json.loads(r['response_text']) for r in requests[initial:]]
         group = case.split('_')[0]
         database = source/'live248-finish'/('crisis' if group in ('knowledge','social') else group)/'game.sqlite'
-        for mode in (['original','violation_control'] if case in ('crisis','phone_agency') else ['original']):
+        for mode in (['original','violation_control'] if case in ('crisis','phone_refusal_001') else ['original']):
             path = output/f'{case}-{mode}.sqlite'; backup(database, path)
             repo = Repository(path)
             # Restore only via existing rollback. Never UPDATE the checkpoint/History.

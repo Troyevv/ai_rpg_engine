@@ -110,7 +110,7 @@ def test_archived_state_through_context_jobs_history_sqlite(api, case, repair):
         fixed = data['responses']['extraction_repair']
     elif repair == 'reauthor':
         fixed['player_agency']['status'] = 'violated'
-    job, calls = play((client, repo, sid), [data['responses']['extraction'], fixed], data['player_input'], data['narrative'], config=dict(CONFIG, context_length=40960))
+    job, calls = play((client, repo, sid), [data['responses']['extraction'], fixed], data['player_input'], data['narrative'], config=dict(CONFIG, context_length=40960), legacy=True)
     assert len(calls) == 3 and job['narrative'] == data['narrative'], job.get('error')
     assert [bool(c.get('response_format')) for c in calls] == [False, True, True]
     diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
@@ -215,7 +215,7 @@ def test_manual_retry_reuses_all_latest_diagnostics_without_new_narrative(api):
     data = archived('campaign')
     sid = seed_archived(repo, 'campaign')['save']
     job, calls = play((client, repo, sid), [data['responses']['extraction']] * 2,
-        data['player_input'], data['narrative'], config=dict(CONFIG, context_length=40960))
+        data['player_input'], data['narrative'], config=dict(CONFIG, context_length=40960), legacy=True)
     assert job['status'] == 'error' and len(calls) == 3
     repo = Repository(repo.path)
     original = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])

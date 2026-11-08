@@ -304,7 +304,7 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
             yield 'Вера родила и сама увидела: мальчик.' if private else 'Кирилл ждёт дома.'
             return
         cam=current['camera']
-        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
+        raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
         if private:
             text=block(messages,'completed_narrative')
             raw.update(events=[dict(id='birth',text=text,evidence=text,participants=['qa_vera'],

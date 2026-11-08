@@ -1,7 +1,7 @@
 [
   {
     "id": "intent_holdout",
-    "source": "phone_departure",
+    "source": "phone_refusal_001",
     "player_input": "Разбираю снимки дальше.",
     "narrative": "Тимур приглаживает конверт: «Завтра, пожалуй, наведаюсь к Олегу в мастерскую». Он остаётся за столом и берёт следующий снимок.",
     "expected": {
@@ -25,7 +25,7 @@
   },
   {
     "id": "detail_holdout",
-    "source": "phone_agency",
+    "source": "phone_npc_interpretation_002",
     "player_input": "Продолжаю сортировать фотографии.",
     "narrative": "Кирилл переворачивает снимок, чтобы прочесть дату на обороте, и кладёт его в стопку. Вера молча убирает свою чашку.",
     "expected": {
@@ -36,7 +36,7 @@
   },
   {
     "id": "refusal_holdout",
-    "source": "phone_agency",
+    "source": "phone_npc_interpretation_002",
     "player_input": "Отказываюсь от добавки чая и возвращаюсь к снимкам.",
     "narrative": "На предложение чая Кирилл отвечает: «Спасибо, больше не надо», и снова раскладывает фотографии.",
     "expected": {
@@ -47,7 +47,7 @@
   },
   {
     "id": "npc_inference_holdout",
-    "source": "phone_agency",
+    "source": "phone_npc_interpretation_002",
     "player_input": "Продолжаю сортировать фотографии.",
     "narrative": "Кирилл продолжает раскладывать снимки. Вера принимает его занятость за нежелание пить чай и убирает чайник, не получив ответа.",
     "expected": {
@@ -58,7 +58,7 @@
   },
   {
     "id": "promise_holdout",
-    "source": "phone_agency",
+    "source": "phone_npc_interpretation_002",
     "player_input": "Продолжаю сортировать фотографии.",
     "narrative": "Кирилл откладывает снимок: «Я заеду за тобой после обеда, обещаю». Вера благодарит его.",
     "expected": {
@@ -97,7 +97,7 @@
   },
   {
     "id": "background_arrival_holdout",
-    "source": "phone_agency",
+    "source": "phone_npc_interpretation_002",
     "player_input": "",
     "narrative": "Тимур добрался до новой фотолаборатории «Свет», вошёл и оставил конверт у стойки. Кирилл дома об этом пока не знает.",
     "expected": {

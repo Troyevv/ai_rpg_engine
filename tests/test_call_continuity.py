@@ -91,7 +91,7 @@ def test_full_call_atomic_continuity_calendar_reload_next_turn(tmp_path):
         seen.append(kw['messages'])
         if not kw.get('response_format'):yield 'Виктория ждёт ответа за дверью.';return
         camera=state['camera']
-        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0)))
+        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0)))
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=ordinary):engine.run_job(repo.path,jid,engine.Worker())
     saved(repo,jid)
     assert DEMAND in json.dumps(seen[0],ensure_ascii=False)
@@ -343,7 +343,7 @@ def test_missing_choices_then_real_action_uses_current_state_once(tmp_path):
         seen.append(kw['messages'])
         if not kw.get('response_format'):yield 'После стука дверь остаётся закрытой.';return
         camera=before['camera']
-        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Открыть дверь',speech='')]))
+        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Открыть дверь',speech='')]))
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):engine.run_job(repo.path,job,engine.Worker())
     saved(repo,job)
     assert KNOCK in json.dumps(seen[0],ensure_ascii=False)

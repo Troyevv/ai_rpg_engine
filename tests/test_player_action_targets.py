@@ -29,7 +29,7 @@ GOOD_INPUT = 'Спрашиваю Марину о Кирилле и предла�
 def claim(targets, *, quote=ACTION, actual=None, outcome='completed', id='input-1'):
     return dict(id=id, player_evidence=quote, target_ids=targets,
                 narrative_target_ids=targets if actual is None else actual,
-                outcome=outcome, meaning='preserved')
+                outcome=outcome, meaning='preserved', target_mode='interaction')
 
 
 def payload(state, actions, *, completed=True):
@@ -47,12 +47,18 @@ def payload(state, actions, *, completed=True):
         events.append(event)
     return dict(final_scene=dict(location_id=camera['location_id'],
                                 present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
-                player_agency=dict(status='preserved', actions=actions), events=events)
+                player_agency=dict(status='preserved', actions=actions, narrative_audit=[
+                    dict(narrative_evidence='Исход действия', classification='authorized', player_action_id=a['id']) for a in actions]), events=events)
 
 
-def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn', config=None):
+def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn', config=None, legacy=False):
     client, repo, sid = crisis
     jid = repo.begin_job(sid, text, kind, config or CONFIG)
+    if legacy:
+        # Explicit archived producer replay; do not edit historical model replies.
+        with repo.connect() as db:
+            saved=json.loads(repo.get_job(jid)['config_json']);saved.pop('_extraction_contract',None)
+            db.execute('UPDATE game_jobs SET config_json=? WHERE id=?',(json.dumps(saved),jid))
     responses = iter(responses)
     calls = []
     def stream(**kw):
@@ -265,7 +271,8 @@ def test_schema_has_resolvable_typed_review():
     from jsonschema import Draft202012Validator
     action = claim([MARINA], quote=GOOD_INPUT)
     data = dict(final_scene=dict(location_id=None, present_character_ids=[]),
-                player_agency=dict(status='preserved', actions=[action]))
+                player_agency=dict(status='preserved', actions=[action], narrative_audit=[dict(
+        narrative_evidence='Нина задаёт вопрос.', classification='authorized', player_action_id=action['id'])]))
     for schema in (extraction_schema(), prompt_schema(player_agency_required=True)):
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(data)
@@ -347,7 +354,8 @@ def test_target_can_be_newly_promoted_character(crisis):
     raw.pop('relationship_changes')
     quote = 'Спрашиваю Ладу о мастерской.'
     action = claim(['new_npc'], quote=quote)
-    raw['player_agency'] = dict(status='preserved', actions=[action])
+    raw['player_agency'] = dict(status='preserved', actions=[action], narrative_audit=[dict(
+        narrative_evidence='Нина задаёт вопрос.', classification='authorized', player_action_id=action['id'])])
     raw['events'][0].update(actor_id=NINA, target_ids=['new_npc'], player_action_id=action['id'],
                             player_assertion='completed_interaction', player_evidence=quote)
     job, calls = play(crisis, [raw], quote, 'Лада пришла. Нина спрашивает её о мастерской. Лада рассказала о мастерской.')

@@ -271,7 +271,10 @@ def extraction_schema():
     }
     from backend.runtime_v3.player_actions import PlayerAgencyReview
     agency_schema = PlayerAgencyReview.model_json_schema()
-    agency_schema['properties']['actions']['items'] = agency_schema.pop('$defs')['PlayerAction']
+    agency_defs = agency_schema.pop('$defs')
+    agency_schema['properties']['actions']['items'] = agency_defs['PlayerAction']
+    agency_schema['properties']['narrative_audit'] = dict(
+        anyOf=[dict(type='array', items=agency_defs['NarrativeAgencyItem']), dict(type='null')], default=None)
     schema = obj(dict(player_agency=agency_schema, metadata={'type':'object','additionalProperties':True},final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,observed_character_ids=strings,
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
@@ -307,8 +310,8 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False):
-    """Validation-equivalent schema; prose lives once in the extraction contract."""
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True):
+    """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
         if isinstance(node, dict):
@@ -339,6 +342,23 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     schema['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
     if player_agency_required:
         schema['required'].append('player_agency')
+        agency = schema['properties']['player_agency']
+        if agency_audit_required:
+            agency['required'].append('narrative_audit')
+            agency['properties']['narrative_audit'] = agency['properties']['narrative_audit']['anyOf'][0]
+            action = agency['properties']['actions']['items']
+            action['required'].append('target_mode')
+            action['properties']['player_evidence']['description'] = 'Exact current input quote, once.'
+            action['properties']['target_ids']['description'] = 'Intended canonical targets, not witnesses; noncanonical objects=[].'
+            action['properties']['narrative_target_ids']['description'] = 'Actual targets; partial=subset, deferred may be [].'
+            action['properties']['target_mode']['description'] = 'interaction=contact; reference=observe/mention, no delivery.'
+            agency['properties']['narrative_audit']['description'] = 'Significant controlled acts across WHOLE prose, even outside Events.'
+            event = schema['properties']['events']['items']
+            event['dependentRequired']['player_action_id'] = ['actor_id', 'target_ids']
+            event['properties']['player_action_id']['description'] = 'Reviewed action ID; quote inherited. NPC reply stays separate.'
+            event['properties']['target_ids']['description'] = 'Own achieved targets: subset of action actual targets; union covers them.'
+        else:
+            agency['properties'].pop('narrative_audit')
     else:
         schema['properties'].pop('player_agency')
         schema['properties']['events']['items'].pop('dependentRequired', None)
@@ -382,6 +402,21 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if not births: schema['properties'].pop('births',None)
     if not reproduction or not births:
         schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
+    if agency_audit_required:
+        schema['properties']['events']['items']['properties']['minute']['description'] = 'Known absolute world minute; otherwise OMIT. Sequence uses order.'
+        # Preserve only high-risk birth-source annotations, not all domain prose.
+        def birth_guidance(node):
+            if isinstance(node, dict):
+                props = node.get('properties', {})
+                if 'basis' in props and 'source_actor_id' in props:
+                    props['basis']['description'] = 'announcement=spoken disclosure; observation=direct perception of the child, not hearing a speaker.'
+                    props['source_actor_id']['description'] = 'Actual canonical speaker, null for a genuinely unknown speaker; never substitute a listener.'
+                for child in node.values(): birth_guidance(child)
+            elif isinstance(node, list):
+                for child in node: birth_guidance(child)
+        birth_guidance(schema['properties'].get('births', {}))
+        schema['properties'] = {**{k:v for k,v in schema['properties'].items() if k != 'final_scene'},
+                                'final_scene': schema['properties']['final_scene']}
     counts = Counter()
 
     def key(node):
@@ -396,6 +431,20 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
             for value in node: count(value)
     count(schema)
     shared = {value: ('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'[index] if index<52 else 's'+str(index)) for index, value in enumerate(sorted((k for k, n in counts.items() if n > 1 and n*(len(k)-13)>len(k)+25),key=lambda k:(-counts[k],k)))}
+
+    if agency_audit_required:
+        def name_records(node, hint='Record'):
+            if isinstance(node, dict):
+                value = key(node)
+                if value in shared and 'properties' in node:
+                    name = ''.join(part.capitalize() for part in hint.split('_'))
+                    if name not in shared.values(): shared[value] = name
+                for field, child in node.get('properties', {}).items(): name_records(child, field)
+                if 'items' in node: name_records(node['items'], hint)
+                for child in node.get('anyOf', []): name_records(child, hint)
+            elif isinstance(node, list):
+                for child in node: name_records(child, hint)
+        name_records(schema)
 
     def compact(node, root=False):
         if isinstance(node, dict):
@@ -441,7 +490,9 @@ def repair_feedback(diagnostic, payload, before):
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
     details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths') if key in row} for row in rows]
-    detail = details[0]
+    # Keep the legacy first-error summary, without duplicating its long reason
+    # and source lists. The diagnostics array retains every complete record.
+    detail = {key:details[0][key] for key in ('code','path') if key in details[0]}
     # Retain topology for referenced endpoints even if relevance omitted them.
     # The context builder removes only copies already in its canonical slice.
     referenced = set()
@@ -464,7 +515,7 @@ def repair_feedback(diagnostic, payload, before):
             'Never remove witnesses while retaining impossible contact, substitute a speaker, invent arrival/consent or suppress confirmed learning. '
             'Recheck both agency directions across prose, including unrecorded replies/gestures/decisions. If Narrative itself violates agency/canon, '
             'return player_agency.status=violated (uncertain if unprovable), using existing reauthor/abandon; do not launder it by editing JSON. '
-            'Event/action coverage: actual actor, one action ID, its exact quote, target subset/union. Restore a genuinely performed player address '
+            'Event/action coverage: actual actor, one action ID, verified action quote, target subset/union. When the request schema permits, omit the duplicate Event quote; never overwrite an explicit conflict. Restore a genuinely performed player address '
             'as a separate Event; retain NPC reply/fact_ids/knowledge_gained. Never relabel the NPC response as player-authored. '
             'Align events/movements/final_scene/character_changes at scene granularity: future_intent/preparation is not departure; '
             'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Arrival needs accepted source Event/actor/endpoint/order. '
