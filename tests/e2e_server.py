@@ -1226,7 +1226,7 @@ if __name__ == '__main__':
         repo=app.state.repository
         if checkpoint not in ('family','family-incapacitated'): raise ValueError('Unknown test checkpoint')
         result=load_fixture(repo,checkpoint)
-        ordinary_job(repo,result['save'],'start')
+        ordinary_job(repo,result['save'],'start',expected_choices=0 if checkpoint=='family-incapacitated' else 6)
         if dead:
             snap=repo.get_snapshot(result['save']);state=snap['world_state'];cid=state['meta']['current_protagonist_id']
             state['characters'][cid]['life_status']='dead';state['meta']['protagonist_required']=True

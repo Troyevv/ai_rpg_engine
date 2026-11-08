@@ -10,7 +10,7 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize('scenario', ['provenance-campaign','departure223','berezovsk-002','berezovsk-005','background','entry','optional-annotation','retry','semantic-retry','doorway','office','imported-json','imported-text'])
+@pytest.mark.parametrize('scenario', ['family-capabilities','provenance-campaign','departure223','berezovsk-002','berezovsk-005','background','entry','optional-annotation','retry','semantic-retry','doorway','office','imported-json','imported-text'])
 def test_browser_arrival_controls_commit_with_provenance(tmp_path, scenario):
     run=subprocess.run([sys.executable,__file__,str(tmp_path/'game.sqlite'),scenario],
                        capture_output=True,text=True,timeout=60)
@@ -27,6 +27,22 @@ def exercise(path, scenario):
     import engine
 
     repo=Repository(path)
+    if scenario=='family-capabilities':
+        import json,os,runpy
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        def check_endpoint(app,**kwargs):
+            with TestClient(app) as client:
+                for checkpoint,count in [('family',6),('family-incapacitated',0)]:
+                    response=client.post('/test/family-seed',params=dict(checkpoint=checkpoint))
+                    assert response.status_code==200,response.text
+                    sid=response.json()['save']
+                    assert len(json.loads(app.state.repository.list_turns(sid)[-1]['choices_json']))==count
+                    assert client.get(f'/api/saves/{sid}').status_code==200
+        with patch.dict(os.environ,{'E2E_DB_PATH':path}),patch('uvicorn.run',side_effect=check_endpoint) as launch:
+            runpy.run_path(str(Path(__file__).parent/'e2e_server.py'),run_name='__main__')
+        assert launch.call_count==1
+        return
     if scenario in ('provenance-campaign','departure223'):
         import json
         from test_narrative_test_world import ordinary_job

@@ -97,6 +97,17 @@ choices and state equality. Direct subprocess checks of the browser provider now
 pass all 13 scenarios; the fixture/provenance integration subset passes 50 tests.
 These results are not a substitute for the final complete CI.
 
+CI #491 reached 3815 backend passes and one failure: the newly added shared
+fixture assertion incorrectly required six choices even for an incapacitated
+protagonist. That checkpoint now explicitly requires zero choices, while healthy
+checkpoints still require six. Runtime capability enforcement is unchanged. The browser family seed had the
+same shared assertion; its endpoint now explicitly checks healthy/incapacitated
+choice counts through a subprocess TestClient control. The 60-test family/fixture
+subset and that HTTP endpoint control pass locally.
+The earlier campaign repair overflow was also traced to five repeated Narrative
+quotes in test choice metadata (5325 characters); typed scene attribution removes
+that duplication and restores the expected bounded repair within the same budget.
+
 The active-author correction preserves NPC-owned knowledge needed to author a
 message, including explicit uncertainty, while a merely mentioned off-scene NPC
 still contributes no private goals/facts/threads. Semantic retrieval diagnostics
