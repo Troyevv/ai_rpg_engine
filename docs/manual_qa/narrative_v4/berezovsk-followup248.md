@@ -122,6 +122,23 @@ full browser suites remain enabled. Local Chromium cannot start because the
 host denies its singleton `socket()`; no bypass was attempted. **Final full CI
 results and exact HEAD are published in PR #248**, not inferred from local builds.
 
+## Independent CI scroll regression
+
+Full CI #492 on `2de1afd` passed backend (3817 passed, 1 skipped), frontend,
+all smoke jobs and three full browser shards. The remaining desktop shard failed
+`streaming72` reduced-motion bottom-follow: 389 px from the bottom instead of <2.
+The existing assertion is unchanged. Its trace shows upward layout adjustments
+before any manual scrolling. A deterministic regression reproduces a shrink that
+clamps scrollTop followed by new content before the queued scroll event; the old
+handler incorrectly treats this as player intent and disables following.
+
+The hook now distinguishes changed content/viewport geometry from upward input.
+Wheel, touch, keyboard and scrollbar input retain precedence and preserve manual
+reading. The new regression failed before the fix and passes afterwards, including
+concurrent wheel/scrollbar input controls. Local frontend: 153 tests passed,
+TypeScript/build passed. The original browser test remains unchanged; final CI
+must confirm both full desktop/mobile and the focused streaming workflow.
+
 ## Remaining risks
 
 - Source declarations are produced by the same model. Runtime checks canonical
