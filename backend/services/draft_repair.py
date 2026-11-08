@@ -77,6 +77,8 @@ def request(raw,errors,author_context=None):
     errors=list(errors)
     for issue in list(errors):
         path=issue.get('path','')
+        if issue.get('category')=='motivation_dependencies' and issue.get('preserve_evidence'):
+            errors.append(dict(issue,path=path.rsplit('/',1)[0]+'/evidence'))
         if issue.get('category')=='calendar_date' and path.rsplit('/',1)[-1] in ('since_date','until_date'):
             try:partial=pointer(value,path)
             except (ValueError,KeyError,TypeError,IndexError):continue
@@ -116,6 +118,8 @@ def request(raw,errors,author_context=None):
     residence_ids={p.split('/')[3].replace('~1','/').replace('~0','~') for p in list(paths)+list(removals) if p.startswith('/world/residences/') and len(p.split('/'))>=4}
     residence_ids={rid for rid in residence_ids if rid in value.get('world',{}).get('residences',{}) or '/world/residences/'+rid in paths}
     paths=RepairScope(paths,value,residence_ids,removals)
+    paths.dependency_preservation={e['path']:e['preserve_evidence'] for e in errors
+        if e.get('category')=='motivation_dependencies' and e['path'].endswith('/dependencies') and e.get('preserve_evidence')}
     paths.close_paths={e['path'] for e in errors if e.get('lifecycle_decision')=='close' and any(not b.get('path','').startswith('/world/residences/') for b in e.get('basis',[]))}
     payload=dict(errors=errors,fragments=fragments,candidate_hash=paths.candidate_hash)
     if paths.location_links:
@@ -241,6 +245,17 @@ def apply(raw,reply,paths):
             raise ValueError('Новая локация не связана с исправляемой записью.')
     if isinstance(paths,RepairScope):
         from backend.services.draft_completeness import pointer
+        from backend.runtime_v3.lifecycle import DEPENDENCIES
+        for path,preserved in getattr(paths,'dependency_preservation',{}).items():
+            prior=pointer(original,path)
+            if pointer(value,path)==prior:continue
+            rowpath=path.rsplit('/',1)[0]
+            old_evidence=pointer(original,rowpath).get('evidence','')
+            evidence=pointer(value,rowpath).get('evidence','')
+            if (pointer(value,path)!={k:v for k,v in prior.items() if k in DEPENDENCIES}
+                    or not isinstance(evidence,str) or preserved not in evidence
+                    or old_evidence and old_evidence not in evidence):
+                raise ValueError('dependencies: сохрани поддерживаемые ссылки и исходные данные в evidence.')
         for path in used:
             if path.rsplit('/',1)[-1] not in ('since_date','until_date'):continue
             try:prior=pointer(original,path)

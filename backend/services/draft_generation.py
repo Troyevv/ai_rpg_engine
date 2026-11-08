@@ -207,9 +207,19 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 stage='draft_world_creative_repair' if slot.startswith('creative_correction_') else 'draft_world_creative'
                 repo.draft_phase(jid,'retrying' if slot.startswith('creative_correction_') else 'developing')
                 return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
-            state=draft_creative.develop(state,messages[-1]['content'],journal,creative_call,
-                                         lambda:repo.save_response_journal(jid,journal),
-                                         request_key=candidate_hash([context,{k:config.get(k) for k in ('provider','model','thinking','temperature','max_tokens','_draft_stage_output_limits','_model_capabilities')}]))
+            try:
+                state=draft_creative.develop(state,messages[-1]['content'],journal,creative_call,
+                                             lambda:repo.save_response_journal(jid,journal),
+                                             request_key=candidate_hash([context,{k:config.get(k) for k in ('provider','model','thinking','temperature','max_tokens','_draft_stage_output_limits','_model_capabilities')}]))
+            except ValueError:
+                # Rejected optional proposals never replace a valid base world.
+                # Transport/budget failures and cancellation keep their recovery
+                # semantics; only a recorded validation rejection is optional.
+                if journal.get('pending') or handle.cancel.is_set() or journal.get('creative',{}).get('status')!='rejected':
+                    raise
+                base,base_report=draft_initial.inspect_candidate(state)
+                if base_report['errors']:raise
+                state=base
             if state is None:return
             result=journal['candidate_text']
             repo.save_draft_candidate(jid,state,[],review=dict(status='not_started',issues=[]),epoch=epoch)
@@ -237,6 +247,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             result=json.dumps(state,ensure_ascii=False)
         journal['errors']=errors;repo.save_response_journal(jid,journal)
         if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
+        # A rejected trial remains uncommitted. Its newly revealed diagnostics
+        # join the next bounded request against the original candidate, so the
+        # model can resubmit a coherent patch rather than repeat the old scope.
+        if patch_failure and patch_failure.get('trial'):
+            errors=errors+[e for e in patch_failure['trial']['after'] if e not in errors]
         repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
         if patch_failure:repair.append(dict(role='user',content=json.dumps(patch_failure,ensure_ascii=False)))
         repo.draft_phase(jid,'retrying');stage='draft_world_repair'

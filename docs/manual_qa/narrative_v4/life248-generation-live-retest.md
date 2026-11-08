@@ -1,5 +1,13 @@
 # Life248 generation recovery: real DeepSeek retest
 
+**Follow-up correction:** the Off world's uncompleted semantic review and rejected
+optional creative proposal are not launch blockers. Starting with warnings is an
+intended product flow, not a manufactured PASS. The subsequent free production UI
+check successfully confirmed this exact 11-character world and reloaded its game
+save. See [launch, structural fixes and next Live QA](life248-launch-and-repair.md).
+The observations below remain the historical record of the earlier run; its
+decision not to launch was a QA limitation, not a technical launch failure.
+
 2026-11-08 · PR #248 · tested HEAD `96448e0f94ffaa982b1b88b9da3267fe10e08a54`.
 Follow-up to [the fixes and free regressions](life248-generation-recovery.md).
 **Recovery fixes worked, but neither creation pipeline completed. Lifecycle

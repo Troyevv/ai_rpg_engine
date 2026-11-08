@@ -1,5 +1,6 @@
 """Initial-world additions to master's editable draft, using Runtime models."""
 from copy import deepcopy
+import json
 import re
 from pydantic import ValidationError
 from backend.runtime_v3 import models as m
@@ -31,6 +32,33 @@ def error(path,message,category='invalid',**extra):
 
 
 MOTIVATION_FIELDS = ('goals', 'intentions', 'obligations')
+
+
+def dependency_errors(state):
+    """Diagnose unsupported author data before legacy salvage can discard it."""
+    from backend.runtime_v3.lifecycle import DEPENDENCIES
+    world=state.get('world',{}) if isinstance(state,dict) else {}
+    actors=world.get('characters',{}) if isinstance(world,dict) else {}
+    errors=[]
+    for cid,actor in (actors.items() if isinstance(actors,dict) else []):
+        if not isinstance(actor,dict):continue
+        for field in MOTIVATION_FIELDS:
+            rows=actor.get(field,[])
+            for index,row in enumerate(rows if isinstance(rows,list) else []):
+                deps=row.get('dependencies') if isinstance(row,dict) else None
+                if not isinstance(deps,dict):continue  # Typed validation owns shape errors.
+                path=f'/world/characters/{escape(cid)}/{field}/{index}/dependencies'
+                unsupported={k:v for k,v in deps.items() if k not in DEPENDENCIES}
+                if unsupported:
+                    preserved='Неподдерживаемые исходные зависимости (не исполняются Runtime): '+json.dumps(unsupported,ensure_ascii=False,sort_keys=True)
+                    errors.append(error(path,'Runtime не поддерживает эти виды dependencies. '
+                        'Сохрани исходные данные в evidence дословно через preserve_evidence, '
+                        'не меняя прежний evidence и поддерживаемые зависимости.',
+                        'motivation_dependencies',allowed=list(DEPENDENCIES),preserve_evidence=preserved))
+                for key,ids in deps.items():
+                    if key in DEPENDENCIES and isinstance(ids,list) and len(ids)>8:
+                        errors.append(error(path+'/'+escape(key),'Допустимо не более восьми зависимостей одного вида.','dependency_limit'))
+    return errors
 
 
 def motivation_records(values, cid, field):
@@ -87,6 +115,11 @@ def extend_schema(schema):
     actor = world['characters']['additionalProperties']
     canonical = runtime_schema(m.Character)['properties']
     actor['properties'].update({k:canonical[k] for k in ('situation','goals','intentions','emotion','obligations')})
+    from backend.runtime_v3.lifecycle import DEPENDENCIES
+    for field in MOTIVATION_FIELDS:
+        actor['properties'][field]['items']['properties']['dependencies']={
+            'type':'object','additionalProperties':False,
+            'properties':{key:{'type':'array','maxItems':8,'items':{'type':'string'}} for key in DEPENDENCIES}}
     actor['properties'].update({k:canonical[k] for k in ACTOR_FIELDS if k not in ('appearance','personality','values','identity_components')})
     world['facts']['additionalProperties']['properties']['claim'] = runtime_schema(m.Claim)
     world['knowledge']['additionalProperties']['properties'].update({k:v for k,v in runtime_schema(m.Knowledge)['properties'].items() if k not in ('actor_id','fact_id','confirmed_once')})
@@ -295,7 +328,7 @@ def normalize(value):
 
 def validate_typed(state, *, advisory_age=False):
     """Validate before legacy migration's conservative salvage can discard input."""
-    world=state['world']; problems=[];invalid_shape=False
+    world=state['world']; problems=dependency_errors(state);invalid_shape=False
     def check(model,record,path):
         nonlocal invalid_shape
         try: return model.model_validate(record)
@@ -550,13 +583,14 @@ def inspect_candidate(raw, *, for_start=False):
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
     portrait_errors = input_diagnostics(raw.get('characters')) if isinstance(raw, dict) else []
+    independent_errors = portrait_errors + dependency_errors(raw)
     state=raw
     try:
         state=normalize(raw)
         # Typed checking precedes legacy preparation, which otherwise hides paths.
         advisories=validate_typed(state,advisory_age=for_start)
-        if portrait_errors:
-            raise DraftErrors(portrait_errors)
+        if independent_errors:
+            raise DraftErrors(independent_errors)
         state=draft_world.prepare(state)
         report=draft_world.validate(state,canonical=False)
         if report['errors']:
@@ -566,7 +600,7 @@ def inspect_candidate(raw, *, for_start=False):
         return state,dict(report,diagnostics=[],semantic_warnings=advisories)
     except (ValueError,TypeError,KeyError,IndexError,AttributeError) as exc:
         diagnostics=exc.errors if isinstance(exc,DraftErrors) else [error('/',str(exc),'validation_incomplete')]
-        diagnostics = diagnostics + [e for e in portrait_errors if e not in diagnostics]
+        diagnostics = diagnostics + [e for e in independent_errors if e not in diagnostics]
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)
 
 
