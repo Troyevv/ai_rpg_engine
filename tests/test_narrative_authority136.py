@@ -162,7 +162,10 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
         raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
             observed_character_ids=['qa_marina'] if observed else [],elapsed_minutes=0),
             events=[dict(id='conversation',text='Марина отвечает.',participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')])
-        if not observed and old['characters']['qa_marina']['location_id'] != camera['location_id']:
+        returning = old['characters']['qa_marina']['location_id'] != camera['location_id']
+        if returning:
+            # A later doorway conversation still needs actual return from an
+            # unknown/other place; visibility cannot stand in for that arrival.
             raw['movements']=[dict(actor_id='qa_marina',to_location_id=camera['location_id'])]
             arrival_sources(raw)
         with patch('engine.launch'):
@@ -172,13 +175,15 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
         def provider(**kw):
             if kw['messages'][0]['content'].startswith('Select at most ONE'):yield '{"action":null}';return
             calls.append(kw)
-            yield json.dumps(raw) if kw.get('response_format') else ('Марина стоит в проёме.' if observed else 'Марина вошла внутрь и ответила.')
+            text = 'Марина вернулась к дому и ответила из проёма.' if observed and returning else ('Марина стоит в проёме и отвечает.' if observed else 'Марина вошла внутрь и ответила.')
+            yield json.dumps(raw) if kw.get('response_format') else text
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):
             engine.run_job(repo.path,jid,engine.Worker())
         saved(repo,jid);assert len(calls)==2
         state=repo.get_snapshot(sid)['world_state']
         assert ('qa_marina' in state['camera']['present_character_ids']) != observed
-        if observed:assert state['characters']['qa_marina']['location_id'] is None
+        if observed:
+            assert state['characters']['qa_marina']['location_id'] == (camera['location_id'] if returning else None)
     physical();physical();physical(True)
     with patch('engine.launch'):
         r=client.post(f'/api/saves/{sid}/phone/dispatch',json=dict(revision=repo.get_save(sid)['revision'],config=CONFIG,command=dict(action='call',contact_id='phone-qa_kirill-qa-vera',operation_id='issue136-call')))
@@ -273,7 +278,7 @@ def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
     assert result['status']=='saved' and len(calls)==1
     assert repo.get_snapshot(sid)['world_state']['characters']['viktoria_solovyova']['life_status']=='alive'
     assert len(repo.list_turns(sid))==1
-    feedback=next(json.loads(m['content'].split('Исправь структурную ошибку, верни полный JSON:\n',1)[1]) for m in calls[0]['messages'] if 'original_extraction' in m['content'])
+    feedback=next(json.loads(m['content'].split('Повторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n',1)[1]) for m in calls[0]['messages'] if 'original_extraction' in m['content'])
     assert feedback['original_extraction']==attempts[-1]
 
 

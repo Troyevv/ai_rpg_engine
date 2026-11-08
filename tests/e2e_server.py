@@ -357,13 +357,14 @@ def scripted_stream(**kwargs):
                 value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
                 if phone_mode=='office-authority136':
                     doorway=task['player_input'] in ('Подождать у двери.','Продолжить после звонка.')
-                    text='Виктория стоит в проёме, не заходя.' if doorway else 'Виктория вошла внутрь и отвечает Илье.'
+                    returning=current_phone['characters'].get('qa_marina',{}).get('location_id') != camera['location_id']
+                    text=('Виктория вернулась к дому и отвечает Илье из проёма.' if returning else 'Виктория стоит в проёме и отвечает Илье, не заходя.') if doorway else 'Виктория вошла внутрь и отвечает Илье.'
                     present=[cid for cid in camera['present_character_ids'] if cid!='qa_marina']
                     if not doorway: present.append('qa_marina')
                     value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
                         observed_character_ids=['qa_marina'] if doorway else [],elapsed_minutes=0),
                         events=[dict(id='dialogue',text=text,participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')]) if kwargs.get('response_format') else text
-                    if isinstance(value,dict) and not doorway and current_phone['characters']['qa_marina'].get('location_id') != camera['location_id']:
+                    if isinstance(value,dict) and returning:
                         from runtime_v3_fixture import arrival_sources
                         value['movements']=[dict(actor_id='qa_marina',to_location_id=camera['location_id'],evidence=text)]
                         arrival_sources(value)

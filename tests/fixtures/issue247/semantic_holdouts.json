@@ -1,0 +1,123 @@
+[
+  {
+    "id": "intent_holdout",
+    "source": "phone_departure",
+    "player_input": "Разбираю снимки дальше.",
+    "narrative": "Тимур приглаживает конверт: «Завтра, пожалуй, наведаюсь к Олегу в мастерскую». Он остаётся за столом и берёт следующий снимок.",
+    "expected": {
+      "agency": "preserved",
+      "timur_location": "unchanged",
+      "arrivals": 0,
+      "departure": false
+    }
+  },
+  {
+    "id": "arrival_holdout",
+    "source": "crisis",
+    "player_input": "Продолжаю записи за столом.",
+    "narrative": "Вера добралась из дома до библиотеки, вошла и остановилась у стойки. Нина продолжает записи.",
+    "expected": {
+      "agency": "preserved",
+      "vera_location": "library",
+      "arrival_source_required": true,
+      "player_Knowledge": "only witnessed facts"
+    }
+  },
+  {
+    "id": "detail_holdout",
+    "source": "phone_agency",
+    "player_input": "Продолжаю сортировать фотографии.",
+    "narrative": "Кирилл переворачивает снимок, чтобы прочесть дату на обороте, и кладёт его в стопку. Вера молча убирает свою чашку.",
+    "expected": {
+      "agency": "preserved",
+      "extra_player_decision": false,
+      "timur_location": null
+    }
+  },
+  {
+    "id": "refusal_holdout",
+    "source": "phone_agency",
+    "player_input": "Отказываюсь от добавки чая и возвращаюсь к снимкам.",
+    "narrative": "На предложение чая Кирилл отвечает: «Спасибо, больше не надо», и снова раскладывает фотографии.",
+    "expected": {
+      "agency": "preserved",
+      "refusal": "authorized",
+      "player_action_event_coverage": "complete"
+    }
+  },
+  {
+    "id": "npc_inference_holdout",
+    "source": "phone_agency",
+    "player_input": "Продолжаю сортировать фотографии.",
+    "narrative": "Кирилл продолжает раскладывать снимки. Вера принимает его занятость за нежелание пить чай и убирает чайник, не получив ответа.",
+    "expected": {
+      "agency": "preserved",
+      "player_refusal": false,
+      "npc_interpretation": "not a player decision"
+    }
+  },
+  {
+    "id": "promise_holdout",
+    "source": "phone_agency",
+    "player_input": "Продолжаю сортировать фотографии.",
+    "narrative": "Кирилл откладывает снимок: «Я заеду за тобой после обеда, обещаю». Вера благодарит его.",
+    "expected": {
+      "agency": "violated",
+      "recovery": "reauthor",
+      "do_not_hide_by_omitting_event": true
+    }
+  },
+  {
+    "id": "observation_holdout",
+    "source": "crisis",
+    "player_input": "Рассматриваю снимок Веры.",
+    "narrative": "Нина рассматривает фотографию Веры на столе. Вера на снимке улыбается; сама она остаётся дома.",
+    "expected": {
+      "agency": "preserved",
+      "physical_contact": false,
+      "vera_location": "home",
+      "vera_camera_membership": false
+    }
+  },
+  {
+    "id": "unknown_source_holdout",
+    "source": "family_birth",
+    "player_input": "Остаюсь рядом до завершения родов.",
+    "narrative": "Ребёнок родился и закричал. Осмотрев его, врач произнёс: «У вас сын». Кирилл и Вера слышали объявление. Имя врача не было названо.",
+    "expected": {
+      "birth": "completed",
+      "source_actor_id": null,
+      "source_assertion": "direct_observation",
+      "sex_known_by": [
+        "qa_kirill",
+        "qa_vera"
+      ],
+      "timur_knows": false
+    }
+  },
+  {
+    "id": "background_arrival_holdout",
+    "source": "phone_agency",
+    "player_input": "",
+    "narrative": "Тимур добрался до новой фотолаборатории «Свет», вошёл и оставил конверт у стойки. Кирилл дома об этом пока не знает.",
+    "expected": {
+      "agency": "no controlled actor; protagonist unchanged",
+      "new_location": true,
+      "timur_arrival": true,
+      "player_Knowledge_of_arrival": false,
+      "arrival_event_player_observed": false
+    },
+    "kind": "background"
+  },
+  {
+    "id": "knowledge_holdout",
+    "source": "knowledge",
+    "player_input": "Соглашаюсь встретиться завтра в библиотеке в 15:00 и спрашиваю Веру, удобно ли ей.",
+    "narrative": "Кирилл подтверждает встречу завтра в библиотеке в 15:00 и спрашивает, удобно ли Вере. Вера отвечает: «Да, я буду в три». Тимур слышит их и уточняет: «Значит, завтра в библиотеке, в пятнадцать?»",
+    "expected": {
+      "agency": "preserved",
+      "player_and_npc_events": "separate real actors",
+      "known_acquisitions": "retain every newly perceived agreement fact for its actual witnesses"
+    }
+  }
+]

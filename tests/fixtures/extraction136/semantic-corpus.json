@@ -900,7 +900,7 @@
     },
     {
       "id": "rumor_knowledge",
-      "narrative": "Виктория сообщила Илье из дверного проёма: «Юра якобы покинул город». Илья услышал это, но не уверен в достоверности.",
+      "narrative": "Виктория пришла из салона к кабинету Ильи, остановилась в открытом дверном проёме и сообщила: «Юра якобы покинул город». Илья услышал это, но не уверен в достоверности.",
       "player_input": "",
       "preconditions": {},
       "expected": {
@@ -949,6 +949,17 @@
         ],
         "events": [
           {
+            "id": "doorway_arrival",
+            "text": "Виктория пришла к кабинету и остановилась в открытом проёме.",
+            "participants": [
+              "viktoria_solovyova"
+            ],
+            "witnesses": [],
+            "medium": "action",
+            "location_id": "ilya_cabinet",
+            "order": 1
+          },
+          {
             "id": "report",
             "text": "Виктория передала слух.",
             "participants": [
@@ -961,7 +972,8 @@
             "medium": "conversation",
             "fact_ids": [
               "rumor_yura"
-            ]
+            ],
+            "order": 2
           }
         ],
         "knowledge_gained": [
@@ -970,6 +982,16 @@
             "fact_id": "rumor_yura",
             "source_event_id": "report",
             "status": "suspected"
+          }
+        ],
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "from_location_id": "salon_lak",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "source_event_id": "doorway_arrival",
+            "order": 1
           }
         ]
       }

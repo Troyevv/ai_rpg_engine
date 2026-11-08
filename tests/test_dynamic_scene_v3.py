@@ -130,7 +130,7 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     assert len(calls) == 3
     messages = calls[2]['messages']
     system = messages[0]['content']
-    feedback = json.loads(system.split('Исправь структурную ошибку, верни полный JSON:\n', 1)[1])
+    feedback = json.loads(system.split('Повторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n', 1)[1])
     assert feedback['original_extraction'] == bad
     assert 'previous_camera' not in feedback
     current = json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))

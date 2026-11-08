@@ -106,13 +106,19 @@ def validate_event_presence(resolver, event, index, written):
         orders = {event_order}
     common = None
     local_actors = set()
+    action = event.get('player_action') or {}
+    contact = event.get('player_interaction') or (
+        action.get('outcome') == 'completed' and action.get('target_mode') == 'interaction')
     for role in ('participants', 'witnesses'):
         for n, actor in enumerate(event[role]):
             if medium == 'message' and channel != 'physical' and role == 'participants' and actor == event.get('author_id'):
                 # Attribution of an artifact does not establish contact or perception.
                 continue
             local_actors.add(actor)
-            visible = role == 'participants' and medium in ('observation', 'conversation')
+            # Visibility can locate an observed subject for observation only.
+            # Conversation needs actual shared geography (also at a doorway)
+            # or an established transport above; observed is never contact proof.
+            visible = role == 'participants' and medium == 'observation' and not contact
             slots = _meeting_slots(resolver, actor, visible, routes.get(actor, ()), orders, event_order, eid)
             if allowed_places is not None:
                 slots = {slot for slot in slots if slot[1] in allowed_places}

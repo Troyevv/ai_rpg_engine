@@ -74,6 +74,20 @@ def exercise(path, scenario):
         engine.run_job(path,jid,engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
         assert fixture.handoff_provider['narratives']==1
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    if scenario=='office':
+        # Exercise the same doorway return used after the browser's phone scene:
+        # leaving camera membership makes location unknown; observed alone must
+        # not make the next conversation valid.
+        for text in ('Спрашиваю, как дела.','Подождать у двери.','Продолжить после звонка.'):
+            jid=repo.begin_job(sid,text,'turn',config)
+            engine.run_job(path,jid,engine.Worker())
+            assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+            state=repo.get_snapshot(sid)['world_state']
+            if text=='Подождать у двери.':
+                assert state['characters']['qa_marina']['location_id'] is None
+            elif text=='Продолжить после звонка.':
+                assert state['camera']['observed_character_ids']==['qa_marina']
+                assert state['characters']['qa_marina']['location_id']==state['camera']['location_id']
     if scenario=='background':
         repo.switch_actor(sid,'character_2',repo.get_save(sid)['revision'])
         jid=repo.begin_job(sid,'','background',config)

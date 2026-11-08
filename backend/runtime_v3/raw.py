@@ -456,8 +456,21 @@ def repair_feedback(diagnostic, payload, before):
     return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
         known_locations={lid:{k:v for k,v in before['locations'][lid].items()
                              if k in ('id','name','aliases','parent_id','kind')} for lid in sorted(referenced)},
-        canonical_context='Use the supplied immutable current state/camera/locations; original_extraction is rejected, not canon.',
-        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. A player address/request and an NPC response need separate Events with their actual actors. If completion coverage is missing, restore the genuinely performed player address Event linked to its action/exact quote, retaining the NPC response and its fact_ids/knowledge_gained. Never relabel the NPC response as player-authored; never invent an action or reply. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present specifies END membership but alone proves no arrival from a different/unknown canonical place; observed is outside. Do not invent movements, consent or endpoints. Recheck EVERY movement: future_intent/departure is not completed_arrival, even with an existing or newly registered endpoint. Synchronize events, movements, final_scene and character_changes: preparation is not departure; leaving a room is not leaving the building. Preserve END membership at the actual scene granularity; absence requires a real departure, not a plan. Bind arrivals to source_event_id with actor/endpoint/order; retain actual arrivals and ordered routes. New Narrative-established locations use locations[]; creation alone is not arrival. Never replace null with a plausible destination. Narrative contradicting canon requires existing refusal/reauthor, not a JSON rewrite of its meaning.'), ensure_ascii=False, separators=(',', ':'))
+        canonical_context='Use the supplied immutable current state/camera/locations; original_extraction — предварительный отклонённый ответ, не канон.',
+        contract=(
+            'narrative-authority-v1: repair INTERPRETATION, not a saved status. original_extraction — предварительный отклонённый ответ, не канон. '
+            'Read the unchanged full Narrative against immutable before and current player_input; fix all diagnostics/dependencies together. '
+            'Preserve confirmed Events, facts, witnesses, real sources and ALL knowledge acquisitions; repair supported links. '
+            'Never remove witnesses while retaining impossible contact, substitute a speaker, invent arrival/consent or suppress confirmed learning. '
+            'Recheck both agency directions across prose, including unrecorded replies/gestures/decisions. If Narrative itself violates agency/canon, '
+            'return player_agency.status=violated (uncertain if unprovable), using existing reauthor/abandon; do not launder it by editing JSON. '
+            'Event/action coverage: actual actor, one action ID, its exact quote, target subset/union. Restore a genuinely performed player address '
+            'as a separate Event; retain NPC reply/fact_ids/knowledge_gained. Never relabel the NPC response as player-authored. '
+            'Align events/movements/final_scene/character_changes at scene granularity: future_intent/preparation is not departure; '
+            'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Arrival needs accepted source Event/actor/endpoint/order. '
+            'New locations and autonomous background movement remain valid; no automatic player Knowledge. Observed is visibility, not contact proof. '
+            'This is the only automatic repair; return full JSON, never rewrite before/History or the Narrative.'
+        )), ensure_ascii=False, separators=(',', ':'))
 
 
 def prune_schema_definitions(schema):

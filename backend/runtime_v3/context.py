@@ -350,15 +350,12 @@ class ExtractionContextBuilder:
         snapshot['character_cards'] = [appearance_card(c, snapshot['world_state'], scope.pov_actor_id or scope.controlled_actor_id, omniscient=self.extraction, bounded=True,known_actor_ids=scope.relevant_actor_ids) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
-        default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         # Retry/regeneration can retain an older default in their immutable prompt
         # snapshot. Reuse the existing upgrade registry, without rewriting it.
-        from hashlib import sha256
-        old_defaults = json.loads((PROMPTS/'default_updates.json').read_text(encoding='utf-8')).get('state_update_prompt.md', [])
-        if isinstance(old_defaults, str): old_defaults = [old_defaults]
-        custom = saved and saved.strip() != default.strip() and sha256(saved.encode()).hexdigest() not in old_defaults
+        from backend.repositories.documents import is_builtin_prompt
+        custom = saved and not is_builtin_prompt('state_update_prompt.md', saved, PROMPTS)
         rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
@@ -643,7 +640,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if not feedback['known_locations']:
                 feedback.pop('known_locations')
             validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
-        rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
+        rules += '\nПовторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))

@@ -37,11 +37,22 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: ALL input/Narrative. Changed act/target/consent or impossible completion=violated; unprovable=uncertain. No laundering/deletion/downgrading. NPCs independent.
-Act=ID+exact full quote. Event=initiator actor_id+ONE player_action_id+same player_evidence; no mixed quotes. SEPARATE player-address/NPC-reply Events/actors. Restore address/action/quote/targets; retain NPC reply/fact_ids/ALL acquisitions.
-Targets: attempted=keeps; partial=subset; deferred/not_performed permits actual=[]; untargeted=[]. Event targets subset actual, union=actual. completed_interaction requires completed.
-Contact requires presence/call/bound delivery even without marker; reply optional; silence != delivery.
-reference=watch Vera; interaction=ask Vera; ask doctor about Vera targets doctor. Reference sets match without contact; JSON mismatch=repair; impossible prose contact=violated.
+PLAYER ACTION REVIEW: both directions over WHOLE Narrative, beyond Events:
+(1) Account for every input action: meaning, targets, actual outcome.
+(2) Find new EXTERNAL speech/reply/consent/refusal (also gestures)/promise/choice absent from
+input. Omission from JSON never repairs prose.
+Physical detail of an authorized act is allowed, a separate response is not.
+Changed act/target/consent, new decision or impossible completion => status=violated;
+unprovable => uncertain. Use reauthor/abandon, never deletion/downgrade/fake evidence.
+NPC acts remain independent and authorize no EXTERNAL choice.
+Action: ID + exact full input quote. Player Event: actual actor_id, ONE player_action_id +
+same player_evidence. Split acts; separate player-address/NPC-reply Events. Keep replies,
+fact_ids and ALL confirmed acquisitions.
+Targets: attempted=chosen; partial=subset; deferred/not_performed may have
+actual=[]; untargeted=[]. Event targets subset actual, union=actual. completed_interaction needs
+completed action; question needs no reply, silence proves no delivery.
+reference=watch Vera; interaction=ask Vera; ask doctor ABOUT Vera targets doctor. Reference
+sets match without contact; JSON mismatch is repairable, impossible prose contact is violated.
 '''
 
 
