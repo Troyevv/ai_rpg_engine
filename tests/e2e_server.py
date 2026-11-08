@@ -328,6 +328,12 @@ def scripted_stream(**kwargs):
         if turn and json.loads(turn.split('\n', 1)[1]).get('player_input') == case['player_input']:
             raw = deepcopy(case['payload'])
             raw.pop('movements')  # Human-reviewed departure-only interpretation, not an LLM accuracy test.
+            # This synthetic browser provider emits the current protocol; the
+            # historical fixture on disk remains unchanged.
+            review = raw['player_agency']
+            review['narrative_audit'] = [dict(narrative_evidence='Кирилл остаётся за столом с фотографиями.',
+                classification='authorized', player_action_id=a['id']) for a in review['actions']]
+            for action in review['actions']:action['target_mode'] = 'reference'
             for event in raw.get('events', []):
                 event.pop('minute', None)  # Fixture clock differs from historical live job.
             yield json.dumps(raw, ensure_ascii=False) if kwargs.get('response_format') else case['narrative']
