@@ -548,11 +548,15 @@ def cross_record_errors(state):
 def inspect_candidate(raw, *, for_start=False):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
+    from backend.services.portrait_traits import input_diagnostics
+    portrait_errors = input_diagnostics(raw.get('characters')) if isinstance(raw, dict) else []
     state=raw
     try:
         state=normalize(raw)
         # Typed checking precedes legacy preparation, which otherwise hides paths.
         advisories=validate_typed(state,advisory_age=for_start)
+        if portrait_errors:
+            raise DraftErrors(portrait_errors)
         state=draft_world.prepare(state)
         report=draft_world.validate(state,canonical=False)
         if report['errors']:
@@ -562,6 +566,7 @@ def inspect_candidate(raw, *, for_start=False):
         return state,dict(report,diagnostics=[],semantic_warnings=advisories)
     except (ValueError,TypeError,KeyError,IndexError,AttributeError) as exc:
         diagnostics=exc.errors if isinstance(exc,DraftErrors) else [error('/',str(exc),'validation_incomplete')]
+        diagnostics = diagnostics + [e for e in portrait_errors if e not in diagnostics]
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)
 
 

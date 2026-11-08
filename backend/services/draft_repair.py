@@ -203,6 +203,15 @@ def apply(raw,reply,paths):
         if not isinstance(patch,dict) or set(patch)!={'path','value'} or not isinstance(patch['path'],str) or patch['path'] not in paths or patch['path'] in used:
             raise ValueError('Исправление затронуло неразрешённый путь.')
         path=patch['path'];used.add(path)
+        if isinstance(paths,RepairScope) and path.startswith('/characters/') and path.endswith('/portrait_traits'):
+            from backend.services.draft_completeness import pointer
+            from backend.services.portrait_traits import STYLES
+            prior=pointer(original,path);proposed=patch['value'];options=dict(STYLES,form=('human','neutral'))
+            if not isinstance(proposed,dict) or (not isinstance(prior,dict) and proposed):
+                raise ValueError('portrait_traits: исправление не должно придумывать признаки.')
+            if isinstance(prior,dict) and (set(proposed)-set(prior) or any(
+                    k in options and v in options[k] and proposed.get(k)!=v for k,v in prior.items())):
+                raise ValueError('portrait_traits: корректные признаки должны сохраниться.')
         if isinstance(paths,RepairScope) and path.startswith('/world/') and len(path.split('/'))==4 and isinstance(patch['value'],dict):
             ident=path.split('/')[-1].replace('~1','/').replace('~0','~')
             if patch['value'].get('id',ident)!=ident:raise ValueError('ID новой записи должен совпадать с серверным адресом.')

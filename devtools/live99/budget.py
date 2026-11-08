@@ -5,12 +5,16 @@ import json
 import os
 from pathlib import Path
 from functools import wraps
+from llm import OutputLimitReached
 
 MODEL = 'deepseek-flash'
 # Reserve the entire provider context window, even if our prompt estimator is wrong.
 CONTEXT = 1_048_576
 LIMIT_TOKENS = 3_000_000
 LIMIT_CALLS = 320
+# Same ceiling as the production draft Resume DTO. This permits a configured
+# world recovery; it does not raise any request's output limit automatically.
+MAX_OUTPUT_TOKENS = 65536
 # Integer nano-USD per token: maximum (peak, cold input), verified 2026-11-06.
 INPUT, OUTPUT = 300, 1200
 LIMIT_NUSD = 2_000_000_000
@@ -146,7 +150,7 @@ class Budget:
             return ceiling
 
     def reserve(self, max_tokens):
-        if type(max_tokens) is not int or not 0 < max_tokens <= 32000:
+        if type(max_tokens) is not int or not 0 < max_tokens <= MAX_OUTPUT_TOKENS:
             raise ValueError('Missing or excessive output cap')
         with sqlite3.connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
@@ -223,6 +227,11 @@ class Budget:
                     yield chunk
                 self.settle(rid, usage_receipt)
                 complete = True
+            except OutputLimitReached:
+                # A terminal LENGTH can carry authoritative usage even without
+                # visible JSON. Missing usage still retains the full reserve.
+                self.settle(rid, usage_receipt)
+                raise
             finally:
                 if audit:
                     try:
