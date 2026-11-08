@@ -8,7 +8,7 @@ retained. This is offline engineering verification, **not new Live QA**.
 
 | Case | Recorded failure | Change |
 | --- | --- | --- |
-| D/002 | Extraction sees an off-scene referenced NPC's hidden Fact and a duplicate legacy Thread and the NPC's private goal. Plain choices have no checked knowledge source; separate labelled actor context does not isolate one model's attention. | Actor-mode context excludes unnecessary off-scene private Facts/Threads and psychological state, including redundant scope/Director references. New optional choices declare per-item Fact/scene sources; Runtime checks actor Knowledge, exact source availability and optional continuity basis. Reject only that invalid item, without repair, state changes or restrictions on typed input. |
+| D/002 | Extraction sees an off-scene referenced NPC's hidden Fact and a duplicate legacy Thread and the NPC's private goal. Plain choices have no checked knowledge source; separate labelled actor context does not isolate one model's attention. | Actor-mode context excludes unnecessary off-scene private Facts/Threads and psychological state, including redundant scope/Director references. New optional choices declare per-item Fact/scene sources; Runtime checks actor Knowledge, typed current-scene attribution and optional continuity basis. Reject only that invalid item, without repair, state changes or restrictions on typed input. |
 | LTA Pasha | Reconciliation iterates `(previous present ∪ observed) − present` and clears the known location. Visibility is incorrectly treated as departure. | Observed characters never lose geography from observation. New ordinary turns and all background/LTA preserve known locations on scene absence. An actual exit with unknown destination is an explicit existing Movement, bound to its accepted Event at the known origin. |
 | D/005 | One PlayerAction combines distinct clauses/targets; linked Events use conflicting quotes; arrival asserts interaction without the target among participants. The repair fixes some fields but omits `final_scene`. Retry takes only that latest partial proposal. | Compound-action instructions explain separate consent/target boundaries. Repair requests a full schema with the populated consequence sections. Retry finds the preceding complete proposal and supplies only omitted sections as **unaccepted context**. It never merges or applies proposals itself. |
 
@@ -53,7 +53,7 @@ and patches provider transport. Results on the implementation:
 - Original D/002 under its historical v3 reproduces the unsafe suggestion without
   adding Knowledge. New contexts contain neither the hidden Fact nor the duplicate
   off-scene Thread. A v4 control preserves the original six proposed texts and
-  adds explicitly reviewed sources: five safe suggestions survive and the letter
+  adds explicitly reviewed source declarations: five safe suggestions survive and the letter
   suggestion is rejected. Paraphrases with the same unavailable source also fail.
   New saved choices survive reload; typed questions remain available.
 
@@ -66,7 +66,7 @@ control. Historical stored choices are not retroactively rewritten.
 
 ## Regression coverage and verification
 
-`test_berezovsk_followup248.py`: 19 cases through Context Builder, real Runtime,
+`test_berezovsk_followup248.py`: 25 cases through Context Builder, real Runtime,
 engine jobs/Retry, LTA, History and SQLite. Covers original cases, paraphrases,
 unknown/known/missing choice sources, private legacy continuity basis, no Knowledge
 minting, free input, per-item rejection, absence/observation, departure sources,
@@ -77,10 +77,32 @@ v4; legacy raw archive tests remain unchanged. Synthetic provider fixtures that
 expect choices declare their scene sources. Assertions on source validation,
 locations, action recipients, History and transaction rollback are retained.
 
-Local focused run: 106 passed (API, calls, original replays, context compaction,
-extraction semantics, event presence); new focused run: 19 passed; final context/compatibility set: 103 passed; final movement/playability set: 88 passed. Frontend unit:
-151 passed; TypeScript/production build passed. The first broad local run began
-before fixture updates and must not be described as a green final run.
+Local focused runs overlap and are not summed: 25 new regressions; 82 source,
+context, legacy and browser-provider checks on the final source contract; 143
+personality/values/reproduction/birth/secrets/POV checks; 73 narrative authority,
+NPC promotion and persistence checks. Frontend unit: 151 passed;
+TypeScript/production build passed. The first broad local run ended with
+3774 passed, 25 failed, 1 skipped before all protocol fixtures were updated;
+it is not a green final run. Its failures included legacy expectations of
+observation erasing geography, unannotated synthetic choices, hardcoded producer
+v3, a missing optional legacy thread field, and over-filtered active authors.
+Those failures were reproduced and corrected without suppressing assertions.
+
+Intermediate CI #490 on `cb0447e` was **not green**: backend 3794 passed,
+12 failed, 1 skipped; full browser shards also exposed legacy synthetic departure,
+unannotated seeded choices, the obsolete doorway-location expectation and an
+undersized model capacity advertised by the new Berezovsk provider. The fixes keep
+the existing assertions for actual departure, repair attempts, six safe seeded
+choices and state equality. Direct subprocess checks of the browser provider now
+pass all 13 scenarios; the fixture/provenance integration subset passes 50 tests.
+These results are not a substitute for the final complete CI.
+
+The active-author correction preserves NPC-owned knowledge needed to author a
+message, including explicit uncertainty, while a merely mentioned off-scene NPC
+still contributes no private goals/facts/threads. Semantic retrieval diagnostics
+retain selected-versus-included counts outside the model prompt. Old snapshots
+without `Thread.discovered_by` retain their legacy default. Departure feedback
+matches the recorded ordinary contract; background always uses explicit exits.
 
 Two new browser scenarios run for both desktop/mobile: D/002 keeps five safe
 choices through reload; D/005 error → reload → Retry preserves one Narrative and
@@ -93,7 +115,7 @@ results and exact HEAD are published in PR #248**, not inferred from local build
 
 - Source declarations are produced by the same model. Runtime checks canonical
   access and supplied references, not whether a literary sentence truly follows
-  from a quoted source. A model can still misattribute an unrelated safe quote or
+  from the declared scene. A model can still misdeclare a secret as scene-based or
   omit a secret presupposition. No regex classifier or extra verification model
   is introduced. Removing unnecessary GM context reduces the observed cause but
   is not proof of zero possible semantic leaks.

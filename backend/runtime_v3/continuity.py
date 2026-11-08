@@ -530,16 +530,15 @@ def filter_choices(resolver, choices):
             grounding = choice.get('grounding')
             actor = resolver.state['camera']['controlled_actor_id']
             facts = grounding.get('fact_ids') if isinstance(grounding, dict) else None
-            quotes = grounding.get('scene_evidence') if isinstance(grounding, dict) else None
-            from backend.runtime_v3.resolver import normalized
-            sources = [normalized(resolver.narrative), normalized(resolver.player_input)]
+            scene = grounding.get('from_scene') if isinstance(grounding, dict) else None
+            # Scene meaning remains Extraction's responsibility. A typed source
+            # declaration is not a prose matcher, an Event or a Knowledge grant.
             valid = (isinstance(facts, list) and all(isinstance(fid, str) and fid in resolver.state['facts']
                      and resolver.state['knowledge'].get(actor+':'+fid, {}).get('status') in ('known', 'suspected') for fid in facts)
-                     and isinstance(quotes, list) and all(isinstance(q, str) and normalized(q)
-                     and any(normalized(q) in text for text in sources) for q in quotes)
-                     and bool(facts or quotes))
+                     and type(scene) is bool and bool(facts or scene)
+                     and (not scene or bool(resolver.narrative.strip() or resolver.player_input.strip())))
             if not valid:
-                resolver.warn('choices', index, 'Источник предложения не подтверждён знаниями или текущей сценой.',
+                resolver.warn('choices', index, 'Источник предложения не указан или недоступен персонажу.',
                               code='choice_knowledge_unproven')
                 continue
         ids, kind = choice.get('basis_ids'), choice.get('kind')
@@ -552,7 +551,7 @@ def filter_choices(resolver, choices):
             actor = resolver.state['camera']['controlled_actor_id']
             def known_basis(key):
                 thread = resolver.state['threads'].get(key)
-                if thread and thread['discovered_by'] is None and thread['character_ids']:
+                if thread and thread.get('discovered_by') is None and thread['character_ids']:
                     # Legacy null is missing provenance, not worldwide awareness.
                     return actor in thread['character_ids']
                 return actor_knows_dialogue_basis(resolver.state, rows, key, actor)

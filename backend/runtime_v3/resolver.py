@@ -318,10 +318,12 @@ class StateResolver:
                 fatal('Уход без известного назначения требует to_location_id=null и известного from_location_id.',
                       'movement_endpoint_invalid', repairable=True, section='movements', index=i, field='to_location_id', entity=cid)
             if not departure and (not isinstance(target,str) or target not in s['locations']):
+                exit_instruction = ('и используй Movement assertion=departure, to_location_id=null, известный from_location_id и source_event_id ухода. '
+                                    if self.preserve_scene_locations else 'и опусти только неподтверждённую запись прибытия. ')
                 fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
                       'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
                       'сохрани Event ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
-                      'и используй Movement assertion=departure, to_location_id=null, известный from_location_id и source_event_id ухода. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                      + exit_instruction + 'Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
                       'movement_endpoint_invalid', repairable=True, section='movements', index=i,
                       field='to_location_id', entity=cid)
             initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None

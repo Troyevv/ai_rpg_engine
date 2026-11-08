@@ -43,8 +43,8 @@ def grounded_control(data):
     """Human-reviewed provider control; the original stored response is unchanged."""
     raw = json.loads(data['responses']['D'][0])
     for i, choice in enumerate(raw['choices']):
-        choice['grounding'] = (dict(fact_ids=['fact_viktor_letter'], scene_evidence=[]) if i == 3
-            else dict(fact_ids=[], scene_evidence=[data['narrative']]))
+        choice['grounding'] = (dict(fact_ids=['fact_viktor_letter'], from_scene=False) if i == 3
+            else dict(fact_ids=[], from_scene=True))
     return raw
 
 
@@ -100,8 +100,8 @@ def test_d002_individual_choice_sources_reload_rollback_and_free_input(tmp_path,
 
 def test_choice_source_does_not_grant_knowledge_and_known_source_is_usable():
     data = deepcopy(DATA['002']); raw = grounded_control(data)
-    for grounding in (dict(fact_ids=['missing'], scene_evidence=[]),
-                      dict(fact_ids=[], scene_evidence=['Never uttered']), None):
+    for grounding in (dict(fact_ids=['missing'], from_scene=False),
+                      dict(fact_ids=[], from_scene='untyped'), None):
         raw['choices'][3]['grounding'] = grounding
         result = resolve(data, raw)
         assert len(result.choices) == 5
@@ -116,7 +116,7 @@ def test_choice_source_does_not_grant_knowledge_and_known_source_is_usable():
 def test_optional_continuity_basis_cannot_bypass_choice_knowledge():
     data=deepcopy(DATA['002']);raw=grounded_control(data)
     choice=raw['choices'][3]
-    choice.update(grounding=dict(fact_ids=[],scene_evidence=[data['narrative']]),
+    choice.update(grounding=dict(fact_ids=[],from_scene=True),
                   basis_ids=['thread_viktor_letter'],kind='question')
     result=resolve(data,raw)
     assert len(result.choices)==5 and result.state['knowledge']==data['before']['knowledge']
@@ -258,3 +258,39 @@ def test_original_d005_failure_retry_full_schema_and_atomicity(tmp_path,retry_go
     assert after['world_state']['knowledge']==before['world_state']['knowledge']
     fresh.rollback_last(sid)
     assert fresh.get_snapshot(sid)==before and history(fresh,sid)==old_history
+
+
+@pytest.mark.parametrize('version,kind,explicit', [(3,'turn',False),(4,'turn',True),(3,'background',True),(4,'background',True)])
+def test_departure_schema_and_repair_feedback_match_recorded_mode(version,kind,explicit):
+    snapshot,narrative,raw=lta_second_group()
+    messages=build_context(snapshot,[], '',kind,131072,8192,extraction_text=narrative,extraction_contract=version)
+    schema=next(json.loads(m['content'].split('\n',1)[1]) for m in messages if m['content'].startswith('JSON Schema\n'))
+    movement=schema['properties']['movements']['items']['properties']
+    assert ('departure' in movement['assertion']['enum']) is explicit
+    assert ('Movement assertion=departure' in messages[0]['content']) is explicit
+    raw['movements']=[dict(actor_id='char_pasha',from_location_id='loc_home_kovalev',
+        to_location_id=None,assertion='completed_arrival')]
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(snapshot['world_state'],narrative,'',mode='background' if kind=='background' else 'turn',
+            preserve_scene_locations=version>=4).resolve(raw)
+    assert error.value.code=='movement_endpoint_invalid'
+    assert ('assertion=departure' in str(error.value)) is explicit
+
+
+@pytest.mark.parametrize('source_valid',[True,False])
+def test_choice_can_use_this_turn_accepted_learning_but_cannot_repair_its_source(source_valid):
+    from test_live248_recovery import live,control
+    data=live('knowledge');raw=control(data)
+    acquisition=raw['knowledge_gained'][0]
+    raw['choices']=[dict(action='Уточнить только что услышанное.',speech='',
+        grounding=dict(fact_ids=[acquisition['fact_id']],from_scene=False))]
+    actor=data['before']['camera']['controlled_actor_id']
+    assert data['before']['knowledge'].get(actor+':'+acquisition['fact_id'],{}).get('status')!='known'
+    if not source_valid:
+        acquisition['source_event_id']='fabricated'
+        with pytest.raises(StructuralDeltaError):resolve(data,raw)
+        return
+    result=resolve(data,raw)
+    assert len(result.choices)==1
+    assert result.state['knowledge'][actor+':'+acquisition['fact_id']]['status']=='known'
+    assert any(k['fact_id']==acquisition['fact_id'] for k in result.history['knowledge_acquisitions'])

@@ -218,7 +218,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
             for key in list(actor):
                 if actor[key] in (None, '', [], {}): actor.pop(key)
     if state['camera']['mode'] == 'actor':
-        scene_actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | {scope.controlled_actor_id}
+        scene_actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids | {scope.controlled_actor_id}
         for cid, character in current['characters'].items():
             if cid not in scene_actors:
                 for key in ('goals', 'intentions', 'obligations', 'emotion', 'situation', 'personality', 'values'):
@@ -369,6 +369,8 @@ class ExtractionContextBuilder:
         if self.contract_version >= 4:
             from backend.runtime_v3.context_contract import GROUNDED_CHOICES_CONTRACT, CHOICE_CONTRACT
             rules = rules.replace(CHOICE_CONTRACT, GROUNDED_CHOICES_CONTRACT)
+        explicit_departures = self.contract_version >= 4 or kind == 'background'
+        if explicit_departures:
             rules = rules.replace('Departure without destination: Event + END absence,\nno completed_arrival, location unknown.',
                 'Departure without destination: Movement assertion=departure, to_location_id=null, known from_location_id, accepted source_event_id/order at origin. END absence alone preserves location.')
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
@@ -410,7 +412,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(explicit_departures=self.contract_version >= 4, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -528,17 +530,20 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     observer = scope.pov_actor_id or scope.controlled_actor_id
     remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
                       if e['channel']!='VOICE_CALL' and observer not in e['read_by'] and observer != e['sender_id']}
+    private_context_facts = set()
     if camera['mode'] == 'actor':
         # Relevance of a mentioned off-scene NPC does not authorize exposing
         # their private facts or legacy threads to this player-facing scene.
-        actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | {scope.controlled_actor_id}
+        actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids | {scope.controlled_actor_id}
         available = {k['fact_id'] for k in state['knowledge'].values()
-                     if k['actor_id'] in actors and k['status'] in ('known', 'suspected')}
-        remote_private |= {fid for fid in scope.fact_ids
-                           if state['facts'][fid]['visibility'] == 'secret' and fid not in available}
+                     if k['actor_id'] in actors and (k['status'] in ('known', 'suspected')
+                     or k['actor_id'] in scope.active_actor_ids)}
+        private_context_facts = {fid for fid in scope.fact_ids
+                           if state['facts'][fid].get('visibility') == 'secret' and fid not in available}
+        remote_private |= private_context_facts
         scope.thread_ids = [tid for tid in scope.thread_ids
-            if (state['threads'][tid]['discovered_by'] is not None and actors.intersection(state['threads'][tid]['discovered_by']))
-            or (state['threads'][tid]['discovered_by'] is None and
+            if (state['threads'][tid].get('discovered_by') is not None and actors.intersection(state['threads'][tid].get('discovered_by')))
+            or (state['threads'][tid].get('discovered_by') is None and
                 (not state['threads'][tid]['character_ids'] or actors.intersection(state['threads'][tid]['character_ids'])))]
     scope.fact_ids = [fid for fid in scope.fact_ids if fid not in remote_private]
     scope.knowledge_ids = [key for key in scope.knowledge_ids if state['knowledge'][key]['fact_id'] not in remote_private]
@@ -716,6 +721,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith(title+'\n'): messages[i] = block(title, value); return
 
     selected = {key: len(current[key]) for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
+    # Retrieval diagnostics retain selected-but-not-transmitted candidates.
+    # This metadata is never a model context or a grant of Knowledge.
+    selected['facts'] += len(private_context_facts)
     selected_history = list(scope.history_events)
     def refresh_current():
         replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
@@ -965,7 +973,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                              'Удалённые собеседники / GM-only', 'Упомянутые, присутствие не установлено / GM-only',
                              'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
     included_counts = {mode: sum(classifier.classify(cid, scope) == mode for cid in included_actors) for mode in counts}
-    selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids),
+    selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids) | private_context_facts,
         threads=set(scope.thread_ids), scheduled_events=set(scope.scheduled_event_ids), knowledge=set(scope.knowledge_ids),
         relationships=set(scope.relationship_pairs), history_events={e.get('id') for e in selected_history})
     included_ids = dict(characters=included_actors, locations=set(current['locations']), facts=set(current['facts']),

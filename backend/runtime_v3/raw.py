@@ -353,8 +353,8 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         choice = schema['properties']['choices']['items']
         choice['properties']['grounding'] = {'type':'object', 'additionalProperties':False,
             'properties':{'fact_ids':{'type':'array','items':{'type':'string'}},
-                          'scene_evidence':{'type':'array','items':{'type':'string'}}},
-            'required':['fact_ids','scene_evidence']}
+                          'from_scene':{'type':'boolean'}},
+            'required':['fact_ids','from_scene']}
         choice['required'].append('grounding')
     if player_agency_required:
         if not consequence_first:

@@ -82,7 +82,7 @@ def browser_response(payload, kwargs):
                        if m['content'].startswith('completed_narrative\n')), None)
         if source:
             for choice in raw.get('choices', []):
-                choice.setdefault('grounding', dict(fact_ids=[], scene_evidence=[source]))
+                choice.setdefault('grounding', dict(fact_ids=[], from_scene=True))
     return raw
 
 
@@ -356,7 +356,13 @@ def scripted_stream(**kwargs):
         turn = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), None)
         if turn and json.loads(turn.split('\n', 1)[1]).get('player_input') == case['player_input']:
             raw = deepcopy(case['payload'])
-            raw.pop('movements')  # Human-reviewed departure-only interpretation, not an LLM accuracy test.
+            # Human-reviewed departure-only interpretation; the original
+            # synthetic #223 negative payload on disk remains unchanged.
+            raw['movements'] = [dict(actor_id='qa_timur',
+                from_location_id=current_phone['camera']['location_id'],
+                to_location_id=None, assertion='departure', source_event_id='departure',
+                evidence='Тимур прощается и уходит.', order=0)]
+            raw['events'][0]['order'] = 0
             # This synthetic browser provider emits the current protocol; the
             # historical fixture on disk remains unchanged.
             review = raw['player_agency']
@@ -681,7 +687,7 @@ def generation_fixture(prep, jid, config, *args):
 draft_generation.run = generation_fixture
 
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152}.get(model, 32768)}
+    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072}.get(model, 32768)}
 }
 def authoring_stream(**kwargs):
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):

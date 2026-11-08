@@ -22,7 +22,8 @@ def run(repo,job,raw):
 def raw_for(snapshot):
     camera=snapshot['world_state']['camera']
     return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
-        choices=[dict(action='Действие '+str(i),speech='') for i in range(6)])
+        choices=[dict(action='Действие '+str(i),speech='',
+            grounding=dict(fact_ids=[],from_scene=True)) for i in range(6)])
 
 
 def test_real_job_commit_reload_timing_and_variant(db):

@@ -187,7 +187,7 @@ def play(repo,sid,text='Рассмотреть карту.',kind='turn'):
         if not kwargs.get('response_format'):
             yield 'Разговор о карте продолжается.'; return
         current=section(kwargs['messages'],'Текущее состояние / GM-only')
-        yield json.dumps(raw(current,choices=[dict(c, grounding=dict(fact_ids=[], scene_evidence=['Разговор о карте продолжается.'])) for c in CHOICE_EXAMPLES]),ensure_ascii=False)
+        yield json.dumps(raw(current,choices=[dict(c, grounding=dict(fact_ids=[], from_scene=True)) for c in CHOICE_EXAMPLES]),ensure_ascii=False)
     jid=repo.begin_job(sid,text,kind,CONFIG)
     with patch('engine.find_loaded_model',return_value={'config':{'context_length':32768}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(repo.path,jid,engine.Worker())

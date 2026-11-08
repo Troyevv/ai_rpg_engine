@@ -85,7 +85,7 @@ def reviewed(payload, *, choice_source=None):
         if choice_source:
             # Opt-in provenance for explicitly authored synthetic wire fixtures.
             for choice in raw.get('choices', []):
-                choice.setdefault('grounding', dict(fact_ids=[], scene_evidence=[choice_source]))
+                choice.setdefault('grounding', dict(fact_ids=[], from_scene=True))
     return raw
 
 

@@ -183,7 +183,7 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
         state=repo.get_snapshot(sid)['world_state']
         assert ('qa_marina' in state['camera']['present_character_ids']) != observed
         if observed:
-            assert state['characters']['qa_marina']['location_id'] == (camera['location_id'] if returning else None)
+            assert state['characters']['qa_marina']['location_id'] == camera['location_id']
     physical();physical();physical(True)
     with patch('engine.launch'):
         r=client.post(f'/api/saves/{sid}/phone/dispatch',json=dict(revision=repo.get_save(sid)['revision'],config=CONFIG,command=dict(action='call',contact_id='phone-qa_kirill-qa-vera',operation_id='issue136-call')))
@@ -282,13 +282,13 @@ def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
     assert feedback['original_extraction']==attempts[-1]
 
 
-def test_observed_stale_colocation_clears_only_unknown_position(api):
+def test_observation_preserves_known_geography_without_movement(api):
     client,app=api;sid=imported(client);before=app.state.repository.get_snapshot(sid)['world_state']
     before['characters']['viktoria_solovyova']['location_id']='ilya_cabinet'
     raw=arrival();raw['movements']=[]
     raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
     out=StateResolver(before,'Она видна за открытым окном.','').resolve(raw)
-    assert out.state['characters']['viktoria_solovyova']['location_id'] is None
+    assert out.state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
     assert not out.history['movements'] and out.state['locations']==before['locations']
 
 

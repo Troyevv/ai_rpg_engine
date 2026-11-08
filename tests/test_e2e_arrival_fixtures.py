@@ -10,7 +10,7 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize('scenario', ['background','entry','optional-annotation','retry','semantic-retry','doorway','office','imported-json','imported-text'])
+@pytest.mark.parametrize('scenario', ['provenance-campaign','departure223','berezovsk-002','berezovsk-005','background','entry','optional-annotation','retry','semantic-retry','doorway','office','imported-json','imported-text'])
 def test_browser_arrival_controls_commit_with_provenance(tmp_path, scenario):
     run=subprocess.run([sys.executable,__file__,str(tmp_path/'game.sqlite'),scenario],
                        capture_output=True,text=True,timeout=60)
@@ -27,6 +27,68 @@ def exercise(path, scenario):
     import engine
 
     repo=Repository(path)
+    if scenario in ('provenance-campaign','departure223'):
+        import json
+        from test_narrative_test_world import ordinary_job
+        if scenario=='provenance-campaign':
+            from test_action_provenance_repair import archived,seed_archived
+            sid=seed_archived(repo,'campaign')['save']
+            data=archived('campaign');action=data['player_input']
+            fixture.provenance238_case='campaign';fixture.provenance238_repeat=True
+            config=dict(CONFIG,model='provenance-test',provider='local',thinking='off',
+                context_length=40960,update_tokens=4096,recent_turns=6,memory_batch=4)
+        else:
+            from devtools.narrative_test_world import load_fixture
+            sid=load_fixture(repo,'phone')['save'];ordinary_job(repo,sid,'start')
+            fixture.phone_mode='departure223'
+            data=json.loads((Path(__file__).parent/'fixtures/movement/phone001.json').read_text())
+            action=data['player_input'];config=CONFIG
+        before=repo.get_snapshot(sid)
+        jid=repo.begin_job(sid,action,'turn',config)
+        engine.run_job(path,jid,engine.Worker())
+        job=repo.get_job(jid);calls=repo.request_log(job_id=jid)
+        if scenario=='provenance-campaign':
+            assert job['status']=='error'
+            assert sorted(r['stage'] for r in calls)==['extraction','extraction_repair','narrative'],job['error']
+            assert repo.get_snapshot(sid)==before
+        else:
+            assert job['status']=='saved',job['error']
+            snap=Repository(path).get_snapshot(sid)
+            assert snap['world_state']['characters']['qa_timur']['location_id'] is None
+            with repo.connect() as db:history,_=read_history(db,snap['history_head'])
+            assert any(m['actor_id']=='qa_timur' and m['source_event_id'] for m in history['movements'])
+            repo.rollback_last(sid);assert repo.get_snapshot(sid)==before
+        return
+    if scenario.startswith('berezovsk-'):
+        import json
+        from copy import deepcopy
+        from test_berezovsk_followup248 import DATA,LTA,CONFIG,grounded_control,compound_control
+        from test_integrated_repair247 import seed
+        case=scenario[-3:];data=deepcopy(DATA[case]);sid=seed(repo,data)['save']
+        snapshot=deepcopy(LTA['snapshot']);snapshot['world_state']=data['before']
+        snapshot['history_head']=repo.get_snapshot(sid)['history_head']
+        with repo.connect() as db:db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),sid))
+        before=repo.get_snapshot(sid)
+        answers=([grounded_control(data)] if case=='002' else
+                 [json.loads(r) for r in data['responses']['D']]+[compound_control(data)])
+        fixture.berezovsk_followup=dict(data=data,responses=answers,attempt=0)
+        config=dict(CONFIG,model='berezovsk-followup-test')
+        jid=repo.begin_job(sid,data['player_input'],'turn',config)
+        engine.run_job(path,jid,engine.Worker())
+        if case=='005':
+            assert repo.get_job(jid)['status']=='error' and repo.get_snapshot(sid)==before
+            repo.retry_job(jid,config)
+            engine.run_job(path,jid,engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
+        assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+        fresh=Repository(path)
+        if case=='002':assert len(json.loads(fresh.list_turns(sid)[-1]['choices_json']))==5
+        else:assert fresh.get_snapshot(sid)['world_state']['characters']['char_alexey']['location_id']=='loc_home_viktor'
+        assert fresh.get_snapshot(sid)['world_state']['knowledge']==before['world_state']['knowledge']
+        calls=repo.request_log(job_id=jid)
+        assert len(calls)==(2 if case=='002' else 4)
+        assert sum(r['stage']=='narrative' for r in calls)==1
+        fresh.rollback_last(sid);assert fresh.get_snapshot(sid)==before
+        return
     if scenario.startswith('imported-'):
         from fastapi.testclient import TestClient
         from backend.api.app import create_app

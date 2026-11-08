@@ -226,7 +226,7 @@ def test_optional_choice_errors_drop_only_choices_and_keep_next_input(tmp_path):
     raw['choices']=[dict(action='Осмотреться.',speech=''),
         dict(action='Неверная привязка.',speech='',basis_ids=['missing'],kind='question')]
     for choice in raw['choices']:
-        choice['grounding']=dict(fact_ids=[],scene_evidence=[data['player_input']])
+        choice['grounding']=dict(fact_ids=[],from_scene=True)
     job,calls=execute(repo,sid,data,[raw],legacy=False)
     assert job['status']=='saved' and len(calls)==2
     assert any(w['code']=='choice_basis_invalid' for w in json.loads(job['warnings_json']))

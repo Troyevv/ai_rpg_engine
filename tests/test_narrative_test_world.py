@@ -31,7 +31,8 @@ def ordinary_job(repo, sid, kind='turn'):
     camera = before['world_state']['camera']
     raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
-        choices=[dict(action=f'Рассмотреть деталь {i}', speech='') for i in range(6)])
+        choices=[dict(action=f'Рассмотреть деталь {i}', speech='',
+            grounding=dict(fact_ids=[], from_scene=True)) for i in range(6)])
     def stream(**kwargs):
         yield json.dumps(raw, ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
     text = 'Рассмотреть фотографии.' if kind == 'turn' else ''
@@ -42,6 +43,7 @@ def ordinary_job(repo, sid, kind='turn'):
     job = repo.get_job(jid)
     assert job['status'] == 'saved', job['error']
     assert calls.call_count == 2  # ordinary narrative + extraction, no repair or extra LLM
+    assert len(json.loads(repo.list_turns(sid)[-1]['choices_json'])) == 6
     after = repo.get_snapshot(sid)
     assert_world_state_v3_invariants(after['world_state'])
     assert after['world_state']['camera']['controlled_actor_id'] == ACTOR_ID
