@@ -314,7 +314,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False):
     """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
@@ -344,6 +344,18 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     schema = structural(extraction_schema())
     # New generation requires provenance; legacy raw/saved payloads remain readable.
     schema['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
+    if explicit_departures:
+        movement = schema['properties']['movements']['items']
+        movement['properties']['assertion'] = {'enum': ['completed_arrival', 'departure']}
+        movement['properties']['to_location_id'] = {'type': ['string', 'null']}
+        movement['description'] = 'Arrival: reached endpoint. Departure: null endpoint, known from_location_id, accepted departure Event at origin; same order. END absence alone changes no geography.'
+    if grounded_choices:
+        choice = schema['properties']['choices']['items']
+        choice['properties']['grounding'] = {'type':'object', 'additionalProperties':False,
+            'properties':{'fact_ids':{'type':'array','items':{'type':'string'}},
+                          'scene_evidence':{'type':'array','items':{'type':'string'}}},
+            'required':['fact_ids','scene_evidence']}
+        choice['required'].append('grounding')
     if player_agency_required:
         if not consequence_first:
             schema['required'].append('player_agency')
@@ -488,7 +500,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     return result
 
 
-def repair_feedback(diagnostic, payload, before):
+def repair_feedback(diagnostic, payload, before, previous_complete=None):
     """Retry-only context: never infer scene semantics from prose in Python."""
     if isinstance(payload, str):
         try: payload = json.loads(payload)
@@ -510,7 +522,18 @@ def repair_feedback(diagnostic, payload, before):
         elif isinstance(value, str) and value in before['locations']:
             referenced.add(value)
     references(payload)
+    omitted = {}
+    if isinstance(previous_complete, str):
+        try: previous_complete = json.loads(previous_complete)
+        except ValueError: previous_complete = None
+    if isinstance(payload, dict) and isinstance(previous_complete, dict):
+        omitted = {key:previous_complete[key] for key in ('final_scene', *SECTIONS)
+                   if key not in payload and previous_complete.get(key)}
+    required = ['final_scene'] + [key for key in SECTIONS if
+        (isinstance(payload, dict) and payload.get(key)) or omitted.get(key)]
     return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
+        response_required=required,
+        **({'omitted_sections_from_previous_proposal':omitted} if omitted else {}),
         known_locations={lid:{k:v for k,v in before['locations'][lid].items()
                              if k in ('id','name','aliases','parent_id','kind')} for lid in sorted(referenced)},
         canonical_context='Use the supplied immutable current state/camera/locations; original_extraction — предварительный отклонённый ответ, не канон.',
@@ -527,7 +550,9 @@ def repair_feedback(diagnostic, payload, before):
             'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Arrival needs accepted source Event/actor/endpoint/order. '
             'New locations and autonomous background movement remain valid; no automatic player Knowledge. Observed is visibility, not contact proof. '
             'This is the only automatic repair; return ONLY the full RawTurnResult matching JSON Schema. '
-            'diagnostic, diagnostics, original_extraction, known_locations, canonical_context and contract are INPUT feedback keys, '
+            'For compound input, split distinct clauses/targets into separate PlayerActions when appropriate; a shared action uses one full quote inherited by its Events. Do not invent Events. '
+            'Always return final_scene, including unchanged fields, and every response_required section. Omitted sections from an earlier proposal are UNACCEPTED context to recheck, not a patch to apply. '
+            'diagnostic, diagnostics, original_extraction, omitted_sections_from_previous_proposal, response_required, known_locations, canonical_context and contract are INPUT feedback keys, '
             'NOT output fields. Do not copy this feedback envelope or return a patch. '
             'Never rewrite before/History or the Narrative.'
         )), ensure_ascii=False, separators=(',', ':'))

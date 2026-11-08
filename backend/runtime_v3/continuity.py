@@ -525,7 +525,23 @@ def filter_choices(resolver, choices):
     blocked = {(r['kind'], tuple(sorted(r['basis_ids']))) for r in recent
                if r['status'] in ('resolved', 'rejected') and r['basis_digest'] == fingerprint(rows, r['basis_ids'])}
     seen, result = set(), []
-    for choice in choices:
+    for index, choice in enumerate(choices):
+        if resolver.choice_grounding_required:
+            grounding = choice.get('grounding')
+            actor = resolver.state['camera']['controlled_actor_id']
+            facts = grounding.get('fact_ids') if isinstance(grounding, dict) else None
+            quotes = grounding.get('scene_evidence') if isinstance(grounding, dict) else None
+            from backend.runtime_v3.resolver import normalized
+            sources = [normalized(resolver.narrative), normalized(resolver.player_input)]
+            valid = (isinstance(facts, list) and all(isinstance(fid, str) and fid in resolver.state['facts']
+                     and resolver.state['knowledge'].get(actor+':'+fid, {}).get('status') in ('known', 'suspected') for fid in facts)
+                     and isinstance(quotes, list) and all(isinstance(q, str) and normalized(q)
+                     and any(normalized(q) in text for text in sources) for q in quotes)
+                     and bool(facts or quotes))
+            if not valid:
+                resolver.warn('choices', index, 'Источник предложения не подтверждён знаниями или текущей сценой.',
+                              code='choice_knowledge_unproven')
+                continue
         ids, kind = choice.get('basis_ids'), choice.get('kind')
         key = None
         if ids:
@@ -533,6 +549,16 @@ def filter_choices(resolver, choices):
                 resolver.warn('choices', 0, 'Неизвестное основание варианта.', code='choice_basis_invalid'); continue
             if kind not in ('question', 'proposal', 'information', 'decision', 'opportunity'):
                 resolver.warn('choices', 0, 'Некорректный смысл варианта.', code='choice_kind_invalid'); continue
+            actor = resolver.state['camera']['controlled_actor_id']
+            def known_basis(key):
+                thread = resolver.state['threads'].get(key)
+                if thread and thread['discovered_by'] is None and thread['character_ids']:
+                    # Legacy null is missing provenance, not worldwide awareness.
+                    return actor in thread['character_ids']
+                return actor_knows_dialogue_basis(resolver.state, rows, key, actor)
+            if any(not known_basis(key) for key in ids):
+                resolver.warn('choices', index, 'Основание предложения недоступно управляемому персонажу.',
+                              code='choice_knowledge_unproven'); continue
             key = (kind, tuple(sorted(ids)))
             if key in blocked: continue
             if any(rows[k].get('status') in ('resolved', 'cancelled', 'completed', 'failed', 'expired', 'closed') for k in ids): continue

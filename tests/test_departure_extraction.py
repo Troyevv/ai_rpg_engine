@@ -31,7 +31,8 @@ def departure(camera):
     return dict(
         final_scene=dict(location_id=camera['location_id'], elapsed_minutes=1,
                          present_character_ids=[cid for cid in camera['present_character_ids'] if cid != NPC]),
-        events=[dict(id='departure', text=DEPARTURE, participants=[NPC], witnesses=[ACTOR_ID], medium='observation')],
+        events=[dict(id='departure', text=DEPARTURE, participants=[NPC], witnesses=[ACTOR_ID], medium='observation', location_id=camera['location_id'], order=1)],
+        movements=[dict(actor_id=NPC, from_location_id=camera['location_id'], to_location_id=None, assertion='departure', source_event_id='departure', order=1, evidence=DEPARTURE)],
     )
 
 
@@ -89,9 +90,9 @@ def test_phone006_repair_and_lineage(phone, corrected):
     history = active_history(repo, saved)
     event, = [e for e in history['events'] if e.get('local_id') == 'departure']
     assert event['text'] == DEPARTURE and event['witnesses'] == [ACTOR_ID]
-    assert history['movements'] == original_history['movements']
-    assert any(c.get('entity') == NPC and c.get('kind') == 'scene_position' and c['location_id'] is None
-               for c in history['state_changes'])
+    assert history['movements'][:-1] == original_history['movements']
+    assert history['movements'][-1]['actor_id'] == NPC
+    assert history['movements'][-1]['to_location_id'] is None
     assert NPC not in client.get(f'/api/saves/{sid}').json()['state']['scene_meta']['present_ids']
 
     # A sibling interprets an intention as an intention: Timur stays with the group.
@@ -156,14 +157,14 @@ def test_group_departure_preserves_another_confirmed_route(phone):
     text = f"Кирилл, Вера и Тимур обсуждают фотографии. {DEPARTURE} Вера добралась до места «{away['name']}»."
     good = departure(camera)
     good['final_scene']['present_character_ids'] = [ACTOR_ID]
-    good['movements'] = [dict(actor_id='qa_vera', from_location_id=camera['location_id'],
+    good['movements'] += [dict(actor_id='qa_vera', from_location_id=camera['location_id'],
                               to_location_id=away['id'], assertion='completed_arrival', source_event_id='arrival', evidence=text)]
     good['events'].append(dict(id='arrival',text=text,participants=['qa_vera'],location_id=away['id'],medium='action'))
     bad = deepcopy(good)
     bad['movements'].append(null_arrival(camera))
     job, calls = run(client, sid, [bad, good], text, 'turn', ACTION)
     assert job['status'] == 'saved', job.get('error')
-    assert 'movements[1].to_location_id' in calls[-1]['messages'][0]['content']
+    assert 'movements[2].to_location_id' in calls[-1]['messages'][0]['content']
     saved = repo.get_snapshot(sid)
     assert saved['world_state']['characters'][NPC]['location_id'] is None
     assert saved['world_state']['characters']['qa_vera']['location_id'] == away['id']

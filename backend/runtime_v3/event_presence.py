@@ -43,7 +43,8 @@ def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order
                 # No relative order within a tie between Event and movement.
                 places = set()
                 break
-            places = {move['to_location_id']}
+            places = {move['from_location_id'] if move['to_location_id'] is None
+                      and move.get('source_event_id') == event_id else move['to_location_id']}
         slots.update((order, place) for place in places)
     return slots
 
@@ -136,7 +137,7 @@ def validate_event_presence(resolver, event, index, written):
 
 
 def validate_movement_sources(resolver, raw, events, rejected_events=()):
-    """Bind explicit arrival assertions to accepted Events, never interpret prose.
+    """Bind movement assertions to accepted Events, never interpret prose.
 
     Historical movements remain readable; every newly proposed arrival needs a
     source, even if the producer omits the assertion marker. Initial world
@@ -158,17 +159,19 @@ def validate_movement_sources(resolver, raw, events, rejected_events=()):
         # Otherwise a supplied source must actually anchor the arrival, even if
         # an older producer omitted the newer explicit assertion marker.
         arrival_source = 'assertion' in item or item.get('player_assertion') != 'involuntary'
+        endpoint_field = 'from_location_id' if item.get('assertion') == 'departure' else 'to_location_id'
+        endpoint = item.get(endpoint_field)
         field, reason = None, None
         if event is None:
-            field, reason = 'source_event_id', 'Прибытие требует принятого Event этого хода, не плана или подготовки.'
+            field, reason = 'source_event_id', 'Перемещение требует принятого Event этого хода, не плана или подготовки.'
         elif actor not in event['participants']:
-            field, reason = 'actor_id', 'Event прибытия не подтверждает участие перемещаемого персонажа.'
-        elif arrival_source and event.get('location_id') != item['to_location_id']:
-            field, reason = 'to_location_id', 'Место Event прибытия должно совпадать с endpoint, а не местом обсуждения плана.'
+            field, reason = 'actor_id', 'Event перемещения не подтверждает участие перемещаемого персонажа.'
+        elif arrival_source and event.get('location_id') != endpoint:
+            field, reason = endpoint_field, 'Место Event должно совпадать с endpoint прибытия или origin ухода, а не местом обсуждения плана.'
         elif event.get('interaction_channel') == 'call' or event['medium'] == 'message':
-            field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое прибытие.'
+            field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое перемещение.'
         elif arrival_source and event.get('order') != item.get('order'):
-            field, reason = 'order', 'Movement и его Event прибытия должны обозначать один шаг порядка.'
+            field, reason = 'order', 'Movement и его source Event должны обозначать один шаг порядка.'
         if field:
             errors.append(StructuralDeltaError(reason+' Пересмотрите вместе events, movements, final_scene и character_changes; '
                 'не превращайте подготовку в уход или удаление из сцены.', 'movement_source_invalid',

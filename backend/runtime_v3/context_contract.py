@@ -110,6 +110,22 @@ feelings/goals/promises/personality/Knowledge evidence; only input/completed eve
 '''
 EXTRACTION_CONTRACT += CHOICE_CONTRACT
 
+GROUNDED_CHOICES_CONTRACT = '''
+CHOICE SOURCE BOUNDARY v4: each optional choice carries grounding={fact_ids,scene_evidence}.
+Up to six distinct future {action,speech} proposals for Choice context actor_id; disabled => [].
+Use that actor's current personality/values/style, capacities, active motivations and visible
+relationships; end-scene/channel/time, not old presence. Manual input remains unrestricted.
+Before writing it, identify ALL factual presuppositions (including paraphrases/questions).
+fact_ids lists every canonical Fact used; only the controlled actor's known/suspected beliefs
+or accepted witnessed acquisitions may authorize it. Suspected permits inquiry, not certainty.
+scene_evidence quotes exact perceived completed_narrative/current input for new scene details
+or generic proposals; at least one source. A neutral quote is not cover for an unrelated secret.
+GM truth/another NPC's belief, intent or biography is NOT a choice source. Never repair this by
+inventing Knowledge. If one proposal has no safe grounding, omit THAT choice; retain safe others.
+basis_ids remains optional continuity metadata, not a replacement for grounding. This is source
+selection in the same Extraction call, not a second audit, an Event or a player decision.
+'''
+
 
 TIME_CONTRACT = """
 current_time — единственная canonical проекция времени: Day N, date (если известна),

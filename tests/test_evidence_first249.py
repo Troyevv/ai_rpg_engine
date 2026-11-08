@@ -78,7 +78,7 @@ def test_missing_or_bad_new_fields_are_repairable_and_cannot_choose_legacy(tmp_p
     repo=Repository(tmp_path/'game.sqlite');sid=seed(repo,data)['save']
     # Caller configuration cannot downgrade a newly created producer either.
     job,calls=execute(repo,sid,data,[bad,good],legacy=False,config=dict(CONFIG,_extraction_contract=1))
-    assert json.loads(job['config_json'])['_extraction_contract']==3
+    assert json.loads(job['config_json'])['_extraction_contract']==4
     # This archived action is unreferenced bookkeeping; it cannot authorize a domain.
     assert job['status']=='saved' and len(calls)==2,job['error']
     assert not json.loads(job['repair_diagnostics_json'])
@@ -107,7 +107,7 @@ def test_new_job_retry_regeneration_and_siblings_keep_contract_and_provenance(tm
     failed,calls=execute(repo,sid,data,[bad,bad],legacy=False)
     assert failed['status']=='error' and len(calls)==3
     repo.retry_job(failed['id'],dict(CONFIG,_extraction_contract=1))
-    assert json.loads(repo.get_job(failed['id'])['config_json'])['_extraction_contract']==3
+    assert json.loads(repo.get_job(failed['id'])['config_json'])['_extraction_contract']==4
     # Already reset to extracting: run using the recorded job without retrying again.
     import engine
     def stream(**kwargs):yield json.dumps(raw,ensure_ascii=False)
@@ -117,7 +117,7 @@ def test_new_job_retry_regeneration_and_siblings_keep_contract_and_provenance(tm
     after=repo.get_snapshot(sid);turn=repo.list_turns(sid)[-1]
     sibling,_=execute(repo,sid,data,[raw],kind='regenerate',legacy=False)
     assert sibling['status']=='saved',sibling['error']
-    assert json.loads(sibling['config_json'])['_extraction_contract']==3
+    assert json.loads(sibling['config_json'])['_extraction_contract']==4
     assert sibling['context_json']==saved['context_json']
     assert len(repo.variants(turn['node_id']))==2
     repo.select_variant(sid,turn['id'],turn['active_variant_id'],repo.get_save(sid)['revision'])

@@ -58,6 +58,7 @@ npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
 agency249=None
+berezovsk_followup=None
 integrated247_case=None
 integrated247_live=False
 integrated247_repeat=False
@@ -71,9 +72,32 @@ agency237_extractions=0
 birth231_response=None
 due240_responses=None
 
+def browser_response(payload, kwargs):
+    from runtime_v3_fixture import reviewed
+    raw = reviewed(payload)
+    # Explicit v4 provenance for synthetic browser scenarios only. Original
+    # recorded-provider replays and choice-negative controls bypass this adapter.
+    if kwargs.get('model') not in ('integrated-test', 'berezovsk-followup-test'):
+        source = next((json.loads(m['content'].split('\n',1)[1]) for m in kwargs['messages']
+                       if m['content'].startswith('completed_narrative\n')), None)
+        if source:
+            for choice in raw.get('choices', []):
+                choice.setdefault('grounding', dict(fact_ids=[], scene_evidence=[source]))
+    return raw
+
+
 def scripted_stream(**kwargs):
     global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if berezovsk_followup and kwargs.get('model') == 'berezovsk-followup-test':
+        if kwargs.get('response_format'):
+            answers = berezovsk_followup['responses']
+            raw = answers[min(berezovsk_followup['attempt'], len(answers)-1)]
+            berezovsk_followup['attempt'] += 1
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield berezovsk_followup['data']['narrative']
+        return
     if kwargs.get('model') == 'lta250-test':
         yield '{}' if kwargs.get('response_format') else 'NPC занимается своим делом.'
         return
@@ -597,7 +621,7 @@ def scripted_stream(**kwargs):
             pass  # Deliberately malformed/partial fixtures retain their transport.
         else:
             if isinstance(parsed, dict) and 'final_scene' in parsed:
-                value = json.dumps(reviewed(parsed), ensure_ascii=False)
+                value = json.dumps(browser_response(parsed, kwargs), ensure_ascii=False)
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
     chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60
@@ -620,7 +644,7 @@ def stream(**kwargs):
                 pass
             else:
                 if isinstance(value, dict) and 'final_scene' in value:
-                    chunk = json.dumps(reviewed(value), ensure_ascii=False)
+                    chunk = json.dumps(browser_response(value, kwargs), ensure_ascii=False)
         yield chunk
 
 
@@ -1046,6 +1070,24 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/berezovsk-followup-seed')
+    def berezovsk_followup_seed(case: str = '002'):
+        global berezovsk_followup
+        from copy import deepcopy
+        from test_berezovsk_followup248 import DATA, LTA, grounded_control, compound_control
+        from test_integrated_repair247 import seed
+        if case not in ('002','005'): raise ValueError('Unknown replay')
+        data=deepcopy(DATA[case]); result=seed(app.state.repository,data)
+        snapshot=deepcopy(LTA['snapshot'])
+        snapshot['world_state']=data['before']
+        snapshot['history_head']=app.state.repository.get_snapshot(result['save'])['history_head']
+        with app.state.repository.connect() as db:
+            db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),result['save']))
+        responses=([grounded_control(data)] if case=='002' else
+            [json.loads(raw) for raw in data['responses']['D']] + [compound_control(data)])
+        berezovsk_followup=dict(data=data,responses=responses,attempt=0)
+        return dict(world=result['world'],save=result['save'],action=data['player_input'])
 
     @app.post('/test/agency249-seed')
     def agency249_seed(mode: str = 'saved'):

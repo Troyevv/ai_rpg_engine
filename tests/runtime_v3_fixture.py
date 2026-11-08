@@ -10,7 +10,7 @@ from backend.services.timeline import parse_time
 
 def wire(payload,narrative,before=None):
     if not isinstance(payload,dict):return deepcopy(payload)
-    if 'final_scene' in payload:return reviewed(payload)
+    if 'final_scene' in payload:return reviewed(payload, choice_source=narrative)
     if 'scene' not in payload:return deepcopy(payload)
     from canonical_fixture import canonical
     p=canonical(payload);scene=p['scene'];delta=p['world_delta']
@@ -33,7 +33,7 @@ def wire(payload,narrative,before=None):
     for fact in result.get('facts',[]):fact['visibility']='secret' if fact.get('secret') else 'public'
     for scheduled in result.get('scheduled_event_changes',[]):
         if 'participants' in scheduled:scheduled['character_ids']=scheduled['participants']
-    return reviewed(result)
+    return reviewed(result, choice_source=narrative)
 
 
 def setup_scenario(repo,sid,present=None,observer=False):
@@ -73,7 +73,7 @@ def execute(repo,job,payload,narrative,repaired=None):
     return calls
 
 
-def reviewed(payload):
+def reviewed(payload, *, choice_source=None):
     """Protocol adapter for pre-232 scripted scenarios reviewed by their authors.
 
     These fixtures do not claim completed player interactions. New agency tests
@@ -82,6 +82,10 @@ def reviewed(payload):
     raw = deepcopy(payload)
     if isinstance(raw, dict) and 'final_scene' in raw:
         raw.setdefault('player_agency', dict(status='preserved', actions=[], narrative_audit=[]))
+        if choice_source:
+            # Opt-in provenance for explicitly authored synthetic wire fixtures.
+            for choice in raw.get('choices', []):
+                choice.setdefault('grounding', dict(fact_ids=[], scene_evidence=[choice_source]))
     return raw
 
 

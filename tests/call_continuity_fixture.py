@@ -28,6 +28,8 @@ def response(current, text, narrative=None):
             participants=[actor],witnesses=[actor],medium='observation',interaction_channel='physical')]
         result['physical_projections']=[dict(event_id='outside',text=physical)]
         result['choices']=[dict(action='Подойти к двери и ответить Виктории',speech='',interaction_channel='physical'),dict(action='Выйти из кабинета',speech='',interaction_channel='physical')]
+        for choice in result['choices']:
+            choice['grounding']=dict(fact_ids=[],scene_evidence=[physical])
         result['final_scene'].update(situation=physical,situation_evidence=physical)
     if ending:result['call_lifecycle_changes']=[dict(call_id=comm['active_call'],actor_id=npc,assertion='completed_end',evidence=END)]
     # Deliberately defer agreement until a later turn: current player input is

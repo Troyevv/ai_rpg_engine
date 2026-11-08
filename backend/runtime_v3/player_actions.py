@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 3
+EXTRACTION_VERSION = 4
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -104,6 +104,10 @@ use schema provenance/targets/delivery/coverage. Omit duplicate quotes; conflict
 Arrival Event.order=Movement.order. unauthorized_choice/violated means SIGNIFICANT choice,
 not a gesture. Report unsupported substantial outcomes, never delete them to fake success.
 NPC acts grant no player consent.
+Split compound input by actual actor/targets/channel/location when these differ. A trip toward
+someone is reference, not automatically a conversation. Shared PlayerAction is legal for truly
+shared consent/targets; its Events inherit ONE full quote. If Event quotes identify distinct
+input clauses, use distinct PlayerActions, never join unrelated addresses or fabricate Events.
 """
 
 
@@ -119,6 +123,7 @@ def resolver_options(state, player_input, kind='turn', contract_version=1, *, ti
     needed = required(state, player_input, kind)
     return dict(require_player_agency=needed, agency_audit_required=needed and contract_version >= 2,
                 consequence_first=contract_version >= 3,
+                preserve_scene_locations=contract_version >= 4, choice_grounding_required=contract_version >= 4,
                 require_elapsed=kind == 'turn' and not time_skip)
 
 
@@ -294,7 +299,8 @@ def event_provenance(resolver, item, event, index, actions):
             reason, detail = 'multiple_action_evidence', 'player_evidence охватывает несколько отдельных PlayerActions.'
         else:
             reason, detail = 'action_evidence_mismatch', 'player_evidence не совпадает с цитатой связанного PlayerAction.'
-        invalid('player_evidence', reason, detail + ' Используйте только его точную цитату; несколько действий требуют отдельных Events.', completion=completed)
+        invalid('player_evidence', reason, detail + ' Сверьте границы составного ввода: разные действия/адресаты могут требовать отдельных PlayerActions и соответствующих Events. '
+                'При действительно общем действии наследуйте единственную полную цитату; не создавайте фиктивные Events и не объединяйте чужие полномочия.', completion=completed)
     if completed and action:
         if action.outcome != 'completed':
             invalid('player_assertion', 'outcome_not_completed', 'completed_interaction требует outcome=completed в исходном действии; не меняйте исход ради проверки.', completion=True)

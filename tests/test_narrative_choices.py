@@ -7,7 +7,7 @@ import pytest
 from hypothesis import given, strategies as st
 
 from backend.runtime_v3.context import build_context
-from backend.runtime_v3.context_contract import CHOICE_CONTRACT
+from backend.runtime_v3.context_contract import GROUNDED_CHOICES_CONTRACT
 from backend.runtime_v3.camera import transition, observe
 from backend.runtime_v3.migration import migrate_v2
 from backend.runtime_v3.models import Fact, Knowledge, Motivation, Relationship
@@ -71,7 +71,7 @@ def test_canonical_profile_context_policy_and_no_mutation():
     assert ctx['scene']['location_id']=='home' and ctx['scene']['present_actor_ids']==['a','b']
     assert ctx['recent_player_expression'][0]['player_input']=='PLAYER_a'
     assert 'OLD_a' not in str(ctx) and 'UNSELECTED' not in str(messages)
-    assert CHOICE_CONTRACT in messages[0]['content']
+    assert GROUNDED_CHOICES_CONTRACT in messages[0]['content']
     assert messages.selection['choice_context']==dict(enabled=True,actor_id='a',recent_inputs=1,knowledge=0)
     assert snap==before and turns==[turn()]
 
@@ -187,7 +187,7 @@ def play(repo,sid,text='Рассмотреть карту.',kind='turn'):
         if not kwargs.get('response_format'):
             yield 'Разговор о карте продолжается.'; return
         current=section(kwargs['messages'],'Текущее состояние / GM-only')
-        yield json.dumps(raw(current,choices=CHOICE_EXAMPLES),ensure_ascii=False)
+        yield json.dumps(raw(current,choices=[dict(c, grounding=dict(fact_ids=[], scene_evidence=['Разговор о карте продолжается.'])) for c in CHOICE_EXAMPLES]),ensure_ascii=False)
     jid=repo.begin_job(sid,text,kind,CONFIG)
     with patch('engine.find_loaded_model',return_value={'config':{'context_length':32768}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(repo.path,jid,engine.Worker())

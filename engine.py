@@ -274,18 +274,23 @@ def run_job(path, job_id, handle):
                 from backend.runtime_v3.raw import RawTurnResult, repair_feedback
                 # Retry reuses the latest failed proposal as feedback, never as
                 # canonical truth or a union of mutually inconsistent attempts.
+                latest_payload = None
+                complete_payload = None
                 for request in storage.request_log(job_id=job_id):
                     if request['stage'] not in ('extraction', 'extraction_repair') or not request.get('response_text'):
                         continue
+                    if latest_payload is None:
+                        latest_payload = request['response_text']
                     try:
                         previous_extraction = RawTurnResult.parse(request['response_text'])
+                        complete_payload = request['response_text']
                     except StructuralDeltaError:
-                        pass  # Invalid raw text is still useful repair feedback.
-                    diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
-                    if diagnostics:
-                        latest = diagnostics[-1]
-                        feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], request['response_text'], before['world_state'])
+                        continue  # Keep the latest failure and find its complete predecessor.
                     break
+                diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
+                if diagnostics and latest_payload is not None:
+                    latest = diagnostics[-1]
+                    feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], latest_payload, before['world_state'], previous_complete=complete_payload)
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return

@@ -20,3 +20,9 @@ Latest real QA: https://github.com/Troyevv/ai_rpg_engine/pull/248#issuecomment-6
 
 The two independent residual defects are documented in
 `docs/manual_qa/narrative_v4/playability250-independent-findings.md`.
+
+Follow-up #248: `lta.json.gz` preserves the original `lta/turns/001/before.json.gz`
+snapshot, four response strings from `requests.json.gz`, and the two exact
+current-state blocks used by Extraction. Other prompt/transport/config fields
+are excluded. These are recorded data, not corrected model outputs. Tests label
+source-grounded D/002 and split-action D/005 as human-reviewed provider controls.

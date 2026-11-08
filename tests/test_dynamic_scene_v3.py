@@ -170,7 +170,10 @@ def test_scene_contract_overrides_saved_prompt_without_previous_narratives():
     snapshot['world_state']['locations']['nail'] = dict(id='nail', name='Гвоздь', description='')
     messages = build(snapshot, extraction_text=NARRATIVE,
         prompts={'state_update_prompt.md': {'content': 'Сохранённая инструкция'}})
-    assert EXTRACTION_CONTRACT in messages[0]['content']
-    assert messages[0]['content'].index('Сохранённая инструкция') < messages[0]['content'].index(EXTRACTION_CONTRACT)
+    contract = EXTRACTION_CONTRACT.split('Departure without destination:')[0]
+    assert contract in messages[0]['content']
+    assert 'Movement assertion=departure' in messages[0]['content']
+    assert 'CHOICE SOURCE BOUNDARY v4' in messages[0]['content']
+    assert messages[0]['content'].index('Сохранённая инструкция') < messages[0]['content'].index(contract)
     assert section(messages, 'Текущее состояние / GM-only')['locations']['nail']['name'] == 'Гвоздь'
     assert not any(m['role'] == 'assistant' for m in messages)

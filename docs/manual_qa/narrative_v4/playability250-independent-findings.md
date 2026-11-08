@@ -1,5 +1,7 @@
 # Independent Berezovsk findings, 2026-11-08
 
+Follow-up implementation and current verification: [Berezovsk follow-up #248](berezovsk-followup248.md). The findings below describe the recorded pre-follow-up baseline.
+
 These are confirmed residual defects, **not fixed by #250**, and not converted to
 advisory success. They require separate scoped work before claiming reliable
 Knowledge/geography in live play. Baseline: PR #248 `c978a8f`; repeated with the

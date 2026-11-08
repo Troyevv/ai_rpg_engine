@@ -61,7 +61,12 @@ def test_phone_provider_jobs_contract_reload(phone, name, mode):
     before = repo.get_snapshot(sid)
     history = active_history(repo, before)
     turns = repo.list_turns(sid)
-    good = deepcopy(case['payload']); good.pop('movements')
+    good = deepcopy(case['payload'])
+    # v4 represents the same documented departure explicitly; archive unchanged.
+    exit_event = good['events'][0]
+    exit_event.update(location_id=before['world_state']['camera']['location_id'], order=1)
+    good['movements'] = [dict(actor_id=NPC, from_location_id=exit_event['location_id'], to_location_id=None,
+        assertion='departure', source_event_id=exit_event['id'], order=1, evidence=exit_event['text'])]
     bad = deepcopy(case['payload'])
     for raw in (good, bad):
         # Explicit protocol annotation of these synthetic movement controls.
@@ -100,7 +105,8 @@ def test_phone_provider_jobs_contract_reload(phone, name, mode):
     for field in ('location_id', 'pov_actor_id', 'controlled_actor_id'):
         assert saved['world_state']['camera'][field] == before['world_state']['camera'][field]
     after = active_history(fresh, saved)
-    assert after['movements'] == history['movements']
+    assert after['movements'][:-1] == history['movements']
+    assert after['movements'][-1]['actor_id'] == NPC and after['movements'][-1]['to_location_id'] is None
     new_events = after['events'][len(history['events']):]
     assert len(new_events) == len(good['events'])
     assert {e['local_id'] for e in new_events} == {e['id'] for e in good['events']}
@@ -124,6 +130,7 @@ def test_gold_intent_departure_and_return_jobs(phone, narrative, leaves):
     raw = departure(camera)
     raw['events'][0]['text'] = narrative
     if not leaves:
+        raw['movements'] = []
         raw['final_scene']['present_character_ids'] = camera['present_character_ids']
     job, calls = run(client, sid, [raw], narrative, 'turn', ACTION)
     assert job['status'] == 'saved', job.get('error')
@@ -132,7 +139,7 @@ def test_gold_intent_departure_and_return_jobs(phone, narrative, leaves):
     assert saved['world_state']['characters'][NPC]['location_id'] == (None if leaves else camera['location_id'])
     assert (NPC in saved['world_state']['camera']['present_character_ids']) is not leaves
     assert saved['world_state']['knowledge'] == before['world_state']['knowledge']
-    assert active_history(repo, saved)['movements'] == active_history(repo, before)['movements']
+    assert len(active_history(repo, saved)['movements']) - len(active_history(repo, before)['movements']) == int(leaves)
 
 
 @pytest.mark.parametrize('legs', [1, 2])

@@ -32,13 +32,15 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
         self.agency_audit_required = agency_audit_required
         self.consequence_first = consequence_first
+        self.preserve_scene_locations = preserve_scene_locations or mode == 'background'
+        self.choice_grounding_required = choice_grounding_required
         self.require_player_agency = require_player_agency or agency_audit_required
         self.require_due_birth_assessment = require_due_birth_assessment
         self.letter_sources = {a["id"]: a for a in sources}
@@ -307,15 +309,19 @@ class StateResolver:
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
-            if 'assertion' in item and item['assertion'] != 'completed_arrival':
+            departure = item.get('assertion') == 'departure'
+            if 'assertion' in item and item['assertion'] not in ('completed_arrival', 'departure'):
                 fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
                       section='movements', index=i, field='assertion', entity=cid)
             target = item.get('to_location_id')
-            if not isinstance(target,str) or target not in s['locations']:
+            if departure and (target is not None or not isinstance(item.get('from_location_id'), str)):
+                fatal('Уход без известного назначения требует to_location_id=null и известного from_location_id.',
+                      'movement_endpoint_invalid', repairable=True, section='movements', index=i, field='to_location_id', entity=cid)
+            if not departure and (not isinstance(target,str) or target not in s['locations']):
                 fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
                       'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
                       'сохрани Event ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
-                      'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                      'и используй Movement assertion=departure, to_location_id=null, известный from_location_id и source_event_id ухода. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
                       'movement_endpoint_invalid', repairable=True, section='movements', index=i,
                       field='to_location_id', entity=cid)
             initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
@@ -370,7 +376,10 @@ class StateResolver:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
-        for cid in (set(self.before['camera']['present_character_ids']) | set(observed)) - set(present):
+        # Visibility never establishes departure. Keep the old ordinary producer's
+        # membership convention only for recorded pre-v4 jobs, not new turns/LTA.
+        absent = set() if self.preserve_scene_locations else set(self.before['camera']['present_character_ids'])
+        for cid in absent - set(present) - set(observed):
             if cid not in moves and s['characters'][cid]['location_id'] == lid:
                 s['characters'][cid]['location_id'] = None
                 self.history.state_changes.append(dict(kind='scene_position', entity=cid, location_id=None, derived_from='final_scene', turn_id=self.turn_id))

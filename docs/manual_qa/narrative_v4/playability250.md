@@ -1,5 +1,7 @@
 # #250 — consequence-first Narrative playability
 
+Follow-up implementation and current verification: [Berezovsk follow-up #248](berezovsk-followup248.md). The findings below describe the recorded pre-follow-up baseline.
+
 Implementation continues PR #248 from `c978a8f76d52672e1286cb0dbeb7a2bda40dc3f6`.
 No new PR, merge, paid calls, world regeneration or repair of original Narrative.
 Real-game acceptance is **NOT RUN**: no new paid budget was authorized. Current
