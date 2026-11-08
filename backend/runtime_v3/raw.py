@@ -520,7 +520,10 @@ def repair_feedback(diagnostic, payload, before):
             'Align events/movements/final_scene/character_changes at scene granularity: future_intent/preparation is not departure; '
             'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Arrival needs accepted source Event/actor/endpoint/order. '
             'New locations and autonomous background movement remain valid; no automatic player Knowledge. Observed is visibility, not contact proof. '
-            'This is the only automatic repair; return full JSON, never rewrite before/History or the Narrative.'
+            'This is the only automatic repair; return ONLY the full RawTurnResult matching JSON Schema. '
+            'diagnostic, diagnostics, original_extraction, known_locations, canonical_context and contract are INPUT feedback keys, '
+            'NOT output fields. Do not copy this feedback envelope or return a patch. '
+            'Never rewrite before/History or the Narrative.'
         )), ensure_ascii=False, separators=(',', ':'))
 
 

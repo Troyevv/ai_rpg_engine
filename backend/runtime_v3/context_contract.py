@@ -84,6 +84,11 @@ COMPACT_REFERENCED — обсуждаемый человек, а не участ
 CHOICE_CONTRACT = '''
 CHOICE GENERATION POLICY (same Extraction call):
 Up to six {action,speech} choices for Choice context actor_id; enabled=false => [].
+basis_ids is OPTIONAL continuity metadata, not provenance of a future suggestion.
+Use only existing Fact/Thread/ScheduledEvent/Role/Residence/Condition/ObjectiveRelation
+or goal/intention/obligation IDs supplied in context. Never use Event IDs, PlayerAction
+IDs, character IDs or location IDs as basis_ids. A new suggestion based on this scene
+may omit basis_ids (or use []); it needs no completed Event. Do not invent a basis.
 Never personalize for another POV/original protagonist.
 Use CURRENT canonical personality (#67 overrides cards), style/habits, capabilities,
 values, directed relationships and active goals/intentions/obligations. Unknown traits stay

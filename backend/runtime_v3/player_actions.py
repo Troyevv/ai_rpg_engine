@@ -80,7 +80,16 @@ unauthorized_choice/changed act or target/impossible contact => violated; uncert
 Audit BEFORE status. Deleting Events cannot repair prose; use reauthor/abandon.
 Omit duplicate Event quote; reject explicit conflicts. Keep NPC reply/facts/ALL learning.
 partial=subset; attempted=chosen; deferred/not_performed may have actual=[]; untargeted=[].
-interaction needs delivery, not reply.
+interaction needs delivery, not reply. Addressing mother ABOUT grandfather targets mother,
+not grandfather. Reference targets remain the same mentioned IDs in both target arrays.
+For EACH completed/partial interaction emit an Event for the player's delivered act:
+actor_id=controlled actor, participants include actor and reached targets,
+player_action_id=that action.id, target_ids=subset of that action.narrative_target_ids.
+All reached targets must be covered across its Events. An NPC answer is a SEPARATE
+Event with its own actor_id; it cannot stand in for the player's question.
+Do not attach player_action_id to an NPC reply. Execution details need no invented
+new player decision. Use the current action's quote once, in player_evidence.
+Arrival Event.order and Movement.order MUST match; farewell precedes arrival.
 NarrativeAgencyItem examples: a=verified "Open folder" action:
 {"narrative_evidence":"Turns a page","classification":"execution_detail","player_action_id":"a"}
 {"narrative_evidence":"Agrees to travel","classification":"unauthorized_choice","player_action_id":null}

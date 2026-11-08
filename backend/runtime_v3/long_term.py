@@ -475,7 +475,24 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         camera["_background_actor_ids"] = sorted(
             {cid for c in group for cid in c.actor_ids}
         )
+        # Ephemeral scene descriptions date from the interval start, not from
+        # this future NPC resolution. Retain them as dated context, never mutate
+        # the canonical snapshot or present an old conversation as ongoing.
+        resolution_state = deepcopy(camera["world_state"])
+        previous_scene = dict(minute=projection.start,
+            situation=camera["world_state"]["camera"]["situation"],
+            actors={cid: c["situation"] for cid, c in camera["world_state"]["characters"].items()
+                    if c.get("situation") and cid in camera["_background_actor_ids"]})
+        camera["world_state"]["camera"]["situation"] = ""
+        for c in camera["world_state"]["characters"].values():
+            c["situation"] = ""
         instruction = (
+            "Прошлая сцена на начало интервала (не продолжается автоматически): "
+            + json.dumps(previous_scene, ensure_ascii=False)
+            + ". Текущий момент разрешения: " + str(minute) + ". "
+            "Это самостоятельная жизнь NPC, не следующий обмен репликами в прошлой сцене. "
+            "EXTERNAL actor не участвует и не становится свидетелем фоновых событий; "
+            "не обращайся к нему и не используй его прошлое присутствие как текущий контакт. "
             "Длительный переход. Разреши только перечисленные причины на заданный момент. "
             "Возможность и наступление срока не доказывают событие. Допустимо оставить исход неизвестным. "
             "Не придумывай действия, решения, речь или обязательства EXTERNAL actor: "
@@ -599,7 +616,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 # The group occurs at a known instant. StateResolver checks explicit claims.
                 event.setdefault("minute", minute)
             resolved = StateResolver(
-                camera["world_state"],
+                resolution_state,
                 narrative,
                 "",
                 letter_sources=artifacts,

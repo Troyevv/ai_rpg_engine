@@ -188,6 +188,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     s["threads"]["education"] = Thread(
         id="education", description="Учёба", character_ids=["c"], relevance=1
     ).model_dump()
+    s["characters"]["a"]["situation"] = "Waiting in the old player scene"
     text = "Персонаж c начал учиться и тайно переехал."
     raw = dict(
         final_scene=dict(
@@ -249,6 +250,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
         assert any(d.get("code") == "event_minute_invalid" for d in report["diagnostics"])
         assert "study" not in after["world_state"]["roles"]
         return
+    assert after["world_state"]["characters"]["a"] == before["world_state"]["characters"]["a"]
     assert report["accepted"], report["diagnostics"]
     assert batch["events"][0]["minute"] == batch["events"][0]["recorded_minute"] == candidate.minute
     assert after["world_state"]["roles"]["study"]["status"] == "active"
