@@ -29,6 +29,12 @@ for (const scenario of ['002','008','016','020']) {
       expect(first.job).toMatchObject({retry_allowed:true,narrative_reauthor_required:false});
       expect(first.state).toEqual(before.state);
       await page.reload();
+      // A long expanded LTA report must scroll with history, not consume the
+      // mobile viewport and leave Retry underneath the fixed composer/phone.
+      if (scenario==='016') {
+        await expect(page.locator('.story-scroll .advance-result')).toBeVisible();
+        expect((await page.locator('.story-scroll').boundingBox())!.height).toBeGreaterThan(100);
+      }
       await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
       await expect.poll(async () => (await view()).job.status).toBe('saved');
     }

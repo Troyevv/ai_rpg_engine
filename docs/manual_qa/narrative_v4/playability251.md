@@ -99,6 +99,12 @@ Frontend production build and 153 unit tests pass. Local Chromium cannot start:
 Desktop/mobile recovery scenarios are committed for execution in GitHub CI; this
 local launch failure is not reported as an application test pass.
 
+Full mobile CI on original 016 exposed an additional UI blocker: the expanded
+LTA report lived outside `.story-scroll` and consumed the available height,
+putting Retry under the composer/phone. LTA/time-skip/calendar notices now share
+the existing story scroller. The browser regression retains an ordinary click
+and checks usable story height; no force-click or timeout increase.
+
 ## Remaining risk and short real-session plan (NOT authorized/run)
 
 Offline evidence demonstrates removal of specific gates and preserved negative

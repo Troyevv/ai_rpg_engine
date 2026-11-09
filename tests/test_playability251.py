@@ -287,6 +287,16 @@ def test_original_numeric_weekdays_preserved_new_semantic_ids_correct(case, day,
     assert current_time(result.state, scheduled_window(result.state,event)['start_minute'])['date'] == date
 
 
+@pytest.mark.parametrize('version', [2, 3, 4])
+def test_weekday_instructions_match_the_saved_contract_schema(version):
+    messages = build_context(DATA['016']['snapshot'], [], 'Наблюдаю.', 'turn',
+        131072, 8192, extraction_text=DATA['016']['narrative'], extraction_contract=version)
+    schema = next(m['content'] for m in messages if m['content'].startswith('JSON Schema\n'))
+    assert ('calendar_weekdays.id' in schema) is (version >= 3)
+    assert ('weekday: use calendar_weekdays.id' in messages[0]['content']) is (version >= 3)
+    assert ('weekday: legacy zero-based' in messages[0]['content']) is (version < 3)
+
+
 def test_custom_weekdays_unknown_date_and_input_schema():
     state = deepcopy(DATA['016']['snapshot']['world_state'])
     state['meta']['calendar'].update(start_date=None, start_weekday=0,

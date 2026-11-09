@@ -457,17 +457,16 @@ class ExtractionContextBuilder:
         from backend.repositories.documents import is_builtin_prompt
         custom = saved and not is_builtin_prompt('state_update_prompt.md', saved, PROMPTS)
         rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
+        from backend.runtime_v3.context_contract import DEPARTURE_CONTRACT, TEMPORAL_REFINEMENT_CONTRACT
         if self.contract_version < 3:
-            rules = rules.replace('weekday: use calendar_weekdays.id, never calculate a numeric index.\n'
-                'Existing ID + rescheduled + temporal={"time":"10:00"} refines the SAME occurrence\'s time;\n'
-                'its date/anchor stay fixed. New plans or a changed day need a full date basis.',
+            rules = rules.replace(TEMPORAL_REFINEMENT_CONTRACT,
                 'weekday: legacy zero-based profile index (Gregorian Monday=0).')
         if self.contract_version >= 4:
             from backend.runtime_v3.context_contract import GROUNDED_CHOICES_CONTRACT, CHOICE_CONTRACT
             rules = rules.replace(CHOICE_CONTRACT, GROUNDED_CHOICES_CONTRACT)
         explicit_departures = self.contract_version >= 4 or kind == 'background'
         if not explicit_departures:
-            rules = rules.replace('Departure without destination: Movement assertion=departure,\nknown origin, null endpoint; END absence alone proves no departure.',
+            rules = rules.replace(DEPARTURE_CONTRACT,
                 'Departure without destination: Event + END absence, no completed_arrival, location unknown.')
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind):

@@ -1,4 +1,8 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
+DEPARTURE_CONTRACT = 'Departure without destination: Movement assertion=departure; known origin, null endpoint.'
+TEMPORAL_REFINEMENT_CONTRACT = '''weekday: use calendar_weekdays.id, never calculate a numeric index.
+Existing ID/rescheduled/temporal={"time":"10:00"}: SAME occurrence/date/anchor.
+New plan/changed day needs full date basis.'''
 EXTRACTION_CONTRACT = '''
 CURRENT RUNTIME narrative-authority-v1. Return JSON RawTurnResult per JSON Schema.
 Interpret player_input and whole completed_narrative; never continue/rewrite it.
@@ -15,7 +19,8 @@ Unknowns=null/unknown/omitted; never fabricate identity/source.
 LOCATION / VISIBILITY / CONTACT
 final_scene=END membership, not arrival. Movement owns route/completed_arrival/departure.
 Optional Event: accepted, compatible actor/endpoint/timeline. Keep routes/returns, before/new endpoints.
-future_intent/preparation/END absence changes no geography. Departure: known origin, null endpoint.
+future_intent/preparation/END absence changes no geography.
+''' + DEPARTURE_CONTRACT + '''
 Room exit != building exit. Arrival needs no prior on-camera exit. Allow NPC initiative,
 new locations[] and background movement; none grants player Knowledge. Place creation/time/plans prove no arrival.
 observed_character_ids=disjoint outside visibility, not location/contact/Knowledge.
@@ -27,12 +32,11 @@ EXTERNAL movement: explicit_choice+input quote OR verified player_action_id (dir
 Involuntary needs external source Event. order resolves route/encounter sequence, not duplication.
 
 EVENT / FACT / KNOWLEDGE
-Distinguish Event actor/participants, witnesses and source. Use the real speaker, not a listener.
-Unknown identity: null where schema permits, never a fictional promotion.
-knowledge_gained: THIS accepted informational Event + fact_ids + actual witness.
-Restore supported links; never drop confirmed learning to pass.
-Perception/reading teaches; GM cards/delivery/time/intent alone cannot. Message author_id
-requires established attribution, not nearby participants.
+Event: distinguish actor/participants/witnesses/source; actual speaker, not listener.
+Unknown identity=null where allowed, never fabricated.
+knowledge_gained: accepted informational Event + fact_ids + actual witness;
+restore supported links, never drop learning. Perception/reading teaches;
+GM cards/delivery/time/intent do not. Message author_id needs attribution, not proximity.
 Facts are immutable: reuse IDs; new assertions get new IDs. claim={subject_id,predicate,value,
 scope:""} defines exclusive slot; scope=role/period, omit uncertain slots. known is belief,
 not truth. Statuses: known/suspected/unknown/outdated/refuted/superseded. Revival requires
@@ -158,9 +162,7 @@ occurred=done; missed=confirmed nonperformance; blocked=obstacle; started/ended=
 No plans from dreams, offers, questions or old discussions. Close matching ID only.
 EXTERNAL agreed/rescheduled/cancelled: explicit_choice + exact player_input decision quote.
 NPC cancellation: decision_actor_id. temporal/end_temporal: one date/weekday/day_offset/minute_offset.
-weekday: use calendar_weekdays.id, never calculate a numeric index.
-Existing ID/rescheduled/temporal={"time":"10:00"}: SAME occurrence/date/anchor.
-New plan/changed day needs full date basis.
+""" + TEMPORAL_REFINEMENT_CONTRACT + """
 minute_offset alone; otherwise stated HH:MM in time OR imprecise day_period OR neither for day precision.
 depends_on=necessary prerequisite, not group/series; cancellation invalidates dependents only.
 Leave changes neither location nor education. Time alone never starts/ends intervals or penalizes relationships.
