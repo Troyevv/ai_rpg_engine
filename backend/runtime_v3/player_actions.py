@@ -101,13 +101,14 @@ Review/audit optional; uncertain/incidental_detail advisory, never domain author
 No Event per everyday act; NPC replies support ALL heard Knowledge.
 Unlinked inventory proves nothing. Canonical player Events require verified PlayerAction;
 use schema provenance/targets/delivery/coverage. Omit duplicate quotes; conflicts reject.
-Arrival Event.order=Movement.order. unauthorized_choice/violated means SIGNIFICANT choice,
+No duplicate arrival Event/quote. unauthorized_choice/violated means SIGNIFICANT choice,
 not a gesture. Report unsupported substantial outcomes, never delete them to fake success.
 NPC acts grant no player consent.
 Split compound input by actual actor/targets/channel/location when these differ. A trip toward
 someone is reference, not automatically a conversation. Shared PlayerAction is legal for truly
 shared consent/targets; its Events inherit ONE full quote. If Event quotes identify distinct
 input clauses, use distinct PlayerActions, never join unrelated addresses or fabricate Events.
+Strangers need no fake ID/self-target. Arrival proves no contact.
 """
 
 
@@ -133,6 +134,8 @@ def review(resolver, raw):
     value = raw.player_agency
     referenced = {row.get('player_action_id') for row in raw.records['events']
                   if isinstance(row, dict) and isinstance(row.get('player_action_id'), str)}
+    referenced.update(row['player_action_id'] for row in raw.records['movements']
+                      if isinstance(row, dict) and isinstance(row.get('player_action_id'), str))
     if value is None:
         if resolver.require_player_agency and not resolver.consequence_first:
             fatal('Extraction не проверил соответствие Narrative действию игрока.',
@@ -204,8 +207,6 @@ def review(resolver, raw):
         if action.meaning != 'preserved':
             narrative_conflict(**path)
         if actual != intended and not (partial_subset or deferred):
-            if action.target_mode != 'reference':
-                narrative_conflict(**path)
             fatal('Extraction пометила смысл как preserved, но target_ids и narrative_target_ids противоречат друг другу. '
                   'Перечитайте исходный ввод и неизменный Narrative, исправьте классификацию и ID целей вместе. '
                   'Упоминание/невмешательство использует reference и не требует контакта. '
@@ -227,6 +228,49 @@ def review(resolver, raw):
                   'интерпретация NPC не является разрешением игрока.',
                   'player_agency_audit_reference_invalid', repairable=True, **path)
     return actions
+
+
+def movement_component(resolver, raw, item, actions, index):
+    """Remove contact authority from an otherwise independent arrival component.
+
+    A compound input may include a trip and a greeting. An action-only arrival
+    with just the traveller proves neither delivery nor consent. No participant,
+    Action target or domain outcome is invented. Domain consumers keep the marker
+    blocking; optional annotations will have to prove themselves independently.
+    """
+    reference = item.get('player_action_id')
+    action = actions.get(reference) if isinstance(reference, str) else None
+    actor = resolver.protected_actor_id
+    targets = item.get('target_ids')
+    if (not resolver.consequence_first or not action or action.outcome not in ('completed', 'partial')
+            or item.get('actor_id') != actor or item.get('participants') != [actor]
+            or item.get('medium', 'action') != 'action' or item.get('interaction_channel')
+            or item.get('player_assertion') not in (None, 'completed_interaction')
+            or not isinstance(targets, list) or not targets
+            or not all(isinstance(t, str) for t in targets)
+            or not set(targets) <= set(action.narrative_target_ids)
+            or not (set(targets) & resolver.state['characters'].keys()) - {actor}):
+        return item
+    eid = item.get('id')
+    from backend.runtime_v3.raw import OPTIONAL_SECTIONS
+    # No substantial consumer may lose its stated contact/consent source.
+    for section, rows in raw.records.items():
+        if section in OPTIONAL_SECTIONS or section in ('events', 'movements'):
+            continue
+        for row in rows:
+            if isinstance(row, dict) and (row.get('source_event_id') == eid
+                    or any(isinstance(row.get(key), list) and eid in row[key]
+                           for key in ('source_event_ids', 'event_ids'))):
+                return item
+    if not any(isinstance(m, dict) and m.get('source_event_id') == eid
+               and m.get('actor_id') == actor and m.get('assertion') == 'completed_arrival'
+               and m.get('to_location_id') == item.get('location_id') for m in raw.records['movements']):
+        return item
+    candidate = dict(item, target_ids=[])
+    candidate.pop('player_assertion', None)
+    resolver.warn('events', index, 'Компонент прибытия не подтверждает обращение; сняты только полномочия контакта.',
+                  field='player_assertion', entity=eid, code='movement_contact_annotation_ignored')
+    return candidate
 
 
 
@@ -363,9 +407,9 @@ def validate_completions(resolver, actions, events, indices, written_sources, *,
         requires_contact = (action.outcome == 'completed' and action.target_mode == 'interaction'
                             and required & resolver.state['characters'].keys())
         missing = required - covered.get(action.id, set())
-        # Preserve noncontact/untargeted actions without an Event. Once Events
-        # reference an action, their own targets must cover its actual scope.
-        if missing and (requires_contact or action.id in covered):
+        # Legacy producers required complete Event coverage. Current inventories
+        # cannot demand Events per gesture; each supplied contact was checked above.
+        if missing and not resolver.consequence_first and (requires_contact or action.id in covered):
             errors.append(StructuralDeltaError(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
                   + ', '.join(sorted(missing)) + '. '
                   'Если Narrative подтверждает обращение игрока, добавьте отдельный Event этого обращения: '

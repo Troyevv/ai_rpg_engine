@@ -448,7 +448,7 @@ def apply(resolver, raw, events):
     for index, row in enumerate(raw.records['continuity_beats']):
         try: claim = ContinuityBeat.model_validate(row)
         except (ValueError, TypeError):
-            if (isinstance(row, dict) and external is not None
+            if (not resolver.consequence_first and isinstance(row, dict) and external is not None
                     and (row.get('decision_actor_id') == external
                          or row.get('kind') == 'decision' and row.get('actor_id') == external)):
                 fatal('Повреждена аннотация действия игрока; проверьте типы и источник решения.',
@@ -461,9 +461,23 @@ def apply(resolver, raw, events):
         event = events.get(claim.source_event_id)
         if player_owned and (resolver.mode == 'background' or not player_dialogue):
             if resolver.mode == 'background':
+                if resolver.consequence_first:
+                    resolver.warn('continuity_beats', index, 'Фон не подтверждает решение игрока.',
+                                  code='continuity_external_decision_ignored')
+                    continue
                 reject('continuity_external_decision', section='continuity_beats', index=index,
                        field='player_evidence', entity=claim.source_event_id)
-            validate_player_decision(resolver, claim, event, index)
+            from backend.services.world_delta_errors import StructuralDeltaError
+            try:
+                validate_player_decision(resolver, claim, event, index)
+            except StructuralDeltaError as exc:
+                if not resolver.consequence_first:
+                    raise
+                # Only this optional annotation loses authority. Domain handlers
+                # run independently and never consume an unverified beat.
+                resolver.warn('continuity_beats', index, str(exc),
+                              code='continuity_external_decision_ignored')
+                continue
         actors = {claim.actor_id, *claim.target_ids}
         if claim.decision_actor_id is not None:
             actors.add(claim.decision_actor_id)
@@ -494,6 +508,10 @@ def apply(resolver, raw, events):
                 continue
         elif any(key in state['facts'] and state['knowledge'].get(claim.actor_id+':'+key, {}).get('status') != 'known'
                  for key in claim.basis_ids):
+            if resolver.consequence_first:
+                resolver.warn('continuity_beats', index, 'Основание аннотации неизвестно персонажу.',
+                              code='continuity_basis_unavailable')
+                continue
             reject('continuity_unknown_fact')
         value = claim.model_dump()
         if npc_decides or external is not None and decider == external:
@@ -505,6 +523,15 @@ def apply(resolver, raw, events):
         key = (event['id'], beat_key(value), value['decision_actor_id'])
         if key in accepted_beats:
             if accepted_beats[key] != value:
+                if resolver.consequence_first:
+                    # Neither conflicting annotation may suppress a later choice.
+                    event['continuity'] = [b for b in event.get('continuity', []) if
+                        (event['id'], beat_key(b), b['decision_actor_id']) != key]
+                    accepted_beats[key] = None
+                    prior.pop(beat_key(value), None)
+                    resolver.warn('continuity_beats', index, 'Противоречащие аннотации решения сняты.',
+                                  code='continuity_beat_conflict_ignored')
+                    continue
                 fatal('Противоречащие аннотации одного решения в одном Event.',
                       'continuity_beat_conflict', repairable=True, section='continuity_beats', index=index)
             resolver.warn('continuity_beats', index, 'Повторная аннотация этого Event.', code='continuity_duplicate')

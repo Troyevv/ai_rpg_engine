@@ -162,7 +162,7 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.repository import continuity_reader, relationship_reader
             world_history['_relationship_query'] = relationship_reader(storage, before.get('history_head'))
             world_history['_continuity_query'] = continuity_reader(storage, before.get('history_head'))
-            history = storage.list_turns(job['save_id'])
+            history = storage.list_turns(job['save_id'], context=True)
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
                 history = [t for t in history if t['sequence'] < target['sequence']]

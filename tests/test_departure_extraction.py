@@ -69,7 +69,7 @@ def test_phone006_repair_and_lineage(phone, corrected):
         ('movement_endpoint_invalid', 'movements[0].to_location_id', [NPC])] * (1 if corrected else 2)
     repair = calls[-1]['messages'][0]['content']
     assert diagnostics[0]['path'] in repair and diagnostics[0]['repair_reason'] in repair
-    assert 'сохрани Event ухода' in repair and 'Не угадывай ID' in repair
+    assert 'сохрани факт ухода' in repair and 'Не угадывай ID' in repair
     repo = Repository(repo.path)
     if not corrected:
         assert job['status'] == 'error'
@@ -181,4 +181,4 @@ def test_departure_cannot_move_player(phone):
     raw['final_scene']['location_id'] = next(lid for lid in state['locations'] if lid != camera['location_id'])
     with pytest.raises(StructuralDeltaError) as exc:
         StateResolver(state, DEPARTURE, ACTION).resolve(raw)
-    assert exc.value.code == 'movement_agency'
+    assert exc.value.code == 'scene_arrival_unproven'

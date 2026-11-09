@@ -16,6 +16,52 @@ WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 
 RU_WEEKDAYS = ('Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс')
 
 
+def weekday_options(state):
+    """Identifiers for structured Extraction input; never parse narrative words."""
+    profile = profile_of(state)
+    labels = profile.get('weekday_names') or WEEKDAYS
+    ids = labels if profile.get('system') == 'custom' else WEEKDAYS
+    return [dict(id=key, **({'label': label} if label != key else {})) for key, label in zip(ids, labels)]
+
+
+def normalize_temporal(state, value):
+    """Canonical storage retains legacy zero-based weekdays, without migration."""
+    if not isinstance(value, dict):
+        return value
+    result = dict(value)
+    day = value.get('weekday')
+    if isinstance(day, str):
+        matches = [i for i, option in enumerate(weekday_options(state)) if option['id'] == day]
+        if len(matches) != 1:
+            raise ValueError('weekday должен быть одним из calendar_weekdays.id текущего календаря.')
+        result['weekday'] = matches[0]
+    return result
+
+
+def refine_scheduled_time(state, old, value):
+    """Keep the resolved occurrence and its original relative-date anchor."""
+    from backend.runtime_v3.models import TEMPORAL_BASES
+    if not isinstance(value, dict) or any(value.get(key) is not None for key in TEMPORAL_BASES):
+        return None
+    if set(value) - {*TEMPORAL_BASES, 'time', 'day_period'} or not (value.get('time') or value.get('day_period')):
+        return None
+    if not old:
+        raise ValueError('time-only допустим только для rescheduled существующего canonical ID.')
+    due = scheduled_due(state, old)
+    if due is None:
+        raise ValueError('Прежняя дата встречи не разрешена; укажите полную temporal привязку.')
+    prior = old.get('temporal') or {}
+    result = {key: prior[key] for key in TEMPORAL_BASES if prior.get(key) is not None and key != 'minute_offset'}
+    if not result:
+        reference = old.get('time_reference_minute')
+        if reference is None:
+            reference = (state['meta'].get('calendar') or {}).get('start_minute', state['meta']['world_time'])
+        day = current_time(state, due)['date']
+        result = {'date': day} if day else {'day_offset': due//1440-reference//1440}
+    result.update({key: value[key] for key in ('time', 'day_period') if value.get(key) is not None})
+    return result
+
+
 def day_period(clock):
     return next(name for start, name in reversed(DAY_PERIODS) if clock >= start)
 

@@ -101,7 +101,7 @@ def test_narrative_substitution_cannot_be_laundered_through_repair(crisis, forma
     before = repo.get_snapshot(sid)
     turns = repo.list_turns(sid)
     variants = repo.variants(turns[-1]['node_id'])
-    raw = payload(before['world_state'], [claim([VERA], actual=[MARINA])])
+    raw = payload(before['world_state'], [dict(claim([VERA], actual=[MARINA]), meaning='changed')])
     if formal_event:
         # A formally input-aligned Event does not fix the already written story.
         raw['events'][0].update(target_ids=[VERA], participants=[NINA, VERA])
@@ -375,6 +375,8 @@ def test_partial_group_action_can_reach_subset_but_never_replacement(crisis, sub
     actual = ['qa_asya'] if substituted else [MARINA]
     raw = payload(before['world_state'], [claim([MARINA, VERA], quote=quote, actual=actual, outcome='partial')], completed=False)
     raw['events'][0]['participants'] = [NINA, *actual]
+    if substituted:
+        raw['player_agency']['actions'][0]['meaning'] = 'changed'
     text = 'Нина спрашивает Асю.' if substituted else 'Нина обращается к Марине и Вере. Марина слушает; Веры здесь нет.'
     job, calls = play(crisis, [raw], quote, text)
     assert len(calls) == 2
@@ -421,7 +423,7 @@ def test_new_object_target_requires_accepted_canonical_creation(crisis, accepted
 def test_legacy_agency_diagnostic_blocks_retry_after_reload(crisis):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
-    raw = payload(before['world_state'], [claim([VERA], actual=[MARINA])])
+    raw = payload(before['world_state'], [dict(claim([VERA], actual=[MARINA]), meaning='changed')])
     job, calls = play(crisis, [raw], ACTION, BAD_TEXT)
     assert len(calls) == 2 and job['status'] == 'error'
     # Pre-unification jobs only stored the code and the generic regenerate action.

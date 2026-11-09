@@ -90,15 +90,24 @@ def test_only_valid_event_targets_cover_an_action_atomically(crisis, fault):
     raw['knowledge_gained'] = [dict(actor_id=MARINA, fact_id='group-news', source_event_id='part-0')]
     arrival_sources(raw)
     job, calls = play(crisis, [raw, raw], quote, narrative)
+    if fault in ('missing', 'duplicate_target', 'bystander'):
+        # #251: inventory coverage cannot require a second decorative Event.
+        # Preserve actual Marina delivery/Knowledge; create no Asya address.
+        assert job['status'] == 'saved' and len(calls) == 2
+        fresh = Repository(repo.path)
+        accepted = [e for e in saved_events(fresh, sid) if e.get('local_id', '').startswith('part-')]
+        assert accepted and all(ASYA not in e['target_ids'] for e in accepted)
+        state = fresh.get_snapshot(sid)['world_state']
+        assert state['knowledge'][MARINA+':group-news']['status'] == 'known'
+        assert ASYA+':group-news' not in state['knowledge']
+        fresh.rollback_last(sid)
+        assert fresh.get_snapshot(sid) == before
+        return
     assert job['status'] == 'error' and len(calls) == 3
     fresh = Repository(repo.path)
     assert fresh.get_snapshot(sid) == before and fresh.list_turns(sid) == turns
     assert fresh.variants(turns[-1]['node_id']) == variants
     assert history(fresh, before) == history(repo, before)
-    diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
-    if fault in ('missing', 'duplicate_target', 'bystander'):
-        assert diagnostics[-1]['code'] == 'player_action_completion_invalid'
-        assert ASYA in diagnostics[-1]['source_ids']
 
 
 @pytest.mark.parametrize('split', [False, True])
@@ -120,12 +129,12 @@ def test_partial_group_preserves_unreached_intended_target(crisis, split):
 
 
 @pytest.mark.parametrize('repair', [True, False])
-def test_group_coverage_repair_preserves_narrative_and_original_lineage(crisis, repair):
+def test_group_delivery_repair_preserves_narrative_and_original_lineage(crisis, repair):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
     good = group(before['world_state'])
     bad = deepcopy(good)
-    bad['events'].pop()
+    bad['events'][1]['participants'] = [NINA]  # Delivered contact needs its own recipient.
     job, calls = play(crisis, [bad, good if repair else bad], QUOTE, TEXT)
     assert len(calls) == 3 and job['narrative'] == TEXT
     assert ASYA in calls[-1]['messages'][0]['content']
@@ -160,13 +169,16 @@ def test_group_and_independent_action_keep_separate_provenance(crisis, fault):
     elif fault == 'wrong_action':
         raw['events'][1]['player_action_id'] = 'second'
     job, calls = play(crisis, [raw, raw], QUOTE + ' ' + second_quote, TEXT)
-    if fault:
+    if fault in ('wrong_quote', 'wrong_action'):
         assert job['status'] == 'error' and len(calls) == 3
         assert Repository(repo.path).get_snapshot(sid) == before
     else:
         assert job['status'] == 'saved' and len(calls) == 2
-        assert [e['player_action']['id'] for e in saved_events(repo, sid)[-3:]] == ['input-1', 'input-1', 'second']
-        assert [e['player_evidence'] for e in saved_events(repo, sid)[-3:]] == [QUOTE, QUOTE, second_quote]
+        accepted = saved_events(repo, sid)[-len(raw['events']):]
+        assert [e['player_action']['id'] for e in accepted] == (['input-1','second'] if fault else ['input-1','input-1','second'])
+        assert [e['player_evidence'] for e in accepted] == ([QUOTE,second_quote] if fault else [QUOTE,QUOTE,second_quote])
+        if fault:
+            assert not any(e['player_action']['id']=='input-1' and ASYA in e['target_ids'] for e in accepted)
 
 
 @pytest.mark.parametrize('channel,valid', [('call', True), ('call', False), ('message', True), ('message', False)])
@@ -242,12 +254,24 @@ def test_continuity_uses_own_event_targets_not_group_bystanders(crisis, substitu
         status='resolved', evidence='Нина соглашается.', player_evidence=quote)]
     arrival_sources(raw)
     job, calls = play(crisis, [raw, raw], quote, 'Нина соглашается помочь Марине, затем Асе.')
-    assert job['status'] == ('error' if substituted else 'saved'), job.get('error')
+    assert job['status'] == 'saved' and len(calls) == 2, job.get('error')
     if substituted:
-        assert len(calls) == 3 and Repository(repo.path).get_snapshot(sid) == before
-        assert 'continuity_external_decision' in repo.get_job(job['id'])['repair_diagnostics_json']
+        assert not any(e.get('continuity') for e in saved_events(repo, sid)[-2:])
+        assert 'continuity_external_decision_ignored' in repo.get_job(job['id'])['warnings_json']
+        assert Repository(repo.path).get_snapshot(sid)['world_state']['knowledge'][NINA+':group-basis']['status']=='known'
     else:
         assert len(calls) == 2
         events = saved_events(repo, sid)[-2:]
         beat, = events[0]['continuity']
         assert beat['target_ids'] == [MARINA] and beat['source_event_id'] == events[0]['id']
+
+
+def test_legacy_contract_keeps_complete_group_coverage(crisis):
+    _, repo, sid = crisis
+    before = repo.get_snapshot(sid)
+    raw = group(before['world_state']); raw['events'].pop()
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 2):
+        job, calls = play(crisis, [raw, raw], QUOTE, TEXT)
+    assert job['status'] == 'error' and len(calls) == 3
+    assert 'player_action_completion_invalid' in repo.get_job(job['id'])['repair_diagnostics_json']
+    assert Repository(repo.path).get_snapshot(sid) == before

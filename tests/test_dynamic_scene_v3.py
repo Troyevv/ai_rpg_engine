@@ -122,7 +122,7 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     bad = raw(camera['location_id'], camera['present_character_ids'])
     bad['player_agency'] = dict(status='preserved', actions=[], narrative_audit=[])
     bad['movements'] = [dict(actor_id=camera['controlled_actor_id'],
-        to_location_id='nail', evidence=NARRATIVE)]
+        to_location_id='nail', assertion='completed_arrival', evidence=NARRATIVE)]
     fixed = deepcopy(bad)
     fixed['final_scene']['location_id'] = 'nail'
     job = repo.begin_job(sid, '', 'start', CONFIG)

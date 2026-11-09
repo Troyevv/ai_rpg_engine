@@ -137,14 +137,29 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             result['history_warnings']=warnings
             return result
 
-    def list_turns(self, save_id):
+    def list_turns(self, save_id, *, context=False):
         with self.connect() as db:
+            # Internal context metadata comes from the active turn snapshots.
+            # Public history neither exposes GM situations nor ships snapshots.
+            temporal = ''
+            if context:
+                for column, name in (('before_json', 'temporal_before'), ('after_json', 'temporal_after')):
+                    temporal += f""", json_object(
+                        'meta',json_object('world_time',json_extract({column},'$.world_state.meta.world_time'),
+                                           'calendar',json_extract({column},'$.world_state.meta.calendar')),
+                        'camera',json_object('situation',json_extract({column},'$.world_state.camera.situation')),
+                        'characters',json((SELECT json_group_object(c.key,json_object('situation',json_extract(c.value,'$.situation')))
+                            FROM json_each(turns.{column},'$.world_state.characters') c))) AS {name}"""
             rows = [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json'
+                + temporal + ' FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
             from backend.runtime_v3.surfaces import route
             for row in rows:
                 before = json.loads(row.pop('before_json'))
                 row['presentation'] = json.loads(row['changes_json']).get('presentation') or route(before, row['kind'])
+                if context:
+                    for key in ('temporal_before', 'temporal_after'):
+                        row[key] = json.loads(row[key])
             return rows
 
     def physical_choice_source(self, save_id, turns, state):

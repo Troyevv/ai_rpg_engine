@@ -137,16 +137,18 @@ def validate_event_presence(resolver, event, index, written):
 
 
 def validate_movement_sources(resolver, raw, events, rejected_events=()):
-    """Bind movement assertions to accepted Events, never interpret prose.
+    """Validate supplied Event links, not a second proof of every Movement.
 
-    Historical movements remain readable; every newly proposed arrival needs a
-    source, even if the producer omits the assertion marker. Initial world
-    placement is not an arrival from an established scene.
+    Movement owns completed_arrival/departure and the route. A separate Event is
+    optional in consequence-first turns; if supplied it must not contradict that
+    route. Its independent contact/perception consumers still validate presence.
     """
     from backend.services.world_delta_errors import StructuralDeltaError
     errors = []
     for index, item in resolver.records(raw, 'movements'):
         source = item.get('source_event_id')
+        if source is None and resolver.consequence_first:
+            continue
         if (source is None and resolver.before['meta']['turn_id'] == 0
                 and resolver.before['camera']['location_id'] is None
                 and resolver.before['characters'].get(item['actor_id'], {}).get('location_id') is None):
@@ -164,13 +166,13 @@ def validate_movement_sources(resolver, raw, events, rejected_events=()):
         field, reason = None, None
         if event is None:
             field, reason = 'source_event_id', 'Перемещение требует принятого Event этого хода, не плана или подготовки.'
-        elif actor not in event['participants']:
+        elif actor not in event['participants'] and (event['participants'] or not resolver.consequence_first):
             field, reason = 'actor_id', 'Event перемещения не подтверждает участие перемещаемого персонажа.'
-        elif arrival_source and event.get('location_id') != endpoint:
+        elif arrival_source and event.get('location_id') != endpoint and (event.get('location_id') is not None or not resolver.consequence_first):
             field, reason = endpoint_field, 'Место Event должно совпадать с endpoint прибытия или origin ухода, а не местом обсуждения плана.'
         elif event.get('interaction_channel') == 'call' or event['medium'] == 'message':
             field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое перемещение.'
-        elif arrival_source and event.get('order') != item.get('order'):
+        elif not resolver.consequence_first and arrival_source and event.get('order') != item.get('order'):
             field, reason = 'order', 'Movement и его source Event должны обозначать один шаг порядка.'
         if field:
             errors.append(StructuralDeltaError(reason+' Пересмотрите вместе events, movements, final_scene и character_changes; '

@@ -78,7 +78,7 @@ def test_domain_invariants_are_not_delegated_to_annotations(api, fault):
     raw = payload(); raw['scene_actions'] = []
     if fault == 'agency':
         raw['final_scene']['location_id'] = 'salon_lak'
-        raw['movements'] = [dict(actor_id='ilya', to_location_id='salon_lak')]
+        raw['movements'] = [dict(actor_id='ilya', to_location_id='salon_lak', assertion='completed_arrival')]
     elif fault == 'knowledge':
         raw['facts'] = [dict(id='secret', text='Закрытая информация.', visibility='secret', character_ids=[NPC])]
         raw['knowledge_gained'] = [dict(actor_id=NPC, fact_id='secret', source_event_id='note')]

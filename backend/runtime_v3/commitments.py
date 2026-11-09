@@ -57,6 +57,23 @@ def apply_commitments(resolver, raw):
         if not isinstance(eid, str) or not eid.strip() or assertion not in ASSERTIONS:
             reject('Нужны canonical ID и подтверждённая семантика изменения.'); continue
         old = events.get(eid)
+        from backend.runtime_v3.calendar import normalize_temporal, refine_scheduled_time, current_time
+        time_refinement = False
+        if 'temporal' in item or 'end_temporal' in item:
+            item = dict(item)
+            try:
+                for field in ('temporal', 'end_temporal'):
+                    if field in item:
+                        item[field] = normalize_temporal(state, item[field])
+                refined = refine_scheduled_time(state, old if assertion == 'rescheduled' else None, item.get('temporal'))
+                if refined is not None:
+                    item['temporal'] = refined
+                    time_refinement = True
+            except ValueError as exc:
+                reject(str(exc), 'commitment_temporal_invalid', field='temporal',
+                       current_time=current_time(state), previous_temporal=(old or {}).get('temporal'),
+                       previous_window=scheduled_window(state, old) if old else None,
+                       previous_anchor=(old or {}).get('time_reference_minute'))
         from backend.runtime_v3.remote import commitment_sources
         sources=commitment_sources(resolver.before,item, delivered=bool(getattr(resolver, 'remote_semantic_sources', None))) if item.get('remote_source_ids') else []
         voice=[]
@@ -108,13 +125,14 @@ def apply_commitments(resolver, raw):
                 fields['call_evidence']=item.get('call_evidence',[])
                 fields['call_time_source_id']=item.get('call_time_source_id',fields.get('call_time_source_id'))
         if old is None or assertion == 'rescheduled':
-            fields['time_reference_minute'] = resolver.before['meta']['world_time']
-            if sources:
+            if not time_refinement:
+                fields['time_reference_minute'] = resolver.before['meta']['world_time']
+            if sources and not time_refinement:
                 anchor=next((e for e in sources if e['id']==item.get('remote_time_source_id')),None)
                 if anchor is None:
                     reject('Относительное время сообщения требует его canonical ID.', 'commitment_remote_time'); continue
                 fields['time_reference_minute']=anchor['world_time']
-            if voice:
+            if voice and not time_refinement:
                 anchor=next((e for e in voice if e['id']==item.get('call_time_source_id') and e['assertion']=='proposal'),None)
                 if anchor is None:
                     reject('Голосовое время требует исходное предложение.', 'commitment_call_time'); continue

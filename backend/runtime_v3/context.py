@@ -18,6 +18,96 @@ def block(name, value):
     return dict(role='user', content=name+'\n'+json.dumps(value, ensure_ascii=False, separators=(',', ':')))
 
 
+def turn_temporal_state(view, side):
+    if isinstance(view.get('temporal_' + side), dict):
+        return view['temporal_' + side]
+    return json.loads(view.get(side + '_json') or '{}').get('world_state', {})
+
+
+def scene_time(state, view):
+    """Read existing turn snapshots; missing historical time stays unknown."""
+    result = {}
+    for side, key in (('before', 'start'), ('after', 'end')):
+        try:
+            saved = turn_temporal_state(view, side)
+            minute = saved.get('meta', {}).get('world_time')
+            if type(minute) is int:
+                result[key] = time_stamp(saved, minute)
+        except (ValueError, TypeError, KeyError):
+            pass
+    return result or {'time': 'unknown'}
+
+
+def time_stamp(state, minute):
+    value = current_time(state, minute)
+    return {key: value[key] for key in ('world_time', 'date', 'weekday_name', 'time')}
+
+
+def project_temporal_context(snapshot, turns, current):
+    """Transient observations across a jump are a projection, never a migration.
+
+    Turn snapshots already own the branch and before/after times. Only unchanged
+    situations inherited across the last accepted jump are demoted. Later scene
+    updates stay current; location, health and other enduring state are untouched.
+    """
+    state = snapshot['world_state']
+    now = state['meta']['world_time']
+    later = []
+    for view in reversed(turns):
+        try:
+            changes = json.loads(view.get('changes_json') or '{}')
+        except (TypeError, ValueError):
+            changes = {}
+        if not isinstance(changes, dict):
+            changes = {}
+        jump = view.get('kind') == 'long_term' or bool(changes.get('time_skip'))
+        if not jump:
+            later.append(view)
+            continue
+        try:
+            before = turn_temporal_state(view, 'before')
+            after = turn_temporal_state(view, 'after')
+            start, end = before['meta']['world_time'], after['meta']['world_time']
+            if type(start) is not int or type(end) is not int:
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not start < end <= now:
+            continue
+        current['last_time_advance'] = dict(start=time_stamp(before, start), end=time_stamp(after, end),
+            elapsed_minutes=end-start, elapsed_since_minutes=now-end,
+            instruction='Past activity is not current. Do not invent player decisions.')
+        stale = {}
+        candidates = [('camera', current['camera'], before['camera'], after['camera'])]
+        candidates += [(cid, row, before['characters'].get(cid, {}), after['characters'].get(cid, {}))
+                       for cid, row in current['characters'].items()]
+        for key, row, old, new in candidates:
+            situation = row.get('situation')
+            if situation and situation == old.get('situation') == new.get('situation'):
+                stale[key] = situation
+        # A subsequent real update refreshes the observation, even if the actor
+        # later returned to the same situation. No prose interpretation.
+        for following in reversed(later):
+            if not stale:
+                break
+            try:
+                prior = turn_temporal_state(following, 'before')
+                updated = turn_temporal_state(following, 'after')
+            except (ValueError, TypeError, KeyError):
+                continue
+            for key in list(stale):
+                a = prior['camera'] if key == 'camera' else prior['characters'].get(key, {})
+                b = updated['camera'] if key == 'camera' else updated['characters'].get(key, {})
+                if a.get('situation') != b.get('situation'):
+                    del stale[key]
+        if stale:
+            current['past_situations'] = dict(observed_no_later_than=time_stamp(before, start), situations=stale)
+            for key in stale:
+                row = current['camera'] if key == 'camera' else current['characters'][key]
+                row.pop('situation', None)
+        return
+
+
 class ContextMessages(list):
     """Wire-compatible list; diagnostics do not consume LLM tokens."""
     def __init__(self, messages, selection):
@@ -336,7 +426,8 @@ class NarrativeContextBuilder:
         messages[2] = block('Текущее состояние / GM-only', current_without_knowledge)
         # Up to SIX visible scenes; optional previous inputs, never trim prose for a target.
         for view in views:
-            messages.extend([dict(role='user', content=view.get('user_text') or 'Продолжить.'),
+            stamp = json.dumps(scene_time(state, view), ensure_ascii=False, separators=(',', ':'))
+            messages.extend([dict(role='user', content='Прошлая сцена / canonical time '+stamp+'\n'+(view.get('user_text') or 'Продолжить.')),
                              dict(role='assistant', content=view.get('assistant_text', ''))])
         return rules, messages
 
@@ -366,13 +457,18 @@ class ExtractionContextBuilder:
         from backend.repositories.documents import is_builtin_prompt
         custom = saved and not is_builtin_prompt('state_update_prompt.md', saved, PROMPTS)
         rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
+        if self.contract_version < 3:
+            rules = rules.replace('weekday: use calendar_weekdays.id, never calculate a numeric index.\n'
+                'Existing ID + rescheduled + temporal={"time":"10:00"} refines the SAME occurrence\'s time;\n'
+                'its date/anchor stay fixed. New plans or a changed day need a full date basis.',
+                'weekday: legacy zero-based profile index (Gregorian Monday=0).')
         if self.contract_version >= 4:
             from backend.runtime_v3.context_contract import GROUNDED_CHOICES_CONTRACT, CHOICE_CONTRACT
             rules = rules.replace(CHOICE_CONTRACT, GROUNDED_CHOICES_CONTRACT)
         explicit_departures = self.contract_version >= 4 or kind == 'background'
-        if explicit_departures:
-            rules = rules.replace('Departure without destination: Event + END absence,\nno completed_arrival, location unknown.',
-                'Departure without destination: Movement assertion=departure, to_location_id=null, known from_location_id, accepted source_event_id/order at origin. END absence alone preserves location.')
+        if not explicit_departures:
+            rules = rules.replace('Departure without destination: Movement assertion=departure,\nknown origin, null endpoint; END absence alone proves no departure.',
+                'Departure without destination: Event + END absence, no completed_arrival, location unknown.')
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind):
             from backend.runtime_v3.player_actions import LEGACY_EXTRACTION_CONTRACT
@@ -458,7 +554,7 @@ def choice_context(snapshot, scope, current, views, kind):
             for k in current['knowledge'] if k['actor_id']==cid and k['status'] in ('known','suspected')
             and k['fact_id'] in current['facts']],
         scene=dict(location_id=state['camera']['location_id'], present_actor_ids=sorted(scope.present_actor_ids),
-                   observed_actor_ids=sorted(scope.observed_actor_ids), remote_actor_ids=sorted(scope.remote_actor_ids), situation=state['camera']['situation']),
+                   observed_actor_ids=sorted(scope.observed_actor_ids), remote_actor_ids=sorted(scope.remote_actor_ids), situation=current['camera'].get('situation', '')),
         recent_player_expression=recent))
 
 
@@ -566,6 +662,15 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.initiative import scene_plan
     scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
+    project_temporal_context(snapshot, turns, current)
+    if extraction_text is not None and extraction_contract >= 3:
+        from backend.runtime_v3.calendar import weekday_options
+        current['calendar_weekdays'] = weekday_options(state)
+    scope.history_events = deepcopy(scope.history_events)
+    for event in scope.history_events:
+        event['event_time'] = time_stamp(state, event['minute']) if type(event.get('minute')) is int else {'time': 'unknown'}
+        if type(event.get('recorded_minute')) is int:
+            event['recorded_time'] = time_stamp(state, event['recorded_minute'])
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
     cfg = state['meta']['communication']

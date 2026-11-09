@@ -13,11 +13,12 @@ Reuse IDs/aliases. Significant new NPCs: promotions with 11 CARD_FIELDS+attribut
 unknowns=null/unknown/omitted, no fabricated identities/sources.
 
 LOCATION / VISIBILITY / CONTACT
-final_scene is END membership at camera granularity, not proof of arrival. Relocation needs
-movements + accepted source_event_id: actor participates, endpoint location_id/order match.
+final_scene is END membership, not arrival proof. Movement owns route/completed_arrival/departure.
+Optional source Event must be accepted and agree with actor/endpoint/timeline.
 Keep routes/returns and before/new endpoints; present ends at scene.
-future_intent/preparation leaves location unchanged. Departure without destination: Event + END absence,
-no completed_arrival, location unknown. Room exit != building exit. Actual arrival needs no
+future_intent/preparation leaves location unchanged. Departure without destination: Movement assertion=departure,
+known origin, null endpoint; END absence alone proves no departure.
+Room exit != building exit. Actual arrival needs no
 prior on-camera exit. Allow NPC initiative/new locations[]/background movement; no automatic
 player Knowledge. Place creation/time/plans prove no arrival.
 observed_character_ids is disjoint outside visibility, not location/contact/Knowledge.
@@ -26,7 +27,8 @@ A doorway may share place without camera membership/boundary nodes. Sight is not
 Remote/memory/mention is not presence. Align events/movements/final_scene/character_changes.
 Off-scene situation needs source_event_id. remote_interactions records only active END contact:
 actor_id/channel/evidence; reconfirm, omit ended; rereading is not contact, arrival is present.
-EXTERNAL movement: explicit_choice + player_evidence, or involuntary + external source_event_id.
+EXTERNAL movement: explicit_choice+input quote OR verified player_action_id (direct/accepted Event).
+Involuntary needs external source Event. order resolves route/encounter sequence, not duplication.
 
 EVENT / FACT / KNOWLEDGE
 Distinguish Event actor/participants, witnesses and source. Use the real speaker, not a listener.
@@ -160,6 +162,9 @@ occurred=done; missed=confirmed nonperformance; blocked=obstacle; started/ended=
 No plans from dreams, offers, questions or old discussions. Close matching ID only.
 EXTERNAL agreed/rescheduled/cancelled: explicit_choice + exact player_input decision quote.
 NPC cancellation: decision_actor_id. temporal/end_temporal: one date/weekday/day_offset/minute_offset.
+weekday: use calendar_weekdays.id, never calculate a numeric index.
+Existing ID + rescheduled + temporal={"time":"10:00"} refines the SAME occurrence's time;
+its date/anchor stay fixed. New plans or a changed day need a full date basis.
 minute_offset alone; otherwise stated HH:MM in time OR imprecise day_period OR neither for day precision.
 depends_on=necessary prerequisite, not group/series; cancellation invalidates dependents only.
 Leave changes neither location nor education. Time alone never starts/ends intervals or penalizes relationships.

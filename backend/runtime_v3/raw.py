@@ -138,7 +138,7 @@ def extraction_schema():
             assertion={'enum':['grounded_feelings']},rationale=string,
             player_evidence=string,player_assertion={'enum':['explicit_directed_feelings']},
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
-        'movements':record(dict(player_evidence=string,player_assertion={'enum':['explicit_choice','involuntary']},source_event_id=string,actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
+        'movements':record(dict(player_action_id=string,player_evidence=string,player_assertion={'enum':['explicit_choice','involuntary']},source_event_id=string,actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=TemporalValue.model_json_schema(),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
@@ -343,12 +343,28 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
     # New generation requires provenance; legacy raw/saved payloads remain readable.
-    schema['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
+    schema['properties']['movements']['items']['required'] += ['assertion'] + ([] if consequence_first else ['source_event_id'])
+    if consequence_first:
+        required_movement = schema['properties']['movements']['items']['required']
+        if 'evidence' in required_movement:
+            required_movement.remove('evidence')
+        # Input form only: Calendar normalizes stable day IDs into canonical ints.
+        schedule = schema['properties']['scheduled_event_changes']['items']['properties']
+        for name in ('temporal', 'end_temporal'):
+            temporal = schedule[name]
+            temporal['properties']['weekday'] = {'type': ['string', 'null'],
+                'description': 'calendar_weekdays.id'}
+            if name == 'end_temporal':
+                continue
+            schedule[name] = {'anyOf': [temporal, {'type': 'object', 'additionalProperties': False,
+                'properties': {'time': {'type': 'string', 'pattern': r'^([01]\d|2[0-3]):[0-5]\d$'}},
+                'required': ['time']}]}
     if explicit_departures:
         movement = schema['properties']['movements']['items']
         movement['properties']['assertion'] = {'enum': ['completed_arrival', 'departure']}
         movement['properties']['to_location_id'] = {'type': ['string', 'null']}
-        movement['description'] = 'Arrival: reached endpoint. Departure: null endpoint, known from_location_id, accepted departure Event at origin; same order. END absence alone changes no geography.'
+        movement['description'] = ('Arrival/departure; source Event optional, conflicting supplied fields reject.'
+            if consequence_first else 'Arrival: reached endpoint. Departure: null endpoint, known from_location_id, accepted departure Event at origin; same order. END absence alone changes no geography.')
     if grounded_choices:
         choice = schema['properties']['choices']['items']
         choice['properties']['grounding'] = {'type':'object', 'additionalProperties':False,
@@ -507,7 +523,8 @@ def repair_feedback(diagnostic, payload, before, previous_complete=None):
         except ValueError: pass  # Preserve malformed output verbatim for repair.
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
-    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths') if key in row} for row in rows]
+    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths',
+                'current_time', 'previous_temporal', 'previous_window', 'previous_anchor') if key in row} for row in rows]
     # Keep the legacy first-error summary, without duplicating its long reason
     # and source lists. The diagnostics array retains every complete record.
     detail = {key:details[0][key] for key in ('code','path') if key in details[0]}
@@ -544,10 +561,10 @@ def repair_feedback(diagnostic, payload, before, previous_complete=None):
             'Never remove witnesses while retaining impossible contact, substitute a speaker, invent arrival/consent or suppress confirmed learning. '
             'Recheck both agency directions across prose, including unrecorded replies/gestures/decisions. If Narrative itself violates agency/canon, '
             'return player_agency.status=violated (uncertain if unprovable), using existing reauthor/abandon; do not launder it by editing JSON. '
-            'Event/action coverage: actual actor, one action ID, verified action quote, target subset/union. When the request schema permits, omit the duplicate Event quote; never overwrite an explicit conflict. Restore a genuinely performed player address '
-            'as a separate Event; retain NPC reply/fact_ids/knowledge_gained. Never relabel the NPC response as player-authored. '
+            'Supplied contact Events: actual actor, verified action quote and delivered recipients. Follow the request schema; omit duplicate quotes, never overwrite explicit conflicts. '
+            'Preserve significant player contact and NPC reply/fact_ids/knowledge_gained; no Event per everyday gesture. Never relabel the NPC response as player-authored. '
             'Align events/movements/final_scene/character_changes at scene granularity: future_intent/preparation is not departure; '
-            'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Arrival needs accepted source Event/actor/endpoint/order. '
+            'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Movement owns the route; optional sources must agree, not duplicate it. '
             'New locations and autonomous background movement remain valid; no automatic player Knowledge. Observed is visibility, not contact proof. '
             'This is the only automatic repair; return ONLY the full RawTurnResult matching JSON Schema. '
             'For compound input, split distinct clauses/targets into separate PlayerActions when appropriate; a shared action uses one full quote inherited by its Events. Do not invent Events. '

@@ -243,7 +243,8 @@ def test_t50_controlled_movement_requires_owned_source(api, authorization):
         raw['events']=[dict(id='carried',text='Его перенесли в салон.',participants=['ilya','viktoria_solovyova'])]
     if authorization in ('none','forged'):
         with pytest.raises(StructuralDeltaError) as exc:StateResolver(before,'Переход завершён.',player).resolve(raw)
-        assert exc.value.code=='movement_agency'
+        # Source and authority failures are independent; source validation now runs first.
+        assert 'movement_agency' in {r['code'] for r in exc.value.diagnostics('test')}
     else:
         after=StateResolver(before,'Переход завершён.',player).resolve(raw)
         assert after.state['characters']['ilya']['location_id']=='salon_lak'
@@ -298,7 +299,7 @@ def test_offcamera_protected_movement_cannot_borrow_pov_agency(api):
     raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='salon_lak',present_character_ids=['viktoria_solovyova']),
              movements=[dict(actor_id='ilya',to_location_id='salon_lak')])
     with pytest.raises(StructuralDeltaError) as exc:StateResolver(before,'Илья теперь в салоне.','').resolve(raw)
-    assert exc.value.code=='movement_agency'
+    assert 'movement_agency' in {r['code'] for r in exc.value.diagnostics('test')}
 
 
 @pytest.mark.parametrize('damage', ['elapsed_missing','elapsed_type','life_changes','movements','scheduled_event_changes'])

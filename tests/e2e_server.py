@@ -1095,6 +1095,17 @@ if __name__ == '__main__':
         berezovsk_followup=dict(data=data,responses=responses,attempt=0)
         return dict(world=result['world'],save=result['save'],action=data['player_input'])
 
+    @app.post('/test/playability251-seed')
+    def playability251_seed(case: str = '002'):
+        global berezovsk_followup
+        from test_playability251 import DATA, seed, payload, control
+        if case not in ('002','008','016','020'):
+            raise ValueError('Unknown replay')
+        result = seed(app.state.repository, case)
+        responses = [payload(case)] if case in ('002','020') else [payload(case),payload(case),control(case)]
+        berezovsk_followup = dict(data=DATA[case], responses=responses, attempt=0)
+        return result
+
     @app.post('/test/agency249-seed')
     def agency249_seed(mode: str = 'saved'):
         global agency249
