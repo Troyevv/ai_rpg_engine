@@ -92,6 +92,7 @@ def test_conflicting_scene_corpus_requires_repair_before_commit(db, name):
     before = setup_scenario(repo, sid, fixture['initial'])
     raw = wire(fixture['payload'], fixture['narrative'], before)
     for row in raw.get('movements', []):
+        row['assertion'] = 'completed_arrival'
         if row.get('actor_id')=='character_1':
             row.update(player_assertion='explicit_choice',player_evidence=PLAYER)
     # The old policy silently discarded these conflicting movements. #64

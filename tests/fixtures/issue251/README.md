@@ -6,6 +6,11 @@ that order. Combined SHA256:
 All 573 manifest entries and all 36 SQLite files (6 roots + 30 checkpoints) were
 verified; SQLite opened read-only. Originals were never modified.
 
+`world.json.xz` preserves all original `world_parts` for world 1 from
+`final.sqlite`, needed by browser startup in addition to the saved snapshot.
+SHA256: `c498fab0d1e3268326badbdad61580e519044bc31d2e9c08490beda145d96c62`.
+No generated world or substitute character cards are used.
+
 `berezovsk.json.xz` is a lossless JSON selection, compressed with standard-library
 LZMA to avoid storing repeated snapshots (88,460 bytes instead of 1,989,414 gzip).
 SHA256: `c1af17eef034d33b6e293cb2a0a3cd60b5aabc73f3a48b80b4003c5eadc41a9b`.

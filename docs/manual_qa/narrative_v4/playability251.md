@@ -104,7 +104,12 @@ local launch failure is not reported as an application test pass.
 Offline evidence demonstrates removal of specific gates and preserved negative
 invariants. It does not establish a new live saved-input ratio or guarantee literary
 consistency. A model can still misclassify semantic arrival or assent; no regex/NLP
-or additional LLM adjudicator is introduced. Legacy hard-classified job diagnostics
+or additional LLM adjudicator is introduced. The older #245 phone archive is a
+concrete example: its `completed_arrival` assertions falsely turn plans into arrivals.
+With optional Movement source Events, that structurally consistent JSON now saves
+without repair. This is a semantic failure, not a successful playability replay;
+requiring a duplicate Event would only incidentally reject that particular encoding.
+Legacy hard-classified job diagnostics
 remain unchanged and are not bypassed. Ordinary new attempts have the repaired
 classification; original abandoned scenes are not silently applied later.
 

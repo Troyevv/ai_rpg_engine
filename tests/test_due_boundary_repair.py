@@ -48,7 +48,9 @@ def family(path, checkpoint='pregnancy'):
     return repo, sid
 
 
-def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path):
+@pytest.mark.parametrize('context_length', [32768, 65536])
+def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path, monkeypatch, context_length):
+    monkeypatch.setitem(CONFIG, 'context_length', context_length)
     repo, sid = family(tmp_path/'replay.sqlite')
     before = repo.get_snapshot(sid)
     state = before['world_state']
@@ -62,6 +64,10 @@ def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path):
     job, calls = execute(repo, sid, SIGNS, [bad, good])
     assert job['status'] == 'saved', job['error']
     assert len(calls) == 3
+    # Browser local-model is capped at 32K even when settings request 64K.
+    # Keep complete repair context within that existing limit, including #251 dates.
+    from context_builder import estimate
+    assert all(estimate(call['messages']) <= context_length - call['max_tokens'] - 256 for call in calls)
     logs = list(reversed(repo.request_log(job_id=job['id'])))
     assert [c['stage'] for c in logs] == ['narrative', 'extraction', 'extraction_repair']
     assert all(block(c['messages'], 'completed_narrative') == SIGNS for c in logs[1:])

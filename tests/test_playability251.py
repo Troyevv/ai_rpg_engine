@@ -50,6 +50,11 @@ def seed(repo, case):
     with repo.connect() as db:
         wid = db.execute('INSERT INTO worlds(name,name_key,version,source_md,digest) VALUES(?,?,?,?,?)',
             ('Berezovsk 251 '+case, 'berezovsk251-'+case, 1, '', 'recorded251-'+case)).lastrowid
+        # Browser boot reads the immutable world definition as well as the save.
+        # Import its original parts; a bare worlds row is not a complete fixture.
+        world = json.loads(lzma.decompress((Path(__file__).parent/'fixtures/issue251/world.json.xz').read_bytes()))
+        db.executemany('INSERT INTO world_parts(world_id,kind,payload) VALUES(?,?,?)',
+                       [(wid, key, json.dumps(value, ensure_ascii=False)) for key, value in world.items()])
         sid = db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
             (wid, 'Recorded '+case, json.dumps(snapshot, ensure_ascii=False))).lastrowid
         row = data['previous_turn']

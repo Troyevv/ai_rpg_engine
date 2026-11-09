@@ -28,8 +28,10 @@ for (const scenario of ['knowledge', 'family', 'phone', 'crisis', 'retry', 'live
     const after = await view();
     const accounting = async () => (await (await request.get(path + '/accounting')).json()).requests;
     const spent = await accounting();
-    // #250: optional inventory/audit no longer purchases repair for these originals.
-    const firstPass = live && ['family', 'phone', 'social'].includes(base);
+    // #250/#251: optional audit and duplicate Movement sources buy no repair.
+    // The old phone extraction falsely asserts arrivals: Runtime cannot infer
+    // that semantic error from prose. Keep it visible as a replay risk.
+    const firstPass = base === 'phone' || (live && ['family', 'social'].includes(base));
     expect(spent.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(firstPass ? 2 : 3);
     await page.reload();
     await expect(input).toBeVisible();

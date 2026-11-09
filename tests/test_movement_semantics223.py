@@ -200,7 +200,7 @@ def test_strict_endpoint_diagnostic_and_repair_contract(phone, target):
     feedback = json.loads(repair_feedback(diagnostic, raw, state))
     assert 'future_intent/departure' in feedback['contract']
     assert 'newly registered endpoint' in feedback['contract']
-    assert 'сохрани Event ухода' in diagnostic['repair_reason']
+    assert 'Сохрани подтверждённые этапы маршрута' in diagnostic['repair_reason']
     schema = extraction_schema()['properties']['movements']['items']
     assert 'future_intent' in schema['description']
     assert schema['properties']['to_location_id']['type'] == 'string'

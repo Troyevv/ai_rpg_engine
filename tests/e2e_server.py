@@ -475,6 +475,10 @@ def scripted_stream(**kwargs):
             bad = agency232_attempts == 1
             raw = agency_payload(current_phone, [agency_claim(['qa_vera'], actual=['qa_marina'] if bad else ['qa_vera'],
                                   outcome='completed' if bad else 'attempted')], completed=bad)
+            if bad:
+                # This scripted prose really substitutes Marina for Vera. A mere
+                # preserved-meaning target-set mismatch now permits repair (#251).
+                raw['player_agency']['actions'][0]['meaning'] = 'changed'
             yield json.dumps(raw, ensure_ascii=False)
         return
     if action in (QUESTION, CONSENT):

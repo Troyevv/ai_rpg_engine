@@ -4,29 +4,25 @@ CURRENT RUNTIME narrative-authority-v1. Return JSON RawTurnResult per JSON Schem
 Interpret player_input and whole completed_narrative; never continue/rewrite it.
 
 SOURCES / OUTCOMES
-WorldState is starting canon, above historical prose/cards. player_input authorizes EXTERNAL
-voluntary decisions; completed_narrative supplies outcomes/NPC acts, including off-screen events.
+WorldState outranks historical prose/cards. player_input authorizes EXTERNAL choices;
+completed_narrative supplies outcomes/NPC acts, including off-screen.
 Separate fact/rumor/plan/preparation/attempt/hypothesis/negation. Intent/promise/due != done.
 Quiet=no Events; preserve confirmed consequences, omit unestablished changes.
 Evidence=provenance; player_evidence=exact current input.
-Reuse IDs/aliases. Significant new NPCs: promotions with 11 CARD_FIELDS+attributes;
-unknowns=null/unknown/omitted, no fabricated identities/sources.
+Reuse IDs/aliases. New significant NPCs: promotions, 11 CARD_FIELDS+attributes.
+Unknowns=null/unknown/omitted; never fabricate identity/source.
 
 LOCATION / VISIBILITY / CONTACT
-final_scene is END membership, not arrival proof. Movement owns route/completed_arrival/departure.
-Optional source Event must be accepted and agree with actor/endpoint/timeline.
-Keep routes/returns and before/new endpoints; present ends at scene.
-future_intent/preparation leaves location unchanged. Departure without destination: Movement assertion=departure,
-known origin, null endpoint; END absence alone proves no departure.
-Room exit != building exit. Actual arrival needs no
-prior on-camera exit. Allow NPC initiative/new locations[]/background movement; no automatic
-player Knowledge. Place creation/time/plans prove no arrival.
-observed_character_ids is disjoint outside visibility, not location/contact/Knowledge.
-Conversation needs co-location at start/end/shared movement/Event.order or confirmed channel.
-A doorway may share place without camera membership/boundary nodes. Sight is not contact.
-Remote/memory/mention is not presence. Align events/movements/final_scene/character_changes.
-Off-scene situation needs source_event_id. remote_interactions records only active END contact:
-actor_id/channel/evidence; reconfirm, omit ended; rereading is not contact, arrival is present.
+final_scene=END membership, not arrival. Movement owns route/completed_arrival/departure.
+Optional Event: accepted, compatible actor/endpoint/timeline. Keep routes/returns, before/new endpoints.
+future_intent/preparation/END absence changes no geography. Departure: known origin, null endpoint.
+Room exit != building exit. Arrival needs no prior on-camera exit. Allow NPC initiative,
+new locations[] and background movement; none grants player Knowledge. Place creation/time/plans prove no arrival.
+observed_character_ids=disjoint outside visibility, not location/contact/Knowledge.
+Conversation needs simultaneous co-location (start/end/ordered route) or confirmed channel.
+Doorways need no camera membership/boundary nodes. Sight/remote/memory/mention is not presence/contact.
+Align events/movements/final_scene/character_changes. Off-scene situation needs source_event_id.
+remote_interactions: active END actor_id/channel/evidence; reconfirm, omit ended. Rereading != contact; arrival=present.
 EXTERNAL movement: explicit_choice+input quote OR verified player_action_id (direct/accepted Event).
 Involuntary needs external source Event. order resolves route/encounter sequence, not duplication.
 
@@ -163,8 +159,8 @@ No plans from dreams, offers, questions or old discussions. Close matching ID on
 EXTERNAL agreed/rescheduled/cancelled: explicit_choice + exact player_input decision quote.
 NPC cancellation: decision_actor_id. temporal/end_temporal: one date/weekday/day_offset/minute_offset.
 weekday: use calendar_weekdays.id, never calculate a numeric index.
-Existing ID + rescheduled + temporal={"time":"10:00"} refines the SAME occurrence's time;
-its date/anchor stay fixed. New plans or a changed day need a full date basis.
+Existing ID/rescheduled/temporal={"time":"10:00"}: SAME occurrence/date/anchor.
+New plan/changed day needs full date basis.
 minute_offset alone; otherwise stated HH:MM in time OR imprecise day_period OR neither for day precision.
 depends_on=necessary prerequisite, not group/series; cancellation invalidates dependents only.
 Leave changes neither location nor education. Time alone never starts/ends intervals or penalizes relationships.
