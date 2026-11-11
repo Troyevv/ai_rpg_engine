@@ -1,0 +1,453 @@
+{
+  "master_sha": "d81a52c9980b79d1be99acfde9fc1a1452d71176",
+  "execution_qa_sha": "32eb3ee0017a2a0515059fd3afd1e21fe85140b2",
+  "pr": 245,
+  "issue": 99,
+  "source_archive_sha256": "3979c8b87ce923ccf21737c8a7cd17718f218b36535997b752c5118d4d15a277",
+  "stage1": "FAILED",
+  "stage2": "NOT RUN: mandatory first-stage gate failed",
+  "new_confirmed_issues": [
+    246
+  ],
+  "verification": {
+    "source_hashes_unchanged": 353,
+    "historical_budget_rows_preserved": true,
+    "paid_calls": 15,
+    "unknown_paid_outcomes": 0,
+    "input_tokens": 231541,
+    "output_tokens": 16197,
+    "peak_cold_usd": "0.0888987",
+    "approved_remaining_usd": "0.5111013",
+    "historical_remaining_usd": "1.5524474",
+    "usage_estimated_usd": "0.031052505",
+    "cached_input_tokens": 91135,
+    "receipts": [
+      {
+        "id": "df9f53ee711f469792f05a4f57afe32f",
+        "job_id": "e3b9501fc2494c6d9a8bb9c6a35206b6",
+        "stage": "narrative",
+        "status": "complete",
+        "input_tokens": 8029,
+        "output_tokens": 447,
+        "cached_input_tokens": 7808,
+        "cost_usd": "0.000324774",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "cc95b53608b241a5a1297d80f3967f5a",
+        "job_id": "e3b9501fc2494c6d9a8bb9c6a35206b6",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 17047,
+        "output_tokens": 1578,
+        "cached_input_tokens": 0,
+        "cost_usd": "0.00350385",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "fda68106f96341e08f61169fa2f6c5a1",
+        "job_id": "e3b9501fc2494c6d9a8bb9c6a35206b6",
+        "stage": "extraction_repair",
+        "status": "complete",
+        "input_tokens": 17701,
+        "output_tokens": 1592,
+        "cached_input_tokens": 0,
+        "cost_usd": "0.00361035",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "16dd5bbd90024ee29f98d4e3c63de68f",
+        "job_id": "6175b8229df4454cbf61fd54c537f979",
+        "stage": "narrative",
+        "status": "complete",
+        "input_tokens": 10885,
+        "output_tokens": 321,
+        "cached_input_tokens": 10751,
+        "cost_usd": "0.000244953",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "479e4e8e0f4a4a71b076afa19f6dafcf",
+        "job_id": "6175b8229df4454cbf61fd54c537f979",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 17468,
+        "output_tokens": 1094,
+        "cached_input_tokens": 5504,
+        "cost_usd": "0.002467512",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "844f21144bca479f9ce6e6223c125d39",
+        "job_id": "b47b39afb3374cebafa383b7c8c177d6",
+        "stage": "narrative",
+        "status": "complete",
+        "input_tokens": 10317,
+        "output_tokens": 234,
+        "cached_input_tokens": 10112,
+        "cost_usd": "0.000201486",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "b3640126e0854273b67c6dd643f3d890",
+        "job_id": "b47b39afb3374cebafa383b7c8c177d6",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 17124,
+        "output_tokens": 2058,
+        "cached_input_tokens": 5504,
+        "cost_usd": "0.002994312",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "4e30b59aae834435be04332bca8cf972",
+        "job_id": "df90fbfbb25c4018911b4ba13c2d8f77",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 20906,
+        "output_tokens": 1147,
+        "cached_input_tokens": 5376,
+        "cost_usd": "0.003033828",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "5cc0e7562c0c4ac9af112f586292d54e",
+        "job_id": "b47b39afb3374cebafa383b7c8c177d6",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 20319,
+        "output_tokens": 2020,
+        "cached_input_tokens": 5504,
+        "cost_usd": "0.003450762",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "21cf7b07f73f4fc8a3385bc852b635ea",
+        "job_id": "b47b39afb3374cebafa383b7c8c177d6",
+        "stage": "extraction_repair",
+        "status": "complete",
+        "input_tokens": 20281,
+        "output_tokens": 2467,
+        "cached_input_tokens": 7168,
+        "cost_usd": "0.003468654",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "8681bdb4190d4158ad1c4b1ed619427d",
+        "job_id": "d3b5d1ec662245ad830713bd28f219a9",
+        "stage": "narrative",
+        "status": "complete",
+        "input_tokens": 8238,
+        "output_tokens": 303,
+        "cached_input_tokens": 8064,
+        "cost_usd": "0.000232092",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "aa2e9fdb1f764c808f06c1bfb61e28e0",
+        "job_id": "d3b5d1ec662245ad830713bd28f219a9",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 17436,
+        "output_tokens": 728,
+        "cached_input_tokens": 5120,
+        "cost_usd": "0.00229956",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "c1841861e2004152a237415c58e946b8",
+        "job_id": "d3b5d1ec662245ad830713bd28f219a9",
+        "stage": "extraction_repair",
+        "status": "complete",
+        "input_tokens": 19126,
+        "output_tokens": 722,
+        "cached_input_tokens": 6144,
+        "cost_usd": "0.002398932",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "e74df61ce9594664b6b4d095580b747e",
+        "job_id": "77dbff1e216a4091a5485f50ed264407",
+        "stage": "narrative",
+        "status": "complete",
+        "input_tokens": 9146,
+        "output_tokens": 371,
+        "cached_input_tokens": 8960,
+        "cost_usd": "0.00027738",
+        "finish_reason": "stop"
+      },
+      {
+        "id": "f791bdf2d1cd48af85dc096b7776734c",
+        "job_id": "77dbff1e216a4091a5485f50ed264407",
+        "stage": "extraction",
+        "status": "complete",
+        "input_tokens": 17518,
+        "output_tokens": 1115,
+        "cached_input_tokens": 5120,
+        "cost_usd": "0.00254406",
+        "finish_reason": "stop"
+      }
+    ],
+    "sqlite_integrity": {
+      "budget.sqlite": "ok",
+      "game.sqlite": "ok",
+      "original-replays-setup-error/crisis-repeat/game.sqlite": "ok",
+      "original-replays/knowledge-repeat/game.sqlite": "ok",
+      "original-replays/knowledge-control/game.sqlite": "ok",
+      "original-replays/social-control/game.sqlite": "ok",
+      "original-replays/crisis-repeat/game.sqlite": "ok",
+      "original-replays/campaign-control/game.sqlite": "ok",
+      "original-replays/campaign-repeat/game.sqlite": "ok",
+      "original-replays/crisis-control/game.sqlite": "ok",
+      "original-replays/social-repeat/game.sqlite": "ok",
+      "original-replays/family-control/game.sqlite": "ok",
+      "original-replays/phone-repeat/game.sqlite": "ok",
+      "original-replays/phone-control/game.sqlite": "ok",
+      "original-replays/family-repeat/game.sqlite": "ok",
+      "campaign-context-replay/campaign-control/game.sqlite": "ok",
+      "campaign-context-replay/campaign-repeat/game.sqlite": "ok"
+    },
+    "final_browser": {
+      "social": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "family": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      },
+      "crisis": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "knowledge": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      },
+      "campaign": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "phone": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      }
+    }
+  },
+  "scenarios": {
+    "crisis": {
+      "status": "BLOCKED; atomic safety pass",
+      "reason": "Narrative invents absent Vera presence; Extraction repair retains it; event_presence_invalid; unchanged state/history. Attempted-action live persistence not exercised.",
+      "checkpoint": "run/crisis/001/before.json.gz",
+      "source_checkpoint_sha256": "9b64c47ed49b0cefc4de848d6c2b34948c67c54098ae1c68c8d6f2e8d25b37b8",
+      "save": 8,
+      "job": "e3b9501fc2494c6d9a8bb9c6a35206b6",
+      "job_status": "error",
+      "input": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+      "minute_before": 558,
+      "minute_after": 558,
+      "snapshot_unchanged": true,
+      "siblings_preserved": true,
+      "calls": 3,
+      "input_tokens": 42777,
+      "output_tokens": 3617,
+      "usage_estimated_usd": "0.007438974",
+      "request_ids": [
+        "df9f53ee711f469792f05a4f57afe32f",
+        "cc95b53608b241a5a1297d80f3967f5a",
+        "fda68106f96341e08f61169fa2f6c5a1"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "d90eb202d31d098e53307f64efa80c02aefe1de44d53eabb643087dfa21f518b",
+      "attempts": [
+        "crisis/001"
+      ]
+    },
+    "social": {
+      "status": "PASS for emitted compound action; split-action coverage partial",
+      "reason": "Exact input/action/event quote and targets; no foreign consent. One optional continuity beat dropped. No new Knowledge. Model emits one compound action, not two.",
+      "checkpoint": "run/social/001/before.json.gz",
+      "source_checkpoint_sha256": "38114a8d9575d73f8028e1047e9a1067ec7712ab26147953f9862abbc1ec1e57",
+      "save": 1,
+      "job": "6175b8229df4454cbf61fd54c537f979",
+      "job_status": "saved",
+      "input": "Я согласен сейчас сортировать фотографии по датам, оставляя оригинал карты на месте. Прошу Веру показать первую пачку.",
+      "minute_before": 567,
+      "minute_after": 570,
+      "snapshot_unchanged": false,
+      "siblings_preserved": true,
+      "calls": 2,
+      "input_tokens": 28353,
+      "output_tokens": 1415,
+      "usage_estimated_usd": "0.002712465",
+      "request_ids": [
+        "16dd5bbd90024ee29f98d4e3c63de68f",
+        "479e4e8e0f4a4a71b076afa19f6dafcf"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "24625411863e8b4bce98081c9fbe0ac1131bb4479d849991f52e62e351a54a81",
+      "attempts": [
+        "social/001"
+      ]
+    },
+    "knowledge": {
+      "status": "FAIL semantic Knowledge; provenance recovered",
+      "reason": "Initial repair context overflow; one reviewed retry preserves Narrative and fixes explicit_choice. Four acquisitions dropped for missing Event.fact_ids (#246); two facts and meeting persist.",
+      "checkpoint": "run/knowledge/001/before.json.gz",
+      "source_checkpoint_sha256": "5d4e88958cbd218afc963272273c7e81e81f078b2481a94dcc2d9c184eed8344",
+      "save": 4,
+      "job": "b47b39afb3374cebafa383b7c8c177d6",
+      "job_status": "saved",
+      "input": "Я согласен прийти завтра в библиотеку в 15:00. Спрашиваю Веру, подходит ли ей именно это время.",
+      "minute_before": 553,
+      "minute_after": 555,
+      "snapshot_unchanged": false,
+      "siblings_preserved": true,
+      "calls": 4,
+      "input_tokens": 68041,
+      "output_tokens": 6779,
+      "usage_estimated_usd": "0.010115214",
+      "request_ids": [
+        "844f21144bca479f9ce6e6223c125d39",
+        "b3640126e0854273b67c6dd643f3d890",
+        "5cc0e7562c0c4ac9af112f586292d54e",
+        "21cf7b07f73f4fc8a3385bc852b635ea"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "00d35a310d54647b60b0e436f1b2485b8c1275c00d763eae9c86b306401f2e01",
+      "attempts": [
+        "knowledge/001",
+        "knowledge/002"
+      ],
+      "original_narrative_preserved": true
+    },
+    "campaign": {
+      "status": "PASS targeted recovery",
+      "reason": "One new Extraction preserves original Narrative, repairs absolute minute and action provenance. No LTA executed in this subrun.",
+      "checkpoint": "run/campaign/011/before.json.gz",
+      "source_checkpoint_sha256": "06c69d1ae607ba35c6c84367eefbcdd207d793af9cdcbf846aafc65ff8ecb82b",
+      "save": 5,
+      "job": "df90fbfbb25c4018911b4ba13c2d8f77",
+      "job_status": "saved",
+      "input": "Я спрашиваю, что стало с договорённостями, делами мастерской и звонком Олегу.",
+      "minute_before": 2631444,
+      "minute_after": 2631446,
+      "snapshot_unchanged": false,
+      "siblings_preserved": true,
+      "calls": 1,
+      "input_tokens": 20906,
+      "output_tokens": 1147,
+      "usage_estimated_usd": "0.003033828",
+      "request_ids": [
+        "4e30b59aae834435be04332bca8cf972"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": false,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "32556e8193d7f539535577d3d909734da53d314e627d021a1b8b6acecb865b2b",
+      "attempts": [
+        "campaign/000"
+      ],
+      "original_narrative_preserved": true
+    },
+    "family": {
+      "status": "BLOCKED before live temporal repair",
+      "reason": "Observation misclassified as completed interaction; bounded repair repeats. Unchanged 1980, no child. Offline reference-only control exposes elapsed3 boundary; reference+elapsed0 accepts ongoing labor.",
+      "checkpoint": "run/family/002/before.json.gz",
+      "source_checkpoint_sha256": "dbca905f678916bd42d3242558cb68f857d31c889b73dacb159eb0acd1204756",
+      "save": 10,
+      "job": "d3b5d1ec662245ad830713bd28f219a9",
+      "job_status": "error",
+      "input": "Я остаюсь рядом и наблюдаю, что происходит с Верой, не вмешиваясь в её действия.",
+      "minute_before": 1980,
+      "minute_after": 1980,
+      "snapshot_unchanged": true,
+      "siblings_preserved": true,
+      "calls": 3,
+      "input_tokens": 44800,
+      "output_tokens": 1753,
+      "usage_estimated_usd": "0.004930584",
+      "request_ids": [
+        "8681bdb4190d4158ad1c4b1ed619427d",
+        "aa2e9fdb1f764c808f06c1bfb61e28e0",
+        "c1841861e2004152a237415c58e946b8"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "944f3c1e9449232291d1c60f95404ff8d7638d6ae11a2ce307be39252031dede",
+      "attempts": [
+        "family/001"
+      ]
+    },
+    "phone": {
+      "status": "FAIL semantic persistence (#223)",
+      "reason": "Future/preparation turns into completed_arrival for Timur/workshop and Vera/library. Both false locations/movements persist after reload; no paid continuation.",
+      "checkpoint": "run/phone/001/before.json.gz",
+      "source_checkpoint_sha256": "9639e66c2187b7ebc44cfbb80814a37ed8db3d57c6a146d19f03b5cf7673220e",
+      "save": 6,
+      "job": "77dbff1e216a4091a5485f50ed264407",
+      "job_status": "saved",
+      "input": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+      "minute_before": 548,
+      "minute_after": 558,
+      "snapshot_unchanged": false,
+      "siblings_preserved": true,
+      "calls": 2,
+      "input_tokens": 26664,
+      "output_tokens": 1486,
+      "usage_estimated_usd": "0.00282144",
+      "request_ids": [
+        "e74df61ce9594664b6b4d095580b747e",
+        "f791bdf2d1cd48af85dc096b7776734c"
+      ],
+      "ui": {
+        "reload_unchanged": true,
+        "mobile": true,
+        "page_errors": []
+      },
+      "paid_continuation": false,
+      "narrative_sha256": "8d04237657659271edceff14ee05863324438a5b055adcd4b8ef11ae357f0385",
+      "attempts": [
+        "phone/001"
+      ]
+    }
+  },
+  "raw_archive_public_url": null,
+  "raw_archive": {
+    "file": "live99-postfix-evidence-20261107.tar.gz",
+    "bytes": 30262307,
+    "sha256": "e19a0b07ea8a76223c16c6b5805f3e7c9b85733aea0a5828719d0522e5176a36",
+    "indexed_files": 283,
+    "excluded_duplicate_replay_sqlite": true,
+    "credentials_scan": "actual configured secret values absent",
+    "public_url": null
+  }
+}

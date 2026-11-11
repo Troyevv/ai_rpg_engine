@@ -39,8 +39,9 @@ def reserve_action(directory, folder, meta, limit):
         db.execute('BEGIN IMMEDIATE')
         if db.execute('SELECT count(*) FROM qa_actions').fetchone()[0] >= limit:
             raise RuntimeError('QA cumulative action budget exhausted')
+        copied_retest = db.execute("SELECT 1 FROM sqlite_master WHERE name='postfix_authorization'").fetchone()
         db.execute('INSERT INTO qa_actions VALUES(?,?)',
-                   (str(folder.resolve()) if (directory / 'budget.sqlite').is_symlink()
+                   (str(folder.resolve()) if copied_retest or (directory / 'budget.sqlite').is_symlink()
                     else str(folder.relative_to(directory)), json.dumps(meta, ensure_ascii=False)))
 
 

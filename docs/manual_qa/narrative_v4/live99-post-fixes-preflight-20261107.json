@@ -1,0 +1,572 @@
+{
+  "master_sha": "d81a52c9980b79d1be99acfde9fc1a1452d71176",
+  "paid_calls": 0,
+  "paid_cost_usd": 0,
+  "original_archive_available": false,
+  "original_sqlite_available": false,
+  "original_ledger_available": false,
+  "last_reported_remaining_usd": "1.6413461",
+  "actual_remaining_reverified": false,
+  "fixture_hashes": {
+    "tests/fixtures/issue238/README.md": "5c517246be4d9ddf4f0a389ea492067d96aa87e9f1c71edd2a01bc921b32d2e8",
+    "tests/fixtures/issue238/campaign.json": "69b36d39c950cb8952531166e7748a9195aaa2402118a21d12563534dfd2b5e1",
+    "tests/fixtures/issue238/knowledge.json": "00851fbc5987932fdfdd16edf276e508abd5c5272d6094bdc0283a2efb8c474e",
+    "tests/fixtures/issue238/social.json": "f7f380cfb609db4355b60b39d07fb9946cd8830d9e808462ff5a981f4c63a6da"
+  },
+  "focused": {
+    "tests.test_player_action_completion": {
+      "tests": 29,
+      "passed": 29
+    },
+    "tests.test_player_action_group_completion": {
+      "tests": 27,
+      "passed": 27
+    },
+    "tests.test_action_provenance_repair": {
+      "tests": 43,
+      "passed": 43
+    },
+    "tests.test_due_boundary_repair": {
+      "tests": 21,
+      "passed": 21
+    },
+    "tests.test_movement_semantics223": {
+      "tests": 25,
+      "passed": 25
+    }
+  },
+  "sqlite": {
+    "count": 118,
+    "all_integrity_ok": true
+  },
+  "local_deterministic_evidence": [
+    {
+      "case": "crisis",
+      "database": "test_crisis_repair_removing_pa0/api.sqlite3",
+      "artifact": "crisis.json",
+      "sha256": "d83feecd1b27e03e486b22259d36725ded51c921e0158d138bdf6a9b2ef9b9c5",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "error"
+        }
+      ]
+    },
+    {
+      "case": "crisis_attempt",
+      "database": "test_absent_noncompleted_outco0/api.sqlite3",
+      "artifact": "crisis_attempt.json",
+      "sha256": "9150548c7da27e2847ec94900761f0d50b39a0dac4ca58210b50ce16d9f26ca3",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    },
+    {
+      "case": "family",
+      "database": "test_family_replay_repairs_two0/replay.sqlite",
+      "artifact": "family.json",
+      "sha256": "5cdf94e5659430e335432e053806447caa0eb3c6231eb984a91239328875b87e",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "long_term",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    },
+    {
+      "case": "social",
+      "database": "test_archived_state_through_co0/api.sqlite3",
+      "artifact": "social.json",
+      "sha256": "e334a5b6225b94362f0c7595562c1a1cddc72d8cb2f9bd7cb7a3fbf371af3c12",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    },
+    {
+      "case": "knowledge",
+      "database": "test_archived_state_through_co1/api.sqlite3",
+      "artifact": "knowledge.json",
+      "sha256": "19011078e708fe0267dcf5e2390d70125c1b1239d158880bf8bf75c4a9dee5b0",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    },
+    {
+      "case": "campaign",
+      "database": "test_archived_state_through_co2/api.sqlite3",
+      "artifact": "campaign.json",
+      "sha256": "f2d59401fb122f611c34c40a6fa38f1095b62fab3daa83b0568a654cc4e09e9a",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    },
+    {
+      "case": "phone",
+      "database": "test_phone_provider_jobs_contr0/api.sqlite3",
+      "artifact": "phone.json",
+      "sha256": "9190e61df1dcf1b2a3f92a4287fd6f85594585237d9d7f90c7d190cf69d2d0b6",
+      "jobs": [
+        {
+          "kind": "start",
+          "status": "saved"
+        },
+        {
+          "kind": "turn",
+          "status": "saved"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Original full SQLite lineage unavailable",
+    "Crisis/Family/Phone use equivalent fixtures",
+    "Provider replies are deterministic; no live semantic pass claimed",
+    "Raw local files are not durable downloadable artifacts"
+  ],
+  "deterministic_results": [
+    {
+      "case": "campaign",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 3,
+      "paid_calls": 0,
+      "before_minute": 2631444,
+      "after_minute": 2631446,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": [
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].minute",
+          "code": "event_minute_invalid",
+          "source_ids": [
+            "event_ask_status_17"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Event.minute: укажите абсолютную целую минуту в [2631444, 2631446] или опустите поле, если точное время неизвестно.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "event_minute_invalid",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "minute",
+          "entity": "event_ask_status_17",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 1
+        },
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].player_action_id",
+          "code": "player_action_event_mismatch",
+          "source_ids": [
+            "event_ask_status_17"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Event event_ask_status_17: отсутствует player_action_id; укажите ID исходного PlayerAction.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "player_action_event_mismatch",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "player_action_id",
+          "entity": "event_ask_status_17",
+          "reason": "missing_player_action_id",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 1
+        },
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].player_evidence",
+          "code": "player_action_event_mismatch",
+          "source_ids": [
+            "event_ask_status_17"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Event event_ask_status_17: отсутствует player_evidence; скопируйте точную цитату связанного PlayerAction.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "player_action_event_mismatch",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "player_evidence",
+          "entity": "event_ask_status_17",
+          "reason": "missing_player_evidence",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 1
+        }
+      ],
+      "original_narrative_preserved": true,
+      "original_state_preserved_on_input": true,
+      "original_user_input_preserved": true
+    },
+    {
+      "case": "crisis",
+      "status": "error",
+      "provider_kind": "scripted",
+      "provider_responses": 3,
+      "paid_calls": 0,
+      "before_minute": 541,
+      "after_minute": 541,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": true,
+      "diagnostics": [
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].participants[1]",
+          "code": "event_presence_invalid",
+          "source_ids": [
+            "event-input-1",
+            "qa_vera"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Runtime v3: qa_vera: присутствие в месте Event event-input-1 не подтверждено. Сверьте одновременное присутствие, order перемещений и Event или источник связи.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "event_presence_invalid",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "participants[1]",
+          "entity": "event-input-1",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 2
+        },
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].player_action_id",
+          "code": "player_action_completion_invalid",
+          "source_ids": [
+            "event-input-1",
+            "input-1",
+            "qa_vera"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Runtime v3: Действие input-1: outcome=completed не подтверждён участием адресатов: qa_vera. Сверьте outcome с неизменным Narrative; не удаляйте Event/адресата и не выдумывайте канал. Если Narrative явно завершает невозможный контакт, player_agency.status=violated (нужен новый Narrative).",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "player_action_completion_invalid",
+          "stage": "validation_failed",
+          "index": 0,
+          "field": "player_action_id",
+          "entity": "event-input-1",
+          "attempt": 1,
+          "attempt_epoch": 0,
+          "revision": 2
+        }
+      ]
+    },
+    {
+      "case": "crisis_attempt",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 2,
+      "paid_calls": 0,
+      "before_minute": 541,
+      "after_minute": 542,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": []
+    },
+    {
+      "case": "family",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 3,
+      "paid_calls": 0,
+      "before_minute": 1980,
+      "after_minute": 1980,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": [
+        {
+          "domain": "final_scene",
+          "section": "final_scene",
+          "path": "final_scene.elapsed_minutes",
+          "code": "ordinary_temporal_boundary",
+          "source_ids": [
+            "pregnancy_2d1e0671fb72810d6e61"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Runtime v3: Обычный ход пересекает неразрешённую временную границу. Повторно интерпретируй исходный Narrative; не выдумывай рождение или длительность.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "ordinary_temporal_boundary",
+          "stage": "extraction_repair",
+          "temporal_boundary": {
+            "world_time": 1980,
+            "elapsed_minutes": 2,
+            "max_minutes": 0,
+            "due_birth_repair": true,
+            "boundaries": [
+              {
+                "id": "pregnancy_2d1e0671fb72810d6e61",
+                "kind": "pregnancy_due",
+                "due_minute": 1980
+              }
+            ]
+          },
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 3
+        }
+      ],
+      "characters_unchanged": true,
+      "pregnancy_unchanged": true
+    },
+    {
+      "case": "knowledge",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 3,
+      "paid_calls": 0,
+      "before_minute": 553,
+      "after_minute": 555,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": [
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].player_evidence",
+          "code": "player_action_completion_invalid",
+          "source_ids": [
+            "event_vera_agrees_library_15",
+            "a1"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Event event_vera_agrees_library_15: player_evidence охватывает несколько отдельных PlayerActions. Используйте только его точную цитату; несколько действий требуют отдельных Events.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "player_action_completion_invalid",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "player_evidence",
+          "entity": "event_vera_agrees_library_15",
+          "reason": "multiple_action_evidence",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 1
+        }
+      ],
+      "original_narrative_preserved": true,
+      "original_state_preserved_on_input": true,
+      "original_user_input_preserved": true
+    },
+    {
+      "case": "phone",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 2,
+      "paid_calls": 0,
+      "before_minute": 541,
+      "after_minute": 544,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": [],
+      "timur_location": null,
+      "timur_present": false
+    },
+    {
+      "case": "social",
+      "status": "saved",
+      "provider_kind": "scripted",
+      "provider_responses": 3,
+      "paid_calls": 0,
+      "before_minute": 567,
+      "after_minute": 569,
+      "knowledge_unchanged": true,
+      "snapshot_unchanged": false,
+      "diagnostics": [
+        {
+          "domain": "events",
+          "section": "events",
+          "path": "events[0].player_evidence",
+          "code": "player_action_completion_invalid",
+          "source_ids": [
+            "event_8c1f2a4d9e7b3a6c5d20",
+            "act_show_first_pack"
+          ],
+          "severity": "recoverable",
+          "action": "extraction_repair",
+          "repair_reason": "Event event_8c1f2a4d9e7b3a6c5d20: player_evidence охватывает несколько отдельных PlayerActions. Используйте только его точную цитату; несколько действий требуют отдельных Events.",
+          "repair_error_type": "StructuralDeltaError",
+          "repair_error_code": "player_action_completion_invalid",
+          "stage": "extraction_repair",
+          "index": 0,
+          "field": "player_evidence",
+          "entity": "event_8c1f2a4d9e7b3a6c5d20",
+          "reason": "multiple_action_evidence",
+          "attempt": 0,
+          "attempt_epoch": 0,
+          "revision": 1
+        }
+      ],
+      "original_narrative_preserved": true,
+      "original_state_preserved_on_input": true,
+      "original_user_input_preserved": true
+    }
+  ],
+  "ui_review": [
+    {
+      "name": "phone-desktop",
+      "errors": [],
+      "state_unchanged": true,
+      "turns_unchanged": true,
+      "screenshot": "phone-desktop.png"
+    },
+    {
+      "name": "family-mobile",
+      "errors": [],
+      "state_unchanged": true,
+      "turns_unchanged": true,
+      "screenshot": "family-mobile.png"
+    }
+  ],
+  "frontend": {
+    "vitest": {
+      "passed": 151,
+      "files": 23
+    },
+    "production_build": "passed",
+    "warning": "chunk >500 kB"
+  },
+  "playwright": {
+    "passed": 12,
+    "desktop": 6,
+    "mobile": 6,
+    "retries": 0,
+    "real_deepseek": false
+  },
+  "backend_full": {
+    "status": "failed",
+    "suites": [
+      {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "1",
+        "skipped": "1",
+        "tests": "3585",
+        "time": "751.922",
+        "timestamp": "2026-11-07T17:08:31.234928+00:00"
+      }
+    ],
+    "skips": [
+      {
+        "test": {
+          "classname": "tests.test_review170",
+          "name": "test_real_export_evidence",
+          "time": "0.001"
+        },
+        "reason": {
+          "type": "pytest.skip",
+          "message": "Private export is not published; set RPG_REVIEW170_EXPORT for original evidence"
+        }
+      }
+    ],
+    "passed": 3583,
+    "failed": 1,
+    "skipped": 1,
+    "failures": [
+      {
+        "test": {
+          "classname": "tests.test_npc_initiative",
+          "name": "test_pacing_and_silence_never_require_or_forbid_ordinary_initiative",
+          "time": "4.463"
+        },
+        "trace": "+ Exception Group Traceback (most recent call last):\n  |   File \"/workspace/ai_rpg_engine/tests/test_npc_initiative.py\", line 149, in test_pacing_and_silence_never_require_or_forbid_ordinary_initiative\n  |     def test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(preset,quiet):\n  |                    ^^^\n  | hypothesis.errors.FlakyFailure: Hypothesis test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(preset='calm', quiet=False) produces unreliable results: Failed on the first call but did not on a subsequent one (1 sub-exception)\n  | Failing test case: test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(\n  |     preset='calm',\n  |     quiet=False,\n  | )\n  | Unreliable test timings! On an initial run, this test took 1232.02ms, which exceeded the deadline of 200.00ms, but on a subsequent run it took 30.33 ms, which did not. If you expect this sort of variability in your test timings, consider turning deadlines off for this test by setting deadline=None.\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"/workspace/ai_rpg_engine/tests/test_npc_initiative.py\", line 149, in test_pacing_and_silence_never_require_or_forbid_ordinary_initiative\n    |     def test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(preset,quiet):\n    |                    ^^^^^^^^^^^^^^^^\n    |   File \"/workspace/ai_rpg_engine/.venv/lib/python3.12/site-packages/hypothesis/core.py\", line 1040, in test\n    |     raise DeadlineExceeded(\n    | hypothesis.errors.DeadlineExceeded: Test took 1232.02ms, which exceeds the deadline of 200.00ms. If you expect test cases to take this long, you can use @settings(deadline=...) to either set a higher deadline, or to disable it with deadline=None.\n    +------------------------------------"
+      }
+    ]
+  },
+  "stage1_proposal": {
+    "max_calls": 36,
+    "usd_cap_peak_cold": "0.60",
+    "expected_usd_range": [
+      "0.06",
+      "0.20"
+    ],
+    "approved": false,
+    "requires_original_archive_and_ledger": true
+  },
+  "fixture_files_unchanged_from_master": true,
+  "local_artifact_hashes": {
+    "focused.xml": "3f90455b1ea0d44dea7f3248741c47181467cfd745d85a39c1b2302f51ddd2bb",
+    "focused.log": "a46fc8771083513f5d63933eefa11327ecda2325287f75fc9204a9ecc3fb6f89",
+    "vitest.log": "b01c7dc9c868c3f7825c344a1df29caed7885477fef3cf7d6ec40f9ef005d45f",
+    "build.log": "493966668a2a278fbf41adbd1e0a79f9f3c2000f0a67da25cda002471b1f77e7",
+    "browser.log": "491bb17f8673a060b3322c60ec7cd7081686b8e314d90d30ad3670238e3f749c",
+    "sqlite-integrity.json": "9f812da32374ec9aa83ce9d32ba9b4a9704dbe9f034224963280c5f99e9934c0",
+    "ui-review.json": "d1552d80becef10bd438de15ef3a6c654d1518ab8df7d02f8ae9df6b845c9413",
+    "phone-desktop.png": "6e7fbef9b2809fc22b7ae232d7b50e36f4cb02ae1a4ae873536b474745887709",
+    "family-mobile.png": "997ab6ff544c36c90c34fccf46056668d8112b7acb033cf9e1d5e86856c7099c",
+    "backend.xml": "9a608f14bf3f3047b458abac4e4f90d1d105d5d847d8a43ce3dba50802bc66bf",
+    "backend.log": "2174c0f879d3296a4088f310aba68a69ecc3c8131d5325dda05240618241ab45",
+    "npc-timing.log": "320418a142dbb681dcc95cf0e2eab02616c1e2706712b2586cfb6de4b81dfb5b",
+    "npc-timing.xml": "63430802585487e2fada86444961f8f25fa5ad56fc73f96e5ab06f37bf6728fa"
+  },
+  "original_source_release": {
+    "tag": "qa-99-campaign-evidence-20261107",
+    "draft": true,
+    "assets": 0,
+    "comments_on_239_241_242_243_244": 0
+  },
+  "npc_timing_diagnostic": {
+    "passed": 1,
+    "elapsed_seconds": 1.08,
+    "test_unchanged": true,
+    "deadline_unchanged": true,
+    "full_run_failure_preserved": true,
+    "root_cause_of_wall_clock_variance": "not established"
+  }
+}
