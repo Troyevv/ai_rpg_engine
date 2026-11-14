@@ -247,9 +247,11 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
     subject = camera['controlled_actor_id'] if camera['mode']=='actor' else camera.get('subject_id')
     location = positions.get(subject, camera['location_id'])
     if 'observer_location_id' in scene:
-        if camera['mode'] != 'observer':
-            fatal('Extraction не меняет режим камеры.', 'camera_invalid', section='scene', field='observer_location_id')
-        location = scene.pop('observer_location_id')
+        observer_location = scene.pop('observer_location_id')
+        if camera['mode'] == 'observer':
+            location = observer_location
+        elif observer_location is not None:
+            fatal('Extraction не меняет режим камеры.', 'camera_invalid', repairable=True, section='scene', field='observer_location_id')
     visible = scene.pop('visible_character_ids', None)
     if visible is None:
         visible = [cid for cid in camera['present_character_ids'] if positions.get(cid)==location]
