@@ -65,6 +65,8 @@ Without disclosure: basis=not_disclosed. Unwitnessed background arrival teaches 
 a later report teaches only its own listeners.
 '''
 
+BASE_EXTRACTION_CONTRACT = EXTRACTION_CONTRACT
+
 NARRATIVE_CONTRACT = '''
 GM-only карточки и внутренние состояния не являются знанием POV.
 FULL_REMOTE даёт личность для реплик, но не право показывать невидимые жесты/комнату собеседника.
@@ -197,7 +199,7 @@ Current canonical display_name is authoritative; old prose retains historical na
 Return choices=[] for a blocked controlled actor; world time/observation can continue.
 '''
 NARRATIVE_CONTRACT += '\n' + LIFE_CONTRACT
-EXTRACTION_CONTRACT += """
+LIFE_EXTRACTION_CONTRACT = """
 Life/social changes: assertion=established plus verbatim evidence of completed truth.
 Never infer ties from attraction/age/names/scenes, adoption from affection, love from sex,
 or death from absence/time. Missing != dead. Conditions persist until explicit resolution;
@@ -211,6 +213,7 @@ requires the normal witnessed event path. No disclosure or voluntary feeling fab
 Dead actors get no ordinary updates. Blocked can_act yields choices=[]. Developmental
 stage needs explicit setting-aware evidence, never invented biography.
 """
+EXTRACTION_CONTRACT += LIFE_EXTRACTION_CONTRACT
 
 RESIDENCE_CONTRACT = '''
 Current physical location, residence (home/base), and ongoing social role are independent.
@@ -257,7 +260,7 @@ For role_changes only, significance=major may mark a significant setting-specifi
 role phase; routine suppresses biography indexing. This never establishes a role
 without the usual evidence/lifecycle checks. Omit when standard phase semantics fit.
 '''
-EXTRACTION_CONTRACT += """
+RESIDENCE_EXTRACTION_CONTRACT = """
 Residence/role/organization changes need established completed evidence, not plans or age.
 Physical location != home/base != role. Travel/visits, marriage, roles and hierarchy never
 imply relocation/presence/Knowledge. Keep unknowns unknown; reuse known IDs/aliases.
@@ -273,6 +276,7 @@ and responsible other decision_actor_id; never disguise voluntary choice as exte
 Creation fact_id, closure_fact_id and witnessed Knowledge follow normal rules; replacement
 uses new fact_id for closure. Known opening never reveals hidden closure/rename. No broadcast.
 """
+EXTRACTION_CONTRACT += RESIDENCE_EXTRACTION_CONTRACT
 
 PERSONALITY_CONTRACT = '''
 Current canonical personality overrides initial card/history. Emotion, goals, identity,
@@ -305,7 +309,7 @@ Values are GM-only: respect values_known_by; never broadcast Knowledge or derive
 unrelated values from marriage/birth/death/job/time. EXTERNAL choices belong to input.
 """
 NARRATIVE_CONTRACT += MOTIVATION_CONTRACT
-EXTRACTION_CONTRACT += MOTIVATION_CONTRACT + """
+MOTIVATION_EXTRACTION_CONTRACT = MOTIVATION_CONTRACT + """
 LIFECYCLE: use *_updates IDs/revisions + current evidence; include accepted
 source_event_id when available. completed needs actual narrated result, NOT future
 input or due time. EXTERNAL cancelled/superseded/new desire: player_assertion=
@@ -326,6 +330,7 @@ turns in existing development_evidence IDs (EXTERNAL: completed player-owned cho
 Reuse that evidence pipeline; one mood/turning_point/event is insufficient. Retain
 unrelated values and personality. No numeric morality. All prose uses game language.
 """
+EXTRACTION_CONTRACT += MOTIVATION_EXTRACTION_CONTRACT
 
 
 REPRODUCTION_CONTRACT = """
@@ -615,3 +620,100 @@ DeepSeek authors the scene within supplied constraints; output only literary pro
 without runtime labels, status reports, JSON or choice lists.
 """
 NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT
+
+
+SEMANTIC_SLICE_CONTRACT = """
+v5 information_events: completed perception; one source_actor_id (null if unknown),
+medium/text, claims. Each claim: fact_id OR new fact (optional local id), actual
+perceived_by, assertion=observation/testimony/rumor, status. Rumor=suspected.
+Runtime builds Event/Fact/Knowledge from exact local IDs, never names. No duplicate
+facts/events/knowledge_gained for these outcomes. Other domains unchanged.
+Controlled speaker needs verified player_action_id + actual target_ids, not overhearers.
+Movement intent/attempt causes no relocation; arrival/departure rules unchanged.
+chronology_claims: significant retrospection only. chronology_events ID, elapsed_days from
+scene start (or in-scene reference_minute), exact evidence, narrator/belief/lie/quotation.
+Unknown time is not recorded time. Report wrong prose; character errors are not narrator truth.
+"""
+
+SEMANTIC_RELATIONSHIP_CONTRACT = """
+Directed feelings never mirror. source_event_ids: 1..8 accepted current local Events or
+prior relationship_evidence; actor/target or speaker/perceiver contact, scene_action or
+player_interaction. Thoughts/feelings/choices/ties prove no contact. grounded_feelings +
+rationale; absolute dimensions change <=5 (unknown=0), context gradual, no fabricated
+consent. Neutral talk need not change feelings. explicit_directed_feelings + exact
+player_evidence overrides; negation/questions/hypotheticals/gestures/others' speech do not.
+Consumed/pre-override evidence never reapplies. Preserve inertia and independence.
+"""
+
+SEMANTIC_BASE_CONTRACT = """
+CURRENT RUNTIME narrative-authority-v1. JSON RawTurnResult only. Interpret WHOLE completed_narrative
++ player_input; never rewrite. State outranks cards/history. Input authorizes EXTERNAL choices;
+Narrative supplies NPC outcomes. Plans/preparation/attempt/rumor/negation != done. Quiet=no Event;
+keep ALL confirmed consequences. evidence=provenance; player_evidence=exact input. Reuse IDs/aliases;
+promotions: 11 CARD_FIELDS+attributes. Unknowns stay unknown; never fabricate identity/source.
+LOCATION: final_scene=END membership, not arrival. Movement owns routes/returns/arrival/departure;
+no duplicate Event. Supplied source must match actor/place/time.
+Departure without destination: Movement assertion=departure; known origin, null endpoint.
+Room exit!=building exit. Arrival needs no on-camera exit; new places/NPC initiative allowed.
+Plans/place creation/time/END absence prove no relocation/Knowledge. observed_character_ids=
+disjoint visibility, not contact/location. Conversation needs simultaneous start/end/ordered-route
+co-location or active channel; doorways need no membership/node. Align scene/changes/routes;
+offscene situation needs source_event_id. remote_interactions=active END actor/channel/evidence;
+reconfirm, omit ended; reread!=contact. EXTERNAL movement: explicit_choice+input quote OR verified
+PlayerAction direct/via Event. Involuntary: external Event. order sequences encounters, not duplicates.
+INFORMATION: speaker!=listener. Perception/reading teaches, not participation/delivery/cards/time.
+Message author needs attribution, not proximity. Legacy knowledge_gained: accepted informational
+Event/fact_ids/witness; repair supported links, never lose learning. Immutable Facts: reuse IDs,
+new assertion=new ID. claim(subject_id,predicate,value,scope)=exclusive slot; scope=period/role,
+omit uncertain slots. known=belief, not truth. Revival needs expected_revision; supersedes links
+old+new facts in Event. New known retires conflicting known in its slot only; distinct order for
+same-slot transitions. Rumor=suspected. story_secret=plot. subject/keeper/biography IDs mean
+related/conscious owner/biographical subject, grant no Knowledge. existence=hidden or discoverable
+anonymous slot. secret_disclosures: written Event/artifact+fact, confirmed|rumor; quotation!=confirmation.
+Event.minute absolute in [world_time,world_time+applied elapsed]; omit unknown minute/order.
+Date testimony to telling. elapsed>=0; Runtime owns Skip/background clocks. No StatePatch.
+CHARACTER: POV!=control; Situation objective, Emotion internal. EXTERNAL desires need input;
+Emotion: explicit internal declaration + player_evidence.emotion + explicit_internal_state,
+never gestures/cards/questions/conditions/negations/others' speech. physical_state empty needs
+proven resolution; sleep alone cures nothing. Directed feelings follow relationship source rules.
+"""
+
+SEMANTIC_LIFE_CONTRACT = """
+Life/social: established + completed evidence; never infer ties from feelings/age/names/sex,
+adoption from affection, death from absence/time. Missing!=dead. Conditions persist until
+resolved; effects only restrict. Close exact ID, new phase=new ID; no automatic monogamy.
+Marriage/adoption changes no names/home/emotions/Knowledge. Parent/adoptive_parent/guardian/
+foster_parent/step_parent distinct, valid in setting. EXTERNAL voluntary ties/names need
+explicit_choice + player_evidence; NPC closure decision_actor_id. fact_id names endpoints;
+closure_fact_id distinct, learning through perception. Dead: no ordinary updates; blocked
+can_act: choices=[]. Developmental stage explicit/setting-aware, never biography from age.
+"""
+SEMANTIC_RESIDENCE_CONTRACT = """
+Residence/role/organization: established completed evidence, not plans/age. Location!=home!=role;
+travel/marriage/work/geography implies no relocation, nationality/culture/calendar or Knowledge.
+Reuse IDs/aliases; locations creates, location_changes edits hierarchy/kind/aliases; unknowns stay.
+New residence/role phases coexist; only explicit replaces closes listed IDs, or status=closed.
+Changed employer/institution/program needs new phase. Roles include job/education/training/
+membership/office; no invented schedules/economy/age stages. Organization rename keeps ID,
+closure ends linked roles, chooses no replacements. EXTERNAL voluntary: explicit_choice+
+player_evidence. External outcome: transition=external + other decision_actor_id, never disguise
+voluntary choice. Creation fact_id/closure_fact_id; replacement uses new fact. Known opening
+never reveals later closure/rename; no broadcast.
+"""
+
+SEMANTIC_MOTIVATION_CONTRACT = """
+Goal=desired outcome, intention=near action, value=durable priority; distinct from emotion,
+personality and appointments. Active drives choices; blocked/review_required constrains;
+resolved is history. Values GM-only, values_known_by governs access; no unrelated inference.
+*_updates: ID/revision + current evidence, accepted source_event_id if available; new omits ID,
+existing text immutable. Omitted entries persist. EXTERNAL new desire/cancel/supersede needs
+explicit_choice + full player_evidence. completed/failed=actual result, never due/future input;
+known may ground retrospective result, no fake quote. Offering trip completes offering only.
+expired=lost context; cancelled/superseded=explicit. Explicit dependencies characters/roles/
+organizations; semantically review dead/closed targets, never auto-close all goals or by time.
+unblocked resumes, still_active acknowledges review. No invented evidence.
+value_deltas establish/refine/retire: expected_text/revision. Durable declaration needs accepted
+source_event_id; EXTERNAL explicit_value + player_evidence. Otherwise sustained_behavior needs
+>=3 source turns in development_evidence (EXTERNAL completed own choices), not one mood/event/
+turning point. Keep unrelated values/personality; no morality meters. All prose game language.
+"""

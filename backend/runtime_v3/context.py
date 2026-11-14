@@ -9,6 +9,7 @@ import json
 from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
 from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT, REMOTE_EXTRACTION_CONTRACT, REMOTE_NARRATIVE_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
+from backend.runtime_v3.player_actions import EXTRACTION_VERSION
 from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time, commitment_view
 
 PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
@@ -439,7 +440,7 @@ def state_outcome(snapshot):
 class ExtractionContextBuilder:
     extraction = True
 
-    def __init__(self, contract_version=4):
+    def __init__(self, contract_version=EXTRACTION_VERSION):
         self.contract_version = contract_version
 
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
@@ -457,6 +458,15 @@ class ExtractionContextBuilder:
         from backend.repositories.documents import is_builtin_prompt
         custom = saved and not is_builtin_prompt('state_update_prompt.md', saved, PROMPTS)
         rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
+        if self.contract_version >= 5:
+            from backend.runtime_v3.context_contract import BASE_EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT
+            rules = rules.replace(BASE_EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT)
+            from backend.runtime_v3.context_contract import (LIFE_EXTRACTION_CONTRACT, RESIDENCE_EXTRACTION_CONTRACT,
+                SEMANTIC_LIFE_CONTRACT, SEMANTIC_RESIDENCE_CONTRACT)
+            rules = rules.replace(LIFE_EXTRACTION_CONTRACT, SEMANTIC_LIFE_CONTRACT).replace(
+                RESIDENCE_EXTRACTION_CONTRACT, SEMANTIC_RESIDENCE_CONTRACT)
+            from backend.runtime_v3.context_contract import MOTIVATION_EXTRACTION_CONTRACT, SEMANTIC_MOTIVATION_CONTRACT
+            rules = rules.replace(MOTIVATION_EXTRACTION_CONTRACT, SEMANTIC_MOTIVATION_CONTRACT)
         from backend.runtime_v3.context_contract import DEPARTURE_CONTRACT, TEMPORAL_REFINEMENT_CONTRACT
         if self.contract_version < 3:
             rules = rules.replace(TEMPORAL_REFINEMENT_CONTRACT,
@@ -479,9 +489,17 @@ class ExtractionContextBuilder:
         if historical:
             from backend.runtime_v3.context_contract import HISTORICAL_EXTRACTION_CONTRACT
             rules += HISTORICAL_EXTRACTION_CONTRACT
-        if current.get('relationship_evidence'):
+        if current.get('relationship_evidence') or self.contract_version >= 5:
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
-            rules += RELATIONSHIP_EVIDENCE_CONTRACT
+            relationship_contract = RELATIONSHIP_EVIDENCE_CONTRACT
+            if self.contract_version >= 5:
+                from backend.runtime_v3.context_contract import SEMANTIC_RELATIONSHIP_CONTRACT
+                relationship_contract = SEMANTIC_RELATIONSHIP_CONTRACT
+            rules += relationship_contract
+        if self.contract_version >= 5:
+            from backend.runtime_v3.context_contract import SEMANTIC_SLICE_CONTRACT
+            rules = rules.replace('Directed feelings need prior relationship_evidence', 'Directed feelings need accepted current Events or prior relationship_evidence')
+            rules += SEMANTIC_SLICE_CONTRACT
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
@@ -507,7 +525,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -604,7 +622,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=4):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:
@@ -670,6 +688,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         event['event_time'] = time_stamp(state, event['minute']) if type(event.get('minute')) is int else {'time': 'unknown'}
         if type(event.get('recorded_minute')) is int:
             event['recorded_time'] = time_stamp(state, event['recorded_minute'])
+    if extraction_text is not None and extraction_contract >= 5:
+        current['chronology_events'] = [dict(id=e['id'], text=e.get('text', '')[:600], minute=e['minute'],
+            date=e['event_time'].get('date'), elapsed_days=state['meta']['world_time']//1440-e['minute']//1440)
+            for e in scope.history_events if type(e.get('minute')) is int][-8:]
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
     cfg = state['meta']['communication']
@@ -779,9 +801,23 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 feedback.pop('known_locations')
             validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
         if isinstance(feedback, dict):
+            if extraction_contract >= 5 and 'contract' in feedback:
+                # Existing semantic rules above remain authoritative. Feedback
+                # supplies differences, not a second copy of the same contract.
+                feedback['contract'] = ('Reinterpret the unchanged full Narrative and input against immutable before. '
+                    'Fix all diagnostics/dependencies together; preserve ALL confirmed consequences and learning. '
+                    'Rejected JSON is not canon: do not fabricate consent, arrivals, speakers or hide outcomes. '
+                    'For violated Narrative use the existing agency/chronology findings, not JSON laundering. '
+                    'Return full RawTurnResult with final_scene and every response_required section; '
+                    'recheck omitted_sections_from_previous_proposal. Feedback keys are input only, never a patch. '
+                    'Only one automatic repair; never rewrite Narrative or History.')
+                validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
             for message in messages:
                 if message['content'].startswith('JSON Schema\n'):
                     schema = json.loads(message['content'].split('\n', 1)[1])
+                    if extraction_contract >= 5 and 'knowledge_gained' in feedback.get('response_required', []):
+                        from backend.runtime_v3.raw import extraction_schema
+                        schema['properties']['knowledge_gained'] = extraction_schema()['properties']['knowledge_gained']
                     schema['required'] = list(dict.fromkeys(schema.get('required', []) + [key
                         for key in feedback.get('response_required', []) if key in schema['properties']]))
                     message['content'] = block('JSON Schema', schema)['content']
@@ -1040,7 +1076,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     messages[0]['content'] = messages[0]['content'].replace(
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
-    if builder.extraction and estimate(messages) > hard_context_limit:
+    annotation_budget = target if builder.extraction and extraction_contract >= 5 else hard_context_limit
+    if builder.extraction and estimate(messages) > annotation_budget:
         # Mandatory action provenance takes priority over optional Director
         # annotations, just as communication outcomes do above. Domain Events,
         # state, agency and presence contracts remain complete and validated.
@@ -1049,7 +1086,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 schema = json.loads(message['content'].split('\n', 1)[1])
                 from backend.runtime_v3.raw import prune_schema_definitions
                 for section in ('scene_transitions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_actions'):
-                    if estimate(messages) <= hard_context_limit: break
+                    if estimate(messages) <= annotation_budget: break
                     if section not in schema.get('required', []):
                         schema['properties'].pop(section, None)
                     prune_schema_definitions(schema)

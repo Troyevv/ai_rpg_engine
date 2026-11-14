@@ -442,7 +442,8 @@ def test_context_retains_bounded_identity_and_typed_arrival_contract():
     assert current['camera']['present_character_ids']==['ilya']
     assert current['characters']['viktoria_solovyova']['location_id']=='salon_lak'
     schema=block(extraction,'JSON Schema')['properties']['movements']['items']['properties']
-    assert {'actor_evidence','destination_evidence','from_location_id','assertion'}<=schema.keys()
+    assert {'from_location_id','assertion'}<=schema.keys()
+    assert not {'actor_evidence','destination_evidence'} & schema.keys()
     assert 'completed_arrival' in str(extraction)
     assert len(cards)<len(original['character_cards'])
 

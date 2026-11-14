@@ -21,6 +21,18 @@
 - Prefer existing abstractions and established dependencies to new frameworks, parallel implementations, or speculative generalization.
 - Do not implement future modes or features unless requested by the task.
 
+## Product philosophy: DeepSeek leads, Runtime supports
+- The primary product goal is a compelling, coherent, uninterrupted role-playing story over many turns. Judge changes by playability and narrative continuity, not merely by the number of Runtime validations passed.
+- DeepSeek is the creative director and author: it develops plot, dialogue, NPC initiative, relationships, new characters, locations, and consequential events without requiring advance permission from Runtime for ordinary creative decisions.
+- Runtime is DeepSeek's assistant, not its gatekeeper. It provides durable world memory, relevant canonical context, deterministic simulation and calculations (calendar, chronology, ages, pregnancy stages and due dates, lifecycle progression, and other objective processes), and reliable persistence of consequences.
+- Extraction interprets what actually happened in completed Narrative; Runtime should derive technical links and bookkeeping deterministically wherever possible. Do not make the LLM reproduce redundant Event/Fact/Knowledge/Movement evidence or metadata merely to satisfy internal plumbing.
+- Preserve meaningful invariants: explicit player agency and consent, character-specific Knowledge and secrets, established chronology, objective biological/lifecycle constraints, and canonical identity. Creative freedom is not permission to rewrite established history. A major date error (for example, describing an event from five days ago as yesterday) is a serious continuity defect.
+- Treat minor ambiguity, harmless prose imprecision, and nonessential metadata mismatches as warnings or safely omitted changes, not reasons to stop a playable turn. Never silently commit a major contradiction, invent missing semantic facts, or sacrifice canonical consistency.
+- Prefer targeted narrative correction for serious contradictions before presenting or committing them; avoid regenerating entire scenes or adding LLM calls for minor defects. Preserve atomicity for dependent changes, while allowing independent valid consequences to survive a recoverable error when safe.
+- Runtime must not use brittle keyword/regex heuristics to adjudicate literary meaning, or impose increasingly redundant blocking validations. Semantic interpretation belongs to Extraction; deterministic validation and state updates belong to Runtime.
+- When revising Extraction, favor a simpler semantic interface and deterministic compilation into existing domain records, retaining compatibility with current saves and Runtime invariants. Validate architectural changes against real saved Narrative/Extraction/Runtime QA evidence, including false positives, missed outcomes, cost, latency, and long-session playability.
+- If an existing rule predominantly obstructs legitimate storytelling without protecting a substantial invariant, simplify or remove it with regression coverage rather than layering another workaround on top.
+
 ## Narrative invariants
 - Canonical World State, not prose, is the authoritative persistent state.
 - Preserve separation of POV (camera/perspective) and Controlled Actor (player agency). Observing an NPC or using “World without protagonist” must not silently transfer control.

@@ -6,7 +6,7 @@ import json
 from backend.runtime_v3.models import TemporalValue, fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('information_events','chronology_claims','secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -23,6 +23,7 @@ class RawTurnResult:
     choices: list
     warnings: list
     player_agency: dict | None = None
+    semantic_compiled: bool = False
 
     @classmethod
     def parse(cls, payload):
@@ -88,6 +89,166 @@ class RawTurnResult:
         return cls(deepcopy(payload['final_scene']), records, choices, warnings, deepcopy(payload.get('player_agency')))
 
 
+
+def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
+    """Expand explicit perceptions once, never infer them from prose or delivery.
+
+    The caller owns the trusted contract version. Input and original provider
+    responses remain untouched; the normal domain validators own all authority.
+    """
+    from backend.runtime_v3.models import identity
+    from pydantic import ValidationError
+    result = deepcopy(raw)
+    if result.semantic_compiled:
+        return result
+    result.semantic_compiled = True
+    for event in result.records['events']:
+        if isinstance(event, dict): event.pop('information_source', None)
+    for acquisition in result.records['knowledge_gained']:
+        if isinstance(acquisition, dict): acquisition.pop('_compiled_perception', None)
+    event_ids = {e.get('id') for e in result.records['events'] if isinstance(e, dict) and isinstance(e.get('id'), str)}
+    fact_ids = {f.get('id') for f in result.records['facts'] if isinstance(f, dict) and isinstance(f.get('id'), str)}
+    aliases = {}
+    original_knowledge_count = len(result.records['knowledge_gained'])
+    for i, value in enumerate(result.records['information_events']):
+        try:
+            info = InformationEvent.model_validate(value)
+        except ValidationError as exc:
+            fatal(str(exc), 'information_event_invalid', repairable=True, section='information_events', index=i)
+        eid = info.id or identity('information', turn_id, namespace, i)
+        if eid in event_ids:
+            fatal('Информационное событие повторно задано через events.', 'semantic_duplicate', repairable=True, section='information_events', index=i)
+        event_ids.add(eid)
+        witnesses, links, acquisitions, claim_links = set(), [], [], []
+        for j, claim in enumerate(info.claims):
+            if claim.fact is not None:
+                fact = deepcopy(claim.fact)
+                local = fact.pop('id', None)
+                if local is not None and (not isinstance(local, str) or not local):
+                    fatal('Локальный ID факта должен быть непустой строкой.', 'information_event_invalid', repairable=True, section='information_events', index=i)
+                if local in state['facts'] or local in fact_ids or local in aliases:
+                    fatal('Новый факт повторяет существующий ID; используйте fact_id.', 'semantic_duplicate', repairable=True, section='information_events', index=i)
+                fid = identity('information-fact', turn_id, namespace, narrative, eid, j)
+                if local:
+                    aliases[local] = fid
+                fact.update(id=fid, evidence=info.evidence)
+                result.records['facts'].append(fact)
+                fact_ids.add(fid)
+            else:
+                fid = aliases.get(claim.fact_id, claim.fact_id)
+                if fid not in state['facts'] and fid not in fact_ids:
+                    fatal('Неизвестный информационный факт.', 'knowledge_fact_unknown', repairable=True, section='information_events', index=i)
+            links.append(fid)
+            claim_links.append(fid)
+            links.extend(claim.supersedes)
+            witnesses.update(claim.perceived_by)
+            for actor in claim.perceived_by:
+                acquisition = dict(actor_id=actor, fact_id=fid, source_event_id=eid,
+                    status=claim.status, evidence=info.evidence, _compiled_perception=True)
+                if claim.supersedes: acquisition['supersedes'] = claim.supersedes
+                if actor in claim.expected_revisions:
+                    acquisition['expected_revision'] = claim.expected_revisions[actor]
+                acquisitions.append(acquisition)
+        participants = witnesses | set(info.target_ids or []) | ({info.source_actor_id} if info.source_actor_id else set())
+        event = dict(id=eid, text=info.text, evidence=info.evidence, medium=info.medium,
+            participants=sorted(participants), witnesses=sorted(witnesses), fact_ids=list(dict.fromkeys(links)))
+        # A speaker is an actor, not merely an informational source. Preserve
+        # existing player provenance; overhearers are never inferred addressees.
+        if info.source_actor_id and info.medium in ('conversation', 'testimony', 'message'):
+            event['actor_id'] = info.source_actor_id
+            if info.target_ids is not None: event['target_ids'] = info.target_ids
+            if info.player_action_id is not None: event['player_action_id'] = info.player_action_id
+        for key in ('location_id', 'minute', 'order', 'interaction_channel'):
+            value = getattr(info, key)
+            if value is not None: event[key] = value
+        if info.advance_candidate_ids: event['advance_candidate_ids'] = info.advance_candidate_ids
+        if info.medium == 'message' and info.source_actor_id: event['author_id'] = info.source_actor_id
+        event['information_source'] = dict(actor_id=info.source_actor_id,
+            claims=[dict(fact_id=fid, assertion=claim.assertion, perceived_by=claim.perceived_by)
+                    for fid, claim in zip(claim_links, info.claims)])
+        result.records['events'].append(event)
+        result.records['knowledge_gained'].extend(acquisitions)
+    # Local references are exact response IDs, never names or textual matching.
+    def map_refs(value, field=''):
+        if isinstance(value, dict):
+            return {k:map_refs(v, k) for k,v in value.items()}
+        if isinstance(value, list):
+            return [map_refs(v, field) for v in value]
+        if isinstance(value, str) and (field.endswith('_id') or field.endswith('_ids') or field == 'supersedes'):
+            return aliases.get(value, value)
+        return value
+    result.records = map_refs(result.records)
+    result.choices = map_refs(result.choices)
+    knowledge = result.records['knowledge_gained']
+    legacy_pairs = {(k.get('actor_id'), k.get('fact_id')) for k in knowledge[:original_knowledge_count] if isinstance(k, dict) and isinstance(k.get('actor_id'), str) and isinstance(k.get('fact_id'), str)}
+    if any((k['actor_id'], k['fact_id']) in legacy_pairs for k in knowledge[original_knowledge_count:]):
+        fatal('Восприятие продублировано в knowledge_gained и information_events.', 'semantic_duplicate', repairable=True, section='information_events')
+    moves = []
+    for i, movement in enumerate(result.records['movements']):
+        if isinstance(movement, dict) and movement.get('assertion') in ('intent', 'attempt'):
+            result.warnings.append(dict(section='movements', index=i, code='movement_not_completed', action='no_relocation'))
+        else: moves.append(movement)
+    result.records['movements'] = moves
+    if len(result.records['knowledge_gained']) > 64:
+        fatal('Превышен лимит Knowledge после сборки.', 'knowledge_budget', repairable=True)
+    return result
+
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Literal
+
+
+class PerceivedClaim(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    fact_id: str | None = None
+    fact: dict | None = None
+    assertion: Literal['observation', 'testimony', 'rumor']
+    perceived_by: list[str] = Field(min_length=1, max_length=16)
+    status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded']
+    expected_revisions: dict[str, int] = Field(default_factory=dict)
+    supersedes: list[str] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode='after')
+    def coherent(self):
+        if (self.fact_id is None) == (self.fact is None):
+            raise ValueError('Exactly one of fact_id or new fact is required.')
+        if self.fact is not None and (not isinstance(self.fact.get('text'), str) or not self.fact['text'].strip()):
+            raise ValueError('New fact needs text.')
+        if len(set(self.perceived_by)) != len(self.perceived_by):
+            raise ValueError('Duplicate perceiver.')
+        if self.assertion == 'rumor' and self.status != 'suspected':
+            raise ValueError('Rumor is suspected, never objective truth.')
+        if set(self.expected_revisions) - set(self.perceived_by) or any(v < 0 for v in self.expected_revisions.values()):
+            raise ValueError('Invalid perception revision.')
+        return self
+
+
+class ChronologyClaim(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    event_id: str
+    assertion: Literal['narrator', 'belief', 'lie', 'quotation']
+    elapsed_days: int = Field(ge=0)
+    reference_minute: int | None = Field(default=None, ge=0)
+    evidence: str = Field(min_length=1)
+
+
+class InformationEvent(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    id: str | None = None
+    text: str = Field(min_length=1)
+    evidence: str = ''
+    source_actor_id: str | None
+    target_ids: list[str] | None = None
+    player_action_id: str | None = None
+    medium: Literal['conversation', 'observation', 'discovery', 'testimony', 'message']
+    claims: list[PerceivedClaim] = Field(min_length=1, max_length=16)
+    location_id: str | None = None
+    minute: int | None = Field(default=None, ge=0)
+    order: int | None = Field(default=None, ge=0)
+    interaction_channel: Literal['physical', 'call'] | None = None
+    advance_candidate_ids: list[str] = Field(default_factory=list, max_length=3)
+
+
 def repair_revision_warnings(previous, current):
     """Audit revised proposals, never adjudicate which Extraction is true.
 
@@ -142,6 +303,14 @@ def extraction_schema():
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=TemporalValue.model_json_schema(),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    info = InformationEvent.model_json_schema()
+    info['properties']['claims']['items'] = info.pop('$defs')['PerceivedClaim']
+    # The exact existing Fact input shape, with server-owned optional identity.
+    fact_schema = deepcopy(definitions['facts'])
+    fact_schema['required'] = ['text']
+    info['properties']['claims']['items']['properties']['fact'] = {'anyOf':[fact_schema, {'type':'null'}]}
+    definitions['information_events'] = info
+    definitions['chronology_claims'] = ChronologyClaim.model_json_schema()
     from backend.runtime_v3.remote_models import SecretDisclosure
     definitions['secret_disclosures'] = record(dict(source_event_id=string, **SecretDisclosure.model_json_schema()['properties']), ('source_event_id','fact_id','assertion','evidence'))
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
@@ -314,7 +483,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False):
     """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
@@ -342,6 +511,13 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if not semantic_slice:
+        schema['properties'].pop('information_events')
+        schema['properties'].pop('chronology_claims', None)
+    else:
+        # New perceptions use one representation. The legacy parser remains
+        # available, and repair restores this schema for an existing proposal.
+        schema['properties'].pop('knowledge_gained')
     # New generation requires provenance; legacy raw/saved payloads remain readable.
     schema['properties']['movements']['items']['required'] += ['assertion'] + ([] if consequence_first else ['source_event_id'])
     if consequence_first:
@@ -365,6 +541,10 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         movement['properties']['to_location_id'] = {'type': ['string', 'null']}
         movement['description'] = ('Arrival/departure; source Event optional, conflicting supplied fields reject.'
             if consequence_first else 'Arrival: reached endpoint. Departure: null endpoint, known from_location_id, accepted departure Event at origin; same order. END absence alone changes no geography.')
+    if semantic_slice:
+        schema['properties']['movements']['items']['properties']['assertion']['enum'] += ['intent', 'attempt']
+        for field in ('actor_evidence', 'destination_evidence'):
+            schema['properties']['movements']['items']['properties'].pop(field, None)
     if grounded_choices:
         choice = schema['properties']['choices']['items']
         choice['properties']['grounding'] = {'type':'object', 'additionalProperties':False,
@@ -396,7 +576,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     else:
         schema['properties'].pop('player_agency')
         schema['properties']['events']['items'].pop('dependentRequired', None)
-        for field in ('actor_id', 'target_ids', 'player_action_id'):
+        for field in (('player_action_id',) if semantic_slice else ('actor_id', 'target_ids', 'player_action_id')):
             schema['properties']['events']['items']['properties'].pop(field)
     if elapsed_required:
         schema['properties']['final_scene']['required'].append('elapsed_minutes')

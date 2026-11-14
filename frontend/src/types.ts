@@ -176,6 +176,7 @@ export interface Job {
   narrative_complete?: boolean;
   retry_allowed?: boolean;
   narrative_reauthor_required?: boolean;
+  chronology_correction_available?: boolean;
   kind: string;
   revision: number;
   live?: boolean;

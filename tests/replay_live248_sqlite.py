@@ -23,7 +23,7 @@ from test_integrated_repair247 import execute, history
 CASES = [('crisis','002'),('family','001'),('knowledge','001'),('phone','002'),('social','001')]
 
 
-def replay_final(source, output):
+def replay_final(source, output, *, contract_version=None):
     """Use original full SQLite lineage, not a seeded replacement world."""
     from devtools.live99.extraction_compare import CASES as final_cases, read, digest
     manifest = read(source/'live248-final-87abdb8-sha256.json')
@@ -52,16 +52,18 @@ def replay_final(source, output):
             if mode == 'violation_control':
                 replies[-1]['player_agency']['status'] = 'violated'
             with patch('llm.chat_stream', side_effect=AssertionError('External calls forbidden')):
-                job,calls = execute(repo,sid,data,replies)
+                job,calls = execute(repo,sid,data,replies,legacy=contract_version is None, contract_version=contract_version)
             refused = case=='crisis' or mode=='violation_control'
-            assert job['status'] == ('error' if refused else 'saved'), (case,mode,job['error'])
+            if contract_version is None:
+                assert job['status'] == ('error' if refused else 'saved'), (case,mode,job['error'])
+            refused = job['status'] != 'saved'
             after = snapshot(path,sid)
             assert all(after['variants'].get(k)==v for k,v in before['variants'].items())
             fresh = Repository(path)
             assert fresh.get_snapshot(sid) == after['snapshot']
             gains = len(history(fresh,sid)['knowledge_acquisitions'])-len(hist['knowledge_acquisitions'])
-            if case=='knowledge': assert gains==4
-            if case=='family_birth': assert gains==10
+            if case=='knowledge' and not refused: assert gains==4
+            if case=='family_birth' and not refused: assert gains==10
             if refused:
                 assert after['snapshot']==before['snapshot'] and history(repo,sid)==hist
                 repo.abandon_job(sid,job['id'],repo.get_save(sid)['revision'],job['attempt_epoch'])
@@ -71,7 +73,9 @@ def replay_final(source, output):
             assert repo.get_snapshot(sid)==checkpoint and history(repo,sid)==hist
             with repo.connect() as db: assert db.execute('pragma integrity_check').fetchone()[0]=='ok'
             results.append(dict(case=case,mode=mode,status=job['status'],scripted_calls=len(calls),
-                                knowledge_acquisitions=gains,semantic_acceptance=False,paid_calls=0))
+                                knowledge_acquisitions=gains,semantic_acceptance=False,paid_calls=0,
+                                missing_recorded_response='StopIteration' in str(job.get('error')),
+                                errors=[r.get('code') for r in json.loads(job.get('repair_diagnostics_json') or '[]')],contract=json.loads(job['config_json']).get('_extraction_contract',1)))
             print(json.dumps(results[-1]),flush=True)
             (output/'summary.json').write_text(json.dumps(results,indent=2))
     assert all(digest(source/name)==expected for name,expected in manifest.items())
@@ -119,10 +123,11 @@ def replay(source,output,case,step,mode):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('source',type=Path);p.add_argument('output',type=Path)
     p.add_argument('--final',action='store_true',help='Replay the combined final #248 archive')
+    p.add_argument('--contract',type=int,choices=[1,4,5],help='Comparison profile on unchanged raw; no new model-semantic claim')
     args=p.parse_args();args.output.mkdir(parents=True,exist_ok=False)
     args.source=args.source.resolve();args.output=args.output.resolve()
     if args.final:
-        replay_final(args.source,args.output)
+        replay_final(args.source,args.output,contract_version=args.contract)
         return
     original_hash=hashlib.sha256((args.source/'game.sqlite').read_bytes()).hexdigest();results=[]
     for case,step in CASES:

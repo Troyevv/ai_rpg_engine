@@ -46,6 +46,8 @@ def acquire_disclosures(state, event, actor, batch):
     class Perception:
         observed=True
         mode='turn'
+        consequence_first=False
+        semantic_slice=False
         protected_knowledge_actor_ids=set()
         def __init__(self):
             self.state=state
@@ -53,7 +55,7 @@ def acquire_disclosures(state, event, actor, batch):
             self.turn_id=state['meta']['turn_id']
         def records(self, raw, section):
             return enumerate(raw)
-        def typed(self, model, value, *args):
+        def typed(self, model, value, *args, **kwargs):
             return model.model_validate(value).model_dump()
         def warn(self, *args, **kwargs):
             # A later read must not revive retired beliefs or overwrite a newer

@@ -130,6 +130,9 @@ def test_relationship_inertia_directed_dynamics_manual_baseline():
 def test_compact_schema_has_identical_validation_rules(agency, audit):
     schema=prompt_schema(player_agency_required=agency, agency_audit_required=audit)
     full=extraction_schema()
+    # This comparison explicitly requests the legacy producer projection.
+    full['properties'].pop('information_events')
+    full['properties'].pop('chronology_claims')
     # Current generated arrivals require provenance; the raw/legacy schema
     # intentionally stays compatible. All other compaction is lossless.
     assert full['properties']['movements']['items']['required'] == ['actor_id', 'to_location_id']

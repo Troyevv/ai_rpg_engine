@@ -96,7 +96,7 @@ def candidate(c):
 
 def resolver_kwargs(case, variant):
     if case.get('kind')=='background':
-        return background_resolver_options(case['protection_state'])
+        return background_resolver_options(case['protection_state'], 2 if variant=='D' else 1)
     return player_actions.resolver_options(case['before'],case['player_input'],
         case.get('kind','turn'), 2 if variant=='D' else 1)
 

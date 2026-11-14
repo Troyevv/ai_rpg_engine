@@ -6,17 +6,19 @@ from backend.runtime_v3.director import background_candidate, interval_candidate
 from backend.runtime_v3.context import build_context
 from backend.runtime_v3.resolver import StateResolver
 from backend.runtime_v3.raw import repair_feedback
+from backend.runtime_v3.player_actions import EXTRACTION_VERSION
 from backend.runtime_v3.models import assert_world_state_v3_invariants,fatal
 from backend.services.world_delta_errors import StructuralDeltaError
 
 
-def background_resolver_options(state):
+def background_resolver_options(state, contract_version=EXTRACTION_VERSION):
     """Shared hidden-simulation boundary for production and offline/live QA."""
+    from backend.runtime_v3.player_actions import contract_options
     visible = set(state['camera']['present_character_ids']) | set(state['camera'].get('observed_character_ids', []))
     return dict(observed=False, mode='background',
                 protected_actor_id=state['camera']['controlled_actor_id'],
                 protected_knowledge_actor_ids=visible, require_player_agency=False,
-                agency_audit_required=False)
+                agency_audit_required=False, **contract_options(contract_version))
 
 
 class BackgroundGenerationError(RuntimeError):
@@ -104,7 +106,8 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     snapshot, history_batch = deepcopy(snapshot), deepcopy(history_batch)
     state = snapshot['world_state']
     camera=observe(snapshot,actor_id=candidate['actor_id'],allow_protagonist=True)
-    boundary=background_resolver_options(state)
+    contract_version = config.get('_extraction_contract', 1)
+    boundary=background_resolver_options(state, contract_version)
     protected=boundary['protected_actor_id']
     visible_actors=boundary['protected_knowledge_actor_ids']
     if batch: camera['_background_actor_ids']=list({cid for item in batch for cid in item['actor_ids']})
@@ -121,11 +124,11 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     if not narrative.strip():raise BackgroundGenerationError('empty_background')
     feedback=None
     for attempt in range(2):
-        messages=background_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
+        messages=background_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            resolved=StateResolver(camera['world_state'],narrative,'',letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],**boundary,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
+            resolved=StateResolver(camera['world_state'],narrative,'',chronology_events=(world_history or {}).get('events', []),letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],**boundary,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 relationship_query=(world_history or {}).get('_relationship_query'),relationship_receipts=history_batch.get('relationship_changes',[]),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:

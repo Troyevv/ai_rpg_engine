@@ -32,11 +32,13 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.semantic_slice = semantic_slice
+        self.chronology_events = {e['id']:e for e in (chronology_events or []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
         self.agency_audit_required = agency_audit_required
         self.consequence_first = consequence_first
         self.preserve_scene_locations = preserve_scene_locations or mode == 'background'
@@ -216,6 +218,13 @@ class StateResolver:
     def resolve(self, payload):
         from backend.services.world_delta_errors import StructuralDeltaError
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
+        if self.semantic_slice:
+            from backend.runtime_v3.raw import compile_semantic
+            raw = compile_semantic(raw, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
+            from backend.runtime_v3.continuity import validate_chronology
+            validate_chronology(self, raw)
+        elif raw.records['information_events'] or raw.records['chronology_claims']:
+            fatal('Семантический срез недоступен в записанной версии запроса.', 'contract_version_mismatch', repairable=True)
         self.warnings.extend(raw.warnings)
         from backend.runtime_v3.continuity import validate_due_birth_assessments
         validate_due_birth_assessments(self, raw)
@@ -425,7 +434,7 @@ class StateResolver:
             if fields.get('id') in s['facts']:
                 for key in ('story_secret','secret_subject_ids','secret_keeper_ids','secret_biography_ids','secret_existence','origin_remote_event_id'):
                     fields.setdefault(key, s['facts'][fields['id']][key])
-            entry = self.typed(Fact,fields,'facts',i)
+            entry = self.typed(Fact,fields,'facts',i, required_code='fact_invalid' if self.semantic_slice else None)
             if entry:
                 for cid in entry['character_ids'] + entry['secret_subject_ids'] + entry['secret_keeper_ids'] + entry['secret_biography_ids']: self.actor(cid,'facts',i)
                 if entry['id'] in s['facts'] and entry != s['facts'][entry['id']]:
@@ -458,6 +467,9 @@ class StateResolver:
                             for n, cid in enumerate(lists[role]) if cid not in s['characters']), None)
             if unknown:
                 role, n, cid = unknown
+                if self.semantic_slice and item.get('information_source'):
+                    fatal('Информационное событие ссылается на неизвестного персонажа.',
+                          'information_actor_unknown', repairable=True, section='information_events', entity=cid)
                 self.warn('events', i, f'Неизвестный персонаж {cid} в Event {eid}.', entity=eid,
                           code='event_character_unknown')
                 self.warnings[-1].update(path=f'events[{i}].{role}[{n}]', source_ids=[eid, cid])
@@ -474,6 +486,8 @@ class StateResolver:
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=scene_end)
+            if self.semantic_slice and item.get('information_source'):
+                event['information_source'] = deepcopy(item['information_source'])
             if item.get('interaction_channel') is not None:
                 event['interaction_channel']=item['interaction_channel']
             if 'minute' in item and type(item['minute']) is int and scene_start <= item['minute'] <= scene_end:
@@ -495,6 +509,19 @@ class StateResolver:
             item = movement_component(self, raw, item, player_actions, i)
             try:
                 event_provenance(self, item, event, i, player_actions)
+                if self.semantic_slice and item.get('actor_id') is not None and not event.get('player_action'):
+                    actor, targets = item['actor_id'], item.get('target_ids', [])
+                    if (not isinstance(actor, str) or actor not in event['participants'] or
+                            not isinstance(targets, list) or any(not isinstance(t, str) for t in targets) or
+                            not set(targets) <= set(event['participants'] + event['witnesses']) or actor in targets):
+                        dependent = any(isinstance(r, dict) and isinstance(r.get('source_event_ids'), list)
+                            and eid in r['source_event_ids'] for r in raw.records['relationship_changes'])
+                        if dependent or item.get('information_source'):
+                            fatal('Автор/адресаты NPC-взаимодействия не согласованы с участниками.',
+                                'event_contact_invalid', repairable=True, section='events', index=i)
+                        self.warn('events', i, 'Снята некорректная вспомогательная аннотация контакта.', code='event_contact_annotation_ignored')
+                    else:
+                        event.update(actor_id=actor, target_ids=list(targets))
             except StructuralDeltaError as exc:
                 event_errors.append(exc)
                 rejected_events.add(eid)
@@ -652,7 +679,7 @@ class StateResolver:
                 if key == 'emotion' and cid == camera['controlled_actor_id']: actor['emotion_source_sequence'] = self.turn_id-1
             apply_changes(self, item, cid, i, events)
         from backend.runtime_v3.relationships import apply_relationships
-        apply_relationships(self, raw)
+        apply_relationships(self, raw, events)
         for i, item in self.records(raw, 'thread_changes'):
             if not isinstance(item.get('id'), str) or not item['id']:
                 self.warn('thread_changes', i, 'отсутствует ID'); continue

@@ -576,6 +576,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         config.get("context_length", 32768),
                         config.get("update_tokens", 4096),
                         extraction_text=narrative,
+                        extraction_contract=config.get("_extraction_contract", 1),
                         validation_feedback=feedback,
                         pacing_decision=messages.selection["pacing"],
                         initiative_decision=messages.selection["initiative"],
@@ -594,6 +595,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         )
                     )
                     raw = RawTurnResult.parse(payload)
+                    if config.get('_extraction_contract', 1) >= 5:
+                        from backend.runtime_v3.raw import compile_semantic
+                        raw = compile_semantic(raw, resolution_state, narrative, turn,
+                            namespace=identity('advance-group', sorted(c.id for c in group)))
                     if raw.final_scene.get("elapsed_minutes", 0) != 0:
                         raise ValueError("Время группы задаётся Runtime, а не Extraction.")
                     from backend.runtime_v3.long_term_promotions import prepare
@@ -640,12 +645,15 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             raise ValueError("Событие не указывает выбранную причину исхода.")
                         # The group occurs at a known instant. StateResolver checks explicit claims.
                         event.setdefault("minute", minute)
+                    from backend.runtime_v3.player_actions import contract_options
                     resolved = StateResolver(
                         resolution_state,
                         narrative,
                         "",
+                        chronology_events=(history or {}).get("events", []),
                         letter_sources=artifacts,
                         turn_id=turn,
+                        **contract_options(config.get("_extraction_contract", 1)),
                         observed=False,
                         mode="background",
                         protected_actor_id=protected,

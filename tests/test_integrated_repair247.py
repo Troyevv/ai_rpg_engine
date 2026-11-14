@@ -71,7 +71,7 @@ def history(repo, sid):
         return read_history(db, repo.get_snapshot(sid)['history_head'])[0]
 
 
-def execute(repo, sid, data, replies, *, retry=None, kind='turn', config=None, legacy=True):
+def execute(repo, sid, data, replies, *, retry=None, kind='turn', config=None, legacy=True, contract_version=None):
     config = config or CONFIG
     if retry:
         repo.retry_job(retry, config)
@@ -80,6 +80,12 @@ def execute(repo, sid, data, replies, *, retry=None, kind='turn', config=None, l
         with repo.connect() as db:
             saved = json.loads(repo.get_job(jid)['config_json'])
             saved.pop('_extraction_contract', None)
+            db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (json.dumps(saved), jid))
+    if contract_version is not None:
+        assert not retry and kind != 'regenerate'
+        with repo.connect() as db:
+            saved = json.loads(repo.get_job(jid)['config_json'])
+            saved['_extraction_contract'] = contract_version
             db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (json.dumps(saved), jid))
     calls = []
     replies = iter(deepcopy(replies))

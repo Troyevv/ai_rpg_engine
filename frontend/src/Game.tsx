@@ -215,6 +215,13 @@ export function Game({
           setSubmitted(null);
         }
       })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
+      {job.chronology_correction_available && <div className="flex flex-col gap-2">
+        <p className="text-sm text-muted-foreground">Исправление хронологии создаст новую редакцию и заново проверит состояние. Запросы к модели могут быть платными.</p>
+        <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
+          setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey,
+            correct_chronology:true, revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
+        })}>Исправить хронологию сцены</Button>
+      </div>}
       {retryable && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
         setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey}));
       })}>{physical ? 'Повторить обработку состояния' : t('retry')}</Button>}

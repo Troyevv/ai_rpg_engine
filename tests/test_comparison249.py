@@ -22,7 +22,7 @@ def test_background_kwargs_match_hidden_production_and_preserve_knowledge():
         events=[dict(id='arrival',text=case['narrative'],participants=['qa_timur'],witnesses=['qa_timur'],
             medium='action',location_id='lab',order=1)])
     for variant in ('C','D'):
-        assert resolver_kwargs(case,variant)==background_resolver_options(state)
+        assert resolver_kwargs(case,variant)==background_resolver_options(state,2 if variant=='D' else 1)
         out=evaluate(case,variant,raw)
         assert out['structural_status']=='accepted',out
         assert out['state']['knowledge']==state['knowledge']

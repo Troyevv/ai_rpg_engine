@@ -59,6 +59,7 @@ story168_payload=None
 story168_gate=None
 agency249=None
 berezovsk_followup=None
+policy252_selection=None
 integrated247_case=None
 integrated247_live=False
 integrated247_repeat=False
@@ -89,6 +90,18 @@ def browser_response(payload, kwargs):
 def scripted_stream(**kwargs):
     global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if policy252_selection and kwargs.get('model') == 'policy252-test':
+        from test_policy252 import chronology_payload
+        if 'Исправь только хронологические' in str(kwargs['messages']):
+            policy252_selection['corrected'] = True
+            yield json.dumps(dict(edits=[dict(original='Вчера Вера встретилась с Тимуром.',replacement='Пять дней назад Вера встретилась с Тимуром.')]),ensure_ascii=False)
+        elif kwargs.get('response_format'):
+            completed = next(m['content'] for m in kwargs['messages'] if m['content'].startswith('completed_narrative\n'))
+            corrected = 'Пять дней назад Вера встретилась с Тимуром.' in completed
+            yield json.dumps(chronology_payload(app.state.repository, policy252_selection['save'],policy252_selection['event_id'],5 if corrected else 1),ensure_ascii=False)
+        else:
+            yield policy252_selection['narrative'].replace('Вчера', 'Пять дней назад') if policy252_selection.get('corrected') else policy252_selection['narrative']
+        return
     if berezovsk_followup and kwargs.get('model') == 'berezovsk-followup-test':
         if kwargs.get('response_format'):
             answers = berezovsk_followup['responses']
@@ -1098,6 +1111,13 @@ if __name__ == '__main__':
             [json.loads(raw) for raw in data['responses']['D']] + [compound_control(data)])
         berezovsk_followup=dict(data=data,responses=responses,attempt=0)
         return dict(world=result['world'],save=result['save'],action=data['player_input'])
+
+    @app.post('/test/policy252-seed')
+    def policy252_seed():
+        global policy252_selection
+        from test_policy252 import seed_chronology
+        policy252_selection = seed_chronology(app.state.repository)
+        return policy252_selection
 
     @app.post('/test/playability251-seed')
     def playability251_seed(case: str = '002'):

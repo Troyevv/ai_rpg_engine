@@ -241,6 +241,38 @@ class EngineStorage:
                 raise ValueError('Отменить можно только неудачный или остановленный ход.')
             db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
 
+    def correct_chronology_job(self, job_id, revision, attempt_epoch):
+        """New candidate/lineage; the rejected job and accepted History stay intact."""
+        from backend.services.world_delta_errors import chronology_correction
+        from hashlib import sha256
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
+            if row is None:
+                raise ValueError('Ход не найден.')
+            job = dict(row)
+            grounds = chronology_correction(json.loads(job.get('repair_diagnostics_json') or '[]'))
+            if (job['status'] not in ('error', 'stopped') or not job['narrative_complete'] or
+                    job['kind'] not in ('start', 'turn', 'regenerate', 'background', 'pov') or
+                    not grounds or job['attempt_epoch'] != attempt_epoch or job['revision'] != revision):
+                raise ValueError('Этот кандидат недоступен для адресной коррекции.')
+            self._assert_idle(db, job['save_id'])
+            save = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()
+            if save['revision'] != revision:
+                raise ValueError('Сейв изменился. Этот черновик устарел.')
+            if not job.get('context_json'):
+                raise ValueError('Исходный контекст коррекции отсутствует.')
+            config = json.loads(job['config_json'])
+            config['_narrative_correction'] = dict(source_job_id=job_id,
+                original=job['narrative'], original_sha256=sha256(job['narrative'].encode()).hexdigest(), grounds=grounds)
+            new_id = uuid.uuid4().hex
+            columns = ['save_id','revision','before_json','user_text','kind','replaces_id',
+                       'context_json','memory_before_json','pov_actor_id','audience_json','session_id']
+            db.execute('INSERT INTO game_jobs(id,status,config_json,'+','.join(columns)+') VALUES('+','.join('?' for _ in range(len(columns)+3))+')',
+                [new_id, 'generating', json.dumps(config, ensure_ascii=False), *[job.get(k) for k in columns]])
+            db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
+        return new_id
+
     def retry_job(self, job_id, config=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
