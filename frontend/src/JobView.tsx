@@ -67,10 +67,10 @@ export function JobView({
       )}
       {job.error && (
         <p role="alert" className="error">
-          Сцена не сохранена. Твоё действие и текст сцены доступны. Варианты восстановления — ниже.
+          {job.narrative_reauthor_required ? job.error : 'Сцена не сохранена. Твоё действие и текст сцены доступны. Варианты восстановления — ниже.'}
         </p>
       )}
-      {job.error && <details className="muted"><summary>Техническая причина</summary><p>{job.error}</p></details>}
+      {job.error && !job.narrative_reauthor_required && <details className="muted"><summary>Техническая причина</summary><p>{job.error}</p></details>}
       {active(job) && (
         <Button variant="outline" size="sm" onClick={stop}>
           <Square size={13} />

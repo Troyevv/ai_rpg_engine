@@ -104,6 +104,13 @@ overwrote the earlier record scope. The scope now unions those records while
 keeping unaffected neighbors protected. The new regression plus the v6/provider
 and context-compaction suites passed: **63 passed**.
 
+Full CI #514 exposed a UI regression on desktop and mobile: the existing
+Crisis/001 test could no longer see the reason for an agency refusal because
+JobView had collapsed it into technical details. Narrative contradictions that
+require a new scene now retain their actionable explanation in the alert;
+ordinary processing errors keep technical details collapsed. The existing
+browser assertions are unchanged; final-head CI must confirm the correction.
+
 ## Outstanding acceptance
 
 1. Check final-head CI, including real desktop/mobile E2E.
