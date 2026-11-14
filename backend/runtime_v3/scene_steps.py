@@ -10,7 +10,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from backend.runtime_v3.models import fatal, identity
-from backend.runtime_v3.raw import RawTurnResult, SECTIONS, PerceivedClaim, compile_semantic
+from backend.runtime_v3.raw import RawTurnResult, SECTIONS, OPTIONAL_SECTIONS, SECTION_BUDGETS, PerceivedClaim, compile_semantic
 
 
 class StrictModel(BaseModel):
@@ -64,6 +64,7 @@ class OccurrenceStep(Step):
     """Non-contact domain source (birth, objective event, witnessed action)."""
     kind: Literal['occurrence']
     actor_ids: list[str]
+    fact_ids: list[str] = Field(default_factory=list)
     witnesses: list[str] = Field(default_factory=list)
     location_id: str | None = None
 
@@ -75,6 +76,16 @@ STEP = TypeAdapter(Annotated[MovementStep | InteractionStep | InformationStep | 
 def project_schema(schema):
     """Replace, never supplement, the duplicate model-facing representations."""
     props = schema['properties']
+    for section,(limit,_) in SECTION_BUDGETS.items():
+        if section in props:props[section]['maxItems']=limit
+    # Existing NPC review accepts partial cards and marks them pending_review.
+    promotion=props['promotions']['items']
+    promotion['properties']['fields'].pop('required', None)
+    promotion['required']=[key for key in promotion.get('required',[]) if key!='character']
+    for section in ('possession_deltas','appearance_deltas','development_evidence'):
+        for field in ('player_evidence','player_assertion'):
+            props[section]['items']['properties'].pop(field,None)
+            props[section]['items']['required']=[key for key in props[section]['items'].get('required',[]) if key!=field]
     props['scheduled_event_changes']['items']['properties']['location_id'] = {'type':['string','null']}
     scene = props.pop('final_scene')
     for name in ('events', 'movements', 'information_events', 'knowledge_gained', 'player_agency'):
@@ -124,6 +135,8 @@ def validate(payload):
     errors = []
     for error in Draft202012Validator(input_schema()).iter_errors(p):
         path = list(error.absolute_path)
+        if path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
+            continue  # Existing optional-domain owners still isolate annotation errors.
         errors.append(StructuralDeltaError(error.message, 'scene_schema_invalid',
             section=path[0] if path else 'scene_steps', path='.'.join(map(str,path)) or '$',
             **({'index':path[1]} if len(path)>1 and isinstance(path[1],int) else {})))
@@ -139,6 +152,11 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
     p = validate(payload)
     original=deepcopy(p)
     records = {name:deepcopy(p.get(name, [])) for name in SECTIONS}
+    warnings=[]
+    for name in OPTIONAL_SECTIONS:
+        if not isinstance(records[name],list):
+            records[name]=[]
+            warnings.append(dict(section=name,code='optional_section_invalid',action='drop_section'))
     normalize_facts(records, p, state)
     scene, camera = deepcopy(p['scene']), state['camera']
     positions = {cid:c['location_id'] for cid,c in state['characters'].items()}
@@ -221,7 +239,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
                 event['player_action_id'] = action_id
                 if step.outcome == 'completed': event['player_assertion'] = 'completed_interaction'
         else:
-            event = dict(common, participants=step.actor_ids, witnesses=step.witnesses, medium='observation')
+            event = dict(common, participants=step.actor_ids, witnesses=step.witnesses, fact_ids=step.fact_ids, medium='observation')
             if step.location_id: event['location_id'] = step.location_id
             if action_id: event.update(actor_id=actor, target_ids=[], player_action_id=action_id)
         records['events'].append(event)
@@ -250,8 +268,26 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
         if isinstance(value,str) and (key in reference_fields or key.endswith(('_event_id','_event_ids'))):
             return (action_aliases if key=='player_action_id' else aliases).get(value,value)
         return value
-    raw = RawTurnResult(scene, refs(records), deepcopy(p.get('choices',[])), [],
-        dict(status='preserved', actions=actions, narrative_audit=[dict(f,player_action_id=None) for f in p.get('agency_findings',[])]))
+    choices=p.get('choices',[])
+    choices=[c for c in choices if isinstance(c,dict) and isinstance(c.get('action'),str) and isinstance(c.get('speech',''),str)][:6] if isinstance(choices,list) else []
+    # Narrow legacy metadata adaptation; domain handlers still validate the
+    # accepted Event, Fact, actors, outcome, ownership and current input.
+    by_id={s['id']:s for s in p['scene_steps']}
+    for values in records.values():
+        for item in values:
+            if isinstance(item,dict):
+                source=by_id.get(item.get('source_event_id'))
+                if source and not item.get('evidence'):
+                    item['evidence']=source.get('evidence') or source['text']
+    for section,assertion in (('possession_deltas','explicit_choice'),('appearance_deltas','explicit_choice'),('development_evidence','completed_voluntary_behavior')):
+        for item in records[section]:
+            source=by_id.get(item.get('source_event_id'))
+            provenance=source.get('input_source') if source else None
+            if provenance and provenance['meaning']=='preserved' and source.get('outcome','completed') in ('completed','partial'):
+                item.update(player_evidence=provenance['quote'],player_assertion=assertion)
+    raw = RawTurnResult(scene, refs(records), deepcopy(choices), warnings,
+        dict(status='violated' if any(f['classification']=='unauthorized_choice' for f in p.get('agency_findings',[])) else 'preserved',
+             actions=actions, narrative_audit=[dict(f,player_action_id=None) for f in p.get('agency_findings',[])]))
     raw.semantic_candidate = original
     raw.movement_sources = movement_sources
     # Map compiler failures too: they happen before a Resolver can own the raw.
@@ -264,7 +300,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
             section,index=row.get('section'),row.get('index')
             if section=='information_events' and isinstance(index,int):
                 candidates=[i for i,s in enumerate(original['scene_steps']) if s['kind']=='information']
-                row.update(compiled_path=row.get('path'),section='scene_steps',index=candidates[index],
+                row.update(compiled_path=row.get('path'),section='scene_steps',domain='scene_steps',index=candidates[index],
                     path=f'scene_steps[{candidates[index]}]',source_ids=[original['scene_steps'][candidates[index]]['id']])
             path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
             errors.append(StructuralDeltaError(row['repair_reason'],row['code'],repairable=exc.repairable,**path))
@@ -292,12 +328,13 @@ Targets are actually reached addressees; partial input keeps intended_target_ids
 Report significant unchosen decisions anywhere in prose as agency_findings unauthorized_choice; do not launder prose.
 information: claims reuse PerceivedClaim; perceived_by is per claim, never inferred from targets/presence/delivery.
 Reuse fact_id only for the WHOLE assertion; fragment/hypothetical question never reveals a complete secret.
-occurrence: objective domain source (e.g. birth), not a pre-existing newborn contact. Domain source_event_id uses step.id.
+occurrence: objective domain source (e.g. birth/possession), not a pre-existing newborn contact. fact_ids link assertions without granting Knowledge. Domain source_event_id uses step.id.
 scene: elapsed_minutes/situation and non-derivable visibility only. visible_character_ids overrides composition,
 never moves anybody; omit to retain still-visible prior cast and follow camera subject. No automatic NPC visibility.
 observer_location_id is observer-only. POV never transfers control. Unknown relative ordering needs correction,
 never sort by ID: timing=uncertain. Explicit simultaneity uses timing=simultaneous with the preceding step; otherwise sequence order. Supply minute only if known. Runtime owns background/Skip clocks.
 chronology_claims: narrator/belief/lie/quotation; event_elapsed links an existing event_id and elapsed_days; current_calendar uses date/weekday ID, no fake Event. Calendar outranks old titles; significant contradiction needs narrative recovery. Missing claims prove no check.
+possession_deltas/appearance_deltas/development_evidence inherit input provenance from their exact step source_event_id; no repeated player quote/assertion.
 Facts immutable, exact ID references, no fuzzy merges. Situation!=Emotion; EXTERNAL desires/commitments require input.
 '''
 
@@ -361,12 +398,18 @@ def source_diagnostic(raw, row):
                 i,step=candidates[n]
                 source=dict(section='scene_steps',index=i,local_id=step['id'])
             except (ValueError,IndexError):pass
+    if row.get('code')=='narrative_agency_conflict' and source is None:
+        findings=raw.semantic_candidate.get('agency_findings',[])
+        indexes=[i for i,f in enumerate(findings) if f['classification']=='unauthorized_choice']
+        if indexes:
+            row.update(compiled_path=row.get('path'),section='agency_findings',domain='agency_findings',
+                index=indexes[0],path=f'agency_findings[{indexes[0]}]',source_ids=[])
     if source and source.get('section')=='scene_steps':
-        row.update(compiled_path=row.get('path'),**source)
+        row.update(compiled_path=row.get('path'),domain='scene_steps',**source)
         row['path']=f"scene_steps[{source['index']}]"
         row['source_ids']=[source['local_id']]
         # Internal field names are preserved only as diagnostic metadata.
         if 'field' in row:row['compiled_field']=row.pop('field')
     elif section=='final_scene':
-        row.update(compiled_path=row.get('path'),section='scene',path='scene')
+        row.update(compiled_path=row.get('path'),section='scene',domain='scene',path='scene')
     return row

@@ -6,7 +6,9 @@ original contract; historical WorldState/History snapshots are not migrated.
 
 `scene_steps.py` owns the external types and projection, not a second Runtime.
 `scene_repair.py` owns one-candidate replacement. `RawTurnResult` remains internal.
-The full local validator uses the same schema owner as the context projection;
+The local validator uses the same schema owner as the context projection;
+existing optional annotation owners retain their field-local validation, so
+nonessential malformed annotations do not veto independent substantive outcomes;
 provider projection changes anchors to JSON pointers and removes discriminator
 annotations, without weakening required/nullable/additionalProperties rules.
 
@@ -27,6 +29,9 @@ annotations, without weakening required/nullable/additionalProperties rules.
 IDs in the example must exist in the particular world, or be established via the
 existing locations/promotions sections. It is a schema example, not real QA IO.
 No greeting of a person at the destination, witnesses, or Knowledge is inferred.
+Linked possession/appearance/development records inherit input provenance from
+the exact source step; they no longer ask the model to repeat that quote.
+Partial NPC cards retain the existing pending-review path.
 
 | Meaning | Owner | Derived consumers |
 |---|---|---|
@@ -36,7 +41,7 @@ No greeting of a person at the destination, witnesses, or Knowledge is inferred.
 | Actual arrival/departure/attempt | MovementStep | Route origin from before/prior steps, Movement and source Event |
 | Relative sequence / explicit simultaneity | List order / timing | Shared ordinal axis; uncertain ordering is repairable |
 | Content + source + per-claim perceivers/status | InformationStep / existing PerceivedClaim | Existing information compiler → Fact/Event/Knowledge |
-| Objective domain event (e.g. birth) | OccurrenceStep | Existing BirthClaim/life/process handlers; no newborn contact required |
+| Objective domain event and explicit Fact links (birth, possession) | OccurrenceStep | Existing BirthClaim/life/process handlers; no newborn contact required |
 | Non-derivable composition | scene.visible_character_ids / observed_character_ids | Internal final_scene; never geography/contact |
 | Camera position | Existing mode and subject + accepted route | Internal final_scene; observer-only location override |
 | Duration / significant chronology finding | scene / chronology_claims | Existing Calendar/boundaries/recovery |

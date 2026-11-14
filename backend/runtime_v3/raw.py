@@ -14,6 +14,11 @@ SECTIONS = ('information_events','chronology_claims','secret_disclosures','group
             'reproductive_events','naming_decisions','births','appearance_deltas','possession_deltas')
 
 
+SECTION_BUDGETS = {'births': (24, 'birth_budget'), 'knowledge_gained': (64, 'knowledge_budget'),
+    **{name: (24, 'development_budget') for name in
+       ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas')}}
+
+
 OPTIONAL_SECTIONS = frozenset(('physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences'))
 
 @dataclass
@@ -28,6 +33,13 @@ class RawTurnResult:
     event_sources: dict = field(default_factory=dict)
     semantic_candidate: dict | None = None
     movement_sources: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        # Internal metadata default shared by legacy parsing and semantic compilation.
+        for values in self.records.values():
+            for item in values:
+                if isinstance(item, dict):
+                    item.setdefault('evidence', '')
 
     @classmethod
     def parse(cls, payload):
@@ -62,12 +74,9 @@ class RawTurnResult:
                     fatal('повреждена существенная секция Extraction', 'raw_section_invalid', repairable=True, section=section, path=section, action='extraction_repair', severity='recoverable')
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
-            if section == 'births' and len(values) > 24:
-                fatal('Превышен лимит исходов рождения.', 'birth_budget', repairable=True, section=section, path=section)
-            if section == 'knowledge_gained' and len(values) > 64:
-                fatal('Превышен лимит изменений Knowledge.', 'knowledge_budget', repairable=True, section=section, path=section)
-            if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas') and len(values) > 24:
-                fatal('Превышен лимит изменений домена.', 'development_budget', repairable=True, section=section, path=section)
+            budget = SECTION_BUDGETS.get(section)
+            if budget and len(values) > budget[0]:
+                fatal('Превышен лимит изменений домена.', budget[1], repairable=True, section=section, path=section)
             records[section] = deepcopy(values)
             for index, item in enumerate(records[section]):
                 if isinstance(item, dict):
@@ -83,7 +92,6 @@ class RawTurnResult:
                     if not isinstance(item.get('evidence', ''), str):
                         warnings.append(dict(section=section, path=section+'.evidence', code='evidence_metadata_invalid', action='drop_field'))
                         item['evidence']=''
-                    item.setdefault('evidence', '')
                 elif section not in OPTIONAL_SECTIONS and item not in (None, [], {}):
                     fatal('Повреждена запись существенной секции.', 'raw_record_invalid', repairable=True, section=section, action='extraction_repair')
         choices = payload.get('choices', [])

@@ -58,7 +58,7 @@ and no hidden fallback. Actual acceptance of the full schema by DeepSeek remains
 
 ## Free verification record
 
-- New v6 compiler/provider/production/repair/persistence suites: **50 passed**.
+- New v6 compiler/provider/production/repair/persistence suites: **55 passed**.
 - New suites + context compaction + three affected legacy suites before the final
   audit additions: **149 passed**. Legacy assertions remain intact and request
   their original contract explicitly where they inspect that schema.
@@ -71,7 +71,7 @@ and no hidden fallback. Actual acceptance of the full schema by DeepSeek remains
 - Saturated 32K triplet context passes with full Narrative and reserved birth
   identities retained. No context/output limits were increased. The generic
   schema itself did not become smaller: compact JSON was 32,171 bytes (v5)
-  versus 33,215 (v6); reduction is in duplicated response semantics, not a claimed
+  versus 32,807 (v6); reduction is in duplicated response semantics, not a claimed
   measured token/cost win. Actual provider token/cost/latency comparison is unrun.
 - Desktop/mobile local Playwright launch was blocked before any application
   assertion: Chromium `process_singleton_posix.cc: socket(): Operation not permitted`.
@@ -84,6 +84,20 @@ All new provider responses are authored controls. The #254 domain controls use
 original before/Narrative with an explicitly authored v6 representation; they
 preserve Knowledge (6 acquisitions), Campaign (9), Social (0), and family birth
 (10, same reserved child). They do not replay original DeepSeek v6 responses.
+
+## Additional domain review
+
+Code-path inspection exposed missing internal evidence defaults when bypassing
+legacy parse. The default now belongs to RawTurnResult construction, and linked
+domains inherit source metadata from the exact semantic node. Objective occurrence
+steps can link Facts without inventing perceivers. Possession, appearance and
+personal-development sources inherit the selected input once; their original
+owner/identity/revision/outcome validators remain unchanged.
+
+Partial new-NPC cards still enter pending review. Existing optional annotation
+owners retain field-local rejection; a malformed optional annotation or choices
+list cannot veto an independent accepted route. Existing domain size caps have
+one shared owner and remain in the v6 projection.
 
 ## Outstanding acceptance
 

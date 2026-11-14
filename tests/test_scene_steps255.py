@@ -413,3 +413,57 @@ def test_new_jobs_and_recorded_retry_regeneration_keep_distinct_versions(tmp_pat
     repo.abandon_job(sid,regenerated,stopped['revision'],stopped['attempt_epoch'])
     ordinary=repo.begin_job(sid,'Осматриваюсь.','turn',CONFIG)
     assert json.loads(repo.get_job(ordinary)['config_json'])['_extraction_contract']==6
+
+
+def test_unrelated_optional_annotation_does_not_block_valid_route():
+    s,p=fixture();p['choices']='bad optional suggestions';p['scene_actions']={'invalid':'annotation'}
+    p['continuity_beats']=[{'kind':'not-a-beat'}]
+    result=resolve(s,p)
+    assert result.state['characters']['a']['location_id']=='park'
+    assert not result.choices
+    assert any(w['section']=='scene_actions' and w['action']=='drop_section' for w in result.warnings)
+
+
+def test_v6_unchanged_domains_receive_internal_metadata_defaults():
+    s=state();p=dict(scene=dict(elapsed_minutes=1),scene_steps=[],
+        life_changes=[dict(id='b',life_status='dead',assertion='established')],
+        promotions=[dict(id='newcomer',name='Лада',fields={})])
+    result=resolve(s,p,'')
+    assert result.state['characters']['b']['life_status']=='dead'
+    assert result.state['characters']['newcomer']['display_name']=='Лада'
+    assert 'newcomer' in result.pending_reviews
+    assert any(row['kind']=='npc_identity_created' and row['evidence']=='' for row in result.history['state_changes'])
+
+
+def test_v6_keeps_existing_domain_budgets():
+    s=state();p=dict(scene={},scene_steps=[],births=[{}]*25)
+    with pytest.raises(StructuralDeltaError):resolve(s,p,'')
+
+
+def test_unselected_decision_diagnostic_targets_original_finding():
+    s=state();p=dict(scene={},scene_steps=[],agency_findings=[dict(narrative_evidence='Он согласился.',classification='unauthorized_choice')])
+    with pytest.raises(StructuralDeltaError) as exc:resolve(s,p,'Осматриваюсь.')
+    row=exc.value.diagnostics('validation')[0]
+    assert row['code']=='narrative_agency_conflict' and row['path']=='agency_findings[0]'
+    assert row['action']=='reauthor_narrative'
+
+
+def test_possession_and_development_keep_linked_sources_without_duplicate_quotes():
+    from test_possessions import state as possession_state, delta
+    from test_personality import setup, profile
+    s=possession_state();actor=s['camera']['controlled_actor_id'];player='Забираю своё семейное кольцо.'
+    row=delta(s,transition='voluntary',decision_actor_id=actor,updates=dict(owner_id=actor,holder_id=actor,location_id=None,status='available'))
+    p=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(id='event',kind='occurrence',actor_ids=[actor],fact_ids=[row['fact_id']],text='Забрал кольцо.',input_source=dict(quote=player,meaning='preserved'))],
+        facts=[dict(id=row['fact_id'],text='Кольцо у владельца.',character_ids=[actor],visibility='secret')],possession_deltas=[row])
+    result=resolve(s,p,player)
+    assert result.state['possessions']['ring']['holder_id']==actor
+    assert result.state['knowledge']==s['knowledge']
+    bad=deepcopy(p);bad['scene_steps'][0].pop('input_source')
+    with pytest.raises(StructuralDeltaError):resolve(s,bad,player)
+    s=setup()['world_state'];s['camera'].update(controlled_actor_id='b',present_character_ids=['b'])
+    s['characters']['b']['location_id']=s['camera']['location_id'];player='Я спокойно объясняю свою позицию.'
+    p=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(id='source',kind='occurrence',actor_ids=['b'],text='Объяснила позицию.',input_source=dict(quote=player,meaning='preserved'))],
+        development_evidence=[dict(id='proof',actor_id='b',source_event_id='source',meaning='Отстаивает границы',kind='behavior',assertion='completed')])
+    result=resolve(s,p,player)
+    assert len(profile(result.state)['evidence'])==1
+    assert next(iter(profile(result.state)['evidence'].values()))['player_owned']

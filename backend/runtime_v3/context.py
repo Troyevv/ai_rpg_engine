@@ -506,6 +506,12 @@ class ExtractionContextBuilder:
             rules = rules.replace(SEMANTIC_BASE_CONTRACT, scene_contract).replace(SEMANTIC_SLICE_CONTRACT, '')
             from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
             rules = rules.replace(CONSEQUENCE_CONTRACT, '')
+            rules = rules.replace('EXTERNAL: completed_voluntary_behavior + exact player quote + narrated completion;',
+                'EXTERNAL: source_event_id references a completed scene step with input_source;')
+            rules = rules.replace('Voluntary EXTERNAL changes require explicit_choice and quoted player_evidence;',
+                'Voluntary EXTERNAL appearance changes require source_event_id linked to a completed step with input_source;')
+            rules = rules.replace('Order successive Events. EXTERNAL voluntary choices require\nplayer evidence;',
+                'Use scene-step order. EXTERNAL voluntary choices require input_source on the referenced step;')
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
