@@ -5,8 +5,9 @@ def requires_narrative_reauthor(diagnostics):
     """Sticky rejection of this authored text across recovery attempts."""
     # Older #232 jobs predate the shared action marker. Keep their rejection sticky
     # without rewriting persisted diagnostics or allowing extraction-only recovery.
-    return any(row.get('action') == 'reauthor_narrative'
-               or row.get('code') == 'narrative_agency_conflict' for row in diagnostics)
+    return any((row.get('action') == 'reauthor_narrative'
+                or row.get('code') == 'narrative_agency_conflict')
+               and row.get('scope') != 'independent_background' for row in diagnostics)
 
 class StructuralDeltaError(ValueError):
     """No safe partial application is known."""
@@ -40,3 +41,12 @@ class StructuralDeltaError(ValueError):
         errors = getattr(self, 'errors', None)
         return ([row for error in errors for row in error.diagnostics(stage)]
                 if errors else [self.diagnostic(stage)])
+
+
+def chronology_correction(diagnostics):
+    """Only this explicit recovery can replace a chronology-rejected candidate."""
+    hard = [row for row in diagnostics if row.get('scope') != 'independent_background'
+            and (row.get('action') == 'reauthor_narrative' or row.get('severity') == 'hard_conflict')]
+    if not hard or any(row.get('code') != 'narrative_chronology_conflict' or not row.get('chronology') for row in hard):
+        return None
+    return [row['chronology'] for row in hard]

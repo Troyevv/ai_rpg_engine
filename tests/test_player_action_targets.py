@@ -29,7 +29,7 @@ GOOD_INPUT = 'Спрашиваю Марину о Кирилле и предла�
 def claim(targets, *, quote=ACTION, actual=None, outcome='completed', id='input-1'):
     return dict(id=id, player_evidence=quote, target_ids=targets,
                 narrative_target_ids=targets if actual is None else actual,
-                outcome=outcome, meaning='preserved')
+                outcome=outcome, meaning='preserved', target_mode='interaction')
 
 
 def payload(state, actions, *, completed=True):
@@ -47,12 +47,18 @@ def payload(state, actions, *, completed=True):
         events.append(event)
     return dict(final_scene=dict(location_id=camera['location_id'],
                                 present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
-                player_agency=dict(status='preserved', actions=actions), events=events)
+                player_agency=dict(status='preserved', actions=actions, narrative_audit=[
+                    dict(narrative_evidence='Исход действия', classification='authorized', player_action_id=a['id']) for a in actions]), events=events)
 
 
-def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn', config=None):
+def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn', config=None, legacy=False):
     client, repo, sid = crisis
     jid = repo.begin_job(sid, text, kind, config or CONFIG)
+    if legacy:
+        # Explicit archived producer replay; do not edit historical model replies.
+        with repo.connect() as db:
+            saved=json.loads(repo.get_job(jid)['config_json']);saved.pop('_extraction_contract',None)
+            db.execute('UPDATE game_jobs SET config_json=? WHERE id=?',(json.dumps(saved),jid))
     responses = iter(responses)
     calls = []
     def stream(**kw):
@@ -95,7 +101,7 @@ def test_narrative_substitution_cannot_be_laundered_through_repair(crisis, forma
     before = repo.get_snapshot(sid)
     turns = repo.list_turns(sid)
     variants = repo.variants(turns[-1]['node_id'])
-    raw = payload(before['world_state'], [claim([VERA], actual=[MARINA])])
+    raw = payload(before['world_state'], [dict(claim([VERA], actual=[MARINA]), meaning='changed')])
     if formal_event:
         # A formally input-aligned Event does not fix the already written story.
         raw['events'][0].update(target_ids=[VERA], participants=[NINA, VERA])
@@ -191,7 +197,7 @@ def test_present_alias_pronoun_group_and_untargeted_actions(crisis, text, target
     assert event['player_interaction'] and event['target_ids'] == targets
     assert text in json.dumps(calls[1]['messages'], ensure_ascii=False)
     assert 'PLAYER ACTION AGENCY' in calls[0]['messages'][0]['content']
-    assert 'PLAYER ACTION REVIEW' in calls[1]['messages'][0]['content']
+    assert 'PLAYER AGENCY:' in calls[1]['messages'][0]['content']
 
 
 @pytest.mark.parametrize('npc_text', ['Марина сама предлагает помочь.', 'Марина отвечает на вопрос, обращённый к Вере.'])
@@ -221,12 +227,14 @@ def test_multiple_input_actions_remain_separate(crisis):
 
 
 @pytest.mark.parametrize('review', [None, {}, {'status':'uncertain','actions':[]}, {'status':'violated','actions':[]}])
-def test_missing_or_unsafe_review_cannot_hide_prose_by_omitting_events(crisis, review):
+def test_legacy_review_policy_remains_pinned_for_old_jobs(crisis, review):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
     raw = payload(before['world_state'], [])
     raw['player_agency'] = review
-    job, calls = play(crisis, [raw, raw], ACTION, BAD_TEXT)
+    # Emulate an existing v2 producer; v3 optional audit is covered in #250 tests.
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 2):
+        job, calls = play(crisis, [raw, raw], ACTION, BAD_TEXT)
     assert job['status'] == 'error'
     assert len(calls) == (2 if review and review.get('status') in ('violated', 'uncertain') else 3)
     assert Repository(repo.path).get_snapshot(sid) == before
@@ -265,7 +273,8 @@ def test_schema_has_resolvable_typed_review():
     from jsonschema import Draft202012Validator
     action = claim([MARINA], quote=GOOD_INPUT)
     data = dict(final_scene=dict(location_id=None, present_character_ids=[]),
-                player_agency=dict(status='preserved', actions=[action]))
+                player_agency=dict(status='preserved', actions=[action], narrative_audit=[dict(
+        narrative_evidence='Нина задаёт вопрос.', classification='authorized', player_action_id=action['id'])]))
     for schema in (extraction_schema(), prompt_schema(player_agency_required=True)):
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(data)
@@ -347,7 +356,8 @@ def test_target_can_be_newly_promoted_character(crisis):
     raw.pop('relationship_changes')
     quote = 'Спрашиваю Ладу о мастерской.'
     action = claim(['new_npc'], quote=quote)
-    raw['player_agency'] = dict(status='preserved', actions=[action])
+    raw['player_agency'] = dict(status='preserved', actions=[action], narrative_audit=[dict(
+        narrative_evidence='Нина задаёт вопрос.', classification='authorized', player_action_id=action['id'])])
     raw['events'][0].update(actor_id=NINA, target_ids=['new_npc'], player_action_id=action['id'],
                             player_assertion='completed_interaction', player_evidence=quote)
     job, calls = play(crisis, [raw], quote, 'Лада пришла. Нина спрашивает её о мастерской. Лада рассказала о мастерской.')
@@ -365,6 +375,8 @@ def test_partial_group_action_can_reach_subset_but_never_replacement(crisis, sub
     actual = ['qa_asya'] if substituted else [MARINA]
     raw = payload(before['world_state'], [claim([MARINA, VERA], quote=quote, actual=actual, outcome='partial')], completed=False)
     raw['events'][0]['participants'] = [NINA, *actual]
+    if substituted:
+        raw['player_agency']['actions'][0]['meaning'] = 'changed'
     text = 'Нина спрашивает Асю.' if substituted else 'Нина обращается к Марине и Вере. Марина слушает; Веры здесь нет.'
     job, calls = play(crisis, [raw], quote, text)
     assert len(calls) == 2
@@ -411,7 +423,7 @@ def test_new_object_target_requires_accepted_canonical_creation(crisis, accepted
 def test_legacy_agency_diagnostic_blocks_retry_after_reload(crisis):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
-    raw = payload(before['world_state'], [claim([VERA], actual=[MARINA])])
+    raw = payload(before['world_state'], [dict(claim([VERA], actual=[MARINA]), meaning='changed')])
     job, calls = play(crisis, [raw], ACTION, BAD_TEXT)
     assert len(calls) == 2 and job['status'] == 'error'
     # Pre-unification jobs only stored the code and the generic regenerate action.

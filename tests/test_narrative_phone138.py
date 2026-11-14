@@ -28,7 +28,7 @@ def message(**changes):
 
 
 def payload(state, rows=(), elapsed=1):
-    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=state['camera']['location_id'],
+    return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=state['camera']['location_id'],
         present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=elapsed), remote_events=list(rows))
 
 
@@ -183,7 +183,7 @@ class Provider:
         if not extraction:yield self.prose;return
         if self.fail:raise RuntimeError('External provider unavailable')
         current=json.loads(next(m['content'].split('\n',1)[1] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
-        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=current['camera']['present_character_ids'],elapsed_minutes=self.elapsed),remote_events=deepcopy(self.rows))
+        raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=current['camera']['present_character_ids'],elapsed_minutes=self.elapsed),remote_events=deepcopy(self.rows))
         if self.repair and self.calls.count('extraction')==1:raw['remote_events'][0]['content']=''
         yield json.dumps(raw,ensure_ascii=False)
 

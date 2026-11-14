@@ -1,4 +1,5 @@
 """#39 integration contracts: identity, evidence, chronology, agency and lineage."""
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 import pytest
@@ -31,7 +32,9 @@ def run(s, section=None, rows=(), *, player=TEXT, scene=None, movement=None, **k
             for r in payload[section]:
                 r.pop('player_assertion',None);r.pop('player_evidence',None)
                 if section=='locations':r.pop('assertion',None)
-    if movement: payload['movements']=[movement]
+    if movement:
+        payload['movements']=[movement]
+        arrival_sources(payload)
     return StateResolver(s,TEXT,player,**kwargs).resolve(payload)
 
 
@@ -144,11 +147,11 @@ def test_hierarchy_forward_parents_cycles_broken_refs_dynamic_aliases():
 def test_final_scene_authority_is_independent_of_residence_and_job():
     s=run(state(),'residence_changes',[residence('remote','b','home')]).state
     s=run(s,'role_changes',[role('remote_job','b')]).state
-    arrived=run(s,scene=dict(location_id='home',present_character_ids=['a','b']))
-    assert arrived.state['characters']['b']['location_id']=='home'
-    assert arrived.state['residences']==s['residences'] and arrived.state['roles']==s['roles']
+    with pytest.raises(StructuralDeltaError) as error:
+        run(s,scene=dict(location_id='home',present_character_ids=['a','b']))
+    assert error.value.code=='scene_arrival_unproven'
     text='b arrived at home.'
-    r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',actor_evidence='b',destination_evidence='home',evidence=text)]))
+    r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',source_event_id='arrival',actor_evidence='b',destination_evidence='home',evidence=text)],events=[dict(id='arrival',text=text,participants=['b'],location_id='home',medium='action')]))
     assert r.state['characters']['b']['location_id']=='home'
     assert r.state['residences']==s['residences']
 

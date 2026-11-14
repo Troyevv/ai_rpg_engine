@@ -63,28 +63,56 @@ def salvage(state):
     return state
 
 
-def apply_knowledge(resolver, raw, events):
+def apply_knowledge(resolver, raw, events, *, rejected_event_ids=(), unvalidated_fact_ids=()):
     from backend.runtime_v3.resolver import normalized
+    from backend.services.world_delta_errors import StructuralDeltaError
     r, s = resolver, resolver.state
     candidates = []
+    errors = []
     # Ground and schema-check before considering conflicts: an invalid proposal
     # must not retire a valid belief or prevent another grounded acquisition.
     for i, item in r.records(raw, 'knowledge_gained'):
-        def reject(reason, code='knowledge_path_invalid'):
+        def reject(reason, code='knowledge_path_invalid', field=None):
+            valid_refs = (isinstance(actor, str) and actor in s['characters']
+                          and isinstance(fid, str) and fid in s['facts'])
+            perceived = valid_refs and event and actor in event['witnesses'] and actor not in r.protected_knowledge_actor_ids
+            if (r.semantic_slice and item.get('_compiled_perception') or
+                    valid_refs and r.consequence_first and (r.mode == 'turn' and r.observed or r.semantic_slice and perceived)):
+                # A declared acquisition is a canonical consequence, not audit.
+                # Repair its source instead of saving prose with lost learning.
+                errors.append(StructuralDeltaError(reason, code, repairable=True,
+                    section='knowledge_gained', index=i, field=field,
+                    source_ids=[v for v in (actor, fid, eid) if isinstance(v, str)]))
+                return
             r.warn('knowledge_gained', i, reason, code=code)
+            r.warnings[-1].update(path=f'knowledge_gained[{i}]' + ('.'+field if field else ''),
+                                 source_ids=[v for v in (actor, fid, eid) if isinstance(v, str)])
         actor, fid = item.get('actor_id'), item.get('fact_id')
         eid = item.get('source_event_id')
         event = events.get(eid) if isinstance(eid, str) else None
-        if (not isinstance(actor, str) or not isinstance(fid, str) or
-            actor not in s['characters'] or fid not in s['facts'] or not event or
-            actor not in event['witnesses'] or fid not in event['fact_ids'] or
-            event['medium'] not in INFORMATION_MEDIA):
-            reject('Нет подтверждённого восприятия в завершённом повествовании.'); continue
+        if not isinstance(actor, str) or actor not in s['characters']:
+            reject('Неизвестный получатель знания.', 'knowledge_actor_unknown', 'actor_id'); continue
+        if not isinstance(fid, str) or fid not in s['facts']:
+            reject('Неизвестный факт.', 'knowledge_fact_unknown', 'fact_id'); continue
+        if fid in unvalidated_fact_ids:
+            continue  # Its typed disclosure failed; do not infer dependent errors.
+        if isinstance(eid, str) and eid in rejected_event_ids:
+            continue  # Diagnose the rejected source, not imaginary downstream failures.
+        if not event:
+            reject('Нет принятого Event этого хода.', 'knowledge_event_unknown', 'source_event_id'); continue
+        if actor not in event['witnesses']:
+            reject('Получатель не воспринимал Event.', 'knowledge_witness_missing', 'actor_id'); continue
+        if event.get('information_source') and not any(
+                claim.get('fact_id') == fid and actor in claim.get('perceived_by', [])
+                for claim in event['information_source']['claims']):
+            reject('Получатель не воспринимал именно этот факт.', 'knowledge_claim_perception_missing', 'actor_id'); continue
+        if event['medium'] not in INFORMATION_MEDIA:
+            reject('Канал Event не передаёт знания.', 'knowledge_medium_invalid', 'source_event_id'); continue
         if (not r.observed or r.mode == 'background') and actor in r.protected_knowledge_actor_ids:
-            reject('Фоновое событие не меняет знания участников основной сцены.'); continue
+            reject('Фоновое событие не меняет знания участников основной сцены.', 'knowledge_actor_protected'); continue
         from backend.runtime_v3.life import capabilities
         if not capabilities(s, actor)['can_perceive']:
-            reject('Персонаж не способен воспринять источник.'); continue
+            reject('Персонаж не способен воспринять источник.', 'knowledge_perception_unavailable'); continue
         prior = s['knowledge'].get(actor+':'+fid)
         expected = item.get('expected_revision')
         if expected is not None and (type(expected) is not int or expected < 0):
@@ -100,10 +128,13 @@ def apply_knowledge(resolver, raw, events):
                 old not in event['fact_ids'] for old in supersedes) or
             (supersedes and status != 'known')):
             reject('Исправление требует прежних fact_id в том же событии.'); continue
-        entry = r.typed(Knowledge, dict(actor_id=actor, fact_id=fid, status=status), 'knowledge_gained', i)
+        entry = r.typed(Knowledge, dict(actor_id=actor, fact_id=fid, status=status), 'knowledge_gained', i, required_code='knowledge_status_invalid' if r.semantic_slice else None)
         if entry: candidates.append((i, item, event, entry))
 
-    if not candidates: return
+    if not candidates:
+        if errors:
+            raise StructuralDeltaError.combine(errors)
+        return
 
     # Index once, including only actors actually receiving evidence. This is
     # O(K + proposals), never facts × NPCs. Suspicions may coexist.
@@ -129,8 +160,17 @@ def apply_knowledge(resolver, raw, events):
         if any(type(order) is not int for order in orders) or len(set(orders)) != len(orders):
             ambiguous.update(i for i, _, _, _ in group)
     for i in sorted(ambiguous):
-        r.warn('knowledge_gained', i, 'Противоречивые изменения требуют порядка событий.', code='knowledge_order_ambiguous')
+        if r.semantic_slice:
+            errors.append(StructuralDeltaError('Противоречивые изменения требуют порядка событий.', 'knowledge_order_ambiguous', repairable=True, section='knowledge_gained', index=i))
+        else:
+            r.warn('knowledge_gained', i, 'Противоречивые изменения требуют порядка событий.', code='knowledge_order_ambiguous')
     candidates.sort(key=lambda c: (c[2].get('order', 0), c[0]))
+
+    def reject_transition(i, reason, code):
+        if r.semantic_slice:
+            errors.append(StructuralDeltaError(reason, code, repairable=True, section='knowledge_gained', index=i))
+        else:
+            r.warn('knowledge_gained', i, reason, code=code)
 
     def transition(entry, prior, event, item, trigger):
         entry.update(confirmed_once=entry['status']=='known' or (prior or {}).get('confirmed_once',False) or (prior or {}).get('status')=='known',
@@ -151,14 +191,26 @@ def apply_knowledge(resolver, raw, events):
         key = actor+':'+fid
         prior = s['knowledge'].get(key)
         if entry['status'] in RETIRED and not prior:
-            r.warn('knowledge_gained', i, 'Нет прежнего убеждения для опровержения.', code='knowledge_path_invalid'); continue
+            reject_transition(i, 'Нет прежнего убеждения для опровержения.', 'knowledge_path_invalid'); continue
         if any(actor+':'+old not in s['knowledge'] for old in item.get('supersedes', [])):
-            r.warn('knowledge_gained', i, 'Нет исправляемого убеждения у персонажа.', code='knowledge_path_invalid'); continue
+            reject_transition(i, 'Нет исправляемого убеждения у персонажа.', 'knowledge_path_invalid'); continue
         # Compare against the evolving state after earlier ordered events.
         if item.get('expected_revision') is not None and item['expected_revision'] != (prior or {}).get('revision', 0):
-            r.warn('knowledge_gained', i, 'Ревизия изменилась в ходе.', code='knowledge_revision_conflict'); continue
+            reject_transition(i, 'Ревизия изменилась в ходе.', 'knowledge_revision_conflict'); continue
         if prior and prior['status'] in RETIRED and entry['status'] in CURRENT and item.get('expected_revision') is None:
-            r.warn('knowledge_gained', i, 'Повторное установление требует ревизии.', code='knowledge_revision_conflict'); continue
+            reject_transition(i, 'Повторное установление требует ревизии.', 'knowledge_revision_conflict'); continue
+        if fid not in event['fact_ids']:
+            eid = item['source_event_id']
+            event_index = next(j for j, row in enumerate(raw.records['events'])
+                               if isinstance(row, dict) and row.get('id') == eid)
+            errors.append(StructuralDeltaError(
+                f'Получатель {actor} воспринимает Event {eid}, но fact_ids не содержит {fid}. '
+                'Сверьте раскрытие с исходным Narrative: восстановите точную связь Event→Fact '
+                'или пересмотрите неподтверждённое приобретение. Не удаляйте подтверждённые знания ради проверки.',
+                'knowledge_fact_link_missing', repairable=True, section='knowledge_gained', index=i,
+                field='source_event_id', source_ids=[actor, fid, eid],
+                related_paths=[f'events[{event_index}].fact_ids']))
+            continue
         if prior and prior['status'] == entry['status'] and not item.get('supersedes'):
             continue  # Replay does not manufacture a new historical transition.
         claim_slot = slot(s['facts'][fid])
@@ -177,6 +229,9 @@ def apply_knowledge(resolver, raw, events):
         if claim_slot:
             known[index].discard(key)
             if entry['status'] == 'known': known[index].add(key)
+
+    if errors:
+        raise StructuralDeltaError.combine(errors)
 
 
 def context_rows(state, keys, *, extraction=False):

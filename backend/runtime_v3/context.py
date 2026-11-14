@@ -9,6 +9,7 @@ import json
 from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
 from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT, REMOTE_EXTRACTION_CONTRACT, REMOTE_NARRATIVE_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
+from backend.runtime_v3.player_actions import EXTRACTION_VERSION
 from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time, commitment_view
 
 PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
@@ -16,6 +17,96 @@ PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
 
 def block(name, value):
     return dict(role='user', content=name+'\n'+json.dumps(value, ensure_ascii=False, separators=(',', ':')))
+
+
+def turn_temporal_state(view, side):
+    if isinstance(view.get('temporal_' + side), dict):
+        return view['temporal_' + side]
+    return json.loads(view.get(side + '_json') or '{}').get('world_state', {})
+
+
+def scene_time(state, view):
+    """Read existing turn snapshots; missing historical time stays unknown."""
+    result = {}
+    for side, key in (('before', 'start'), ('after', 'end')):
+        try:
+            saved = turn_temporal_state(view, side)
+            minute = saved.get('meta', {}).get('world_time')
+            if type(minute) is int:
+                result[key] = time_stamp(saved, minute)
+        except (ValueError, TypeError, KeyError):
+            pass
+    return result or {'time': 'unknown'}
+
+
+def time_stamp(state, minute):
+    value = current_time(state, minute)
+    return {key: value[key] for key in ('world_time', 'date', 'weekday_name', 'time')}
+
+
+def project_temporal_context(snapshot, turns, current):
+    """Transient observations across a jump are a projection, never a migration.
+
+    Turn snapshots already own the branch and before/after times. Only unchanged
+    situations inherited across the last accepted jump are demoted. Later scene
+    updates stay current; location, health and other enduring state are untouched.
+    """
+    state = snapshot['world_state']
+    now = state['meta']['world_time']
+    later = []
+    for view in reversed(turns):
+        try:
+            changes = json.loads(view.get('changes_json') or '{}')
+        except (TypeError, ValueError):
+            changes = {}
+        if not isinstance(changes, dict):
+            changes = {}
+        jump = view.get('kind') == 'long_term' or bool(changes.get('time_skip'))
+        if not jump:
+            later.append(view)
+            continue
+        try:
+            before = turn_temporal_state(view, 'before')
+            after = turn_temporal_state(view, 'after')
+            start, end = before['meta']['world_time'], after['meta']['world_time']
+            if type(start) is not int or type(end) is not int:
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not start < end <= now:
+            continue
+        current['last_time_advance'] = dict(start=time_stamp(before, start), end=time_stamp(after, end),
+            elapsed_minutes=end-start, elapsed_since_minutes=now-end,
+            instruction='Past activity is not current. Do not invent player decisions.')
+        stale = {}
+        candidates = [('camera', current['camera'], before['camera'], after['camera'])]
+        candidates += [(cid, row, before['characters'].get(cid, {}), after['characters'].get(cid, {}))
+                       for cid, row in current['characters'].items()]
+        for key, row, old, new in candidates:
+            situation = row.get('situation')
+            if situation and situation == old.get('situation') == new.get('situation'):
+                stale[key] = situation
+        # A subsequent real update refreshes the observation, even if the actor
+        # later returned to the same situation. No prose interpretation.
+        for following in reversed(later):
+            if not stale:
+                break
+            try:
+                prior = turn_temporal_state(following, 'before')
+                updated = turn_temporal_state(following, 'after')
+            except (ValueError, TypeError, KeyError):
+                continue
+            for key in list(stale):
+                a = prior['camera'] if key == 'camera' else prior['characters'].get(key, {})
+                b = updated['camera'] if key == 'camera' else updated['characters'].get(key, {})
+                if a.get('situation') != b.get('situation'):
+                    del stale[key]
+        if stale:
+            current['past_situations'] = dict(observed_no_later_than=time_stamp(before, start), situations=stale)
+            for key in stale:
+                row = current['camera'] if key == 'camera' else current['characters'][key]
+                row.pop('situation', None)
+        return
 
 
 class ContextMessages(list):
@@ -217,6 +308,12 @@ def canonical_slice(state, scope, extraction=False, query=""):
             actor.pop('birth_provenance', None)
             for key in list(actor):
                 if actor[key] in (None, '', [], {}): actor.pop(key)
+    if state['camera']['mode'] == 'actor':
+        scene_actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids | {scope.controlled_actor_id}
+        for cid, character in current['characters'].items():
+            if cid not in scene_actors:
+                for key in ('goals', 'intentions', 'obligations', 'emotion', 'situation', 'personality', 'values'):
+                    character.pop(key, None)
     return current
 
 
@@ -295,7 +392,7 @@ class NarrativeContextBuilder:
                     story_notes=campaign.get('story_notes', ''), tone=campaign.get('sections', {}).get('tone', ''))),
                     block('ContextScope / GM-only', scope.summary()),
                     block('Текущее состояние / GM-only', current),
-                    block('Карточки присутствующих / GM-only', cards),
+                    block('Карточки присутствующих / GM-only', [c for c in cards if c['context_mode']==FULL_PRESENT]),
                     block('Поведенческие профили / GM-only', behavioral),
                     block('Индекс персонажей', index),
                     block('Знания POV', pov_knowledge(state, state['camera'].get('pov_actor_id') or scope.controlled_actor_id, current)),
@@ -303,6 +400,12 @@ class NarrativeContextBuilder:
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
+        for title, mode in [('Наблюдаемые вне физической сцены', FULL_OBSERVED),
+                            ('Удалённые собеседники', FULL_REMOTE),
+                            ('Упомянутые, присутствие не установлено', COMPACT_REFERENCED)]:
+            group = [c for c in cards if c['context_mode']==mode]
+            if group:
+                messages.append(block(title+' / GM-only', group))
         from backend.runtime_v3.reproduction import birth_authoring_context
         births = birth_authoring_context(state, scope)
         if births:
@@ -324,7 +427,8 @@ class NarrativeContextBuilder:
         messages[2] = block('Текущее состояние / GM-only', current_without_knowledge)
         # Up to SIX visible scenes; optional previous inputs, never trim prose for a target.
         for view in views:
-            messages.extend([dict(role='user', content=view.get('user_text') or 'Продолжить.'),
+            stamp = json.dumps(scene_time(state, view), ensure_ascii=False, separators=(',', ':'))
+            messages.extend([dict(role='user', content='Прошлая сцена / canonical time '+stamp+'\n'+(view.get('user_text') or 'Продолжить.')),
                              dict(role='assistant', content=view.get('assistant_text', ''))])
         return rules, messages
 
@@ -336,6 +440,9 @@ def state_outcome(snapshot):
 class ExtractionContextBuilder:
     extraction = True
 
+    def __init__(self, contract_version=EXTRACTION_VERSION):
+        self.contract_version = contract_version
+
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
         snapshot = deepcopy(snapshot)
         from backend.runtime_v3.personality import project_card
@@ -344,21 +451,55 @@ class ExtractionContextBuilder:
         snapshot['character_cards'] = [appearance_card(c, snapshot['world_state'], scope.pov_actor_id or scope.controlled_actor_id, omniscient=self.extraction, bounded=True,known_actor_ids=scope.relevant_actor_ids) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
-        default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
-        rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        # Retry/regeneration can retain an older default in their immutable prompt
+        # snapshot. Reuse the existing upgrade registry, without rewriting it.
+        from backend.repositories.documents import is_builtin_prompt
+        custom = saved and not is_builtin_prompt('state_update_prompt.md', saved, PROMPTS)
+        rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
+        if self.contract_version >= 5:
+            from backend.runtime_v3.context_contract import BASE_EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT
+            rules = rules.replace(BASE_EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT)
+            from backend.runtime_v3.context_contract import (LIFE_EXTRACTION_CONTRACT, RESIDENCE_EXTRACTION_CONTRACT,
+                SEMANTIC_LIFE_CONTRACT, SEMANTIC_RESIDENCE_CONTRACT)
+            rules = rules.replace(LIFE_EXTRACTION_CONTRACT, SEMANTIC_LIFE_CONTRACT).replace(
+                RESIDENCE_EXTRACTION_CONTRACT, SEMANTIC_RESIDENCE_CONTRACT)
+            from backend.runtime_v3.context_contract import MOTIVATION_EXTRACTION_CONTRACT, SEMANTIC_MOTIVATION_CONTRACT
+            rules = rules.replace(MOTIVATION_EXTRACTION_CONTRACT, SEMANTIC_MOTIVATION_CONTRACT)
+        from backend.runtime_v3.context_contract import DEPARTURE_CONTRACT, TEMPORAL_REFINEMENT_CONTRACT
+        if self.contract_version < 3:
+            rules = rules.replace(TEMPORAL_REFINEMENT_CONTRACT,
+                'weekday: legacy zero-based profile index (Gregorian Monday=0).')
+        if self.contract_version >= 4:
+            from backend.runtime_v3.context_contract import GROUNDED_CHOICES_CONTRACT, CHOICE_CONTRACT
+            rules = rules.replace(CHOICE_CONTRACT, GROUNDED_CHOICES_CONTRACT)
+        explicit_departures = self.contract_version >= 4 or kind == 'background'
+        if not explicit_departures:
+            rules = rules.replace(DEPARTURE_CONTRACT,
+                'Departure without destination: Event + END absence, no completed_arrival, location unknown.')
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
-        if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
+        if agency_required(snapshot['world_state'], user_text, kind):
+            from backend.runtime_v3.player_actions import LEGACY_EXTRACTION_CONTRACT
+            from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
+            rules += CONSEQUENCE_CONTRACT if self.contract_version >= 3 else action_contract if self.contract_version >= 2 else LEGACY_EXTRACTION_CONTRACT
         from backend.services.letter_sources import enabled as historical_enabled
         historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
         if historical:
             from backend.runtime_v3.context_contract import HISTORICAL_EXTRACTION_CONTRACT
             rules += HISTORICAL_EXTRACTION_CONTRACT
-        if current.get('relationship_evidence'):
+        if current.get('relationship_evidence') or self.contract_version >= 5:
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
-            rules += RELATIONSHIP_EVIDENCE_CONTRACT
+            relationship_contract = RELATIONSHIP_EVIDENCE_CONTRACT
+            if self.contract_version >= 5:
+                from backend.runtime_v3.context_contract import SEMANTIC_RELATIONSHIP_CONTRACT
+                relationship_contract = SEMANTIC_RELATIONSHIP_CONTRACT
+            rules += relationship_contract
+        if self.contract_version >= 5:
+            from backend.runtime_v3.context_contract import SEMANTIC_SLICE_CONTRACT
+            rules = rules.replace('Directed feelings need prior relationship_evidence', 'Directed feelings need accepted current Events or prior relationship_evidence')
+            rules += SEMANTIC_SLICE_CONTRACT
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
@@ -384,7 +525,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -430,7 +571,7 @@ def choice_context(snapshot, scope, current, views, kind):
             for k in current['knowledge'] if k['actor_id']==cid and k['status'] in ('known','suspected')
             and k['fact_id'] in current['facts']],
         scene=dict(location_id=state['camera']['location_id'], present_actor_ids=sorted(scope.present_actor_ids),
-                   observed_actor_ids=sorted(scope.observed_actor_ids), remote_actor_ids=sorted(scope.remote_actor_ids), situation=state['camera']['situation']),
+                   observed_actor_ids=sorted(scope.observed_actor_ids), remote_actor_ids=sorted(scope.remote_actor_ids), situation=current['camera'].get('situation', '')),
         recent_player_expression=recent))
 
 
@@ -481,7 +622,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:
@@ -502,6 +643,21 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     observer = scope.pov_actor_id or scope.controlled_actor_id
     remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
                       if e['channel']!='VOICE_CALL' and observer not in e['read_by'] and observer != e['sender_id']}
+    private_context_facts = set()
+    if camera['mode'] == 'actor':
+        # Relevance of a mentioned off-scene NPC does not authorize exposing
+        # their private facts or legacy threads to this player-facing scene.
+        actors = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids | {scope.controlled_actor_id}
+        available = {k['fact_id'] for k in state['knowledge'].values()
+                     if k['actor_id'] in actors and (k['status'] in ('known', 'suspected')
+                     or k['actor_id'] in scope.active_actor_ids)}
+        private_context_facts = {fid for fid in scope.fact_ids
+                           if state['facts'][fid].get('visibility') == 'secret' and fid not in available}
+        remote_private |= private_context_facts
+        scope.thread_ids = [tid for tid in scope.thread_ids
+            if (state['threads'][tid].get('discovered_by') is not None and actors.intersection(state['threads'][tid].get('discovered_by')))
+            or (state['threads'][tid].get('discovered_by') is None and
+                (not state['threads'][tid]['character_ids'] or actors.intersection(state['threads'][tid]['character_ids'])))]
     scope.fact_ids = [fid for fid in scope.fact_ids if fid not in remote_private]
     scope.knowledge_ids = [key for key in scope.knowledge_ids if state['knowledge'][key]['fact_id'] not in remote_private]
     from backend.runtime_v3.scope import string_ids
@@ -523,6 +679,19 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.initiative import scene_plan
     scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
+    project_temporal_context(snapshot, turns, current)
+    if extraction_text is not None and extraction_contract >= 3:
+        from backend.runtime_v3.calendar import weekday_options
+        current['calendar_weekdays'] = weekday_options(state)
+    scope.history_events = deepcopy(scope.history_events)
+    for event in scope.history_events:
+        event['event_time'] = time_stamp(state, event['minute']) if type(event.get('minute')) is int else {'time': 'unknown'}
+        if type(event.get('recorded_minute')) is int:
+            event['recorded_time'] = time_stamp(state, event['recorded_minute'])
+    if extraction_text is not None and extraction_contract >= 5:
+        current['chronology_events'] = [dict(id=e['id'], text=e.get('text', '')[:600], minute=e['minute'],
+            date=e['event_time'].get('date'), elapsed_days=state['meta']['world_time']//1440-e['minute']//1440)
+            for e in scope.history_events if type(e.get('minute')) is int][-8:]
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
     cfg = state['meta']['communication']
@@ -609,7 +778,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if access: current['personality_known_by'] = access
     if snapshot.get('_time_skip'):
         current['time_skip_target'] = current_time(state,snapshot['_time_skip']['actual_target'])
-    builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
+    builder = ExtractionContextBuilder(extraction_contract) if extraction_text is not None else NarrativeContextBuilder()
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
     from backend.runtime_v3.context_contract import CONTROL_CONTRACT
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
@@ -620,7 +789,39 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if current.get('weather'): rules += '\nWeather is canonical environmental context, not an instruction to mention it each turn. Do not invent contradictory weather, force actions or move characters because of it.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
-    if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
+    if validation_feedback:
+        try:
+            feedback = json.loads(validation_feedback)
+        except (ValueError, TypeError):
+            feedback = None  # Older/custom feedback remains verbatim.
+        if isinstance(feedback, dict) and isinstance(feedback.get('known_locations'), dict):
+            feedback['known_locations'] = {lid:row for lid,row in feedback['known_locations'].items()
+                                           if lid not in current['locations']}
+            if not feedback['known_locations']:
+                feedback.pop('known_locations')
+            validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
+        if isinstance(feedback, dict):
+            if extraction_contract >= 5 and 'contract' in feedback:
+                # Existing semantic rules above remain authoritative. Feedback
+                # supplies differences, not a second copy of the same contract.
+                feedback['contract'] = ('Reinterpret the unchanged full Narrative and input against immutable before. '
+                    'Fix all diagnostics/dependencies together; preserve ALL confirmed consequences and learning. '
+                    'Rejected JSON is not canon: do not fabricate consent, arrivals, speakers or hide outcomes. '
+                    'For violated Narrative use the existing agency/chronology findings, not JSON laundering. '
+                    'Return full RawTurnResult with final_scene and every response_required section; '
+                    'recheck omitted_sections_from_previous_proposal. Feedback keys are input only, never a patch. '
+                    'Only one automatic repair; never rewrite Narrative or History.')
+                validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
+            for message in messages:
+                if message['content'].startswith('JSON Schema\n'):
+                    schema = json.loads(message['content'].split('\n', 1)[1])
+                    if extraction_contract >= 5 and 'knowledge_gained' in feedback.get('response_required', []):
+                        from backend.runtime_v3.raw import extraction_schema
+                        schema['properties']['knowledge_gained'] = extraction_schema()['properties']['knowledge_gained']
+                    schema['required'] = list(dict.fromkeys(schema.get('required', []) + [key
+                        for key in feedback.get('response_required', []) if key in schema['properties']]))
+                    message['content'] = block('JSON Schema', schema)['content']
+        rules += '\nПовторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
@@ -635,6 +836,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
     target = min(target_context_budget, hard_context_limit)
+    if builder.extraction and not validation_feedback:
+        # Leave soft headroom for the previous JSON plus diagnostic feedback.
+        # Critical source blocks still use the real hard limit when unavoidable.
+        target = min(target, max(0, hard_context_limit - reserve - 1024))
     if letter_context_index is not None:
         for limit in range(5, -1, -1):
             if estimate(messages) <= target: break
@@ -656,6 +861,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith(title+'\n'): messages[i] = block(title, value); return
 
     selected = {key: len(current[key]) for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
+    # Retrieval diagnostics retain selected-but-not-transmitted candidates.
+    # This metadata is never a model context or a grant of Knowledge.
+    selected['facts'] += len(private_context_facts)
     selected_history = list(scope.history_events)
     def refresh_current():
         replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
@@ -716,9 +924,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         refresh_current()
     # Weak semantic-only actor candidates go before facts or behavioral identity.
     if not builder.extraction and estimate(messages) > target:
-        title = 'Карточки присутствующих / GM-only'
-        card_message = next(m for m in messages if m['content'].startswith(title+'\n'))
-        cards = json.loads(card_message['content'].split('\n', 1)[1])
+        title = 'Упомянутые, присутствие не установлено / GM-only'
+        card_message = next((m for m in messages if m['content'].startswith(title+'\n')), None)
+        cards = json.loads(card_message['content'].split('\n', 1)[1]) if card_message else []
         weak = sorted(scope.referenced_actor_ids - scope.structural_actor_ids,
                       key=lambda cid: (scope.actor_scores.get(cid, 0), cid))
         for cid in weak:
@@ -802,8 +1010,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith('JSON Schema\n'):
                 schema = json.loads(message['content'].split('\n', 1)[1])
                 for section in ('development_evidence', 'personality_deltas'):
-                    schema['properties'].pop(section, None)
-                if not any(actor.get('values') for actor in current['characters'].values()):
+                    if section not in schema.get('required', []):
+                        schema['properties'].pop(section, None)
+                if 'value_deltas' not in schema.get('required', []) and not any(actor.get('values') for actor in current['characters'].values()):
                     schema['properties'].pop('value_deltas', None)
                 # Shared definitions belonging only to omitted evaluations do
                 # not need to remain in the wire schema.
@@ -820,7 +1029,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 schema = json.loads(message['content'].split('\n', 1)[1])
                 for section in ('scene_actions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_transitions', 'physical_projections'):
                     if estimate(messages) <= hard_context_limit: break
-                    schema['properties'].pop(section, None)
+                    if section not in schema.get('required', []):
+                        schema['properties'].pop(section, None)
                     from backend.runtime_v3.raw import prune_schema_definitions
                     prune_schema_definitions(schema)
                     replace_schema(schema)
@@ -866,18 +1076,19 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     messages[0]['content'] = messages[0]['content'].replace(
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
-    if builder.extraction and estimate(messages) > hard_context_limit:
+    annotation_budget = target if builder.extraction and extraction_contract >= 5 else hard_context_limit
+    if builder.extraction and estimate(messages) > annotation_budget:
         # Mandatory action provenance takes priority over optional Director
         # annotations, just as communication outcomes do above. Domain Events,
         # state, agency and presence contracts remain complete and validated.
         for message in messages:
             if message['content'].startswith('JSON Schema\n'):
                 schema = json.loads(message['content'].split('\n', 1)[1])
-                if 'player_agency' not in schema['properties']: break
                 from backend.runtime_v3.raw import prune_schema_definitions
                 for section in ('scene_transitions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_actions'):
-                    if estimate(messages) <= hard_context_limit: break
-                    schema['properties'].pop(section, None)
+                    if estimate(messages) <= annotation_budget: break
+                    if section not in schema.get('required', []):
+                        schema['properties'].pop(section, None)
                     prune_schema_definitions(schema)
                     replace_schema(schema)
                 break
@@ -899,9 +1110,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     def contents(title):
         return next((json.loads(m['content'].split('\n', 1)[1]) for m in messages if m['content'].startswith(title+'\n')), [])
     included_actors = (set(current['characters']) if builder.extraction else
-        {c['id'] for title in ('Карточки присутствующих / GM-only', 'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
+        {c['id'] for title in ('Карточки присутствующих / GM-only', 'Наблюдаемые вне физической сцены / GM-only',
+                             'Удалённые собеседники / GM-only', 'Упомянутые, присутствие не установлено / GM-only',
+                             'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
     included_counts = {mode: sum(classifier.classify(cid, scope) == mode for cid in included_actors) for mode in counts}
-    selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids),
+    selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids) | private_context_facts,
         threads=set(scope.thread_ids), scheduled_events=set(scope.scheduled_event_ids), knowledge=set(scope.knowledge_ids),
         relationships=set(scope.relationship_pairs), history_events={e.get('id') for e in selected_history})
     included_ids = dict(characters=included_actors, locations=set(current['locations']), facts=set(current['facts']),

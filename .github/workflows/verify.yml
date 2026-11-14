@@ -50,8 +50,9 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     # #382: 77s setup + 1125s pytest exhausted the 20m job deadline at exit.
-    # Also covers the measured 1286s local full suite, report upload and 2m reserve.
-    timeout-minutes: 25
+    # #475 reached only 97% after 1435s pytest + 77s setup at the 25m deadline.
+    # Allow the remaining tests, report upload and 2m reserve; keep the full gate.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:

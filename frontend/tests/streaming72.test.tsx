@@ -147,6 +147,30 @@ it('layout clamping when choices disappear does not turn off bottom-follow',asyn
  height=1200;await act(()=>resize());await advance(20);expect(top).toBe(1000);
 });
 
+it.each(['wheel','scrollbar'])('queued layout scroll preserves following but %s input still unpins',async input=>{
+ let resize=noop;
+ vi.stubGlobal('ResizeObserver',class {constructor(cb:()=>void){resize=cb}observe(){}disconnect(){}});
+ function Reader(){const {scroll,onScroll,away}=useStoryScroll(74);return <div ref={scroll} onScroll={onScroll} data-away={away}><article data-reading-id="one">Scene</article></div>}
+ await render(<Reader/>);const el=host.firstElementChild as HTMLElement;let height=1000,top=0;
+ Object.defineProperties(el,{scrollHeight:{get:()=>height},clientHeight:{get:()=>200},scrollTop:{get:()=>top,set:v=>{top=Math.min(height-200,v)}}});
+ await act(()=>resize());await advance(20);expect(top).toBe(800);
+ Object.defineProperty(el,'clientWidth',{get:()=>200});
+ // Browser clamps after a shrink, then React adds the next stream block before
+ // that queued scroll event is delivered. The old top is no longer the maximum.
+ height=600;top=400;height=1200;
+ await act(()=>{el.dispatchEvent(new Event('scroll',{bubbles:true}));resize()});
+ expect(el.dataset.away).toBe('false');
+ await advance(20);expect(top).toBe(1000);
+ // A real upward gesture still wins even when the layout changes concurrently.
+ height=1400;
+ await act(()=>{
+  if(input==='wheel')el.dispatchEvent(new WheelEvent('wheel',{deltaY:-100}));
+  else el.dispatchEvent(new MouseEvent('pointerdown',{clientX:201,bubbles:true}));
+  top=900;el.dispatchEvent(new Event('scroll',{bubbles:true}));resize();
+ });
+ expect(el.dataset.away).toBe('true');await advance(20);expect(top).toBe(900);
+});
+
 it('Stop keeps the existing SSE recovery until the worker is no longer live, so Retry can unlock',async()=>{
  class Stream extends EventTarget {static last:Stream;onopen=noop;onerror=noop;closed=false;constructor(){super();Stream.last=this}close(){this.closed=true}}
  vi.stubGlobal('EventSource',Stream);const complete=vi.fn();

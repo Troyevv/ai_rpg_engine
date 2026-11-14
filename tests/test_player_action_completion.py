@@ -3,6 +3,7 @@
 The original #239 raw-response archive was not published when this replay was
 written. The fixture reproduces its scene, actor, absent target and repair shape.
 """
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 from unittest.mock import patch
@@ -86,7 +87,12 @@ def test_completion_repair_and_abandon_are_bounded_and_atomic(crisis, recovery):
     assert 'input-1' in calls[-1]['messages'][0]['content']
     assert 'outcome=completed' in calls[-1]['messages'][0]['content']
     fresh = Repository(repo.path)
-    if recovery == 'attempt':
+    if recovery == 'deleted':
+        # ATTEMPT never completed contact; removing its false optional claim is legal.
+        assert job['status'] == 'saved'
+        assert history(fresh, fresh.get_snapshot(sid))['events'] == history(repo, before)['events']
+        assert fresh.get_snapshot(sid)['world_state']['characters']==before['world_state']['characters']
+    elif recovery == 'attempt':
         assert job['status'] == 'saved', job.get('error')
         assert saved_events(repo, sid)[-1]['player_action']['outcome'] == 'attempted'
     else:
@@ -125,6 +131,7 @@ def test_unmarked_completion_uses_existing_presence_timeline(crisis, movement):
                             dict(actor_id=VERA, from_location_id=home, to_location_id=library)]
         if movement == 'ordered_meeting':
             raw['movements'][0]['order'], raw['events'][0]['order'], raw['movements'][1]['order'] = 1, 2, 3
+    arrival_sources(raw)
     job, calls = play(crisis, [raw, raw], quote, 'Нина задаёт вопрос. Ответа пока нет.')
     if movement == 'cross':
         assert job['status'] == 'error' and len(calls) == 3
@@ -132,7 +139,7 @@ def test_unmarked_completion_uses_existing_presence_timeline(crisis, movement):
     else:
         assert job['status'] == 'saved', job.get('error')
         assert len(calls) == 2
-        assert saved_events(repo, sid)[-1]['player_action']['outcome'] == 'completed'
+        assert next(e for e in saved_events(repo, sid) if e.get('local_id')==raw['events'][0]['id'])['player_action']['outcome'] == 'completed'
 
 
 @pytest.mark.parametrize('target_type', ['place', 'organization', 'object', 'none', 'reference'])

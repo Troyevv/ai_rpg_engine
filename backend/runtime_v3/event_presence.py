@@ -12,7 +12,7 @@ def _scene_places(snapshot, actor, observed_subject=False):
     return places
 
 
-def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order):
+def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order, event_id):
     """Each (phase, place) is one common snapshot, never a union across time."""
     start = _scene_places(resolver.before, actor, observed_subject)
     end = _scene_places(resolver.state, actor, observed_subject)
@@ -39,11 +39,12 @@ def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order
         for move in changes:
             if move['order'] > order:
                 break
-            if move['order'] == event_order:
+            if move['order'] == event_order and move.get('source_event_id') != event_id:
                 # No relative order within a tie between Event and movement.
                 places = set()
                 break
-            places = {move['to_location_id']}
+            places = {move['from_location_id'] if move['to_location_id'] is None
+                      and move.get('source_event_id') == event_id else move['to_location_id']}
         slots.update((order, place) for place in places)
     return slots
 
@@ -106,14 +107,20 @@ def validate_event_presence(resolver, event, index, written):
         orders = {event_order}
     common = None
     local_actors = set()
+    action = event.get('player_action') or {}
+    contact = event.get('player_interaction') or (
+        action.get('outcome') == 'completed' and action.get('target_mode') == 'interaction')
     for role in ('participants', 'witnesses'):
         for n, actor in enumerate(event[role]):
             if medium == 'message' and channel != 'physical' and role == 'participants' and actor == event.get('author_id'):
                 # Attribution of an artifact does not establish contact or perception.
                 continue
             local_actors.add(actor)
-            visible = role == 'participants' and medium in ('observation', 'conversation')
-            slots = _meeting_slots(resolver, actor, visible, routes.get(actor, ()), orders, event_order)
+            # Visibility can locate an observed subject for observation only.
+            # Conversation needs actual shared geography (also at a doorway)
+            # or an established transport above; observed is never contact proof.
+            visible = role == 'participants' and medium == 'observation' and not contact
+            slots = _meeting_slots(resolver, actor, visible, routes.get(actor, ()), orders, event_order, eid)
             if allowed_places is not None:
                 slots = {slot for slot in slots if slot[1] in allowed_places}
             common = slots if common is None else common & slots
@@ -127,6 +134,53 @@ def validate_event_presence(resolver, event, index, written):
     return {actor for actor in local_actors
             if state['characters'][actor]['location_id'] in meeting_places
             and (state['characters'][actor]['location_id'] is not None or actor in state['camera']['present_character_ids'])}
+
+
+def validate_movement_sources(resolver, raw, events, rejected_events=()):
+    """Validate supplied Event links, not a second proof of every Movement.
+
+    Movement owns completed_arrival/departure and the route. A separate Event is
+    optional in consequence-first turns; if supplied it must not contradict that
+    route. Its independent contact/perception consumers still validate presence.
+    """
+    from backend.services.world_delta_errors import StructuralDeltaError
+    errors = []
+    for index, item in resolver.records(raw, 'movements'):
+        source = item.get('source_event_id')
+        if source is None and resolver.consequence_first:
+            continue
+        if (source is None and resolver.before['meta']['turn_id'] == 0
+                and resolver.before['camera']['location_id'] is None
+                and resolver.before['characters'].get(item['actor_id'], {}).get('location_id') is None):
+            continue
+        if isinstance(source, str) and source in rejected_events:
+            continue
+        event = events.get(source) if isinstance(source, str) else None
+        actor = item['actor_id']
+        # Old involuntary records may reference a causal Event before movement.
+        # Otherwise a supplied source must actually anchor the arrival, even if
+        # an older producer omitted the newer explicit assertion marker.
+        arrival_source = 'assertion' in item or item.get('player_assertion') != 'involuntary'
+        endpoint_field = 'from_location_id' if item.get('assertion') == 'departure' else 'to_location_id'
+        endpoint = item.get(endpoint_field)
+        field, reason = None, None
+        if event is None:
+            field, reason = 'source_event_id', 'Перемещение требует принятого Event этого хода, не плана или подготовки.'
+        elif actor not in event['participants'] and (event['participants'] or not resolver.consequence_first):
+            field, reason = 'actor_id', 'Event перемещения не подтверждает участие перемещаемого персонажа.'
+        elif arrival_source and event.get('location_id') != endpoint and (event.get('location_id') is not None or not resolver.consequence_first):
+            field, reason = endpoint_field, 'Место Event должно совпадать с endpoint прибытия или origin ухода, а не местом обсуждения плана.'
+        elif event.get('interaction_channel') == 'call' or event['medium'] == 'message':
+            field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое перемещение.'
+        elif not resolver.consequence_first and arrival_source and event.get('order') != item.get('order'):
+            field, reason = 'order', 'Movement и его source Event должны обозначать один шаг порядка.'
+        if field:
+            errors.append(StructuralDeltaError(reason+' Пересмотрите вместе events, movements, final_scene и character_changes; '
+                'не превращайте подготовку в уход или удаление из сцены.', 'movement_source_invalid',
+                repairable=True, section='movements', index=index, field=field,
+                source_ids=[actor] + ([source] if isinstance(source, str) else [])))
+    if errors:
+        raise StructuralDeltaError.combine(errors)
 
 
 def situation_supported(resolver, change, event_actors):

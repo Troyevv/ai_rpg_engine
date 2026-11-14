@@ -62,3 +62,24 @@ def test_six_risk_groups_fit_cumulative_stage_ceilings():
     assert len(CASES) == 6
     assert [sum(QUOTAS[s]) for s in 'ABC'] == [20, 100, 700]
     assert all(a < b < c for a, b, c in zip(*QUOTAS.values(), strict=True))
+
+@pytest.mark.parametrize('receipt', [None, {'prompt_tokens':10957,'completion_tokens':24000}])
+def test_length_without_visible_json_settles_only_verified_usage(tmp_path,receipt):
+    from llm import OutputLimitReached
+    path=tmp_path/'budget.sqlite';ledger=budget.Budget(path)
+    @ledger.wrap
+    def source(provider,model,max_tokens,on_usage):
+        if receipt is not None:on_usage(receipt)
+        raise OutputLimitReached()
+        yield
+    with pytest.raises(OutputLimitReached):list(source('deepseek',budget.MODEL,24000,lambda _:None))
+    with sqlite3.connect(path) as db:
+        expected=(10957,24000,1) if receipt else (budget.CONTEXT,24000,0)
+        assert db.execute('SELECT input,output,settled FROM reservations').fetchone()==expected
+
+
+def test_world_resume_ceiling_is_reserved_without_raising_ordinary_requests(tmp_path):
+    ledger=budget.Budget(tmp_path/'budget.sqlite')
+    rid=ledger.reserve(64000)
+    with sqlite3.connect(ledger.path) as db:assert db.execute('SELECT output FROM reservations WHERE id=?',(rid,)).fetchone()[0]==64000
+    with pytest.raises(ValueError):ledger.reserve(65537)

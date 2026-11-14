@@ -42,7 +42,10 @@ class BirthSexObservation(StrictModel):
     narrative_sex: Literal['male', 'female'] | None
     event_sex: Literal['male', 'female'] | None
     basis: Literal['not_disclosed', 'observation', 'announcement']
-    source_actor_id: str | None = None
+    source_actor_id: str | None = Field(default=None, description=(
+        'Actual speaker of the announcement, never a nearby witness or parent. '
+        'Use null if the Narrative speaker has no established canonical identity; '
+        'do not invent a Character solely to fill this field.'))
     source_assertion: Literal['direct_observation', 'prior_knowledge'] | None = None
     perceived_by: list[str] = Field(default_factory=list, max_length=64)
     evidence: str = ''
@@ -370,6 +373,13 @@ def validate_birth_sex(r, claim, event, pregnancy):
             raise ValueError('background birth cannot disclose sex to protected observers')
         if row['basis'] == 'announcement':
             actor = row['source_actor_id']
+            if actor is None:
+                # An unnamed clinician can announce an observed birth outcome.
+                # No canonical identity or Knowledge is invented for the source.
+                # Recipients still require this Event's perception/witness proof.
+                if row['source_assertion'] != 'direct_observation':
+                    raise ValueError('unidentified speaker requires established direct observation, not assumed prior Knowledge')
+                continue
             if actor not in event['participants'] or not row['source_assertion']:
                 raise ValueError('announcement requires its established speaker and information source')
             if not capabilities(r.state, actor)['can_perceive']:
@@ -385,40 +395,64 @@ def validate_birth_sex(r, claim, event, pregnancy):
     return rows
 
 
-def validate_birth_knowledge(r, raw, events):
+def validate_birth_knowledge(r, raw, events, *, rejected_event_ids=()):
     """Prevent generic Knowledge from bypassing the typed birth disclosure."""
     guarded = {}
-    for row in raw.records['births']:
-        if not isinstance(row, dict): continue
+    errors = []
+    unvalidated_facts = set()
+    for index, row in enumerate(raw.records['births']):
+        pregnancy_id = row.get('pregnancy_id') if isinstance(row, dict) else None
+        pregnancy = r.state['pregnancies'].get(pregnancy_id) if isinstance(pregnancy_id, str) else None
+        protected_facts = set(pregnancy['sex_fact_ids'].values()) if pregnancy else set()
         try:
-            claim = BirthClaim.model_validate({k:v for k,v in row.items() if k != 'appearance'}).model_dump()
-        except ValueError:
-            continue  # apply_births emits the precise structural diagnostic.
+            claim = BirthClaim.model_validate({k:v for k,v in row.items() if k != 'appearance'}
+                                             if isinstance(row, dict) else row).model_dump()
+        except ValueError as exc:
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError(str(exc), 'birth_claim_invalid', repairable=True,
+                                              section='births', index=index))
+            continue
         p = r.state['pregnancies'].get(claim['pregnancy_id'])
         event = events.get(claim['source_event_id'])
-        if not p or not event: continue
+        if p and claim['source_event_id'] in rejected_event_ids:
+            continue
+        if not p or not event:
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError('unknown pregnancy' if not p else 'current completed narrative event required',
+                'birth_claim_invalid', repairable=True, section='births', index=index,
+                source_ids=[claim['pregnancy_id'], claim['source_event_id']]))
+            continue
         try:
             observations = validate_birth_sex(r, claim, event, p)
-        except StructuralDeltaError:
-            raise
+        except StructuralDeltaError as exc:
+            unvalidated_facts.update(protected_facts)
+            exc.path.update(index=index, path=f'births[{index}].sex_observations')
+            errors.append(exc)
+            continue
         except (ValueError, TypeError, KeyError) as exc:
-            fatal(str(exc), 'birth_sex_observation_invalid', repairable=True,
-                  section='births', field='sex_observations', entity=p['id'])
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError(str(exc), 'birth_sex_observation_invalid', repairable=True,
+                  section='births', index=index, field='sex_observations', entity=p['id']))
+            continue
         allowed = {(actor, p['sex_fact_ids'][o['child_id']]) for o in observations
                    for actor in o['perceived_by'] if o['basis'] != 'not_disclosed'}
         for fid in p['sex_fact_ids'].values():
             guarded.setdefault(fid, set()).update((actor, event['local_id']) for actor, fact_id in allowed if fact_id == fid)
-    if not guarded:
-        return
-    for item in raw.records['knowledge_gained']:
+    for index, item in enumerate(raw.records['knowledge_gained']):
         if not isinstance(item, dict): continue
         fid = item.get('fact_id')
         if not isinstance(fid, str) or fid not in guarded:
             continue  # Ordinary malformed Knowledge keeps its existing local diagnostics.
         actor, source_id = item.get('actor_id'), item.get('source_event_id')
         if not isinstance(actor, str) or not isinstance(source_id, str) or (actor, source_id) not in guarded[fid]:
-            fatal('Знание пола не подтверждено наблюдением этого свидетеля.',
-                  'birth_sex_knowledge_invalid', repairable=True, section='knowledge_gained')
+            unvalidated_facts.add(fid)
+            errors.append(StructuralDeltaError('Знание пола не подтверждено наблюдением этого свидетеля.',
+                  'birth_sex_knowledge_invalid', repairable=True, section='knowledge_gained', index=index))
+    if errors:
+        failure = StructuralDeltaError.combine(errors)
+        # Internal dependency information, not an additional persistent store.
+        failure.unvalidated_fact_ids = frozenset(unvalidated_facts)
+        raise failure
 
 
 def advance_due(state):

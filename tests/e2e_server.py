@@ -57,6 +57,13 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+agency249=None
+berezovsk_followup=None
+policy252_selection=None
+integrated247_case=None
+integrated247_live=False
+integrated247_repeat=False
+integrated247_extractions=0
 provenance238_case=None
 provenance238_repeat=False
 provenance238_extractions=0
@@ -66,9 +73,75 @@ agency237_extractions=0
 birth231_response=None
 due240_responses=None
 
+def browser_response(payload, kwargs):
+    from runtime_v3_fixture import reviewed
+    raw = reviewed(payload)
+    # Explicit v4 provenance for synthetic browser scenarios only. Original
+    # recorded-provider replays and choice-negative controls bypass this adapter.
+    if kwargs.get('model') not in ('integrated-test', 'berezovsk-followup-test'):
+        source = next((json.loads(m['content'].split('\n',1)[1]) for m in kwargs['messages']
+                       if m['content'].startswith('completed_narrative\n')), None)
+        if source:
+            for choice in raw.get('choices', []):
+                choice.setdefault('grounding', dict(fact_ids=[], from_scene=True))
+    return raw
+
+
 def scripted_stream(**kwargs):
-    global provenance238_extractions
+    global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if policy252_selection and kwargs.get('model') == 'policy252-test':
+        from test_policy252 import chronology_payload
+        if 'Исправь только хронологические' in str(kwargs['messages']):
+            policy252_selection['corrected'] = True
+            yield json.dumps(dict(edits=[dict(original='Вчера Вера встретилась с Тимуром.',replacement='Пять дней назад Вера встретилась с Тимуром.')]),ensure_ascii=False)
+        elif kwargs.get('response_format'):
+            completed = next(m['content'] for m in kwargs['messages'] if m['content'].startswith('completed_narrative\n'))
+            corrected = 'Пять дней назад Вера встретилась с Тимуром.' in completed
+            yield json.dumps(chronology_payload(app.state.repository, policy252_selection['save'],policy252_selection['event_id'],5 if corrected else 1),ensure_ascii=False)
+        else:
+            yield policy252_selection['narrative'].replace('Вчера', 'Пять дней назад') if policy252_selection.get('corrected') else policy252_selection['narrative']
+        return
+    if berezovsk_followup and kwargs.get('model') == 'berezovsk-followup-test':
+        if kwargs.get('response_format'):
+            answers = berezovsk_followup['responses']
+            raw = answers[min(berezovsk_followup['attempt'], len(answers)-1)]
+            berezovsk_followup['attempt'] += 1
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield berezovsk_followup['data']['narrative']
+        return
+    if kwargs.get('model') == 'lta250-test':
+        yield '{}' if kwargs.get('response_format') else 'NPC занимается своим делом.'
+        return
+    if agency249 and kwargs.get('model') == 'agency249-test':
+        from copy import deepcopy
+        raw=deepcopy(agency249['raw'])
+        if agency249['mode']=='missing':raw['player_agency'].pop('narrative_audit')
+        if agency249['mode']=='invalid':raw['final_scene']['location_id']='unknown'
+        if agency249['mode']=='uncertain':raw['player_agency']['status']='uncertain'
+        yield json.dumps(raw,ensure_ascii=False) if kwargs.get('response_format') else agency249['narrative']
+        return
+    if integrated247_case and kwargs.get('model') == 'integrated-test':
+        from test_integrated_repair247 import archived, corrected
+        if integrated247_live:
+            from test_live248_recovery import live as archived, control as corrected
+        data = archived(integrated247_case)
+        if kwargs.get('response_format'):
+            integrated247_extractions += 1
+            raw = data['responses'][0]['payload'] if integrated247_extractions == 1 or integrated247_repeat else corrected(data)
+            if integrated247_live and integrated247_case=='family':raw=corrected(data)
+            from copy import deepcopy
+            raw=deepcopy(raw)
+            review=raw.get('player_agency')
+            if review:
+                review['narrative_audit']=[dict(narrative_evidence=data['narrative'][:160],
+                    classification='authorized',player_action_id=a['id']) for a in review['actions']]
+                for action in review['actions']:action.setdefault('target_mode','interaction')
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield data['narrative']
+        return
     if due240_responses is not None:
         from test_due_scene import SIGNS
         if kwargs.get('response_format'):
@@ -232,14 +305,17 @@ def scripted_stream(**kwargs):
             raw=provider_payload(kwargs)
             raw['choices']=[dict(action='Ждать ответа',speech='')]
             scenario=handoff_provider.get('scenario','retry')
-            raw['movements']=[]
             if scenario=='doorway':
+                raw['movements']=[]
+                # The shared arrival control now includes its source Event.
+                # This observed-only scene establishes no arrival at all.
+                raw['events']=[]
                 raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
             if scenario in ('retry','semantic-retry') and handoff_provider['extractions']<=2:
                 raw['final_scene']['location_id']='unknown-room'
                 if scenario=='semantic-retry':raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
             if scenario=='optional-annotation':
-                raw['events']=[dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation')]
+                raw['events'].append(dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation'))
                 raw['scene_actions']=[dict(actor_id='viktoria_solovyova',target_ids=['ilya'],source_event_id='greeting',phase='start',modality='speech',knowledge_ids=['missing'])]
             yield json.dumps(raw,ensure_ascii=False)
         else:
@@ -282,13 +358,30 @@ def scripted_stream(**kwargs):
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    task_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')),None)
+    current_task=json.loads(task_message.split('\n',1)[1]) if task_message else {}
+    quiet_start=(current_task.get('kind')=='start' and not observer
+                 and current_phone.get('camera',{}).get('location_id') is not None
+                 and len(current_phone['camera']['present_character_ids'])==1)
     if current_message and phone_mode == 'departure223':
         from copy import deepcopy
         case = json.loads((Path(__file__).parent / 'fixtures/movement/phone001.json').read_text())
         turn = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), None)
         if turn and json.loads(turn.split('\n', 1)[1]).get('player_input') == case['player_input']:
             raw = deepcopy(case['payload'])
-            raw.pop('movements')  # Human-reviewed departure-only interpretation, not an LLM accuracy test.
+            # Human-reviewed departure-only interpretation; the original
+            # synthetic #223 negative payload on disk remains unchanged.
+            raw['movements'] = [dict(actor_id='qa_timur',
+                from_location_id=current_phone['camera']['location_id'],
+                to_location_id=None, assertion='departure', source_event_id='departure',
+                evidence='Тимур прощается и уходит.', order=0)]
+            raw['events'][0]['order'] = 0
+            # This synthetic browser provider emits the current protocol; the
+            # historical fixture on disk remains unchanged.
+            review = raw['player_agency']
+            review['narrative_audit'] = [dict(narrative_evidence='Кирилл остаётся за столом с фотографиями.',
+                classification='authorized', player_action_id=a['id']) for a in review['actions']]
+            for action in review['actions']:action['target_mode'] = 'reference'
             for event in raw.get('events', []):
                 event.pop('minute', None)  # Fixture clock differs from historical live job.
             yield json.dumps(raw, ensure_ascii=False) if kwargs.get('response_format') else case['narrative']
@@ -332,12 +425,17 @@ def scripted_stream(**kwargs):
                 value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
                 if phone_mode=='office-authority136':
                     doorway=task['player_input'] in ('Подождать у двери.','Продолжить после звонка.')
-                    text='Виктория стоит в проёме, не заходя.' if doorway else 'Виктория вошла внутрь и отвечает Илье.'
+                    returning=current_phone['characters'].get('qa_marina',{}).get('location_id') != camera['location_id']
+                    text=('Виктория вернулась к дому и отвечает Илье из проёма.' if returning else 'Виктория стоит в проёме и отвечает Илье, не заходя.') if doorway else 'Виктория вошла внутрь и отвечает Илье.'
                     present=[cid for cid in camera['present_character_ids'] if cid!='qa_marina']
                     if not doorway: present.append('qa_marina')
                     value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
                         observed_character_ids=['qa_marina'] if doorway else [],elapsed_minutes=0),
                         events=[dict(id='dialogue',text=text,participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')]) if kwargs.get('response_format') else text
+                    if isinstance(value,dict) and returning:
+                        from runtime_v3_fixture import arrival_sources
+                        value['movements']=[dict(actor_id='qa_marina',to_location_id=camera['location_id'],evidence=text)]
+                        arrival_sources(value)
             if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
             else:
                 for i in range(0,len(value),20):
@@ -359,6 +457,12 @@ def scripted_stream(**kwargs):
             if kwargs.get('response_format'):
                 provenance238_extractions += 1
                 raw = data['responses']['extraction'] if provenance238_extractions == 1 or provenance238_repeat else corrected(data, provenance238_case)
+                from copy import deepcopy
+                raw=deepcopy(raw)
+                review=raw['player_agency']
+                review['narrative_audit']=[dict(narrative_evidence=data['narrative'][:160],
+                    classification='authorized',player_action_id=a['id']) for a in review['actions']]
+                for action in review['actions']:action.setdefault('target_mode','interaction')
                 yield json.dumps(raw, ensure_ascii=False)
             else:
                 yield data['narrative']
@@ -384,6 +488,10 @@ def scripted_stream(**kwargs):
             bad = agency232_attempts == 1
             raw = agency_payload(current_phone, [agency_claim(['qa_vera'], actual=['qa_marina'] if bad else ['qa_vera'],
                                   outcome='completed' if bad else 'attempted')], completed=bad)
+            if bad:
+                # This scripted prose really substitutes Marina for Vera. A mere
+                # preserved-meaning target-set mismatch now permits repair (#251).
+                raw['player_agency']['actions'][0]['meaning'] = 'changed'
             yield json.dumps(raw, ensure_ascii=False)
         return
     if action in (QUESTION, CONSENT):
@@ -482,7 +590,7 @@ def scripted_stream(**kwargs):
         location_id=camera['location_id'];locations=[]
         # QA worlds have authored IDs/locations; generic character_1/2 belong
         # only to the original small transport fixture.
-        if (task['kind']=='start' or (observer and location_id is None)) and 'qa_kirill' not in state['characters']:
+        if location_id is None and (task['kind']=='start' or observer) and 'qa_kirill' not in state['characters']:
             from backend.runtime_v3.models import identity
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
@@ -496,8 +604,15 @@ def scripted_stream(**kwargs):
         payload['events']=[dict(id='event',text='Передача ключа.' if observer else 'Собеседник предложил поговорить.',
             participants=present,witnesses=present,fact_ids=[fid] if observer else [],medium='conversation',evidence=evidence)]
         if observer:
+            # SECRET explicitly authors the NPC arrivals before the key handover.
+            # Supply their sources here, not in the generic protocol adapter.
+            from runtime_v3_fixture import arrival_sources
+            payload['movements']=[dict(actor_id=cid,to_location_id=location_id,evidence=SECRET)
+                for cid in present if state['characters'][cid].get('location_id') != location_id]
+            arrival_sources(payload)
             payload['facts']=[dict(id=fid,text='Тайный ключ передан.',character_ids=present,evidence=evidence)]
             payload['knowledge_gained']=[dict(actor_id=cid,fact_id=fid,source_event_id='event',evidence=evidence) for cid in present]
+        if quiet_start:payload['events']=[]
         value=json.dumps(payload,ensure_ascii=False)
     elif kwargs.get('response_format'):
         payload=background() if observer else result()
@@ -512,6 +627,8 @@ def scripted_stream(**kwargs):
         value=json.dumps(canonical(payload,sha256(full.encode()).hexdigest()[:12]),ensure_ascii=False)
     elif observer:
         value = SECRET
+    elif quiet_start:
+        value = 'Вокруг тихо. Пока ничего не происходит.'
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():
         value = summary()
     elif 'сценар' in kwargs['messages'][0]['content'].lower():
@@ -527,7 +644,7 @@ def scripted_stream(**kwargs):
             pass  # Deliberately malformed/partial fixtures retain their transport.
         else:
             if isinstance(parsed, dict) and 'final_scene' in parsed:
-                value = json.dumps(reviewed(parsed), ensure_ascii=False)
+                value = json.dumps(browser_response(parsed, kwargs), ensure_ascii=False)
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
     chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60
@@ -550,7 +667,7 @@ def stream(**kwargs):
                 pass
             else:
                 if isinstance(value, dict) and 'final_scene' in value:
-                    chunk = json.dumps(reviewed(value), ensure_ascii=False)
+                    chunk = json.dumps(browser_response(value, kwargs), ensure_ascii=False)
         yield chunk
 
 
@@ -587,7 +704,7 @@ def generation_fixture(prep, jid, config, *args):
 draft_generation.run = generation_fixture
 
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960}.get(model, 32768)}
+    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072}.get(model, 32768)}
 }
 def authoring_stream(**kwargs):
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
@@ -977,6 +1094,88 @@ if __name__ == '__main__':
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
 
+    @app.post('/test/berezovsk-followup-seed')
+    def berezovsk_followup_seed(case: str = '002'):
+        global berezovsk_followup
+        from copy import deepcopy
+        from test_berezovsk_followup248 import DATA, LTA, grounded_control, compound_control
+        from test_integrated_repair247 import seed
+        if case not in ('002','005'): raise ValueError('Unknown replay')
+        data=deepcopy(DATA[case]); result=seed(app.state.repository,data)
+        snapshot=deepcopy(LTA['snapshot'])
+        snapshot['world_state']=data['before']
+        snapshot['history_head']=app.state.repository.get_snapshot(result['save'])['history_head']
+        with app.state.repository.connect() as db:
+            db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),result['save']))
+        responses=([grounded_control(data)] if case=='002' else
+            [json.loads(raw) for raw in data['responses']['D']] + [compound_control(data)])
+        berezovsk_followup=dict(data=data,responses=responses,attempt=0)
+        return dict(world=result['world'],save=result['save'],action=data['player_input'])
+
+    @app.post('/test/policy252-seed')
+    def policy252_seed():
+        global policy252_selection
+        from test_policy252 import seed_chronology
+        policy252_selection = seed_chronology(app.state.repository)
+        return policy252_selection
+
+    @app.post('/test/playability251-seed')
+    def playability251_seed(case: str = '002'):
+        global berezovsk_followup
+        from test_playability251 import DATA, seed, payload, control
+        if case not in ('002','008','016','020'):
+            raise ValueError('Unknown replay')
+        result = seed(app.state.repository, case)
+        responses = [payload(case)] if case in ('002','020') else [payload(case),payload(case),control(case)]
+        berezovsk_followup = dict(data=DATA[case], responses=responses, attempt=0)
+        return result
+
+    @app.post('/test/agency249-seed')
+    def agency249_seed(mode: str = 'saved'):
+        global agency249
+        from test_extraction_semantics248 import final_live
+        from test_integrated_repair247 import seed
+        data=final_live('phone');selection=seed(app.state.repository,data)
+        state=app.state.repository.get_snapshot(selection['save'])['world_state']
+        action='Продолжаю сортировать фотографии.'
+        narrative='Кирилл переворачивает снимок, читает дату на обороте и кладёт его в стопку.'
+        audit=[dict(narrative_evidence=narrative,classification='execution_detail',player_action_id='sort')]
+        if mode=='reauthor':
+            narrative+=' Вера предлагает подвезти его. Кирилл кивает, соглашаясь.'
+            audit.append(dict(narrative_evidence='Кирилл кивает, соглашаясь.',classification='unauthorized_choice',player_action_id=None))
+        raw=dict(final_scene=dict(location_id=state['camera']['location_id'],
+            present_character_ids=state['camera']['present_character_ids'],elapsed_minutes=1),
+            player_agency=dict(actions=[dict(id='sort',player_evidence=action,target_ids=[],
+                narrative_target_ids=[],target_mode='reference',outcome='completed',meaning='preserved')],
+                narrative_audit=audit,status='preserved'),
+            choices=[dict(action='Посмотреть в окно.',speech=''),dict(action='Продолжить работу.',speech='')])
+        agency249=dict(raw=raw,narrative=narrative,mode=mode)
+        return dict(world=selection['world'],save=selection['save'],action=action)
+
+    @app.post('/test/agency249-allow')
+    def agency249_allow():
+        agency249['mode']='saved'
+        return {'ok':True}
+
+    @app.post('/test/integrated247-seed')
+    def integrated247_seed(case: str = 'knowledge', repeat: bool = False, live: bool = False):
+        global integrated247_case, integrated247_repeat, integrated247_extractions, integrated247_live
+        from test_integrated_repair247 import seed, archived
+        if live:
+            from test_live248_recovery import live as archived
+        if case not in ('knowledge', 'family', 'phone', 'crisis', 'social'):
+            raise ValueError('Unknown replay')
+        result = seed(app.state.repository, archived(case))
+        integrated247_case, integrated247_repeat, integrated247_extractions = case, repeat, 0
+        integrated247_live = live
+        return dict(world=result['world'], save=result['save'], action=archived(case)['player_input'])
+
+    @app.post('/test/integrated247-allow-repair')
+    def integrated247_allow_repair():
+        global integrated247_repeat
+        integrated247_repeat = False
+        return {'ok': True}
+
     @app.post('/test/provenance238-seed')
     def provenance238_seed(case: str = 'social', repeat: bool = False):
         global provenance238_case, provenance238_repeat, provenance238_extractions
@@ -1062,7 +1261,7 @@ if __name__ == '__main__':
         repo=app.state.repository
         if checkpoint not in ('family','family-incapacitated'): raise ValueError('Unknown test checkpoint')
         result=load_fixture(repo,checkpoint)
-        ordinary_job(repo,result['save'],'start')
+        ordinary_job(repo,result['save'],'start',expected_choices=0 if checkpoint=='family-incapacitated' else 6)
         if dead:
             snap=repo.get_snapshot(result['save']);state=snap['world_state'];cid=state['meta']['current_protagonist_id']
             state['characters'][cid]['life_status']='dead';state['meta']['protagonist_required']=True

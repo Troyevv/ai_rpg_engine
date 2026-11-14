@@ -4,6 +4,7 @@ Extraction interprets meaning; Runtime owns provenance, agency, eligibility and
 compare-and-set. History owns chronology; no per-turn psychologist or trait scores.
 """
 from copy import deepcopy
+from backend.runtime_v3.models import fatal
 from typing import Literal
 import logging
 from pydantic import Field
@@ -132,6 +133,11 @@ def apply_personality(resolver, raw, events):
                 event = dict(id=milestone['id'], participants=milestone['actor_ids'], witnesses=[],
                              fact_ids=[], evidence=claim['evidence'])
         if actor is None or actor['life_status'] == 'dead' or event is None or cid not in event['participants']:
+            dependent = any(isinstance(d, dict) and isinstance(d.get('evidence_ids'), list)
+                and row.get('id') in d['evidence_ids'] for d in raw.records['personality_deltas'] + raw.records['value_deltas'])
+            if resolver.semantic_slice and (dependent or actor is not None and actor['life_status'] != 'dead'
+                    and cid != resolver.protected_actor_id):
+                fatal('Заявленный опыт NPC должен иметь принятый источник.', 'development_source_invalid', repairable=True, section='development_evidence', index=i)
             resolver.warn('development_evidence', i, 'Источник опыта не является принятым событием персонажа.', code='development_source_invalid')
             continue
         owned = _player_owned(resolver, claim, event)
@@ -218,6 +224,8 @@ def apply_personality(resolver, raw, events):
                             witnesses=sorted(witnesses),fact_ids=sorted(facts)).model_dump()
                 if len(proposed) > 48: raise ValueError('Профиль превышает ограничение в 48 характеристик.')
             except ValueError as exc:
+                if resolver.semantic_slice:
+                    fatal(str(exc), 'personality_conflict', repairable=True, section='personality_deltas', index=i)
                 resolver.warn('personality_deltas', i, str(exc), code='personality_conflict'); continue
             before = {op['item_id']:deepcopy(profile['items'].get(op['item_id'])) for op in claim['operations']}
             after = {op['item_id']:deepcopy(proposed.get(op['item_id'])) for op in claim['operations']}
@@ -227,6 +235,8 @@ def apply_personality(resolver, raw, events):
             _record(resolver, 'personality_delta', cid, before, after, source_ids=ids,
                     operation_ids=guards, evidence=claim['evidence'], rationale=claim['rationale'], sources=deepcopy(sources))
             continue
+        if resolver.semantic_slice:
+            fatal('Неизвестная ссылка на canonical опыт.', 'personality_source_invalid', repairable=True, section='personality_deltas', index=i)
         resolver.warn('personality_deltas', i, 'Неизвестная ссылка на canonical опыт.', code='personality_source_invalid')
 
 

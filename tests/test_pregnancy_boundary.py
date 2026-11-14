@@ -71,7 +71,7 @@ def test_legacy_reminder_cannot_hide_or_discharge_a_process(calendar_status):
     assert projection.actual_target == p['due_minute']
     assert next(c.actor_ids for c in projection.candidates if c.kind=='birth') == ('a', 'b')
     with pytest.raises(StructuralDeltaError) as exc:
-        StateResolver(state, 'Тихо.', '').resolve(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home',
+        StateResolver(state, 'Тихо.', '').resolve(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='home',
             present_character_ids=['a','b'], elapsed_minutes=1)))
     assert exc.value.code == 'ordinary_temporal_boundary'
 
@@ -99,7 +99,7 @@ def test_background_group_cannot_deliver_a_player_required_birth():
     request = dict(REQUEST, max_llm_calls=2)
     visit = next(c for c in plan(snapshot, request).candidates if c.source_id == 'visit')
     text = 'Роды завершились.'
-    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home', present_character_ids=['a'], elapsed_minutes=0),
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='home', present_character_ids=['a'], elapsed_minutes=0),
         events=[dict(id='visit', text=text, evidence=text, participants=['a'], witnesses=['a'],
                      advance_candidate_ids=[visit.id])],
         births=[dict(pregnancy_id=process['id'], source_event_id='visit',
@@ -108,7 +108,8 @@ def test_background_group_cannot_deliver_a_player_required_birth():
         yield json.dumps(raw) if stage == 'long_term_extraction' else text
     after, history, report = run(snapshot, request, generate=generate)
     assert report['llm_calls'] == 2 and not report['accepted']
-    assert report['diagnostics'][0]['message'] == 'Рождение не входит в причины выбранной фоновой группы.'
+    assert any(d.get('message') == 'Рождение не входит в причины выбранной фоновой группы.' for d in report['diagnostics'])
+    assert report['status']=='incomplete' and report['coverage']['rejected_causes']==1
     assert not history['events']
     assert after['world_state']['pregnancies'][process['id']]['status'] == 'due'
     assert after['world_state']['knowledge'] == state['knowledge']

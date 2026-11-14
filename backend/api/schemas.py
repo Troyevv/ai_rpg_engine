@@ -43,6 +43,9 @@ class Turn(Credential):
 
 class Retry(Credential):
     config: ModelConfig
+    correct_chronology: bool = False
+    revision: int | None = Field(default=None, ge=0)
+    attempt_epoch: int | None = Field(default=None, ge=0)
 
 class Named(DTO):
     name: str = Field(min_length=1, max_length=120, pattern=r'\S')

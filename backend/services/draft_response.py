@@ -270,6 +270,7 @@ def stage_output_limit(slot, messages, config):
 
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     # A confirmed retry gets a new response slot. Historical parts are immutable.
+    logical_slot=slot
     redirects=journal.get('response_retries',{});seen=set()
     while slot in redirects:
         if slot in seen:raise TransportError('Повреждена история повторных проверок.')
@@ -280,11 +281,11 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     if config.get('provider')=='deepseek' and config.get('model') in ('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro'):
         capabilities=dict(context_window=1048576,max_output_tokens=393216)
     context=min(context,capabilities.get('context_window',context))
-    output_limit=min(stage_output_limit(slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
+    output_limit=min(stage_output_limit(logical_slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
-    if not record['complete']:record['output_limit']=output_limit
+    if not record['complete'] and not record.get('failure'):record['output_limit']=output_limit
     schema=None
-    if slot=='world':
+    if logical_slot=='world':
         # Resume may assemble a historical provider response containing contacts.
         # Acceptance is broader than the contract for new generation.
         from backend.services.draft_schema import world_state_schema
@@ -308,6 +309,39 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     if record.get('parts') and not record['parts'][-1]['text'].strip():
         record.setdefault('failure',empty_diagnostic(record['parts'][-1]))
     if record.get('failure'):
+        # A changed output policy may recover a known LENGTH, never an unknown
+        # transport outcome or an identical empty request. Keep the failed slot
+        # intact and retain any visible JSON prefix in the new response slot.
+        last=record['parts'][-1] if record.get('parts') else {}
+        request=deepcopy(messages)
+        if text:request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
+        from llm import thinking_options
+        limit=min(output_limit,context-estimate(request)-512)
+        effective=dict(provider=config.get('provider'),model=config.get('model'),
+            thinking=thinking_options(config.get('provider'),config.get('model'),config.get('thinking','off'))[0],
+            max_tokens=limit)
+        previous=last.get('effective_config',{})
+        changed=bool(previous) and any(previous.get(k)!=v for k,v in effective.items())
+        # Historical fingerprints included temperature even when Thinking made
+        # the SDK omit it. Do not let an ignored temperature change reopen an
+        # earlier failed policy after A -> B -> A.
+        known_policy=any(
+            prior.get('failure') and prior.get('parts')
+            and prior.get('assembly',{}).get('sha256')==record.get('assembly',{}).get('sha256')
+            and all(prior['parts'][-1].get('effective_config',{}).get(k)==v for k,v in effective.items())
+            for prior in (journal['responses'][key] for key in seen | {slot}))
+        fingerprint=digest(json.dumps([request,effective,config.get('temperature')],ensure_ascii=False,sort_keys=True))
+        if (record['failure'].get('code') in ('reasoning_budget_exhausted','empty_output_limit')
+                and last.get('finish_reason')=='length' and changed and not known_policy and limit>=256
+                and not journal.get('pending') and not cancel.is_set()
+                and fingerprint not in journal.get('empty_requests',{})):
+            new_slot=logical_slot+'_policy_'+fingerprint
+            if new_slot in journal['responses']:
+                raise TransportError('Повтор этой политики уже сохранён; автоматический повтор запрещён.')
+            journal['responses'][new_slot]=dict(parts=deepcopy(record['parts'][:-1]),complete=False,retry_of=slot)
+            journal.setdefault('response_retries',{})[slot]=new_slot
+            repo.save_response_journal(jid,journal)
+            return response(repo,jid,journal,logical_slot,messages,config,context,generate,cancel)
         repo.save_response_journal(jid,journal)
         raise TransportError(record['failure']['message'])
     if record['complete'] and record['document_state']!='incomplete':return text

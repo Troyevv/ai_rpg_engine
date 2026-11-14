@@ -82,6 +82,7 @@ def execute(storage, job, handle, chat_stream):
         config=config,
         history=history,
         cancelled=handle.cancelled,
+        recorded_groups=[f["context_key"] for f in frames if f["stage"]=="long_term_narrative"] if frames else None,
     )
     if output is None:
         return
@@ -99,6 +100,12 @@ def execute(storage, job, handle, chat_stream):
         text += "\nПереход остановлен. Продолжи обычным ходом: можно осмотреться, отреагировать или остаться в стороне."
     elif report["interruption"]:
         text += "\nПереход прерван: требуется решение игрока."
+    if report['status'] == 'incomplete':
+        text += "\nСимуляция неполная. Принятые события сохранены; часть причин осталась без результата."
+    elif report['status'] == 'calendar_only':
+        text += "\nИзменился календарь. Жизнь NPC в этом переходе не моделировалась."
+    elif report['status'] == 'quiet':
+        text += "\nРассмотренные ситуации пока не привели к новым событиям."
     text += f"\nРазрешено групп: {len(report['accepted'])}. Нерешённых причин: {len(report['unresolved'])}."
     storage.job_progress(job["id"], "validating", narrative=text, complete=True)
     if not handle.cancelled.is_set():

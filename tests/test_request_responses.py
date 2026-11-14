@@ -98,13 +98,13 @@ def test_rejected_lta_groups_reload_export_and_regeneration(tmp_path):
 
         def stream(**kwargs):
             is_extraction = bool(kwargs.get('response_format'))
-            stage = 'long_term_extraction' if is_extraction else 'long_term_narrative'
-            # Valid JSON with no supporting Event: the provider completes, the Runtime rejects.
+            stage = ('long_term_repair' if len(calls)==2 else 'long_term_extraction') if is_extraction else 'long_term_narrative'
+            # A declared malformed Event is rejected; a truly empty quiet group is valid.
             if is_extraction:
                 state = next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n'))
                 camera = json.loads(state.split('\n', 1)[1])['camera']
                 scene = {k: camera[k] for k in ('location_id', 'present_character_ids')}
-                text = ' ' + json.dumps({'final_scene': dict(scene, elapsed_minutes=0)}) + '\r\n'
+                text = ' ' + json.dumps({'final_scene': dict(scene, elapsed_minutes=0), 'events':[None]}) + '\r\n'
             else:
                 text = f' {kind} {len(calls)}.\n'
             calls.append((stage, text, kwargs['messages']))
@@ -119,11 +119,11 @@ def test_rejected_lta_groups_reload_export_and_regeneration(tmp_path):
         saved = repo.get_job(job)
         assert saved['status'] == 'saved', saved['error']
         report = repo.get_snapshot(sid)['last_long_term_advance']
-        assert not report['accepted'] and any(d['code'] == 'invalid_outcome' for d in report['diagnostics'])
-        assert len(calls) == report['llm_calls'] == 4
+        assert not report['accepted'] and any(d['code'] == 'long_term_outcome_invalid' for d in report['diagnostics'])
+        assert len(calls) == report['llm_calls'] == 3
         rows = list(reversed(repo.request_log(job_id=job)))
         frames = json.loads(saved['context_json'])
-        assert len({r['id'] for r in rows}) == len(frames) == 4
+        assert len({r['id'] for r in rows}) == len(frames) == 3
         # Regeneration retains the original input frames; request rows hold its actual new inputs.
         for r, frame, (stage, text, messages) in zip(rows, frames, calls, strict=True):
             assert (r['job_id'], r['stage'], r['messages']) == (job, stage, messages)
@@ -140,7 +140,7 @@ def test_rejected_lta_groups_reload_export_and_regeneration(tmp_path):
     by_job = {j['id']: {r['id']: r['response_text'] for r in j['requests']} for j in json.loads(data)}
     for job, expected in attempts.items():
         assert by_job[job] == expected
-    assert len(set.union(*(set(rows) for rows in attempts.values()))) == 8
+    assert len(set.union(*(set(rows) for rows in attempts.values()))) == 6
 
 
 def test_retry_keeps_prior_attempts_and_does_not_repeat_narrative(db):

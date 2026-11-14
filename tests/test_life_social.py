@@ -384,7 +384,9 @@ def test_family_checkpoints_use_normal_import_and_incapacitated_start_is_playabl
     from test_narrative_test_world import ordinary_job
     repo=Repository(tmp_path/'checkpoints.sqlite')
     sid=load_fixture(repo,checkpoint)['save']
-    snap=ordinary_job(repo,sid,'start')
+    # An incapacitated protagonist must not receive actionable suggestions;
+    # healthy checkpoints still require all six safe fixture choices.
+    snap=ordinary_job(repo,sid,'start',expected_choices=0 if checkpoint=='family-incapacitated' else 6)
     assert bool(capabilities(snap['world_state'],ACTOR_ID)['can_act'])==(checkpoint!='family-incapacitated')
     assert repo.get_save(sid)['state']['life_state']['life_status']=='alive'
     if checkpoint=='family-care':

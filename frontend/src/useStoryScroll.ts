@@ -8,11 +8,13 @@ export function useStoryScroll(saveId?:number|string){
   const scroll=useRef<HTMLDivElement>(null),pinned=useRef(true);
   const [away,setAway]=useState(false);
   const frame=useRef(0),lastTop=useRef(0);
+  const lastHeight=useRef(0),lastViewport=useRef(0);
   const anchor=useRef<{id:string;offset:number}|null>(null);
   const key=`story-scroll-${saveId}`;
   const remember=useCallback(()=>{
     const el=scroll.current;if(!el||!el.clientHeight)return;
     lastTop.current=el.scrollTop;
+    lastHeight.current=el.scrollHeight;lastViewport.current=el.clientHeight;
     if(!pinned.current){
       const rect=el.getBoundingClientRect(),top=rect.top;
       // Hit-test the reading line; do not measure every historical article per frame.
@@ -42,14 +44,16 @@ export function useStoryScroll(saveId?:number|string){
     const el=scroll.current;if(!el)return;
     const top=el.scrollTop;
     // Moving upwards is user intent even inside the near-bottom threshold.
-    const maximum=Math.max(0,el.scrollHeight-el.clientHeight);
     // Removing choices / closing the keyboard can clamp scrollTop upwards
-    // before ResizeObserver runs. That is layout, not a user's scroll gesture.
-    const clamped=pinned.current&&maximum<lastTop.current&&Math.abs(top-maximum)<2;
-    if(top<lastTop.current-1&&!clamped)pinned.current=false;
+    // before its scroll event arrives. New content may already have raised the
+    // maximum again; compare geometry, not just proximity to the new bottom.
+    // Wheel/touch/keyboard/scrollbar input unpins before this layout guard.
+    const layoutChanged=pinned.current&&(el.scrollHeight!==lastHeight.current||el.clientHeight!==lastViewport.current);
+    if(top<lastTop.current-1&&!layoutChanged)pinned.current=false;
     else if(el.scrollHeight-el.clientHeight-top<2)pinned.current=true;
     setAway(!pinned.current);remember();
-  },[remember]);
+    if(layoutChanged)schedule();
+  },[remember,schedule]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el)return;
     pinned.current=true;anchor.current=null;lastTop.current=0;setAway(false);
@@ -66,15 +70,22 @@ export function useStoryScroll(saveId?:number|string){
       touchY=next;
     };
     const keyUp=(e:KeyboardEvent)=>{if(['ArrowUp','PageUp','Home'].includes(e.key)){pinned.current=false;setAway(true);remember()}};
+    const scrollbar=(e:PointerEvent)=>{
+      if(e.target!==el)return;
+      const left=el.getBoundingClientRect().left+el.clientLeft;
+      if(e.clientX<left||e.clientX>=left+el.clientWidth){pinned.current=false;setAway(true);remember()}
+    };
     const persist=()=>sessionStorage.setItem(key,JSON.stringify({top:lastTop.current,pinned:pinned.current}));
     el.addEventListener('wheel',upward,{passive:true});
     el.addEventListener('touchstart',touchStart,{passive:true});
     el.addEventListener('touchmove',touchMove,{passive:true});
     el.addEventListener('keydown',keyUp);
+    el.addEventListener('pointerdown',scrollbar);
     window.addEventListener('pagehide',persist);
     return()=>{
       persist();observer.disconnect();el.removeEventListener('wheel',upward);
       el.removeEventListener('touchstart',touchStart);el.removeEventListener('touchmove',touchMove);el.removeEventListener('keydown',keyUp);
+      el.removeEventListener('pointerdown',scrollbar);
       window.removeEventListener('pagehide',persist);cancelAnimationFrame(frame.current);frame.current=0;
     };
   },[key,remember,schedule]);

@@ -3,6 +3,7 @@
 The fixtures explicitly encode Extraction's semantic interpretation; these tests
 do not pretend a mock proves a real LLM can never misread arbitrary literature.
 """
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 
@@ -277,7 +278,7 @@ def test_malformed_unrelated_knowledge_keeps_existing_local_handling(tmp_path):
     job,calls=execute(repo,sid,text,raw)
     assert job['status']=='saved',job['error']
     assert len(calls)==2
-    assert 'knowledge_path_invalid' in job['warnings_json']
+    assert 'knowledge_fact_unknown' in job['warnings_json']
 
 
 def test_remote_birth_discloses_only_to_local_observer(tmp_path):
@@ -288,10 +289,10 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
     p,=state['pregnancies'].values()
     camera=state['camera']
     away=next(lid for lid in state['locations'] if lid!=camera['location_id'])
-    moved,_=ordinary(repo,sid,0,text='Вера ушла в соседний дом.',config=CONFIG,extra=dict(
+    moved,_=ordinary(repo,sid,0,text='Вера ушла в соседний дом.',config=CONFIG,extra=arrival_sources(dict(
         movements=[dict(actor_id='qa_vera',to_location_id=away,evidence='Вера ушла.')],
         final_scene=dict(location_id=camera['location_id'],elapsed_minutes=0,
-                         present_character_ids=[cid for cid in camera['present_character_ids'] if cid!='qa_vera'])))
+                         present_character_ids=[cid for cid in camera['present_character_ids'] if cid!='qa_vera']))))
     assert moved['status']=='saved', moved['error']
     def provider(**kwargs):
         messages=kwargs['messages']
@@ -303,7 +304,7 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
             yield 'Вера родила и сама увидела: мальчик.' if private else 'Кирилл ждёт дома.'
             return
         cam=current['camera']
-        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
+        raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
         if private:
             text=block(messages,'completed_narrative')
             raw.update(events=[dict(id='birth',text=text,evidence=text,participants=['qa_vera'],
@@ -330,13 +331,13 @@ def test_repair_cannot_clear_narrative_reauthor_requirement(tmp_path, conflict):
     narrative, raw = payload(before['world_state'], sexes=['female' if conflict == 'birth' else 'male'])
     first = deepcopy(raw)
     # One structural repair is legal until the immutable prose is assessed.
-    first.pop('player_agency')
+    first['unknown_canonical_outcome'] = {'id': 'unsupported'}
     if conflict == 'agency':
         raw['player_agency']['status'] = 'violated'
     job, calls = execute(repo, sid, narrative, [first, raw])
     assert job['status'] == 'error' and len(calls) == 3
     diagnostics = json.loads(job['repair_diagnostics_json'])
-    assert diagnostics[0]['code'] == 'player_agency_missing'
+    assert diagnostics[0]['code'] == 'raw_unknown_field'
     assert diagnostics[-1]['code'] == ('narrative_agency_conflict' if conflict == 'agency' else 'birth_narrative_sex_conflict')
     assert diagnostics[-1]['action'] == 'reauthor_narrative'
     fresh = Repository(repo.path)

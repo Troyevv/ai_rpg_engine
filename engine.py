@@ -68,17 +68,26 @@ def submit(storage, save_id, user_text='', kind='turn', config=None, api_key=Non
     return job_id
 
 
-def retry(storage, job_id, config, api_key=None):
+def retry(storage, job_id, config, api_key=None, *, correct_chronology=False, revision=None, attempt_epoch=None):
+    if correct_chronology:
+        config = json.loads(storage.get_job(job_id)['config_json'])
     check_config(config)
     if live(job_id):
         raise ValueError('Предыдущий запрос ещё останавливается. Подожди немного.')
     if config.get('provider') == 'deepseek':
         api_key = deepseek_key(api_key)
-    storage.retry_job(job_id, config)
+    if correct_chronology:
+        # Correction inherits the original effective model/config; a UI settings
+        # change cannot silently turn it into a different experiment.
+        job_id = storage.correct_chronology_job(job_id, revision, attempt_epoch)
+    else:
+        storage.retry_job(job_id, config)
     if config.get('provider') == 'deepseek':
         launch(storage.path, job_id, api_key=api_key)
     else:
         launch(storage.path, job_id)
+
+    return job_id
 
 
 def launch(path, job_id, api_key=None):
@@ -162,7 +171,7 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.repository import continuity_reader, relationship_reader
             world_history['_relationship_query'] = relationship_reader(storage, before.get('history_head'))
             world_history['_continuity_query'] = continuity_reader(storage, before.get('history_head'))
-            history = storage.list_turns(job['save_id'])
+            history = storage.list_turns(job['save_id'], context=True)
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
                 history = [t for t in history if t['sequence'] < target['sequence']]
@@ -238,7 +247,24 @@ def run_job(path, job_id, handle):
                     if estimate(messages)>context-config['max_tokens']-256:
                         raise ValueError('Сохранённый контекст с контрактом письма не помещается в выбранную модель.')
                 storage.save_context(job_id,messages,before)
-                for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
+                correction = config.get('_narrative_correction')
+                if correction:
+                    correction_messages = list(messages) + [{'role':'system', 'content':
+                        'Исправь только хронологические утверждения отклонённого кандидата по каноническим основаниям. '
+                        'Сохрани события, стиль и смысл остальных фрагментов. Верни JSON {"edits":[{"original":"точный evidence",'
+                        '"replacement":"исправленный фрагмент"}]}. Не создавай новую сцену.\n' +
+                        json.dumps(correction, ensure_ascii=False)}]
+                    if estimate(correction_messages) > context-config['max_tokens']-256:
+                        raise ValueError('Контекст адресной коррекции не помещается; увеличь окно явно.')
+                    from backend.runtime_v3.continuity import corrected_candidate
+                    correction_payload = ''.join(generate('narrative_correction', correction_messages,
+                        config['max_tokens'], config.get('temperature', 0.8), response_format={'type':'json_object'}))
+                    if handle.cancelled.is_set(): return
+                    narrative = corrected_candidate(correction['original'], correction_payload, correction['grounds'])
+                    chunks = []
+                else:
+                    chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8))
+                for chunk in chunks:
                     if handle.cancelled.is_set():
                         return
                     narrative += chunk
@@ -274,25 +300,36 @@ def run_job(path, job_id, handle):
                 from backend.runtime_v3.raw import RawTurnResult, repair_feedback
                 # Retry reuses the latest failed proposal as feedback, never as
                 # canonical truth or a union of mutually inconsistent attempts.
+                latest_payload = None
+                complete_payload = None
                 for request in storage.request_log(job_id=job_id):
                     if request['stage'] not in ('extraction', 'extraction_repair') or not request.get('response_text'):
                         continue
+                    if latest_payload is None:
+                        latest_payload = request['response_text']
                     try:
                         previous_extraction = RawTurnResult.parse(request['response_text'])
+                        complete_payload = request['response_text']
                     except StructuralDeltaError:
-                        pass  # Invalid raw text is still useful repair feedback.
-                    diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
-                    if diagnostics:
-                        latest = diagnostics[-1]
-                        feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], request['response_text'], before['world_state'])
+                        continue  # Keep the latest failure and find its complete predecessor.
                     break
+                diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
+                if diagnostics and latest_payload is not None:
+                    latest = diagnostics[-1]
+                    feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], latest_payload, before['world_state'], previous_complete=complete_payload)
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
-                                         config['update_tokens'], extraction_text=narrative,
+                                         config['update_tokens'], extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
                                          validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                if config.get('_narrative_correction'):
+                    ids = [g['event_id'] for g in config['_narrative_correction']['grounds']]
+                    messages.append({'role':'system', 'content':'Corrected candidate: recheck objective assertions for '
+                        + json.dumps(ids) + ' in chronology_claims against the NEW prose; never omit or downgrade them.'})
+                    if estimate(messages)>context-config['update_tokens']-256:
+                        raise ValueError('Контекст повторной проверки хронологии не помещается в выбранную модель.')
                 if legacy_letter_sources:
                     from backend.services.letter_sources import extraction_context
                     messages.append(extraction_context(legacy_letter_sources))
@@ -312,13 +349,16 @@ def run_job(path, job_id, handle):
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_revision_warnings
                     raw=RawTurnResult.parse(result)
+                    if config.get('_narrative_correction'):
+                        from backend.runtime_v3.continuity import require_chronology_recheck
+                        require_chronology_recheck(raw, config['_narrative_correction']['grounds'])
                     raw.warnings.extend(repair_revision_warnings(previous_extraction, raw))
                     previous_extraction = raw
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
-                    from backend.runtime_v3.player_actions import required as agency_required
-                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],require_due_birth_assessment=require_due_birth_assessment,require_player_agency=agency_required(before['world_state'], job['user_text'], job['kind']),pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    from backend.runtime_v3.player_actions import resolver_options
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],chronology_events=world_history.get('events', []),require_due_birth_assessment=require_due_birth_assessment,**resolver_options(before['world_state'], job['user_text'], job['kind'], config.get('_extraction_contract', 1), time_skip=bool(skip_result)),pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
                     resolved=resolver.resolve(raw)
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']

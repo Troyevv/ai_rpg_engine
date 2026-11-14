@@ -93,7 +93,7 @@ def test_retry_only_unpaid_extraction_and_production_reuses_narrative(failed_fam
     assert probe['input_estimate'] < probe['hard_input_limit'] < 1048576
     assert probe['conservative_usd_after_one_reservation'] < 2
     camera = repo.get_snapshot(job['save_id'])['world_state']['camera']
-    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],
                                present_character_ids=camera['present_character_ids'], elapsed_minutes=1))
     repo.retry_job(jid, dict(json.loads(job['config_json']), context_length=65536))
     with patch('engine.chat_stream', return_value=iter([json.dumps(raw)])) as calls:

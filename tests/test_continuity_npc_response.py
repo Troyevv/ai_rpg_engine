@@ -206,6 +206,7 @@ def test_npc_owned_decision_requires_attributed_event(state, owner, phase, accep
     # This fixture now describes only the NPC decision, not a completed player
     # action with its source Event deliberately removed (#237).
     raw['player_agency']['actions'] = []
+    raw['player_agency']['narrative_audit'] = []  # This control now describes only NPC decisions.
     event['participants'].append('qa_timur')
     if owner:
         event.update(medium='message', author_id=owner)
@@ -233,7 +234,8 @@ def test_proposal_job_is_atomic_and_regenerates_from_the_original_branch(tmp_pat
     revision = repo.get_save(sid)['revision']
     raw = photo_turn(before['world_state'])
     forged = deepcopy(raw)
-    forged['continuity_beats'][0].update(actor_id=VERA, kind='decision', decision_actor_id=ACTOR_ID)
+    # A broken Event source is substantive; an optional beat no longer cancels a turn.
+    forged['events'][0]['player_action_id'] = 'missing_action'
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
     execute(repo, job, forged, ASSENT)
     assert repo.get_job(job)['status'] == 'error'

@@ -273,8 +273,10 @@ def create_app(db_path=None, recover=True):
 
     @app.post('/api/jobs/{jid}/retry')
     def retry(jid: str, body: Retry):
-        engine.retry(repo, jid, body.config.model_dump(), api_key=credentials.resolve(body.config.provider, body.key()))
-        return job(jid)
+        provider = json.loads(repo.get_job(jid)['config_json']).get('provider', 'local') if body.correct_chronology else body.config.provider
+        new_id = engine.retry(repo, jid, body.config.model_dump(), api_key=credentials.resolve(provider, body.key()),
+            correct_chronology=body.correct_chronology, revision=body.revision, attempt_epoch=body.attempt_epoch)
+        return job(new_id)
 
     @app.get('/api/jobs/{jid}/events')
     async def events(jid: str, request: Request):

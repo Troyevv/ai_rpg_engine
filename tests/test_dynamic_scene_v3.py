@@ -7,7 +7,7 @@ from backend.services.world_delta_errors import StructuralDeltaError
 from backend.services.world import CARD_FIELDS
 from test_runtime_v3_domain import initial
 from test_engine import db, CONFIG
-from runtime_v3_fixture import execute
+from runtime_v3_fixture import execute, arrival_sources
 
 PLAYER = 'Иду в кофейню.'
 NARRATIVE = 'Илья и Соня сидят за столиком у окна в кофейне «Гвоздь».'
@@ -18,10 +18,10 @@ def world():
     return state
 
 def raw(lid='nail', present=None):
-    return dict(final_scene=dict(location_id=lid, present_character_ids=present or ['a', 'b'],
+    return arrival_sources(dict(final_scene=dict(location_id=lid, present_character_ids=present or ['a', 'b'],
         situation=NARRATIVE, situation_evidence=NARRATIVE,elapsed_minutes=0),
-        movements=[dict(actor_id='a',to_location_id=lid,player_assertion='explicit_choice',player_evidence=PLAYER)] if (present is None or 'a' in present) else [],
-        locations=[dict(id='nail', name='Гвоздь', evidence=NARRATIVE)])
+        movements=([dict(actor_id=c,to_location_id=lid,**(dict(player_assertion='explicit_choice',player_evidence=PLAYER) if c=='a' else {})) for c in (present or ['a','b']) if c in ('a','b')] if lid!='room' else []),
+        locations=[dict(id='nail', name='Гвоздь', evidence=NARRATIVE)]))
 
 def test_new_location_and_situation_are_canonical_and_patch_replays():
     before = world()
@@ -39,6 +39,8 @@ def test_new_location_and_situation_are_canonical_and_patch_replays():
 def test_return_to_existing_location_keeps_identity():
     first = StateResolver(world(), NARRATIVE, PLAYER).resolve(raw()).state
     back = dict(final_scene=dict(location_id='room', present_character_ids=['a', 'b']),movements=[dict(actor_id='a',to_location_id='room',player_assertion='explicit_choice',player_evidence='Возвращаюсь.')])
+    back['movements'].append(dict(actor_id='b',to_location_id='room'))
+    arrival_sources(back)
     second = StateResolver(first, 'Они вернулись в «Критический успех».', 'Возвращаюсь.').resolve(back).state
     assert second['camera']['location_id'] == 'room'
     assert second['locations'] == first['locations']
@@ -72,7 +74,9 @@ def test_departure_and_arrival_update_presence_and_character_endpoints():
         movements=[dict(actor_id='b', to_location_id='hall', evidence=text)])
     state = world()
     state['characters']['c']['location_id'] = 'hall'
-    payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
+    payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
+    payload['events'] = [dict(id='arrival', text=text, participants=['c'], location_id='room', medium='action')]
+    arrival_sources(payload)
     result = StateResolver(state, text, '',actor_names={'c':'Юра'}).resolve(payload).state
     assert result['camera']['present_character_ids'] == ['a', 'c']
     assert result['characters']['b']['location_id'] == 'hall'
@@ -83,6 +87,9 @@ def test_ordered_route_uses_last_endpoint_and_does_not_duplicate_movement_histor
     payload['movements'] = [
         dict(actor_id='a', to_location_id='nail', order=2, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER),
         dict(actor_id='a', to_location_id='hall', order=1, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER)]
+    payload['movements'].append(dict(actor_id='b',to_location_id='nail',order=2))
+    payload['events']=[]
+    arrival_sources(payload)
     result = StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
     assert len([m for m in result.history['movements'] if m['actor_id'] == 'a']) == 2
 
@@ -113,9 +120,9 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     before = repo.get_snapshot(sid)
     camera = before['world_state']['camera']
     bad = raw(camera['location_id'], camera['present_character_ids'])
-    bad['player_agency'] = dict(status='preserved', actions=[])
+    bad['player_agency'] = dict(status='preserved', actions=[], narrative_audit=[])
     bad['movements'] = [dict(actor_id=camera['controlled_actor_id'],
-        to_location_id='nail', evidence=NARRATIVE)]
+        to_location_id='nail', assertion='completed_arrival', evidence=NARRATIVE)]
     fixed = deepcopy(bad)
     fixed['final_scene']['location_id'] = 'nail'
     job = repo.begin_job(sid, '', 'start', CONFIG)
@@ -123,13 +130,14 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     assert len(calls) == 3
     messages = calls[2]['messages']
     system = messages[0]['content']
-    feedback = json.loads(system.split('Исправь структурную ошибку, верни полный JSON:\n', 1)[1])
+    feedback = json.loads(system.split('Повторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n', 1)[1])
     assert feedback['original_extraction'] == bad
-    assert feedback['previous_camera'] == camera
-    assert set(feedback['known_locations']) == set(before['world_state']['locations'])
-    for lid, location in feedback['known_locations'].items():
-        assert location == {k: v for k, v in before['world_state']['locations'][lid].items()
-                            if k in ('id', 'name', 'aliases', 'parent_id', 'kind')}
+    assert 'previous_camera' not in feedback
+    current = json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
+    assert {key: camera[key] for key in current['camera']}==current['camera']
+    assert all(value is None for key,value in camera.items() if key not in current['camera'])
+    assert not set(current['locations']) & set(feedback.get('known_locations', {}))
+    assert feedback['canonical_context']
     assert feedback['diagnostic']['code'] == 'scene_movement_conflict'
     assert any(NARRATIVE in m['content'] for m in messages if m['content'].startswith('completed_narrative'))
     if repair_succeeds:
@@ -155,14 +163,18 @@ def test_valid_dynamic_location_saves_with_two_calls_and_rolls_back(db):
     repo.rollback_last(sid)
     assert repo.get_snapshot(sid) == before
 
-def test_scene_contract_overrides_saved_prompt_without_previous_narratives():
-    from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT
+@pytest.mark.parametrize('version', [4,5])
+def test_scene_contract_overrides_saved_prompt_without_previous_narratives(version):
+    from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT
     from test_context_builder_v2 import clean_world, build, section
     snapshot = clean_world()
     snapshot['world_state']['locations']['nail'] = dict(id='nail', name='Гвоздь', description='')
-    messages = build(snapshot, extraction_text=NARRATIVE,
+    messages = build(snapshot, extraction_text=NARRATIVE, extraction_contract=version,
         prompts={'state_update_prompt.md': {'content': 'Сохранённая инструкция'}})
-    assert EXTRACTION_CONTRACT in messages[0]['content']
-    assert messages[0]['content'].index('Сохранённая инструкция') < messages[0]['content'].index(EXTRACTION_CONTRACT)
+    contract = (SEMANTIC_BASE_CONTRACT if version >= 5 else EXTRACTION_CONTRACT).split('Departure without destination:')[0]
+    assert contract in messages[0]['content']
+    assert 'Movement assertion=departure' in messages[0]['content']
+    assert 'CHOICE SOURCE BOUNDARY v4' in messages[0]['content']
+    assert messages[0]['content'].index('Сохранённая инструкция') < messages[0]['content'].index(contract)
     assert section(messages, 'Текущее состояние / GM-only')['locations']['nail']['name'] == 'Гвоздь'
     assert not any(m['role'] == 'assistant' for m in messages)

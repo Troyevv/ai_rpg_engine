@@ -41,7 +41,8 @@ def events(repo, snapshot):
     return [e for e in history['events'] if e.get('local_id', '').startswith(EVENT)]
 
 
-def test_social_missing_beat_quote_repairs_without_reauthoring(tmp_path):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_social_missing_beat_quote_repairs_without_reauthoring(tmp_path):
     repo = Repository(tmp_path / 'social.sqlite')
     sid = load_fixture(repo, 'knowledge')['save']
     before = repo.get_snapshot(sid)
@@ -66,6 +67,13 @@ def test_social_missing_beat_quote_repairs_without_reauthoring(tmp_path):
     assert beat['player_evidence'] == event['player_evidence'] == ACTION
     assert beat['evidence'] == event['evidence'] == NARRATIVE
     assert result['narrative'] == NARRATIVE
+
+
+@pytest.fixture
+def legacy_annotation_policy():
+    """Archived v2 jobs retain their stricter continuity contract (#251)."""
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 2):
+        yield
 
 
 @pytest.fixture
@@ -141,7 +149,8 @@ def test_explicit_decision_is_saved_without_extra_call(game, action, status):
     ({'evidence': ''}, 'evidence'),
     ({'status': 'open'}, 'status'),
 ])
-def test_unconfirmed_decision_is_atomic_after_one_repair(game, change, path):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_unconfirmed_decision_is_atomic_after_one_repair(game, change, path):
     repo, sid, before = game
     raw = supported(before['world_state'])
     raw['continuity_beats'][0].update(change)
@@ -188,7 +197,8 @@ def test_event_quote_and_authorship_must_confirm_decision(game, event_change):
     ('Я подумаю, ответа пока нет.', 'information'),
     ('Я хочу потом заняться фотографиями.', 'information'),
 ])
-def test_input_without_decision_cannot_borrow_invented_consent(game, action, kind):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_input_without_decision_cannot_borrow_invented_consent(game, action, kind):
     repo, sid, before = game
     bad = supported(before['world_state'], action)
     bad['continuity_beats'][0]['player_evidence'] = 'Я согласен сейчас сортировать фотографии.'
@@ -212,6 +222,7 @@ def test_npc_proposal_or_independent_decision_needs_no_player_quote(game, decisi
     for key in ('actor_id', 'target_ids', 'player_action_id'):
         raw['events'][0].pop(key)
     raw['player_agency']['actions'] = []
+    raw['player_agency']['narrative_audit'] = []  # This control now describes only NPC decisions.
     text = 'Вера решила убрать свои фотографии.' if decision else 'Вера предлагает разобрать фотографии.'
     raw['events'][0].update(text=text, evidence='Разговор о фотографиях продолжается. ' + text)
     raw['continuity_beats'][0].update(actor_id='qa_vera', target_ids=[ACTOR_ID], evidence=text,
@@ -229,7 +240,8 @@ def test_npc_proposal_or_independent_decision_needs_no_player_quote(game, decisi
 
 
 @pytest.mark.parametrize('bad_second', [False, True])
-def test_multiple_beats_validate_individually_and_commit_atomically(game, bad_second):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_multiple_beats_validate_individually_and_commit_atomically(game, bad_second):
     repo, sid, before = game
     first = 'Я согласен сортировать фотографии.'
     second = 'Я отказываюсь передавать оригинал карты.'
@@ -265,7 +277,8 @@ def test_duplicate_beats_are_not_committed_twice(game):
 
 
 @pytest.mark.parametrize('mode', ['valid', 'repair', 'repeated_error'])
-def test_independent_decisions_share_conversation_but_keep_their_bases(game, mode):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_independent_decisions_share_conversation_but_keep_their_bases(game, mode):
     from backend.runtime_v3.continuity import recorded
     from context_builder import build_context
 
@@ -310,7 +323,8 @@ def test_independent_decisions_share_conversation_but_keep_their_bases(game, mod
 
 
 @pytest.mark.parametrize('quote', ['', 'Да, передаю оригинал карты.'])
-def test_npc_quote_in_conversation_cannot_authorize_player_choice(game, quote):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_npc_quote_in_conversation_cannot_authorize_player_choice(game, quote):
     repo, sid, before = game
     action = 'Вера, где лежит оригинал карты?'
     narrative = 'Вера отвечает: «Да, передаю оригинал карты». Кирилл ждёт.'
@@ -363,7 +377,8 @@ def test_conflicting_duplicate_decision_is_rejected(game):
     assert error.value.code == 'continuity_beat_conflict'
 
 
-def test_recovery_reload_regeneration_siblings_and_new_branch(game):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_recovery_reload_regeneration_siblings_and_new_branch(game):
     repo, sid, before = game
     raw = social_turn(before['world_state'])
     fixed = supported(before['world_state'])
@@ -400,7 +415,8 @@ def test_recovery_reload_regeneration_siblings_and_new_branch(game):
 
 
 @pytest.mark.parametrize('repaired', [False, True])
-def test_decision_cannot_retarget_action_to_another_conversation_participant(game, repaired):
+@pytest.mark.usefixtures('legacy_annotation_policy')
+def test_legacy_decision_cannot_retarget_action_to_another_conversation_participant(game, repaired):
     repo, sid, before = game
     raw = supported(before['world_state'])
     # Timur hears the conversation but is not the addressee chosen in this action.
@@ -424,7 +440,7 @@ def test_decision_cannot_retarget_action_to_another_conversation_participant(gam
 def test_social_narrative_substitution_blocks_formally_correct_decision(game):
     repo, sid, before = game
     raw = supported(before['world_state'])
-    raw['player_agency']['actions'][0]['narrative_target_ids'] = ['qa_timur']
+    raw['player_agency']['actions'][0].update(narrative_target_ids=['qa_timur'], meaning='changed')
     narrative = 'Кирилл обращается к Тимуру и соглашается сортировать его фотографии.'
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
     calls = execute(repo, job, raw, narrative)
@@ -450,3 +466,58 @@ def test_player_can_accept_npc_initiated_proposal(game):
     event, = events(Repository(repo.path), repo.get_snapshot(sid))
     assert event['player_action']['target_ids'] == ['qa_vera']
     assert event['continuity'][0]['decision_actor_id'] == ACTOR_ID
+
+
+@pytest.mark.parametrize('change', [
+    {'player_evidence': ''}, {'player_evidence': 'Чужое согласие'},
+    {'player_evidence': None}, {'source_event_id': 'missing'},
+    {'decision_actor_id': 'qa_vera'}, {'decision_actor_id': None},
+    {'actor_id': 'qa_oleg'}, {'evidence': ''}, {'status': 'open'},
+    {'target_ids': ['qa_timur']}, {'basis_ids': ['missing']},
+])
+def test_current_contract_drops_only_untrusted_annotation(game, change):
+    """#251 counterpart to the pinned legacy failures: no invented decision."""
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'][0].update(change)
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    calls = execute(repo, job, raw, NARRATIVE)
+    result = repo.get_job(job)
+    assert result['status'] == 'saved', result['repair_diagnostics_json']
+    assert len(calls) == 2 and json.loads(result['repair_diagnostics_json']) == []
+    fresh = Repository(repo.path)
+    snapshot = fresh.get_snapshot(sid)
+    event, = events(fresh, snapshot)
+    assert not event.get('continuity')
+    assert event['player_evidence'] == ACTION and event['player_interaction']
+    assert event['text'] == NARRATIVE and result['narrative'] == NARRATIVE
+    for key in ('knowledge', 'scheduled_events', 'objective_relations', 'possessions'):
+        assert snapshot['world_state'][key] == before['world_state'][key]
+    assert fresh.list_turns(sid)[-1]['changes_json'].find('continuity_') >= 0
+    fresh.rollback_last(sid)
+    assert fresh.get_snapshot(sid) == before
+
+
+def test_current_contract_retains_independent_valid_decision(game):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'].append(dict(raw['continuity_beats'][0],
+        basis_ids=['qa_library_open'], player_evidence='Выдуманное согласие'))
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    assert len(execute(repo, job, raw, NARRATIVE)) == 2
+    assert repo.get_job(job)['status'] == 'saved'
+    event, = events(Repository(repo.path), repo.get_snapshot(sid))
+    beat, = event['continuity']
+    assert beat['basis_ids'] == ['qa_map'] and beat['player_evidence'] == ACTION
+
+
+def test_current_contract_conflicting_annotations_cannot_resurrect_decision(game):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'] += [dict(raw['continuity_beats'][0], status='rejected'),
+                               dict(raw['continuity_beats'][0])]
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    assert len(execute(repo, job, raw, NARRATIVE)) == 2
+    assert repo.get_job(job)['status'] == 'saved'
+    event, = events(repo, repo.get_snapshot(sid))
+    assert not event.get('continuity') and event['player_interaction']

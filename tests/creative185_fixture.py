@@ -1,9 +1,9 @@
-"""Build a pre-upgrade rejected checkpoint using real generation persistence."""
+"""Reject an optional creative addition while preserving a valid reviewed base."""
 import json
 from pathlib import Path
 from copy import deepcopy
 from unittest.mock import patch
-from backend.services import draft_creative
+from backend.services import draft_creative, draft_completeness
 from test_api import REMOTE, wait_job
 
 
@@ -13,6 +13,8 @@ def seed_rejected(client):
         if kw['messages'][0]['content'].startswith(draft_creative.MARKER):
             value=json.loads(data['creative']['original_reply'])
             value['candidate_hash']=json.loads(kw['messages'][1]['content'])['candidate_hash']
+        elif kw['messages'][0]['content'].startswith(draft_completeness.MARKER):
+            value={'issues':[]}
         else:
             value=deepcopy(data['candidate'])
             assert not value['world'].get('contacts')
@@ -24,5 +26,5 @@ def seed_rejected(client):
     with patch('backend.services.preparation.chat_stream',side_effect=stream),patch.object(draft_creative,'VALIDATION_VERSION',1),patch.object(draft_creative,'apply_proposal',side_effect=ValueError('Модель не может назначать серверное происхождение: revision')):
         response=client.post(url+'/generate',json=dict(revision=0,text='Сосновка.',config=dict(REMOTE,context_length=131072,max_tokens=20000),api_key='offline'))
         assert response.status_code==200,response.text
-        job=wait_job(client,response.json()['id']);assert job['status']=='error',job
+        job=wait_job(client,response.json()['id']);assert job['status']=='saved',job
     return workspace

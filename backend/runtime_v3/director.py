@@ -66,47 +66,82 @@ def plan(state, kind, history=None, scope=None):
         instruction='Не двигай все линии сразу. Намерение и просроченный срок — не свершившийся факт.')
 
 
-def background_candidate(before, after):
-    now=after['meta']['world_time'];elapsed=now-before['meta']['world_time']
+def background_candidate(before, after, considerations=None):
+    """One fair, bounded opportunity; attempts are receipts, never outcomes.
+
+    The snapshot cursor belongs to the active History branch. World time, not
+    wall time or the length of a single turn, drives eligibility after reload.
+    """
+    now = after['meta']['world_time']
+    elapsed = now - before['meta']['world_time']
+    if elapsed < 0:
+        return None
+    cursor = considerations or {}
+    origin = cursor.get('since_minute', before['meta']['world_time'])
+    attempts = cursor.get('attempts', {})
     camera = after['camera']
     controlled = camera['controlled_actor_id']
     present = set(camera['present_character_ids']) | set(camera.get('observed_character_ids', []))
-    if elapsed < 0:
-        return None
-    # The scene clock only limits its participants. An unrelated NPC process
-    # can still develop in the same world through the private simulation camera.
+    last_dispatch = cursor.get('last_dispatch_minute')
+    candidates = []
+
+    def add(key, actor, reason, cooldown, priority, scheduled_id=None, due=False):
+        last = attempts.get(key)
+        # Due births retain their existing per-turn development, including a frozen
+        # clock. They are not ordinary thread polling; never repeat one turn.
+        due_birth_turn = (key.startswith('pregnancy:')
+                        and after['meta']['turn_id'] > before['meta']['turn_id']
+                        and cursor.get('last_dispatch_turn') != after['meta']['turn_id'])
+        if last is not None and not due_birth_turn and now - last < cooldown:
+            return
+        if not due and now - (last if last is not None else origin) < cooldown:
+            return
+        candidates.append(dict(candidate_id=key, actor_id=actor, reason=reason,
+                               scheduled_id=scheduled_id, last_considered=last,
+                               priority=priority, due_birth_turn=due_birth_turn))
+
+    def eligible(cid, *, active=True):
+        point = after['characters'][cid]
+        return ((not active or capabilities(after, cid)['can_act']) and cid not in present and cid != controlled
+                and (camera['location_id'] is None or point['location_id'] != camera['location_id'])
+                and not (controlled and point['location_id'] is not None
+                         and point['location_id'] == after['characters'][controlled]['location_id']))
+
     for boundary in pregnancy_boundaries(after):
-        if boundary['due_minute'] > now:
-            continue
         mother = after['pregnancies'][boundary['id']]['gestational_actor_id']
-        location = after['characters'][mother]['location_id']
-        if mother in present or mother == controlled or location and location == camera['location_id']:
-            continue
-        if controlled and location and location == after['characters'][controlled]['location_id']:
-            continue
-        return dict(actor_id=mother, reason='Покажи происходящее с этим персонажем: '
-                    'потуги и их наблюдаемое развитие. Роды могут завершиться в сцене или '
-                    'остаться незавершёнными. Не раскрывай скрытые подробности', scheduled_id=None)
-    if elapsed == 0:
-        return None
-    def eligible(cid):
-        point=after['characters'][cid]
-        return capabilities(after,cid)['can_act'] and cid not in present and cid!=controlled and (camera['location_id'] is None or point['location_id']!=camera['location_id'])
-    for event in sorted(after['scheduled_events'].values(),key=lambda e:(e['due_minute'] or 0,e['id'])):
-        if event['status']!='pending' or scheduled_due(after,event) is None or scheduled_due(after,event)>now:continue
-        if event.get('last_attempt_minute') is not None and now-event['last_attempt_minute']<30:continue
-        for cid in event['character_ids']:
-            if eligible(cid):return dict(actor_id=cid,reason='scheduled_event_due',scheduled_id=event['id'])
-    if elapsed>=45:
-        for thread in sorted(after['threads'].values(),key=lambda t:(-t['relevance'],t['id'])):
-            if thread['status'] not in ('active','developing') or thread['relevance']<0.6:continue
-            for cid in thread['character_ids']:
-                if eligible(cid):return dict(actor_id=cid,reason='relevant_off_camera_thread',scheduled_id=None)
-    if elapsed>=60:
-        for cid,point in sorted(after['characters'].items()):
-            if eligible(cid) and any(actionable(r) for field in ('intentions','obligations') for r in point[field]):
-                return dict(actor_id=cid,reason='established_intention_and_time_gap',scheduled_id=None)
-    return None
+        if boundary['due_minute'] <= now and eligible(mother, active=False):
+            add('pregnancy:' + boundary['id'], mother,
+                'Покажи происходящее с этим персонажем: потуги и их наблюдаемое развитие. '
+                'Роды могут завершиться в сцене или остаться незавершёнными. Не раскрывай скрытые подробности',
+                15, 0, due=True)
+    # Zero-time input only develops due births at a frozen scene clock; it
+    # never ticks ordinary intentions or repeats the same canonical turn.
+    if elapsed > 0:
+        for event in after['scheduled_events'].values():
+            due = scheduled_due(after, event)
+            if event['status'] != 'pending' or due is None or due > now:
+                continue
+            if event.get('last_attempt_minute') is not None and now - event['last_attempt_minute'] < 30:
+                continue
+            actor = next((cid for cid in event['character_ids'] if eligible(cid)), None)
+            if actor:
+                add('scheduled:' + event['id'], actor, 'scheduled_event_due', 30, 1, event['id'], due=True)
+        for thread in after['threads'].values():
+            if thread['status'] not in ('active', 'developing') or thread['relevance'] < 0.6:
+                continue
+            actor = next((cid for cid in thread['character_ids'] if eligible(cid)), None)
+            if actor:
+                add('thread:' + thread['id'], actor, 'relevant_off_camera_thread', 45, 2)
+        for cid, point in after['characters'].items():
+            if eligible(cid) and any(actionable(r) for f in ('intentions', 'obligations') for r in point[f]):
+                add('motivation:' + cid, cid, 'established_intention_and_time_gap', 60, 3)
+    if last_dispatch is not None and now - last_dispatch < 15:
+        candidates = [c for c in candidates if c['due_birth_turn']]
+    # Unconsidered causes go first; an unsuccessful high-priority cause cannot
+    # monopolize the slot. Only one group is dispatched, never a per-NPC loop.
+    return min(candidates, key=lambda c: (c['last_considered'] is not None,
+               c['last_considered'] if c['last_considered'] is not None else origin,
+               c['priority'], c['candidate_id']), default=None)
 
 
 def interval_candidates(before, after, budget=6):

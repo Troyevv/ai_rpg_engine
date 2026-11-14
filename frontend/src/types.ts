@@ -97,7 +97,7 @@ export interface State {
   camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene';subject_id?:string|null;pov_actor_id?:string|null};
   notifications?:RuntimeNotice[];
   notification_history?:StoryNotice[];
-  last_long_term_advance?: {actual_target:number;requested_target:number;llm_calls:number;max_llm_calls:number;interruption:{kind:string}|null;decisions:{id:string;context:string;kind:string;domains?:string[]}[];accepted:{summaries:string[]}[];unresolved:{id:string;reason:string}[]}|null;
+  last_long_term_advance?: {status?:'incomplete'|'developed'|'calendar_only'|'quiet';coverage?:{accepted_groups:number;quiet_groups:number;rejected_causes:number;budget_unattempted:number};actual_target:number;requested_target:number;llm_calls:number;max_llm_calls:number;interruption:{kind:string}|null;decisions:{id:string;context:string;kind:string;domains?:string[]}[];accepted:{summaries:string[]}[];unresolved:{id:string;reason:string}[]}|null;
   last_time_skip?:{requested_duration:number;elapsed_minutes:number;interrupted:boolean;background_candidates:number;simulated_candidates?:number;skipped_candidates?:number;merged_candidates?:number;living_world_llm_calls?:number};
   world?: {objective_relations?:Record<string,SocialRelation & {fact_id?:string|null}>;version:number;characters:Record<string,{life_status?:string;location:string|null;minute:number|null;scene_id:string|null;situation?:string;birth_date?:string|null;age?:number|null;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;value_history?:{id:string;before?:string|null;text:string;status:string;minute:number}[];lifecycle?:Record<string,{id:string;text:string;status:string;review_required?:string[]}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;scheduled_events?:Record<string,ScheduledCommitment>;relationships?:Record<string,WorldRelation>};
   world_clock?: {last_event_time:string;minute?:number;calendar?:import("./lib/worldTime").WorldCalendar;projection?:{date:string|null;time:string;day:number;day_period:string};nearby?:{id:string;date:string;kind:string;name:string|null;character_ids:string[]}[]};
@@ -176,6 +176,7 @@ export interface Job {
   narrative_complete?: boolean;
   retry_allowed?: boolean;
   narrative_reauthor_required?: boolean;
+  chronology_correction_available?: boolean;
   kind: string;
   revision: number;
   live?: boolean;

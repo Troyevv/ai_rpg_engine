@@ -86,6 +86,8 @@ class DraftStorage(DraftEditorStorage):
             if author and quality_status in ('rejected','partial'):
                 report['warnings'].append('Необязательное дополнение не принято или качество не завершено полностью. Проверенные данные сохранены; некоторые поля могут требовать содержательного дополнения.')
             creative_status=json.loads(latest['response_journal'] or '{}').get('creative',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
+            if author and creative_status=='rejected':
+                report['warnings'].append('Необязательное творческое дополнение отклонено. Исходный мир сохранён и доступен для игры при корректной структуре.')
             if creative_status=='running' and latest['status']!='generating':creative_status='interrupted'
             public_job=self.public_job(dict(latest)) if latest else None
             if public_job and record and review_metadata(record) and review_metadata(record).get('status')=='stale' and latest['status'] in ('error','stopped'):

@@ -1,7 +1,7 @@
 """Directed feelings: semantic proposals, canonical provenance, local rejection.
 
-No automatic points or emotion simulation. Prior History events are the only
-source for autonomous proposals; explicit player declarations override them.
+No automatic points or emotion simulation. Accepted current and prior History events are
+sources for autonomous proposals; explicit player declarations override them.
 """
 from copy import deepcopy
 import math
@@ -14,13 +14,20 @@ MAX_AUTONOMOUS_STEP = 5
 def interaction_event(event, source, target):
     """Conservative eligibility; prose-only legacy events are not upgraded."""
     participants = event.get('participants', [])
+    if isinstance(participants, list): participants = participants + event.get('witnesses', [])
     if not isinstance(participants, list) or source not in participants or target not in participants:
         return False
     action = event.get('scene_action') or {}
     if not isinstance(action, dict):
         return False
     # An offer is an actual utterance, but is never evidence of its acceptance.
-    return (event.get('player_interaction') is True or
+    speaker = (event.get('information_source') or {}).get('actor_id')
+    perceptions = (event.get('information_source') or {}).get('claims', [])
+    semantic_contact = (event.get('actor_id') in (source, target) and
+        ({source, target} - {event.get('actor_id')}) <= set(event.get('target_ids', []))
+        or speaker in (source, target) and any(
+            ({source, target} - {speaker}) <= set(claim.get('perceived_by', [])) for claim in perceptions))
+    return (semantic_contact or event.get('player_interaction') is True or
             action.get('actor_id') in (source, target) and
             action.get('modality') in ('speech', 'physical', 'departure') and
             action.get('phase') != 'offer' and action.get('response') != 'open')
@@ -33,7 +40,7 @@ def blocked(event, key, receipts):
         c.get('turn_id', -1) >= event.get('turn_id', -1)) for c in receipts)
 
 
-def apply_relationships(resolver, raw):
+def apply_relationships(resolver, raw, current_events=None):
     from backend.runtime_v3.resolver import normalized
     section = 'relationship_changes'
     def player_owned(item):
@@ -70,9 +77,15 @@ def apply_relationships(resolver, raw):
                     any(not isinstance(e, str) or not e for e in ids) or len(set(ids)) != len(ids) or
                     item.get('assertion') != 'grounded_feelings' or
                     not isinstance(item.get('rationale'), str) or not item['rationale'].strip() or
-                    not resolver.relationship_query):
+                    not (resolver.relationship_query or resolver.semantic_slice)):
                 reject('relationship_evidence_required', 'Чувствам нужен явный ввод игрока или принятые канонические взаимодействия.'); continue
-            events = resolver.relationship_query(key, ids)
+            current = current_events or {} if resolver.semantic_slice else {}
+            historical_ids = [eid for eid in ids if eid not in current]
+            events = [current[eid] for eid in ids if eid in current]
+            if historical_ids and resolver.relationship_query:
+                events += resolver.relationship_query(key, historical_ids)
+            # Receipts always store canonical IDs, never transient response aliases.
+            ids = [current[eid]['id'] if eid in current else eid for eid in ids]
             receipts = resolver.relationship_receipts + resolver.history.relationship_changes
             if (len(events) != len(ids) or {e.get('id') for e in events} != set(ids) or any(not interaction_event(e, source, target) or
                     blocked(e, key, receipts) for e in events)):

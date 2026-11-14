@@ -6,7 +6,7 @@ import json
 from backend.runtime_v3.models import TemporalValue, fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('information_events','chronology_claims','secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -23,6 +23,7 @@ class RawTurnResult:
     choices: list
     warnings: list
     player_agency: dict | None = None
+    semantic_compiled: bool = False
 
     @classmethod
     def parse(cls, payload):
@@ -41,6 +42,10 @@ class RawTurnResult:
             warnings.append(dict(section='final_scene', path='final_scene.'+field,
                                  code='raw_unknown_field', action='ignore_field'))
         for key, value in payload.items():
+            if key in ('diagnostic', 'diagnostics'):
+                warnings.append(dict(section=key, path=key, code='raw_feedback_ignored',
+                                     action='ignore_field'))
+                continue  # Input-only feedback is never executable world data.
             if key not in (*SECTIONS, 'final_scene', 'choices', 'metadata', 'player_agency'):
                 if value not in (None, '', [], {}):
                     fatal('неизвестное непустое поле Extraction', 'raw_unknown_field', repairable=True,
@@ -84,6 +89,167 @@ class RawTurnResult:
         return cls(deepcopy(payload['final_scene']), records, choices, warnings, deepcopy(payload.get('player_agency')))
 
 
+
+def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
+    """Expand explicit perceptions once, never infer them from prose or delivery.
+
+    The caller owns the trusted contract version. Input and original provider
+    responses remain untouched; the normal domain validators own all authority.
+    """
+    from backend.runtime_v3.models import identity
+    from pydantic import ValidationError
+    result = deepcopy(raw)
+    if result.semantic_compiled:
+        return result
+    result.semantic_compiled = True
+    for event in result.records['events']:
+        if isinstance(event, dict): event.pop('information_source', None)
+    for acquisition in result.records['knowledge_gained']:
+        if isinstance(acquisition, dict): acquisition.pop('_compiled_perception', None)
+    event_ids = {e.get('id') for e in result.records['events'] if isinstance(e, dict) and isinstance(e.get('id'), str)}
+    fact_ids = {f.get('id') for f in result.records['facts'] if isinstance(f, dict) and isinstance(f.get('id'), str)}
+    aliases = {}
+    original_knowledge_count = len(result.records['knowledge_gained'])
+    for i, value in enumerate(result.records['information_events']):
+        try:
+            info = InformationEvent.model_validate(value)
+        except ValidationError as exc:
+            fatal(str(exc), 'information_event_invalid', repairable=True, section='information_events', index=i)
+        eid = info.id or identity('information', turn_id, namespace, i)
+        if eid in event_ids:
+            fatal('Информационное событие повторно задано через events.', 'semantic_duplicate', repairable=True, section='information_events', index=i)
+        event_ids.add(eid)
+        witnesses, links, acquisitions, claim_links = set(), [], [], []
+        for j, claim in enumerate(info.claims):
+            if claim.fact is not None:
+                fact = deepcopy(claim.fact)
+                local = fact.pop('id', None)
+                if local is not None and (not isinstance(local, str) or not local):
+                    fatal('Локальный ID факта должен быть непустой строкой.', 'information_event_invalid', repairable=True, section='information_events', index=i)
+                if local in state['facts'] or local in fact_ids or local in aliases:
+                    fatal('Новый факт повторяет существующий ID; используйте fact_id.', 'semantic_duplicate', repairable=True, section='information_events', index=i)
+                fid = identity('information-fact', turn_id, namespace, narrative, eid, j)
+                if local:
+                    aliases[local] = fid
+                fact.update(id=fid, evidence=info.evidence)
+                result.records['facts'].append(fact)
+                fact_ids.add(fid)
+            else:
+                fid = aliases.get(claim.fact_id, claim.fact_id)
+                if fid not in state['facts'] and fid not in fact_ids:
+                    fatal('Неизвестный информационный факт.', 'knowledge_fact_unknown', repairable=True, section='information_events', index=i)
+            links.append(fid)
+            claim_links.append(fid)
+            links.extend(claim.supersedes)
+            witnesses.update(claim.perceived_by)
+            for actor in claim.perceived_by:
+                acquisition = dict(actor_id=actor, fact_id=fid, source_event_id=eid,
+                    status=claim.status, evidence=info.evidence, _compiled_perception=True)
+                if claim.supersedes: acquisition['supersedes'] = claim.supersedes
+                if actor in claim.expected_revisions:
+                    acquisition['expected_revision'] = claim.expected_revisions[actor]
+                acquisitions.append(acquisition)
+        participants = witnesses | set(info.target_ids or []) | ({info.source_actor_id} if info.source_actor_id else set())
+        event = dict(id=eid, text=info.text, evidence=info.evidence, medium=info.medium,
+            participants=sorted(participants), witnesses=sorted(witnesses), fact_ids=list(dict.fromkeys(links)))
+        # A speaker is an actor, not merely an informational source. Preserve
+        # existing player provenance; overhearers are never inferred addressees.
+        if info.source_actor_id and info.medium in ('conversation', 'testimony', 'message'):
+            event['actor_id'] = info.source_actor_id
+            if info.target_ids is not None: event['target_ids'] = info.target_ids
+            if info.player_action_id is not None: event['player_action_id'] = info.player_action_id
+        for key in ('location_id', 'minute', 'order', 'interaction_channel'):
+            value = getattr(info, key)
+            if value is not None: event[key] = value
+        if info.advance_candidate_ids: event['advance_candidate_ids'] = info.advance_candidate_ids
+        if info.medium == 'message' and info.source_actor_id: event['author_id'] = info.source_actor_id
+        event['information_source'] = dict(actor_id=info.source_actor_id,
+            claims=[dict(fact_id=fid, assertion=claim.assertion, perceived_by=claim.perceived_by)
+                    for fid, claim in zip(claim_links, info.claims)])
+        result.records['events'].append(event)
+        result.records['knowledge_gained'].extend(acquisitions)
+    # Local references are exact response IDs, never names or textual matching.
+    def map_refs(value, field=''):
+        if isinstance(value, dict):
+            return {k:map_refs(v, k) for k,v in value.items()}
+        if isinstance(value, list):
+            return [map_refs(v, field) for v in value]
+        if isinstance(value, str) and (field in ('fact_id', 'fact_ids', 'supersedes') or
+                                       field.endswith(('_fact_id', '_fact_ids'))):
+            return aliases.get(value, value)
+        return value
+    result.records = map_refs(result.records)
+    result.choices = map_refs(result.choices)
+    knowledge = result.records['knowledge_gained']
+    legacy_pairs = {(k.get('actor_id'), k.get('fact_id')) for k in knowledge[:original_knowledge_count] if isinstance(k, dict) and isinstance(k.get('actor_id'), str) and isinstance(k.get('fact_id'), str)}
+    if any((k['actor_id'], k['fact_id']) in legacy_pairs for k in knowledge[original_knowledge_count:]):
+        fatal('Восприятие продублировано в knowledge_gained и information_events.', 'semantic_duplicate', repairable=True, section='information_events')
+    moves = []
+    for i, movement in enumerate(result.records['movements']):
+        if isinstance(movement, dict) and movement.get('assertion') in ('intent', 'attempt'):
+            result.warnings.append(dict(section='movements', index=i, code='movement_not_completed', action='no_relocation'))
+        else: moves.append(movement)
+    result.records['movements'] = moves
+    if len(result.records['knowledge_gained']) > 64:
+        fatal('Превышен лимит Knowledge после сборки.', 'knowledge_budget', repairable=True)
+    return result
+
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Literal
+
+
+class PerceivedClaim(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    fact_id: str | None = None
+    fact: dict | None = None
+    assertion: Literal['observation', 'testimony', 'rumor']
+    perceived_by: list[str] = Field(min_length=1, max_length=16)
+    status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded']
+    expected_revisions: dict[str, int] = Field(default_factory=dict)
+    supersedes: list[str] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode='after')
+    def coherent(self):
+        if (self.fact_id is None) == (self.fact is None):
+            raise ValueError('Exactly one of fact_id or new fact is required.')
+        if self.fact is not None and (not isinstance(self.fact.get('text'), str) or not self.fact['text'].strip()):
+            raise ValueError('New fact needs text.')
+        if len(set(self.perceived_by)) != len(self.perceived_by):
+            raise ValueError('Duplicate perceiver.')
+        if self.assertion == 'rumor' and self.status != 'suspected':
+            raise ValueError('Rumor is suspected, never objective truth.')
+        if set(self.expected_revisions) - set(self.perceived_by) or any(v < 0 for v in self.expected_revisions.values()):
+            raise ValueError('Invalid perception revision.')
+        return self
+
+
+class ChronologyClaim(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    event_id: str
+    assertion: Literal['narrator', 'belief', 'lie', 'quotation']
+    elapsed_days: int = Field(ge=0)
+    reference_minute: int | None = Field(default=None, ge=0)
+    evidence: str = Field(min_length=1)
+
+
+class InformationEvent(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    id: str | None = None
+    text: str = Field(min_length=1)
+    evidence: str = ''
+    source_actor_id: str | None
+    target_ids: list[str] | None = None
+    player_action_id: str | None = None
+    medium: Literal['conversation', 'observation', 'discovery', 'testimony', 'message']
+    claims: list[PerceivedClaim] = Field(min_length=1, max_length=16)
+    location_id: str | None = None
+    minute: int | None = Field(default=None, ge=0)
+    order: int | None = Field(default=None, ge=0)
+    interaction_channel: Literal['physical', 'call'] | None = None
+    advance_candidate_ids: list[str] = Field(default_factory=list, max_length=3)
+
+
 def repair_revision_warnings(previous, current):
     """Audit revised proposals, never adjudicate which Extraction is true.
 
@@ -124,7 +290,7 @@ def extraction_schema():
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown','outdated','refuted','superseded']},
             expected_revision={'type':'integer','minimum':0},supersedes=dict(type='array',items=string,maxItems=16),
-            source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
+            source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Для подтверждённого раскрытия согласуй Event.fact_ids; не теряй приобретение при пропущенной ссылке.')),
             ('actor_id','fact_id','source_event_id','evidence')),
         'character_changes':record(dict(id=string,source_event_id=string,birth_date=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
             emotion_assertion={'enum':['explicit_internal_state'], 'description':'Только явно выраженное внутреннее состояние controlled actor из player_input, не жест/поведение. Runtime проверяет источник, LLM — семантику.'},
@@ -134,10 +300,18 @@ def extraction_schema():
             assertion={'enum':['grounded_feelings']},rationale=string,
             player_evidence=string,player_assertion={'enum':['explicit_directed_feelings']},
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
-        'movements':record(dict(player_evidence=string,player_assertion={'enum':['explicit_choice','involuntary']},source_event_id=string,actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
+        'movements':record(dict(player_action_id=string,player_evidence=string,player_assertion={'enum':['explicit_choice','involuntary']},source_event_id=string,actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=TemporalValue.model_json_schema(),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    info = InformationEvent.model_json_schema()
+    info['properties']['claims']['items'] = info.pop('$defs')['PerceivedClaim']
+    # The exact existing Fact input shape, with server-owned optional identity.
+    fact_schema = deepcopy(definitions['facts'])
+    fact_schema['required'] = ['text']
+    info['properties']['claims']['items']['properties']['fact'] = {'anyOf':[fact_schema, {'type':'null'}]}
+    definitions['information_events'] = info
+    definitions['chronology_claims'] = ChronologyClaim.model_json_schema()
     from backend.runtime_v3.remote_models import SecretDisclosure
     definitions['secret_disclosures'] = record(dict(source_event_id=string, **SecretDisclosure.model_json_schema()['properties']), ('source_event_id','fact_id','assertion','evidence'))
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
@@ -271,7 +445,10 @@ def extraction_schema():
     }
     from backend.runtime_v3.player_actions import PlayerAgencyReview
     agency_schema = PlayerAgencyReview.model_json_schema()
-    agency_schema['properties']['actions']['items'] = agency_schema.pop('$defs')['PlayerAction']
+    agency_defs = agency_schema.pop('$defs')
+    agency_schema['properties']['actions']['items'] = agency_defs['PlayerAction']
+    agency_schema['properties']['narrative_audit'] = dict(
+        anyOf=[dict(type='array', items=agency_defs['NarrativeAgencyItem']), dict(type='null')], default=None)
     schema = obj(dict(player_agency=agency_schema, metadata={'type':'object','additionalProperties':True},final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,observed_character_ids=strings,
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
@@ -280,7 +457,7 @@ def extraction_schema():
         compression=Compression.model_json_schema(),situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string,basis_ids=strings,kind={'enum':['question','proposal','information','decision','opportunity']}),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
-        'Final scene — авторитетный состав физической сцены; movements и цитаты прибытия не обязательны. observed — видимые вне сцены. '
+        'Final scene — конечный состав сцены, не доказательство прибытия: смена установленного положения требует movements/source_event_id принятого Event. observed — видимые вне сцены. '
         'Не копируй scene_id, last_event_id. Не придумывай время Event. '
         'Dimensions — закрытый набор; непредставимый смысл сохраняй в context.')
     def optional_evidence(node):
@@ -307,8 +484,8 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False):
-    """Validation-equivalent schema; prose lives once in the extraction contract."""
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False):
+    """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
         if isinstance(node, dict):
@@ -335,12 +512,72 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if not semantic_slice:
+        schema['properties'].pop('information_events')
+        schema['properties'].pop('chronology_claims', None)
+    else:
+        # New perceptions use one representation. The legacy parser remains
+        # available, and repair restores this schema for an existing proposal.
+        schema['properties'].pop('knowledge_gained')
+    # New generation requires provenance; legacy raw/saved payloads remain readable.
+    schema['properties']['movements']['items']['required'] += ['assertion'] + ([] if consequence_first else ['source_event_id'])
+    if consequence_first:
+        required_movement = schema['properties']['movements']['items']['required']
+        if 'evidence' in required_movement:
+            required_movement.remove('evidence')
+        # Input form only: Calendar normalizes stable day IDs into canonical ints.
+        schedule = schema['properties']['scheduled_event_changes']['items']['properties']
+        for name in ('temporal', 'end_temporal'):
+            temporal = schedule[name]
+            temporal['properties']['weekday'] = {'type': ['string', 'null'],
+                'description': 'calendar_weekdays.id'}
+            if name == 'end_temporal':
+                continue
+            schedule[name] = {'anyOf': [temporal, {'type': 'object', 'additionalProperties': False,
+                'properties': {'time': {'type': 'string', 'pattern': r'^([01]\d|2[0-3]):[0-5]\d$'}},
+                'required': ['time']}]}
+    if explicit_departures:
+        movement = schema['properties']['movements']['items']
+        movement['properties']['assertion'] = {'enum': ['completed_arrival', 'departure']}
+        movement['properties']['to_location_id'] = {'type': ['string', 'null']}
+        movement['description'] = ('Arrival/departure; source Event optional, conflicting supplied fields reject.'
+            if consequence_first else 'Arrival: reached endpoint. Departure: null endpoint, known from_location_id, accepted departure Event at origin; same order. END absence alone changes no geography.')
+    if semantic_slice:
+        schema['properties']['movements']['items']['properties']['assertion']['enum'] += ['intent', 'attempt']
+        for field in ('actor_evidence', 'destination_evidence'):
+            schema['properties']['movements']['items']['properties'].pop(field, None)
+    if grounded_choices:
+        choice = schema['properties']['choices']['items']
+        choice['properties']['grounding'] = {'type':'object', 'additionalProperties':False,
+            'properties':{'fact_ids':{'type':'array','items':{'type':'string'}},
+                          'from_scene':{'type':'boolean'}},
+            'required':['fact_ids','from_scene']}
+        choice['required'].append('grounding')
     if player_agency_required:
-        schema['required'].append('player_agency')
+        if not consequence_first:
+            schema['required'].append('player_agency')
+        agency = schema['properties']['player_agency']
+        if agency_audit_required:
+            if not consequence_first:
+                agency['required'].append('narrative_audit')
+            agency['properties']['narrative_audit'] = agency['properties']['narrative_audit']['anyOf'][0]
+            action = agency['properties']['actions']['items']
+            action['required'].append('target_mode')
+            action['properties']['player_evidence']['description'] = 'Exact current input quote, once.'
+            action['properties']['target_ids']['description'] = 'Intended canonical targets, not witnesses; noncanonical objects=[].'
+            action['properties']['narrative_target_ids']['description'] = 'Actual targets; partial=subset, deferred may be [].'
+            action['properties']['target_mode']['description'] = 'interaction=contact; reference=observe/mention, no delivery.'
+            agency['properties']['narrative_audit']['description'] = ('Optional findings; incidental_detail/uncertain grant no canonical authority.' if consequence_first else 'Significant controlled acts across WHOLE prose, even outside Events.')
+            event = schema['properties']['events']['items']
+            event['dependentRequired']['player_action_id'] = ['actor_id', 'target_ids']
+            event['properties']['player_action_id']['description'] = 'Reviewed action ID; quote inherited. NPC reply stays separate.'
+            event['properties']['target_ids']['description'] = 'Own achieved targets: subset of action actual targets; union covers them.'
+        else:
+            agency['properties'].pop('narrative_audit')
     else:
         schema['properties'].pop('player_agency')
         schema['properties']['events']['items'].pop('dependentRequired', None)
-        for field in ('actor_id', 'target_ids', 'player_action_id'):
+        for field in (('player_action_id',) if semantic_slice else ('actor_id', 'target_ids', 'player_action_id')):
             schema['properties']['events']['items']['properties'].pop(field)
     if elapsed_required:
         schema['properties']['final_scene']['required'].append('elapsed_minutes')
@@ -380,6 +617,21 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if not births: schema['properties'].pop('births',None)
     if not reproduction or not births:
         schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
+    if agency_audit_required:
+        schema['properties']['events']['items']['properties']['minute']['description'] = 'Known absolute world minute; otherwise OMIT. Sequence uses order.'
+        # Preserve only high-risk birth-source annotations, not all domain prose.
+        def birth_guidance(node):
+            if isinstance(node, dict):
+                props = node.get('properties', {})
+                if 'basis' in props and 'source_actor_id' in props:
+                    props['basis']['description'] = 'announcement=spoken disclosure; observation=direct perception of the child, not hearing a speaker.'
+                    props['source_actor_id']['description'] = 'Actual canonical speaker, null for a genuinely unknown speaker; never substitute a listener.'
+                for child in node.values(): birth_guidance(child)
+            elif isinstance(node, list):
+                for child in node: birth_guidance(child)
+        birth_guidance(schema['properties'].get('births', {}))
+        schema['properties'] = {**{k:v for k,v in schema['properties'].items() if k != 'final_scene'},
+                                'final_scene': schema['properties']['final_scene']}
     counts = Counter()
 
     def key(node):
@@ -394,6 +646,20 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
             for value in node: count(value)
     count(schema)
     shared = {value: ('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'[index] if index<52 else 's'+str(index)) for index, value in enumerate(sorted((k for k, n in counts.items() if n > 1 and n*(len(k)-13)>len(k)+25),key=lambda k:(-counts[k],k)))}
+
+    if agency_audit_required:
+        def name_records(node, hint='Record'):
+            if isinstance(node, dict):
+                value = key(node)
+                if value in shared and 'properties' in node:
+                    name = ''.join(part.capitalize() for part in hint.split('_'))
+                    if name not in shared.values(): shared[value] = name
+                for field, child in node.get('properties', {}).items(): name_records(child, field)
+                if 'items' in node: name_records(node['items'], hint)
+                for child in node.get('anyOf', []): name_records(child, hint)
+            elif isinstance(node, list):
+                for child in node: name_records(child, hint)
+        name_records(schema)
 
     def compact(node, root=False):
         if isinstance(node, dict):
@@ -431,20 +697,63 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     return result
 
 
-def repair_feedback(diagnostic, payload, before):
+def repair_feedback(diagnostic, payload, before, previous_complete=None):
     """Retry-only context: never infer scene semantics from prose in Python."""
     if isinstance(payload, str):
         try: payload = json.loads(payload)
         except ValueError: pass  # Preserve malformed output verbatim for repair.
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
-    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary') if key in row} for row in rows]
-    detail = details[0]
+    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths',
+                'current_time', 'previous_temporal', 'previous_window', 'previous_anchor') if key in row} for row in rows]
+    # Keep the legacy first-error summary, without duplicating its long reason
+    # and source lists. The diagnostics array retains every complete record.
+    detail = {key:details[0][key] for key in ('code','path') if key in details[0]}
+    # Retain topology for referenced endpoints even if relevance omitted them.
+    # The context builder removes only copies already in its canonical slice.
+    referenced = set()
+    def references(value):
+        if isinstance(value, dict):
+            for child in value.values(): references(child)
+        elif isinstance(value, list):
+            for child in value: references(child)
+        elif isinstance(value, str) and value in before['locations']:
+            referenced.add(value)
+    references(payload)
+    omitted = {}
+    if isinstance(previous_complete, str):
+        try: previous_complete = json.loads(previous_complete)
+        except ValueError: previous_complete = None
+    if isinstance(payload, dict) and isinstance(previous_complete, dict):
+        omitted = {key:previous_complete[key] for key in ('final_scene', *SECTIONS)
+                   if key not in payload and previous_complete.get(key)}
+    required = ['final_scene'] + [key for key in SECTIONS if
+        (isinstance(payload, dict) and payload.get(key)) or omitted.get(key)]
     return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
-        previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in
-            ('id', 'name', 'aliases', 'parent_id', 'kind') if key in location}
-            for lid, location in before['locations'].items()},
-        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints. Recheck EVERY movement: future_intent/departure is not completed_arrival, even with an existing or newly registered endpoint. Remove only unsupported arrival, preserve departure Event and END absence; retain actual arrivals and ordered routes. New Narrative-established locations use locations[]; creation alone is not arrival. Never replace null with a plausible destination. Narrative contradicting canon requires existing refusal/reauthor, not a JSON rewrite of its meaning.'), ensure_ascii=False, separators=(',', ':'))
+        response_required=required,
+        **({'omitted_sections_from_previous_proposal':omitted} if omitted else {}),
+        known_locations={lid:{k:v for k,v in before['locations'][lid].items()
+                             if k in ('id','name','aliases','parent_id','kind')} for lid in sorted(referenced)},
+        canonical_context='Use the supplied immutable current state/camera/locations; original_extraction — предварительный отклонённый ответ, не канон.',
+        contract=(
+            'narrative-authority-v1: repair INTERPRETATION, not a saved status. original_extraction — предварительный отклонённый ответ, не канон. '
+            'Read the unchanged full Narrative against immutable before and current player_input; fix all diagnostics/dependencies together. '
+            'Preserve confirmed Events, facts, witnesses, real sources and ALL knowledge acquisitions; repair supported links. '
+            'Never remove witnesses while retaining impossible contact, substitute a speaker, invent arrival/consent or suppress confirmed learning. '
+            'Recheck both agency directions across prose, including unrecorded replies/gestures/decisions. If Narrative itself violates agency/canon, '
+            'return player_agency.status=violated (uncertain if unprovable), using existing reauthor/abandon; do not launder it by editing JSON. '
+            'Supplied contact Events: actual actor, verified action quote and delivered recipients. Follow the request schema; omit duplicate quotes, never overwrite explicit conflicts. '
+            'Preserve significant player contact and NPC reply/fact_ids/knowledge_gained; no Event per everyday gesture. Never relabel the NPC response as player-authored. '
+            'Align events/movements/final_scene/character_changes at scene granularity: future_intent/preparation is not departure; '
+            'unknown destination stays unknown. future_intent/departure is not completed_arrival, even at a newly registered endpoint. Movement owns the route; optional sources must agree, not duplicate it. '
+            'New locations and autonomous background movement remain valid; no automatic player Knowledge. Observed is visibility, not contact proof. '
+            'This is the only automatic repair; return ONLY the full RawTurnResult matching JSON Schema. '
+            'For compound input, split distinct clauses/targets into separate PlayerActions when appropriate; a shared action uses one full quote inherited by its Events. Do not invent Events. '
+            'Always return final_scene, including unchanged fields, and every response_required section. Omitted sections from an earlier proposal are UNACCEPTED context to recheck, not a patch to apply. '
+            'diagnostic, diagnostics, original_extraction, omitted_sections_from_previous_proposal, response_required, known_locations, canonical_context and contract are INPUT feedback keys, '
+            'NOT output fields. Do not copy this feedback envelope or return a patch. '
+            'Never rewrite before/History or the Narrative.'
+        )), ensure_ascii=False, separators=(',', ':'))
 
 
 def prune_schema_definitions(schema):

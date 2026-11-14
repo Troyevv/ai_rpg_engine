@@ -31,8 +31,9 @@ def imported(client, value=None):
     return r.json()['save']
 
 def arrival(actor='viktoria_solovyova', evidence=NARRATIVE):
-    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
-                movements=[dict(actor_id=actor,from_location_id='salon_lak',to_location_id='ilya_cabinet',assertion='completed_arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)])
+    return dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
+                movements=[dict(actor_id=actor,to_location_id='ilya_cabinet',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)],
+                events=[dict(id='arrival',text=evidence,participants=[actor],location_id='ilya_cabinet',medium='action')])
 
 def provider_payload(kwargs):
     raw=arrival()
@@ -175,8 +176,9 @@ def test_arrival_independent_of_hierarchy_and_start_time(api,parent,elapsed):
     raw=arrival();raw['final_scene']['elapsed_minutes']=elapsed
     assert StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw).state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
     raw.pop('movements');raw['final_scene']['situation_evidence']=NARRATIVE
-    out=StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw)
-    assert out.state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw)
+    assert error.value.code=='scene_arrival_unproven'
 
 
 def test_legacy_snapshot_projection_context_and_history_are_read_only():
@@ -440,7 +442,8 @@ def test_context_retains_bounded_identity_and_typed_arrival_contract():
     assert current['camera']['present_character_ids']==['ilya']
     assert current['characters']['viktoria_solovyova']['location_id']=='salon_lak'
     schema=block(extraction,'JSON Schema')['properties']['movements']['items']['properties']
-    assert {'actor_evidence','destination_evidence','from_location_id','assertion'}<=schema.keys()
+    assert {'from_location_id','assertion'}<=schema.keys()
+    assert not {'actor_evidence','destination_evidence'} & schema.keys()
     assert 'completed_arrival' in str(extraction)
     assert len(cards)<len(original['character_cards'])
 

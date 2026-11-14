@@ -60,6 +60,8 @@ class EngineStorage:
     def begin_job(self, save_id, user_text, kind, config):
         if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication'):
             raise ValueError('Неизвестный тип хода.')
+        from backend.runtime_v3.player_actions import EXTRACTION_VERSION
+        config = dict(config, _extraction_contract=EXTRACTION_VERSION)
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
@@ -142,8 +144,11 @@ class EngineStorage:
                         raise ValueError('Подтверди откат последующих ходов.')
                 v = db.execute('SELECT context_json,memory_before_json,job_id FROM response_variants WHERE id=?', (last['active_variant_id'],)).fetchone()
                 context_json, memory_before = (v[0],v[1]) if v else (None,None)
+                config['_extraction_contract'] = 1  # Recorded pre-version variants stay legacy.
                 if v and v['job_id']:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
+                    if original:
+                        config['_extraction_contract'] = json.loads(original[0]).get('_extraction_contract', 1)
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
                         for key in ('_context_selection','long_term_advance','communication','interaction_channel','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
@@ -236,6 +241,38 @@ class EngineStorage:
                 raise ValueError('Отменить можно только неудачный или остановленный ход.')
             db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
 
+    def correct_chronology_job(self, job_id, revision, attempt_epoch):
+        """New candidate/lineage; the rejected job and accepted History stay intact."""
+        from backend.services.world_delta_errors import chronology_correction
+        from hashlib import sha256
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
+            if row is None:
+                raise ValueError('Ход не найден.')
+            job = dict(row)
+            grounds = chronology_correction(json.loads(job.get('repair_diagnostics_json') or '[]'))
+            if (job['status'] not in ('error', 'stopped') or not job['narrative_complete'] or
+                    job['kind'] not in ('start', 'turn', 'regenerate', 'background', 'pov') or
+                    not grounds or job['attempt_epoch'] != attempt_epoch or job['revision'] != revision):
+                raise ValueError('Этот кандидат недоступен для адресной коррекции.')
+            self._assert_idle(db, job['save_id'])
+            save = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()
+            if save['revision'] != revision:
+                raise ValueError('Сейв изменился. Этот черновик устарел.')
+            if not job.get('context_json'):
+                raise ValueError('Исходный контекст коррекции отсутствует.')
+            config = json.loads(job['config_json'])
+            config['_narrative_correction'] = dict(source_job_id=job_id,
+                original=job['narrative'], original_sha256=sha256(job['narrative'].encode()).hexdigest(), grounds=grounds)
+            new_id = uuid.uuid4().hex
+            columns = ['save_id','revision','before_json','user_text','kind','replaces_id',
+                       'context_json','memory_before_json','pov_actor_id','audience_json','session_id']
+            db.execute('INSERT INTO game_jobs(id,status,config_json,'+','.join(columns)+') VALUES('+','.join('?' for _ in range(len(columns)+3))+')',
+                [new_id, 'generating', json.dumps(config, ensure_ascii=False), *[job.get(k) for k in columns]])
+            db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
+        return new_id
+
     def retry_job(self, job_id, config=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -252,7 +289,7 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id','communication','remote_command')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','_extraction_contract','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 

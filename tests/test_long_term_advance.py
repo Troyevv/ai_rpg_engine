@@ -188,6 +188,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     s["threads"]["education"] = Thread(
         id="education", description="Учёба", character_ids=["c"], relevance=1
     ).model_dump()
+    s["characters"]["a"]["situation"] = "Waiting in the old player scene"
     text = "Персонаж c начал учиться и тайно переехал."
     raw = dict(
         final_scene=dict(
@@ -249,6 +250,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
         assert any(d.get("code") == "event_minute_invalid" for d in report["diagnostics"])
         assert "study" not in after["world_state"]["roles"]
         return
+    assert after["world_state"]["characters"]["a"] == before["world_state"]["characters"]["a"]
     assert report["accepted"], report["diagnostics"]
     assert batch["events"][0]["minute"] == batch["events"][0]["recorded_minute"] == candidate.minute
     assert after["world_state"]["roles"]["study"]["status"] == "active"
@@ -619,8 +621,12 @@ def test_regenerate_keeps_group_context_when_prior_call_count_changes(tmp_path):
     with patch("engine.chat_stream", side_effect=again):
         engine.run_job(repo.path, regen, engine.Worker())
     assert repo.get_job(regen)["status"] == "saved", repo.get_job(regen)["error"]
-    assert replayed == recorded
-    assert repo.get_snapshot(sid)["last_long_term_advance"]["llm_calls"] == 4
+    # A repair consumes the existing budget: the second group may be unattempted.
+    assert replayed == recorded[:len(replayed)]
+    assert len(replayed)==1
+    report=repo.get_snapshot(sid)['last_long_term_advance']
+    assert report['llm_calls']==3 and report['coverage']['budget_unattempted']>0
+    assert repo.get_snapshot(sid)["last_long_term_advance"]["llm_calls"] == 3
 
 
 def test_new_character_only_committed_with_accepted_relationship():
