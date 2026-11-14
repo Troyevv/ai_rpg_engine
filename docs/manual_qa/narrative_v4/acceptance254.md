@@ -65,6 +65,12 @@ cause-only counterfactual and an explicitly authored hypothetical interpretation
   preparation/departure/arrival, impossible contact and unrequested decisions.
   `fact_id` denotes the whole assertion; no new Knowledge store, prose parser,
   mandatory critic, retry loop or increased repair cap was added.
+- Saturated 32K requests exposed a regression from the expanded contract. Six
+  existing production-path tests passed at the base but exceeded the context
+  limit with the first implementation. The final v5 wording consolidates repeats
+  and removes legacy-output instructions from new semantic generation; recorded
+  legacy contracts and repair-required legacy schema remain supported. No budget,
+  canonical input, output invariant or repair limit was relaxed.
 
 Offline results on original SQLite: original v5 Knowledge (6 acquisitions),
 Campaign (9), Social, ongoing Family and Arrival accepted; Crisis, both Phone
@@ -104,6 +110,11 @@ remain semantic failures, safely rejected structurally; prompts alone do not
 prove improved classification. Original calendar prose without a claim remains
 undetectable by deterministic code; no universal prose correctness is promised.
 Partial secret tests with authored JSON prove scoping, not model understanding.
+
+Four ordinary original Berezovsk turns were also replayed through production
+jobs with recorded foreground/background replies. Every final world_state exactly
+matches its archived after snapshot; reload and rollback pass. The first turn's
+unclaimed calendar contradiction remains a semantic FAIL, not a successful check.
 
 Final paid acceptance needs separately approved budget: the same seven valid and
 two invalid Narrative cases, partial/full/rumor/conditional contrasts, one normal

@@ -623,39 +623,24 @@ NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT
 
 
 SEMANTIC_SLICE_CONTRACT = """
-v5 information_events: completed perception; one source_actor_id (null if unknown),
-medium/text, claims. Each claim: fact_id OR new fact (optional local id), actual
-perceived_by, assertion=observation/testimony/rumor, status. Rumor=suspected.
-Runtime builds Event/Fact/Knowledge from exact local IDs, never names. No duplicate
-facts/events/knowledge_gained for these outcomes. Other domains unchanged.
-Controlled speaker needs verified player_action_id + actual target_ids, not overhearers.
-fact_id means the WHOLE exact existing assertion, not its topic. Partial disclosure:
-"a letter asking advice" does not reveal "a former pupil writes about family tension".
-Use claims.fact for only actually learned content; "if someone wrote after thirty years"
-is hypothetical, not proof Viktor received that letter. secret_disclosures requires actual
-full disclosure, never evidence completed from GM-only context. Perceivers are per claim.
-Movement intent/attempt causes no relocation. With a unique source_event_id, source Event.order
-owns the step; omit duplicate Movement.order. Without a source, Movement owns its order.
-BirthClaim creates the reserved child: no prior contact target/participant or promotion needed.
-An unnamed examining clinician announcing sex: source_actor_id=null,
-source_assertion=direct_observation; actual listeners only, never invent clinician identity.
-Semantic contrasts (same pass, no inventory of everyday gestures):
-- Timur stays at the table and plans a visit -> no departure; walks out -> departure;
-  enters destination -> completed_arrival. Saying a destination is not contact with its owner.
-- Vera absent, no arrival/channel, yet prose makes her answer -> violated Narrative;
-  explicit arrival then answer -> valid NPC initiative. Never invent arrival to repair JSON.
-- Player sorts photos; prose declines tea by a gesture -> new unrequested decision, violated;
-  adjusting a photo while sorting -> incidental execution, no mandatory PlayerAction.
-For violated prose use existing player_agency.status=violated; retain real NPC outcomes in
-interpretation, but do not legitimize the prose by deleting its contradictory records.
-chronology_claims: only significant objective assertions actually made. kind=event_elapsed
-(default for legacy): chronology_events event_id + elapsed_days. kind=current_calendar:
-date and/or weekday ID from calendar_weekdays, no fictitious event. Use reference_minute
-within the scene (default start), exact evidence, narrator/belief/lie/quotation.
-Current canonical Calendar outranks old event titles: narrator "Saturday" on canonical Sunday
-is a current_calendar conflict; the title "Saturday evening", a lie or quotation is not.
-Known event five days ago described as yesterday is event_elapsed conflict. Unknown date
-stays unknown; recorded time is not event time. Missing claims are not proof of checking.
+v5 information_events -> Event/Fact/Knowledge via exact IDs, no duplicates.
+claims.perceived_by=actual; unknown source_actor_id=null.
+Controlled speaker: verified player_action_id; target_ids exclude overhearers.
+fact_id=WHOLE assertion: "advice letter" != "former pupil's family tension"; use claims.fact
+for fragment. "If someone wrote" proves no personal event. Rumor=suspected;
+secret_disclosures needs full disclosure, no GM-completed evidence.
+Unique Movement source supplies order; otherwise own order.
+BirthClaim creates reserved child, no contact/promotion. Unnamed examining clinician:
+sex source_actor_id=null, source_assertion=direct_observation; actual listeners.
+Contrasts, no gesture inventory: seated plan!=departure; exits=departure; enters=arrival.
+Absent Vera answers without arrival/channel=violated; arrives then answers=valid.
+Sorting photos: unrequested tea refusal=violated; adjusting photos=incidental.
+player_agency.status=violated; never invent arrival/delete outcomes to fix prose.
+chronology_claims: significant, exact evidence, narrator/belief/lie/quotation.
+event_elapsed (default): event_id+elapsed_days; five days ago!=yesterday.
+current_calendar: date/weekday ID, no fake Event; reference_minute in scene, default start.
+Calendar > titles: narrator Saturday on Sunday conflicts; title/lie/quote does not.
+recorded!=event time; missing claim proves no check.
 """
 
 SEMANTIC_RELATIONSHIP_CONTRACT = """
@@ -669,36 +654,34 @@ Consumed/pre-override evidence never reapplies. Preserve inertia and independenc
 """
 
 SEMANTIC_BASE_CONTRACT = """
-CURRENT RUNTIME narrative-authority-v1. JSON RawTurnResult only. Interpret WHOLE completed_narrative
-+ player_input; never rewrite. State outranks cards/history. Input authorizes EXTERNAL choices;
-Narrative supplies NPC outcomes. Plans/preparation/attempt/rumor/negation != done. Quiet=no Event;
-keep ALL confirmed consequences. evidence=provenance; player_evidence=exact input. Reuse IDs/aliases;
-promotions: 11 CARD_FIELDS+attributes. Unknowns stay unknown; never fabricate identity/source.
-LOCATION: final_scene=END membership, not arrival. Movement owns routes/returns/arrival/departure;
-no duplicate Event. Supplied source must match actor/place/time.
-Departure without destination: Movement assertion=departure; known origin, null endpoint.
-Room exit!=building exit. Arrival needs no on-camera exit; new places/NPC initiative allowed.
-Plans/place creation/time/END absence prove no relocation/Knowledge. observed_character_ids=
-disjoint visibility, not contact/location. Conversation needs simultaneous start/end/ordered-route
-co-location or active channel; doorways need no membership/node. Align scene/changes/routes;
-offscene situation needs source_event_id. remote_interactions=active END actor/channel/evidence;
-reconfirm, omit ended; reread!=contact. EXTERNAL movement: explicit_choice+input quote OR verified
-PlayerAction direct/via Event. Involuntary: external Event. order sequences encounters, not duplicates.
-INFORMATION: speaker!=listener. Perception/reading teaches, not participation/delivery/cards/time.
-Message author needs attribution, not proximity. Legacy knowledge_gained: accepted informational
-Event/fact_ids/witness; repair supported links, never lose learning. Immutable Facts: reuse IDs,
-new assertion=new ID. claim(subject_id,predicate,value,scope)=exclusive slot; scope=period/role,
-omit uncertain slots. known=belief, not truth. Revival needs expected_revision; supersedes links
-old+new facts in Event. New known retires conflicting known in its slot only; distinct order for
-same-slot transitions. Rumor=suspected. story_secret=plot. subject/keeper/biography IDs mean
-related/conscious owner/biographical subject, grant no Knowledge. existence=hidden or discoverable
-anonymous slot. secret_disclosures: written Event/artifact+fact, confirmed|rumor; quotation!=confirmation.
-Event.minute absolute in [world_time,world_time+applied elapsed]; omit unknown minute/order.
-Date testimony to telling. elapsed>=0; Runtime owns Skip/background clocks. No StatePatch.
-CHARACTER: POV!=control; Situation objective, Emotion internal. EXTERNAL desires need input;
-Emotion: explicit internal declaration + player_evidence.emotion + explicit_internal_state,
-never gestures/cards/questions/conditions/negations/others' speech. physical_state empty needs
-proven resolution; sleep alone cures nothing. Directed feelings follow relationship source rules.
+CURRENT RUNTIME narrative-authority-v1. RawTurnResult, not StatePatch. WHOLE prose+input,
+never rewrite. State > cards/history.
+EXTERNAL choices need input; NPCs act freely.
+Keep ALL outcomes; plans/attempts/rumors/negations!=done; quiet needs no Event.
+evidence=provenance; player_evidence=exact input. Reuse IDs/aliases, no invented sources;
+promotions: 11 CARD_FIELDS+attributes; unknown stays unknown.
+END membership/absence != relocation. Movement owns route, no duplicate Event;
+Source matches actor/place/time. Departure: known origin, nullable endpoint.
+Room exit!=building exit; arrival needs no shown exit. New places allowed;
+plans/creation/time grant no location/Knowledge. observed_character_ids=disjoint visibility, no contact/location.
+Contact: simultaneous start/end/route co-location or channel; doorway needs no node.
+Align scene/changes/routes; offscene situation needs source_event_id.
+remote_interactions: reconfirm active END actor/channel/evidence; omit ended; reread!=contact.
+EXTERNAL movement: explicit_choice+quote OR verified PlayerAction direct/via Event;
+involuntary: external Event. order sequences encounters, not duplicates.
+Perception/reading teaches, not participation/delivery/cards/time. Speaker!=listener;
+Author needs attribution, not proximity. Facts immutable: new assertion=new ID.
+claim(subject_id,predicate,value,scope)=exclusive period/role slot; omit uncertain.
+known=belief. Revival: expected_revision; supersedes: old+new facts in Event. New known retires
+only same-slot conflicting known; transitions need distinct order. story_secret=plot.
+subject/keeper/biography=related/conscious owner/biographical subject, no Knowledge.
+existence=hidden/discoverable anonymous slot. secret_disclosures: Event/artifact+fact,
+confirmed|rumor; quotation!=confirmation. Event.minute in [world_time,world_time+elapsed];
+omit unknown minute/order; date testimony to telling. elapsed>=0; Runtime owns Skip/background.
+POV!=control; Situation objective, Emotion internal. EXTERNAL desires need input.
+Emotion: explicit internal declaration + player_evidence.emotion + explicit_internal_state;
+not gestures/cards/questions/conditions/negations/others' speech. physical_state clears only
+on proven resolution, not sleep.
 """
 
 SEMANTIC_LIFE_CONTRACT = """
