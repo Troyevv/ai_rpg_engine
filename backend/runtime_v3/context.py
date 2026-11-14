@@ -500,6 +500,12 @@ class ExtractionContextBuilder:
             from backend.runtime_v3.context_contract import SEMANTIC_SLICE_CONTRACT
             rules = rules.replace('Directed feelings need prior relationship_evidence', 'Directed feelings need accepted current Events or prior relationship_evidence')
             rules += SEMANTIC_SLICE_CONTRACT
+        if self.contract_version >= 6:
+            from backend.runtime_v3.scene_steps import CONTRACT as scene_contract
+            from backend.runtime_v3.context_contract import SEMANTIC_BASE_CONTRACT, SEMANTIC_SLICE_CONTRACT
+            rules = rules.replace(SEMANTIC_BASE_CONTRACT, scene_contract).replace(SEMANTIC_SLICE_CONTRACT, '')
+            from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
+            rules = rules.replace(CONSEQUENCE_CONTRACT, '')
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
@@ -515,6 +521,8 @@ class ExtractionContextBuilder:
             if kind != 'background' and not snapshot.get('_time_skip') and due_births_in_scene_clock(snapshot['world_state']):
                 from backend.runtime_v3.context_contract import DUE_BIRTH_CONTRACT
                 rules += DUE_BIRTH_CONTRACT
+        if self.contract_version >= 6:
+            rules = rules.replace('final_scene.', 'scene.')
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.
@@ -525,7 +533,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(scene_sequence=self.contract_version >= 6, semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -801,7 +809,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 feedback.pop('known_locations')
             validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
         if isinstance(feedback, dict):
-            if extraction_contract >= 5 and 'contract' in feedback:
+            if 5 <= extraction_contract < 6 and 'contract' in feedback:
                 # Existing semantic rules above remain authoritative. Feedback
                 # supplies differences, not a second copy of the same contract.
                 feedback['contract'] = ('Reinterpret the unchanged full Narrative and input against immutable before. '
@@ -818,10 +826,16 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     if extraction_contract >= 5 and 'knowledge_gained' in feedback.get('response_required', []):
                         from backend.runtime_v3.raw import extraction_schema
                         schema['properties']['knowledge_gained'] = extraction_schema()['properties']['knowledge_gained']
+                    if extraction_contract >= 6:
+                        from backend.runtime_v3.scene_repair import repair_schema
+                        schema = repair_schema(schema, validation_feedback)
                     schema['required'] = list(dict.fromkeys(schema.get('required', []) + [key
                         for key in feedback.get('response_required', []) if key in schema['properties']]))
                     message['content'] = block('JSON Schema', schema)['content']
-        rules += '\nПовторно интерпретируй неизменный Narrative по feedback; верни полный JSON:\n' + validation_feedback
+        repair_intro = ('Повторно интерпретируй неизменный Narrative; верни ответ по JSON Schema и repair_mode:'
+                        if extraction_contract >= 6 else
+                        'Повторно интерпретируй неизменный Narrative по feedback; верни полный JSON:')
+        rules += '\n' + repair_intro + '\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
@@ -1045,6 +1059,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 def dereference(node):
                     while '$ref' in node: node=schema['$defs'][node['$ref'].split('/')[-1].removeprefix('#')]
                     return node
+                if 'promotions' not in schema['properties']:
+                    break  # Scoped repair has no unrelated promotion payload.
                 promotion=dereference(schema['properties']['promotions']['items'])
                 character=dereference(promotion['properties']['character'])
                 for field in ('appearance','personality','values'):

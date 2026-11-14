@@ -296,7 +296,7 @@ def run_job(path, job_id, handle):
             require_due_birth_assessment = due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'), before['world_state'])
             feedback = None
             previous_extraction = None
-            if job['attempt_epoch']:
+            if job['attempt_epoch'] and config.get('_extraction_contract', 1) < 6:
                 from backend.runtime_v3.raw import RawTurnResult, repair_feedback
                 # Retry reuses the latest failed proposal as feedback, never as
                 # canonical truth or a union of mutually inconsistent attempts.
@@ -317,6 +317,9 @@ def run_job(path, job_id, handle):
                 if diagnostics and latest_payload is not None:
                     latest = diagnostics[-1]
                     feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], latest_payload, before['world_state'], previous_complete=complete_payload)
+            from backend.runtime_v3.scene_repair import SceneCandidate
+            semantic_candidate = SceneCandidate(before['world_state'], narrative, job['user_text'], sequence+1,
+                on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if config.get('_extraction_contract', 1) >= 6 else None
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
@@ -349,7 +352,7 @@ def run_job(path, job_id, handle):
                     from copy import deepcopy
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_revision_warnings
-                    raw=RawTurnResult.parse(result)
+                    raw=semantic_candidate.parse(result) if semantic_candidate else RawTurnResult.parse(result)
                     if config.get('_narrative_correction'):
                         from backend.runtime_v3.continuity import require_chronology_recheck
                         require_chronology_recheck(raw, config['_narrative_correction']['grounds'])
@@ -405,7 +408,7 @@ def run_job(path, job_id, handle):
                     storage.record_repair(job_id,diagnostics)
                     require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required(diagnostics, before['world_state'])
                     if attempt == 1 or not exc.repairable:raise
-                    feedback = repair_feedback(diagnostics, result, before['world_state'])
+                    feedback = semantic_candidate.feedback(diagnostics, result) if semantic_candidate else repair_feedback(diagnostics, result, before['world_state'])
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
             from backend.runtime_v3.simulation import simulate
@@ -413,6 +416,7 @@ def run_job(path, job_id, handle):
             background_warnings=[]
             state,history_batch=simulate(before,state,history_batch,context,config,generate,handle.cancelled,
                 warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail),
+                on_candidate=lambda messages,audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit),
                 world_history={'events':world_history.get('events',[]),'_relationship_query':world_history['_relationship_query'],'_milestone_query':world_history['_milestone_query'],'_development_query':world_history['_development_query']})
             if background_warnings:
                 with storage.connect() as db:

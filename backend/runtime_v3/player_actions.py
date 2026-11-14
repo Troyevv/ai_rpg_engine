@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 5
+EXTRACTION_VERSION = 6
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -130,7 +130,7 @@ def resolver_options(state, player_input, kind='turn', contract_version=1, *, ti
 def contract_options(version):
     """Resolver half of the recorded producer contract, independent of mode."""
     return dict(consequence_first=version >= 3, preserve_scene_locations=version >= 4,
-                choice_grounding_required=version >= 4, semantic_slice=version >= 5)
+                choice_grounding_required=version >= 4, semantic_slice=version >= 5, scene_sequence=version >= 6)
 
 
 def review(resolver, raw):

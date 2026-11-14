@@ -122,6 +122,14 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
+    def record_extraction_candidate(self, request_id, audit):
+        """Attach compiler output to its exact existing request, never latest job."""
+        if request_id is None:
+            raise ValueError('Нет исходного запроса для кандидата Extraction.')
+        with self.connect() as db:
+            db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.extraction_candidate',json(?)) WHERE id=?",
+                       (dump(audit), request_id))
+
     def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
@@ -141,7 +149,10 @@ class RuntimeStorage:
             r['diagnostics'] = json.loads(r.pop('diagnostics_json'))
             r['messages'] = json.loads(r.pop('context_json'))
             r['pricing'] = json.loads(r.pop('pricing_json'))
-            r['max_tokens'] = json.loads(r.pop('config_json')).get('max_tokens')
+            recorded_config = json.loads(r.pop('config_json'))
+            r['max_tokens'] = recorded_config.get('max_tokens')
+            for key in ('extraction_contract','extraction_transport','extraction_schema'):
+                if key in recorded_config: r[key] = recorded_config[key]
         return rows
 
     def accounting(self, save_id):

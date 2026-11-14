@@ -134,7 +134,7 @@ def test_t38_t39_t42_assembled_prompt_contract_and_override(api):
     from backend.runtime_v3.raw import extraction_schema, prompt_schema
     client,app=api;sid=imported(client);snapshot=app.state.repository.get_snapshot(sid)
     prose='Виктория вошла внутрь. '+('Она огляделась. '*1800)
-    messages=build_context(snapshot,[], 'Жду.', 'turn',131072,4096,extraction_text=prose,
+    messages=build_context(snapshot,[], 'Жду.', 'turn',131072,4096,extraction_text=prose, extraction_contract=5,
         prompts={'state_update_prompt.md':{'content':'CUSTOM OVERRIDE SENTINEL'}})
     wire='\n'.join(m['content'] for m in messages)
     assert prose in wire and wire.count('CUSTOM OVERRIDE SENTINEL')==1

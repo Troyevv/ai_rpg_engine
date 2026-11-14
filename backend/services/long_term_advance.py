@@ -82,6 +82,7 @@ def execute(storage, job, handle, chat_stream):
         config=config,
         history=history,
         cancelled=handle.cancelled,
+        on_candidate=lambda messages,audit:storage.record_extraction_candidate(getattr(messages,'request_id',None),audit),
         recorded_groups=[f["context_key"] for f in frames if f["stage"]=="long_term_narrative"] if frames else None,
     )
     if output is None:

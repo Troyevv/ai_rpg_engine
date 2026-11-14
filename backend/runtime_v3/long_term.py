@@ -403,7 +403,7 @@ def advance_clock(snapshot, minute, batch):
     return snapshot
 
 
-def run(snapshot, request, *, generate=None, config=None, history=None, cancelled=None, recorded_groups=None):
+def run(snapshot, request, *, generate=None, config=None, history=None, cancelled=None, recorded_groups=None, on_candidate=None):
     """Narrative + Extraction, optionally one repair within the same total budget.
 
     Failed/unselected groups remain unresolved. Deterministic transitions are
@@ -568,6 +568,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         group_policy["selected_ids"] = [
             c["id"] for c in group_policy["candidates"] if c["selected"]
         ]
+        if config.get('_extraction_contract',1) >= 6:
+            instruction=instruction.replace('events и information_events','scene_steps')
         narrative = ""
         try:
             messages = build_context(
@@ -591,6 +593,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             if not narrative.strip():
                 raise ValueError("Пустой результат длительного перехода.")
             feedback = None
+            from backend.runtime_v3.scene_repair import SceneCandidate
+            semantic_candidate = SceneCandidate(resolution_state, narrative, '', turn,
+                namespace=identity('advance-group', sorted(c.id for c in group)),
+                on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if config.get('_extraction_contract', 1) >= 6 else None
             for attempt in range(2):
                 payload = None
                 try:
@@ -620,7 +626,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             response_format={"type": "json_object"},
                         )
                     )
-                    raw = RawTurnResult.parse(payload)
+                    raw = semantic_candidate.parse(payload) if semantic_candidate else RawTurnResult.parse(payload)
                     if config.get('_extraction_contract', 1) >= 5:
                         from backend.runtime_v3.raw import compile_semantic
                         raw = compile_semantic(raw, resolution_state, narrative, turn,
@@ -723,7 +729,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     report['diagnostics'].extend(exc.diagnostics('long_term_repair' if can_repair else 'unresolved_group'))
                     if not can_repair:
                         raise exc
-                    feedback = repair_feedback(exc.diagnostics('long_term_repair'), payload, resolution_state)
+                    feedback = semantic_candidate.feedback(exc.diagnostics('long_term_repair'), payload) if semantic_candidate else repair_feedback(exc.diagnostics('long_term_repair'), payload, resolution_state)
             # Restore camera only; off-camera location changes remain canonical.
             resolved.state["camera"] = deepcopy(result["world_state"]["camera"])
             from backend.runtime_v3.remote import release_call_channel

@@ -308,6 +308,8 @@ def chat_stream(
     thinking='off',
     on_usage=None,
     on_finish=None,
+    structured_schema=None,
+    extraction_transport=None,
 ):
     if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
@@ -324,6 +326,22 @@ def chat_stream(
     from backend.services.answer_stream import AnswerStream
     answer = AnswerStream()
     try:
+        if structured_schema is not None:
+            from backend.services.structured_extraction import RESPONSES_MODELS, response_events
+            if extraction_transport != 'responses_json_schema' or provider != 'deepseek' or model not in RESPONSES_MODELS:
+                raise ValueError('Этот провайдер/модель не поддерживает выбранный schema transport.')
+            if cancel_event is not None and cancel_event.is_set():raise RuntimeError('Генерация остановлена.')
+            effective_thinking = thinking_options(provider,model,thinking)[0]
+            # Schema occupies one context slot, not both prompt text and API schema.
+            wire_messages=[m for m in messages if not m.get('content','').startswith('JSON Schema\n')]
+            stream=client.responses.create(model=model,input=wire_messages,
+                text={'format':{'type':'json_schema','name':'extraction_v6','schema':structured_schema}},
+                reasoning={'effort':'none' if effective_thinking=='off' else effective_thinking},
+                max_output_tokens=max_tokens,stream=True,
+                **({'temperature':temperature} if effective_thinking=='off' else {}))
+            if on_stream:on_stream(stream)
+            yield from response_events(stream,cancel_event,on_usage,on_finish)
+            return
         extra = {"response_format": response_format} if response_format else {}
         if spec.extra_body:
             extra['extra_body'] = spec.extra_body

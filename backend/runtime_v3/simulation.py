@@ -50,7 +50,7 @@ def optional_generate(generate):
 
 
 def simulate(before_snapshot, snapshot, history_batch, context_length, config, generate, cancelled,
-             warnings, on_repair, world_history=None):
+             warnings, on_repair, world_history=None, on_candidate=None):
     before, state = before_snapshot['world_state'], snapshot['world_state']
     result, history = deepcopy(snapshot), deepcopy(history_batch)
     cursor = result.setdefault('background_considerations', dict(
@@ -67,7 +67,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         result['last_time_skip'].update(diagnostics, simulated_candidates=0)
     try:
         accepted, accepted_history = _simulate_candidate(result, history, candidate, batch,
-            context_length, config, optional_generate(generate), cancelled, warnings, on_repair, world_history)
+            context_length, config, optional_generate(generate), cancelled, warnings, on_repair, world_history, on_candidate)
     except (StructuralDeltaError, BackgroundGenerationError) as exc:
         if cancelled.is_set():
             return snapshot, history_batch
@@ -100,7 +100,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
 
 
 def _simulate_candidate(snapshot, history_batch, candidate, batch, context_length, config,
-                        generate, cancelled, warnings, on_repair, world_history):
+                        generate, cancelled, warnings, on_repair, world_history, on_candidate):
     # Neither failed extraction nor a post-resolution invariant may leak into
     # the foreground candidate or its History batch.
     snapshot, history_batch = deepcopy(snapshot), deepcopy(history_batch)
@@ -123,14 +123,18 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     if cancelled.is_set():return snapshot,history_batch
     if not narrative.strip():raise BackgroundGenerationError('empty_background')
     feedback=None
+    from backend.runtime_v3.scene_repair import SceneCandidate
+    semantic_candidate = SceneCandidate(camera['world_state'], narrative, '', state['meta']['turn_id'],
+        on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if contract_version >= 6 else None
     for attempt in range(2):
         messages=background_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
+            raw = semantic_candidate.parse(payload) if semantic_candidate else payload
             resolved=StateResolver(camera['world_state'],narrative,'',chronology_events=(world_history or {}).get('events', []),letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],**boundary,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 relationship_query=(world_history or {}).get('_relationship_query'),relationship_receipts=history_batch.get('relationship_changes',[]),
-                actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
+                actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(raw)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:
                 fatal('background не должен продвигать часы','background_time_invalid',repairable=True)
             if protected is not None and (protected in resolved.state['camera']['present_character_ids'] or
@@ -141,7 +145,7 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
             diagnostic = exc.diagnostic('world_simulation_repair' if attempt == 0 and exc.repairable else 'background_rejected')
             on_repair(dict(diagnostic, scope='independent_background'))
             if attempt==1 or not exc.repairable:raise
-            feedback = repair_feedback(diagnostic, payload, camera['world_state'])
+            feedback = semantic_candidate.feedback(exc.diagnostics('world_simulation_repair'), payload) if semantic_candidate else repair_feedback(diagnostic, payload, camera['world_state'])
     result=deepcopy(snapshot)
     result['world_state']=resolved.state
     result['world_state']['camera']=deepcopy(state['camera'])

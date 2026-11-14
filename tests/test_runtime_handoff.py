@@ -432,7 +432,7 @@ def test_context_retains_bounded_identity_and_typed_arrival_contract():
     from backend.runtime_v3.context import build_context
     original=json.loads((ROOT/'legacy_snapshot.json').read_text())
     narrative=build_context(original,[],'','start',131072,2000)
-    extraction=build_context(original,[],'','start',131072,4096,extraction_text=NARRATIVE)
+    extraction=build_context(original,[],'','start',131072,4096,extraction_text=NARRATIVE,extraction_contract=5)
     def block(messages,title):return json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith(title+'\n')))
     cards=block(narrative,'Карточки присутствующих / GM-only')
     assert [c['id'] for c in cards]==['ilya']

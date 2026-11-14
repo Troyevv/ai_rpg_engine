@@ -52,7 +52,21 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         config.get('provider', 'local'), config['model'], config.get('thinking', 'off')
     )[0]
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
+    if config.get('_extraction_contract',1) >= 6:
+        from backend.services.structured_extraction import STAGES, transport, request_schema
+        if stage in STAGES:
+            selected=config.get('_extraction_transport',transport(config))
+            schema=request_schema(messages)
+            effective.update(extraction_contract=6, extraction_transport=selected, extraction_schema=schema)
+            if selected=='responses_json_schema':
+                effective.pop('response_format',None)
+                effective['text_format']={'type':'json_schema','name':'extraction_v6'}
+                kwargs.update(structured_schema=schema, extraction_transport=selected)
+            elif selected!='chat_json_object':
+                raise ValueError('Неизвестный записанный transport Extraction.')
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
+    if hasattr(messages, '__dict__'):
+        messages.request_id = rid  # Exact request identity for subsequent candidate audit.
     started=time.perf_counter()
     response = []
     usage, status, finish_reason = None, 'error', None
