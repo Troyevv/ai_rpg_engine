@@ -171,9 +171,9 @@ def test_scene_contract_overrides_saved_prompt_without_previous_narratives(versi
     snapshot['world_state']['locations']['nail'] = dict(id='nail', name='Гвоздь', description='')
     messages = build(snapshot, extraction_text=NARRATIVE, extraction_contract=version,
         prompts={'state_update_prompt.md': {'content': 'Сохранённая инструкция'}})
-    contract = (SEMANTIC_BASE_CONTRACT if version >= 5 else EXTRACTION_CONTRACT).split('Departure without destination:')[0]
+    contract = SEMANTIC_BASE_CONTRACT if version >= 5 else EXTRACTION_CONTRACT.split('Departure without destination:')[0]
     assert contract in messages[0]['content']
-    assert 'Movement assertion=departure' in messages[0]['content']
+    assert ('Departure: known origin, nullable endpoint.' if version >= 5 else 'Movement assertion=departure') in messages[0]['content']
     assert 'CHOICE SOURCE BOUNDARY v4' in messages[0]['content']
     assert messages[0]['content'].index('Сохранённая инструкция') < messages[0]['content'].index(contract)
     assert section(messages, 'Текущее состояние / GM-only')['locations']['nail']['name'] == 'Гвоздь'

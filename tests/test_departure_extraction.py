@@ -63,7 +63,7 @@ def test_phone006_repair_and_lineage(phone, corrected):
     bad = dict(good, movements=[null_arrival(camera)])
     job, calls = run(client, sid, [bad, good if corrected else bad], DEPARTURE, 'turn', ACTION)
     assert [bool(c.get('response_format')) for c in calls] == [False, True, True]
-    assert 'Departure without destination' in calls[1]['messages'][0]['content']
+    assert 'Departure: known origin, nullable endpoint.' in calls[1]['messages'][0]['content']
     diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
     assert [(d['code'], d['path'], d['source_ids']) for d in diagnostics] == [
         ('movement_endpoint_invalid', 'movements[0].to_location_id', [NPC])] * (1 if corrected else 2)
