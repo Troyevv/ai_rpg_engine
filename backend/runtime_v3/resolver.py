@@ -32,11 +32,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None, scene_sequence=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.scene_sequence = scene_sequence
         self.semantic_slice = semantic_slice
         self.chronology_events = {e['id']:e for e in (chronology_events or []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
         self.agency_audit_required = agency_audit_required
@@ -217,7 +218,31 @@ class StateResolver:
 
     def resolve(self, payload):
         from backend.services.world_delta_errors import StructuralDeltaError
-        raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
+        try:
+            result = self._resolve(payload)
+            raw = getattr(self, 'source_raw', None)
+            if raw is not None and raw.semantic_candidate:
+                from backend.runtime_v3.scene_steps import source_diagnostic
+                result.warnings = [source_diagnostic(raw, row) for row in result.warnings]
+            return result
+        except StructuralDeltaError as exc:
+            raw=getattr(self,'source_raw',None)
+            if raw is None or not raw.semantic_candidate:raise
+            from backend.runtime_v3.scene_steps import source_diagnostic
+            errors=[]
+            for row in exc.diagnostics('validation'):
+                translated=source_diagnostic(raw,row)
+                path={k:v for k,v in translated.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
+                errors.append(StructuralDeltaError(row.get('repair_reason',str(exc)),row['code'],repairable=exc.repairable,**path))
+            raise StructuralDeltaError.combine(errors) from exc
+
+    def _resolve(self, payload):
+        from backend.services.world_delta_errors import StructuralDeltaError
+        if self.scene_sequence and not isinstance(payload, RawTurnResult):
+            from backend.runtime_v3.scene_steps import compile_scene
+            raw = compile_scene(payload, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
+        else:
+            raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         if self.semantic_slice:
             from backend.runtime_v3.raw import compile_semantic
             raw = compile_semantic(raw, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
@@ -225,6 +250,7 @@ class StateResolver:
             validate_chronology(self, raw)
         elif raw.records['information_events'] or raw.records['chronology_claims']:
             fatal('Семантический срез недоступен в записанной версии запроса.', 'contract_version_mismatch', repairable=True)
+        self.source_raw = raw
         self.warnings.extend(raw.warnings)
         from backend.runtime_v3.continuity import validate_due_birth_assessments
         validate_due_birth_assessments(self, raw)

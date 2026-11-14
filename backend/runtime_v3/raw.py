@@ -26,6 +26,8 @@ class RawTurnResult:
     semantic_compiled: bool = False
     # Trusted compiler bookkeeping, never accepted from provider metadata.
     event_sources: dict = field(default_factory=dict)
+    semantic_candidate: dict | None = None
+    movement_sources: dict = field(default_factory=dict)
 
     @classmethod
     def parse(cls, payload):
@@ -515,7 +517,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False):
     """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
@@ -663,6 +665,9 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         birth_guidance(schema['properties'].get('births', {}))
         schema['properties'] = {**{k:v for k,v in schema['properties'].items() if k != 'final_scene'},
                                 'final_scene': schema['properties']['final_scene']}
+    if scene_sequence:
+        from backend.runtime_v3.scene_steps import project_schema
+        schema = structural(project_schema(schema))
     counts = Counter()
 
     def key(node):
@@ -699,7 +704,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         if isinstance(node, list): return [compact(value) for value in node]
         return node
     result = compact(schema)
-    result['$defs'] = {name:dict(compact(json.loads(value), root=True), **{'$anchor':name}) for value, name in shared.items()}
+    result['$defs'] = {**result.get('$defs', {}), **{name:dict(compact(json.loads(value), root=True), **{'$anchor':name}) for value, name in shared.items()}}
     # Counting before factoring can leave definitions referenced only once:
     # their original occurrences now live inside another shared definition.
     # Inline those wrappers losslessly rather than paying for an anchor + ref.
@@ -725,6 +730,9 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         expanded = inline(result)
         expanded['$defs'] = {k:v for k,v in expanded['$defs'].items() if k not in single}
         result = expanded
+    if scene_sequence:
+        from backend.services.structured_extraction import wire_schema
+        result = wire_schema(result)
     return result
 
 
