@@ -463,3 +463,17 @@ def test_legacy_acquisition_cannot_borrow_another_claims_perceiver():
     p['knowledge_gained']=[dict(actor_id='c',fact_id='local-one',source_event_id='tell',status='known')]
     with pytest.raises(StructuralDeltaError) as exc:resolve(s,p)
     assert exc.value.code=='knowledge_claim_perception_missing'
+
+
+@pytest.mark.parametrize('local_id',['b','tell','home'])
+def test_fact_alias_does_not_rewrite_other_identity_domains(local_id):
+    s=state();p=raw(s);item=info()
+    item['location_id']='home'
+    item['claims'][0]['fact']['id']=local_id
+    p['information_events']=[item]
+    result=resolve(s,p)
+    assert len(result.history['knowledge_acquisitions'])==4
+    event=result.history['events'][0]
+    assert event['actor_id']=='b' and event['location_id']=='home'
+    assert event['information_source']['actor_id']=='b'
+    assert all(k['source_event_id']==event['id'] for k in result.state['knowledge'].values())

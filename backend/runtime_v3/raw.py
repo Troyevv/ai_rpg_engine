@@ -174,7 +174,8 @@ def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
             return {k:map_refs(v, k) for k,v in value.items()}
         if isinstance(value, list):
             return [map_refs(v, field) for v in value]
-        if isinstance(value, str) and (field.endswith('_id') or field.endswith('_ids') or field == 'supersedes'):
+        if isinstance(value, str) and (field in ('fact_id', 'fact_ids', 'supersedes') or
+                                       field.endswith(('_fact_id', '_fact_ids'))):
             return aliases.get(value, value)
         return value
     result.records = map_refs(result.records)
