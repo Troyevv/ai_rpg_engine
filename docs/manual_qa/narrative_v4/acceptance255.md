@@ -58,7 +58,7 @@ and no hidden fallback. Actual acceptance of the full schema by DeepSeek remains
 
 ## Free verification record
 
-- New v6 compiler/provider/production/repair/persistence suites: **58 passed**.
+- New v6 compiler/provider/production/repair/persistence suites: **59 passed**.
 - New suites + context compaction + three affected legacy suites before the final
   audit additions: **149 passed**. Legacy assertions remain intact and request
   their original contract explicitly where they inspect that schema.
@@ -98,6 +98,11 @@ Partial new-NPC cards still enter pending review. Existing optional annotation
 owners retain field-local rejection; a malformed optional annotation or choices
 list cannot veto an independent accepted route. Existing domain size caps have
 one shared owner and remain in the v6 projection.
+
+Final repair review found that multiple indexed diagnostics in one section
+overwrote the earlier record scope. The scope now unions those records while
+keeping unaffected neighbors protected. The new regression plus the v6/provider
+and context-compaction suites passed: **63 passed**.
 
 ## Outstanding acceptance
 

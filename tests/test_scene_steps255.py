@@ -527,3 +527,20 @@ def test_scoped_section_edit_retains_unmentioned_neighbor_and_logs_withdrawal():
         withdrawals=[dict(section='facts',record_key='bad',reason='Не установленный факт.')]))
     assert raw.semantic_candidate['facts']==[p['facts'][1]]
     assert any(w.get('record_key')=='bad' and w['code']=='semantic_reinterpretation' for w in raw.warnings)
+
+
+def test_repair_combines_multiple_record_diagnostics_without_unlocking_neighbors():
+    import json
+    from backend.runtime_v3.scene_repair import SceneCandidate
+    s=state();p=dict(scene={},scene_steps=[],facts=[
+        dict(id='first',text='Первый черновик'),dict(id='second',text='Второй черновик'),
+        dict(id='independent',text='Сохранить')])
+    candidate=SceneCandidate(s,'Проза','',1);candidate.parse(p)
+    info=json.loads(candidate.feedback([
+        dict(section='facts',index=0,code='fact_invalid'),
+        dict(section='facts',index=1,code='fact_invalid')],p))
+    assert info['scope']['record_keys']['facts']==['first','second']
+    edits=[dict(id='first',text='Первое исправлено'),dict(id='second',text='Второе исправлено')]
+    raw=candidate.parse(dict(candidate_hash=info['candidate_hash'],replacements=[],
+        sections={'facts':edits},reason='Уточнены оба исходных утверждения.'))
+    assert raw.semantic_candidate['facts']==edits+[p['facts'][2]]

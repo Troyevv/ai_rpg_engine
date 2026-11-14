@@ -93,7 +93,8 @@ class SceneCandidate:
                 sections.add(section)
                 values=self.base.get(section,[])
                 if isinstance(values,list):
-                    selected_records[section]={index} if isinstance(index,int) and 0<=index<len(values) else set(range(len(values)))
+                    selected_records.setdefault(section,set()).update(
+                        {index} if isinstance(index,int) and 0<=index<len(values) else range(len(values)))
         # Route/presence dependencies share explicit actors. ID references bind
         # other domains. This deliberately errs toward rechecking dependencies,
         # while unconnected proposals remain byte-for-byte unchanged.
