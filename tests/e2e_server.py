@@ -16,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
+import backend.runtime_v3.player_actions as extraction_versions
+extraction_versions.EXTRACTION_VERSION = 5  # Historical browser replies are v5.
+scene255_mode = False
+scene255_attempts = 0
 provider_chat_stream = llm.chat_stream
 import backend.services.preparation as preparation
 from backend.api.app import create_app
@@ -660,6 +664,22 @@ def scripted_stream(**kwargs):
 
 
 def stream(**kwargs):
+    global scene255_attempts
+    if scene255_mode and kwargs.get('model')=='scene255-test':
+        if not kwargs.get('response_format'):
+            yield 'Кирилл попрощался и дошёл до парка.'
+            return
+        scene255_attempts += 1
+        current=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
+        schema=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('JSON Schema\n')))
+        actor=current['camera']['controlled_actor_id']
+        step=dict(id='walk',kind='movement',actor_id=actor,text='Дошёл до парка.',assertion='completed_arrival',endpoint='park255',input_source=dict(quote='несуществующий ввод' if scene255_attempts<=2 else 'Иду в парк.',meaning='preserved'))
+        if 'candidate_hash' in schema['properties']:
+            reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[step],sections={},reason='Повторная ошибочная интерпретация в authored negative control.')
+        else:
+            reply=dict(scene=dict(elapsed_minutes=1),scene_steps=[step],locations=[dict(id='park255',name='Парк',evidence='')])
+        yield json.dumps(reply)
+        return
     # Upgrade old scripted provider fixtures to the mandatory #232 review envelope.
     # Preserve malformed/partial transport output and explicit negative reviews.
     from runtime_v3_fixture import reviewed
@@ -743,6 +763,24 @@ if __name__ == '__main__':
         assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
         (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
+    @app.post('/test/scene255-reset')
+    def scene255_reset():
+        global scene255_mode
+        scene255_mode=False
+        extraction_versions.EXTRACTION_VERSION=5
+        return {'ok':True}
+
+    @app.post('/test/scene255-seed')
+    def scene255_seed():
+        global scene255_mode, scene255_attempts
+        from test_integrated_repair247 import seed, archived
+        extraction_versions.EXTRACTION_VERSION=5
+        scene255_mode=False
+        result=seed(app.state.repository,archived('knowledge'))
+        extraction_versions.EXTRACTION_VERSION=6
+        scene255_mode=True;scene255_attempts=0
+        return result
+
     @app.post('/test/editor173')
     def seed_editor173(body:dict):
         global editor173_control,phone_mode,creative172_control

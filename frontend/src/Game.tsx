@@ -198,7 +198,7 @@ export function Game({
   const entries=surfaceEntries(allEntries,'physical');
   const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
-    <div className="flex flex-wrap gap-2" aria-busy={busy}>
+    <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
       <Button disabled={busy || running} onClick={() => void run(async () => {
         try {
           const discarded = await api<Job>(`/saves/${save.id}/jobs/${job.id}/abandon`, {
@@ -487,6 +487,7 @@ export function Game({
           </div>
           <div className="composer-footer">
             <span>Твоё действие всегда важнее предложенных вариантов.</span>
+            {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
             {away&&<button
               onClick={jumpToLatest}
             >
