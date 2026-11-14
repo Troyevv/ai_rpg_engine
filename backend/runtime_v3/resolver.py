@@ -336,38 +336,47 @@ class StateResolver:
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
         moves = {}
+        movement_errors, invalid_moves, invalid_route_actors = [], set(), set()
         for i, item in self.records(raw,'movements'):
-            cid = self.actor(item.get('actor_id'),'movements',i)
-            if cid != self.protected_actor_id and item.get('player_action_id') is not None:
-                fatal('PlayerAction управляемого персонажа не является действием другого actor.',
-                      'movement_agency', repairable=True, section='movements', index=i, entity=cid)
-            departure = item.get('assertion') == 'departure'
-            if self.consequence_first and 'assertion' not in item:
-                fatal('Movement фиксирует только completed_arrival или departure. Будущее намерение остаётся планом.',
-                      'movement_assertion_invalid', repairable=True, section='movements', index=i, field='assertion')
-            if 'assertion' in item and item['assertion'] not in ('completed_arrival', 'departure'):
-                fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
-                      section='movements', index=i, field='assertion', entity=cid)
-            target = item.get('to_location_id')
-            if departure and (target is not None or not isinstance(item.get('from_location_id'), str)):
-                fatal('Уход без известного назначения требует to_location_id=null и известного from_location_id.',
-                      'movement_endpoint_invalid', repairable=True, section='movements', index=i, field='to_location_id', entity=cid)
-            if not departure and (not isinstance(target,str) or target not in s['locations']):
-                exit_instruction = ('и используй Movement assertion=departure, to_location_id=null, известный from_location_id. '
-                                    if self.preserve_scene_locations else 'и опусти только неподтверждённую запись прибытия. ')
-                fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
-                      'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
-                      'сохрани факт ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
-                      + exit_instruction + 'Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
-                      'movement_endpoint_invalid', repairable=True, section='movements', index=i,
-                      field='to_location_id', entity=cid)
-            # Authority is checked after accepted Event/Action provenance below;
-            # tentative geography is needed by the shared presence validator.
-            order = item.get('order')
-            if order is not None and (type(order) is not int or order < 0):
-                self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
-            moves.setdefault(cid,[]).append((order,target,item['evidence'],item))
+            try:
+                cid = self.actor(item.get('actor_id'),'movements',i)
+                if cid != self.protected_actor_id and item.get('player_action_id') is not None:
+                    fatal('PlayerAction управляемого персонажа не является действием другого actor.',
+                          'movement_agency', repairable=True, section='movements', index=i, entity=cid)
+                departure = item.get('assertion') == 'departure'
+                if self.consequence_first and 'assertion' not in item:
+                    fatal('Movement фиксирует только completed_arrival или departure. Будущее намерение остаётся планом.',
+                          'movement_assertion_invalid', repairable=True, section='movements', index=i, field='assertion')
+                if 'assertion' in item and item['assertion'] not in ('completed_arrival', 'departure'):
+                    fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
+                          section='movements', index=i, field='assertion', entity=cid)
+                target = item.get('to_location_id')
+                if departure and (target is not None or not isinstance(item.get('from_location_id'), str)):
+                    fatal('Уход без известного назначения требует to_location_id=null и известного from_location_id.',
+                          'movement_endpoint_invalid', repairable=True, section='movements', index=i, field='to_location_id', entity=cid)
+                if not departure and (not isinstance(target,str) or target not in s['locations']):
+                    exit_instruction = ('и используй Movement assertion=departure, to_location_id=null, известный from_location_id. '
+                                        if self.preserve_scene_locations else 'и опусти только неподтверждённую запись прибытия. ')
+                    fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
+                          'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
+                          'сохрани факт ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
+                          + exit_instruction + 'Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                          'movement_endpoint_invalid', repairable=True, section='movements', index=i,
+                          field='to_location_id', entity=cid)
+                # Authority is checked after accepted Event/Action provenance below;
+                # tentative geography is needed by the shared presence validator.
+                order = item.get('order')
+                if order is not None and (type(order) is not int or order < 0):
+                    self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
+                moves.setdefault(cid,[]).append((order,target,item['evidence'],item))
+            except StructuralDeltaError as exc:
+                movement_errors.append(exc)
+                invalid_moves.add(i)
+                if isinstance(item.get('actor_id'), str):
+                    invalid_route_actors.add(item['actor_id'])
         for cid, route in moves.items():
+            if cid in invalid_route_actors:
+                continue  # Dependent geography is inconclusive, never publish this candidate.
             if len({r[1] for r in route}) > 1:
                 if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
                     fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
@@ -392,6 +401,8 @@ class StateResolver:
             s['characters'][cid]['location_id'] = origin
         scene_errors = []
         for cid in present:
+            if cid in invalid_route_actors:
+                continue
             origin = s['characters'][cid]['location_id']
             initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
                                  and self.before['characters'].get(cid, {}).get('location_id') is None)
@@ -446,7 +457,7 @@ class StateResolver:
         event_indices = {}
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
-        event_errors = list(scene_errors)
+        event_errors = list(scene_errors) + movement_errors
         rejected_events = set()
         for i, item in self.records(raw,'events'):
             error_start = len(event_errors)
@@ -514,9 +525,7 @@ class StateResolver:
                     if (not isinstance(actor, str) or actor not in event['participants'] or
                             not isinstance(targets, list) or any(not isinstance(t, str) for t in targets) or
                             not set(targets) <= set(event['participants'] + event['witnesses']) or actor in targets):
-                        dependent = any(isinstance(r, dict) and isinstance(r.get('source_event_ids'), list)
-                            and eid in r['source_event_ids'] for r in raw.records['relationship_changes'])
-                        if dependent or item.get('information_source'):
+                        if item.get('information_source'):
                             fatal('Автор/адресаты NPC-взаимодействия не согласованы с участниками.',
                                 'event_contact_invalid', repairable=True, section='events', index=i)
                         self.warn('events', i, 'Снята некорректная вспомогательная аннотация контакта.', code='event_contact_annotation_ignored')
@@ -537,11 +546,15 @@ class StateResolver:
         from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
         from backend.runtime_v3.event_presence import validate_movement_sources
         try:
-            validate_movement_sources(self, raw, events, rejected_events)
+            validate_movement_sources(self, raw, events, rejected_events, invalid_moves)
         except StructuralDeltaError as exc:
             event_errors.append(exc)
         situation_actors = {}
         for eid, event in list(events.items()):
+            if invalid_route_actors & set(event['participants'] + event['witnesses']):
+                rejected_events.add(eid)
+                del events[eid]
+                continue  # Provenance was checked; presence depends on the rejected route.
             try:
                 situation_actors[eid] = validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
             except StructuralDeltaError as exc:

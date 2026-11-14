@@ -92,15 +92,19 @@ def scripted_stream(**kwargs):
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
     if policy252_selection and kwargs.get('model') == 'policy252-test':
         from test_policy252 import chronology_payload
+        from test_acceptance254 import calendar_payload
+        calendar_case = policy252_selection.get('calendar_case', False)
         if 'Исправь только хронологические' in str(kwargs['messages']):
             policy252_selection['corrected'] = True
-            yield json.dumps(dict(edits=[dict(original='Вчера Вера встретилась с Тимуром.',replacement='Пять дней назад Вера встретилась с Тимуром.')]),ensure_ascii=False)
+            yield json.dumps(dict(edits=[dict(original=policy252_selection['correction_original'],replacement=policy252_selection['correction_replacement'])]),ensure_ascii=False)
         elif kwargs.get('response_format'):
             completed = next(m['content'] for m in kwargs['messages'] if m['content'].startswith('completed_narrative\n'))
-            corrected = 'Пять дней назад Вера встретилась с Тимуром.' in completed
-            yield json.dumps(chronology_payload(app.state.repository, policy252_selection['save'],policy252_selection['event_id'],5 if corrected else 1),ensure_ascii=False)
+            corrected = policy252_selection['correction_replacement'] in completed
+            payload = (calendar_payload(app.state.repository, policy252_selection['save'], corrected=corrected) if calendar_case else
+                       chronology_payload(app.state.repository, policy252_selection['save'],policy252_selection['event_id'],5 if corrected else 1))
+            yield json.dumps(payload,ensure_ascii=False)
         else:
-            yield policy252_selection['narrative'].replace('Вчера', 'Пять дней назад') if policy252_selection.get('corrected') else policy252_selection['narrative']
+            yield policy252_selection['narrative'].replace(policy252_selection['correction_original'], policy252_selection['correction_replacement']) if policy252_selection.get('corrected') else policy252_selection['narrative']
         return
     if berezovsk_followup and kwargs.get('model') == 'berezovsk-followup-test':
         if kwargs.get('response_format'):
@@ -1113,10 +1117,17 @@ if __name__ == '__main__':
         return dict(world=result['world'],save=result['save'],action=data['player_input'])
 
     @app.post('/test/policy252-seed')
-    def policy252_seed():
+    def policy252_seed(calendar: bool = False):
         global policy252_selection
         from test_policy252 import seed_chronology
-        policy252_selection = seed_chronology(app.state.repository)
+        if calendar:
+            from test_acceptance254 import seed_calendar
+            policy252_selection = seed_calendar(app.state.repository)
+        else:
+            policy252_selection = seed_chronology(app.state.repository)
+        policy252_selection.update(calendar_case=calendar,
+            correction_original='Неверный день.' if calendar else 'Вчера Вера встретилась с Тимуром.',
+            correction_replacement='Верный день.' if calendar else 'Пять дней назад Вера встретилась с Тимуром.')
         return policy252_selection
 
     @app.post('/test/playability251-seed')

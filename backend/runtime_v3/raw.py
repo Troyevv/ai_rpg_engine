@@ -1,5 +1,5 @@
 """Tolerant input envelope. Optional records are validated independently downstream."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from copy import deepcopy
 from functools import lru_cache
 import json
@@ -24,6 +24,8 @@ class RawTurnResult:
     warnings: list
     player_agency: dict | None = None
     semantic_compiled: bool = False
+    # Trusted compiler bookkeeping, never accepted from provider metadata.
+    event_sources: dict = field(default_factory=dict)
 
     @classmethod
     def parse(cls, payload):
@@ -102,6 +104,8 @@ def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
     if result.semantic_compiled:
         return result
     result.semantic_compiled = True
+    result.event_sources = {i: dict(section='events', index=i, local_id=e.get('id'))
+        for i, e in enumerate(result.records['events']) if isinstance(e, dict)}
     for event in result.records['events']:
         if isinstance(event, dict): event.pop('information_source', None)
     for acquisition in result.records['knowledge_gained']:
@@ -166,6 +170,8 @@ def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
         event['information_source'] = dict(actor_id=info.source_actor_id,
             claims=[dict(fact_id=fid, assertion=claim.assertion, perceived_by=claim.perceived_by)
                     for fid, claim in zip(claim_links, info.claims)])
+        result.event_sources[len(result.records['events'])] = dict(
+            section='information_events', index=i, local_id=eid)
         result.records['events'].append(event)
         result.records['knowledge_gained'].extend(acquisitions)
     # Local references are exact response IDs, never names or textual matching.
@@ -188,7 +194,19 @@ def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
     for i, movement in enumerate(result.records['movements']):
         if isinstance(movement, dict) and movement.get('assertion') in ('intent', 'attempt'):
             result.warnings.append(dict(section='movements', index=i, code='movement_not_completed', action='no_relocation'))
-        else: moves.append(movement)
+        else:
+            if isinstance(movement, dict) and isinstance(movement.get('source_event_id'), str):
+                sources = [e for e in result.records['events'] if isinstance(e, dict)
+                           and e.get('id') == movement['source_event_id']]
+                # Only an explicit, unique source owns the step. Normal source,
+                # presence and agency validation still runs before publication.
+                if len(sources) == 1 and type(sources[0].get('order')) is int and sources[0]['order'] >= 0:
+                    if movement.get('order') != sources[0]['order']:
+                        result.warnings.append(dict(section='movements', index=i,
+                            code='movement_order_derived', action='derive_field',
+                            source_ids=[movement['source_event_id']], field='order'))
+                    movement['order'] = sources[0]['order']
+            moves.append(movement)
     result.records['movements'] = moves
     if len(result.records['knowledge_gained']) > 64:
         fatal('Превышен лимит Knowledge после сборки.', 'knowledge_budget', repairable=True)
@@ -201,8 +219,8 @@ from typing import Literal
 
 class PerceivedClaim(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    fact_id: str | None = None
-    fact: dict | None = None
+    fact_id: str | None = Field(default=None, description='Reuse only when the WHOLE existing assertion was perceived, not just its topic or a fragment.')
+    fact: dict | None = Field(default=None, description='New assertion containing only actually perceived content; hypotheticals do not establish a personal event.')
     assertion: Literal['observation', 'testimony', 'rumor']
     perceived_by: list[str] = Field(min_length=1, max_length=16)
     status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded']
@@ -226,11 +244,23 @@ class PerceivedClaim(BaseModel):
 
 class ChronologyClaim(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    event_id: str
+    kind: Literal['event_elapsed', 'current_calendar'] = 'event_elapsed'
+    event_id: str | None = None
     assertion: Literal['narrator', 'belief', 'lie', 'quotation']
-    elapsed_days: int = Field(ge=0)
+    elapsed_days: int | None = Field(default=None, ge=0)
+    date: str | None = None
+    weekday: str | None = None
     reference_minute: int | None = Field(default=None, ge=0)
     evidence: str = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def coherent(self):
+        if self.kind == 'event_elapsed':
+            if not self.event_id or self.elapsed_days is None or self.date is not None or self.weekday is not None:
+                raise ValueError('event_elapsed needs event_id and elapsed_days only.')
+        elif self.event_id is not None or self.elapsed_days is not None or not (self.date or self.weekday):
+            raise ValueError('current_calendar needs date and/or weekday, never a fictitious event_id.')
+        return self
 
 
 class InformationEvent(BaseModel):
@@ -247,7 +277,8 @@ class InformationEvent(BaseModel):
     minute: int | None = Field(default=None, ge=0)
     order: int | None = Field(default=None, ge=0)
     interaction_channel: Literal['physical', 'call'] | None = None
-    advance_candidate_ids: list[str] = Field(default_factory=list, max_length=3)
+    advance_candidate_ids: list[str] = Field(default_factory=list, max_length=3,
+        description='LTA only: explicitly related selected causes, inherited by the compiled Event. A link does not itself resolve a cause.')
 
 
 def repair_revision_warnings(previous, current):
@@ -705,7 +736,8 @@ def repair_feedback(diagnostic, payload, before, previous_complete=None):
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
     details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths',
-                'current_time', 'previous_temporal', 'previous_window', 'previous_anchor') if key in row} for row in rows]
+                'current_time', 'previous_temporal', 'previous_window', 'previous_anchor',
+                'allowed_candidate_ids', 'local_id', 'order', 'source_order', 'location_id') if key in row} for row in rows]
     # Keep the legacy first-error summary, without duplicating its long reason
     # and source lists. The diagnostics array retains every complete record.
     detail = {key:details[0][key] for key in ('code','path') if key in details[0]}

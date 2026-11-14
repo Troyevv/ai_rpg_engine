@@ -325,7 +325,8 @@ def run_job(path, job_id, handle):
                                          config['update_tokens'], extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
                                          validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 if config.get('_narrative_correction'):
-                    ids = [g['event_id'] for g in config['_narrative_correction']['grounds']]
+                    ids = [dict(kind=g.get('kind', 'event_elapsed'), event_id=g.get('event_id'),
+                                reference_minute=g.get('current_minute')) for g in config['_narrative_correction']['grounds']]
                     messages.append({'role':'system', 'content':'Corrected candidate: recheck objective assertions for '
                         + json.dumps(ids) + ' in chronology_claims against the NEW prose; never omit or downgrade them.'})
                     if estimate(messages)>context-config['update_tokens']-256:

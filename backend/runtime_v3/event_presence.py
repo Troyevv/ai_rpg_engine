@@ -57,7 +57,10 @@ def validate_event_presence(resolver, event, index, written):
 
     def reject(field, reason, actor=None):
         fatal(reason, 'event_presence_invalid', repairable=True, section='events',
-              index=index, field=field, entity=eid, source_ids=[eid, actor] if actor else [eid])
+              index=index, field=field, entity=eid, source_ids=[eid, actor] if actor else [eid],
+              order=event.get('order'), location_id=location,
+              related_paths=[f"movements[{i}]" for i, m in enumerate(resolver.history.movements)
+                             if m.get('actor_id') == actor])
 
     if location is not None and (not isinstance(location, str) or location not in state['locations']):
         reject('location_id', f'Неизвестная локация Event {eid}: {location}.')
@@ -136,7 +139,7 @@ def validate_event_presence(resolver, event, index, written):
             and (state['characters'][actor]['location_id'] is not None or actor in state['camera']['present_character_ids'])}
 
 
-def validate_movement_sources(resolver, raw, events, rejected_events=()):
+def validate_movement_sources(resolver, raw, events, rejected_events=(), invalid_moves=()):
     """Validate supplied Event links, not a second proof of every Movement.
 
     Movement owns completed_arrival/departure and the route. A separate Event is
@@ -146,6 +149,8 @@ def validate_movement_sources(resolver, raw, events, rejected_events=()):
     from backend.services.world_delta_errors import StructuralDeltaError
     errors = []
     for index, item in resolver.records(raw, 'movements'):
+        if index in invalid_moves:
+            continue
         source = item.get('source_event_id')
         if source is None and resolver.consequence_first:
             continue

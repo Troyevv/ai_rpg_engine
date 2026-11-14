@@ -24,6 +24,32 @@ from backend.runtime_v3.long_term_calendar import target_minute, annual_occurren
 from backend.runtime_v3.scope import RelevanceResolver
 
 
+def validate_event_causes(raw, selected_ids):
+    """All independent missing causes, addressed to the provider's source rows.
+
+    Compiled information Events inherit only their own semantic source's causes.
+    Participants, prose and the size of the selected group never confer a cause.
+    """
+    from backend.services.world_delta_errors import StructuralDeltaError
+    errors = []
+    selected = set(selected_ids)
+    for i, event in enumerate(raw.records['events']):
+        if not isinstance(event, dict):
+            continue
+        links = event.get('advance_candidate_ids', [])
+        if (not isinstance(links, list) or not links or
+                any(not isinstance(link, str) for link in links) or set(links) - selected):
+            source = raw.event_sources.get(i, dict(section='events', index=i, local_id=event.get('id')))
+            errors.append(StructuralDeltaError(
+                'Укажите только явно связанные выбранные причины в исходном событии; не угадывайте связь. '
+                'Связь с причиной сама по себе не означает её разрешение.',
+                'long_term_cause_invalid', repairable=True, **source,
+                field='advance_candidate_ids', allowed_candidate_ids=sorted(selected),
+                source_ids=[event['id']] if isinstance(event.get('id'), str) else []))
+    if errors:
+        raise StructuralDeltaError.combine(errors)
+
+
 class AdvanceRequest(StrictModel):
     amount: int = Field(ge=1, le=200, strict=True)
     unit: Literal["weeks", "months", "years"]
@@ -522,7 +548,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             "Не создавай случайных людей; используй существующую личность, если она подходит. "
             "Для действительно нового человека достаточно минимальных известных сведений. "
             "Не придумывай биографию. Не воспроизводи каждый день. elapsed_minutes=0. "
-            "Изменения должны опираться на принятые события. У каждого события events укажи advance_candidate_ids: "
+            "Изменения должны опираться на принятые события. У каждой исходной записи events и information_events укажи advance_candidate_ids: "
             "ID только тех выбранных причин, исход которых это событие действительно устанавливает. "
             "Если исход остался неизвестен, не указывай его ID. "
             # Source prose is world truth and may contain a private facet. The
@@ -613,6 +639,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     # hitchhiking on an accepted NPC group. Knowledge still needs #76 proof.
                     if len(raw.records["events"]) > 8:
                         raise ValueError("Лимит событий группы превышен.")
+                    validate_event_causes(raw, [c.id for c in group])
                     for event in raw.records["events"]:
                         if not isinstance(event, dict):
                             continue
@@ -635,14 +662,6 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             )
                         if not set(event.get("participants", [])) & allowed:
                             raise ValueError("Событие не связано с выбранной причиной.")
-                        links = event.get("advance_candidate_ids", [])
-                        if (
-                            not isinstance(links, list)
-                            or not links
-                            or any(not isinstance(link, str) for link in links)
-                            or set(links) - {c.id for c in group}
-                        ):
-                            raise ValueError("Событие не указывает выбранную причину исхода.")
                         # The group occurs at a known instant. StateResolver checks explicit claims.
                         event.setdefault("minute", minute)
                     from backend.runtime_v3.player_actions import contract_options

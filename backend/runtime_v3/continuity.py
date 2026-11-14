@@ -618,7 +618,7 @@ def turn_signal(resolver):
 
 
 def validate_chronology(resolver, raw):
-    """Verify typed retrospective claims against accepted event time, never NLP."""
+    """Check explicit objective claims against Calendar/History, never parse prose."""
     from backend.runtime_v3.raw import ChronologyClaim
     from backend.runtime_v3.calendar import MINUTES_PER_DAY, current_time
     from pydantic import ValidationError
@@ -631,12 +631,6 @@ def validate_chronology(resolver, raw):
             fatal(str(exc), 'chronology_claim_invalid', repairable=True, section='chronology_claims', index=i)
         if claim.assertion != 'narrator':
             continue
-        event = resolver.chronology_events.get(claim.event_id)
-        minute = (event or {}).get('minute')
-        if type(minute) is not int:
-            fatal('Нет известного времени исходного события; recorded_minute не заменяет его.',
-                'chronology_source_unknown', repairable=True, section='chronology_claims', index=i,
-                source_ids=[claim.event_id])
         now = resolver.before['meta']['world_time']
         elapsed = raw.final_scene.get('elapsed_minutes', 0)
         end = now + elapsed if resolver.mode == 'turn' and not resolver.runtime_time_skip and type(elapsed) is int else now
@@ -644,6 +638,40 @@ def validate_chronology(resolver, raw):
             if not now <= claim.reference_minute <= end:
                 fatal('Время высказывания вне текущей сцены.', 'chronology_reference_invalid', repairable=True, section='chronology_claims', index=i)
             now = claim.reference_minute
+        if claim.kind == 'current_calendar':
+            from backend.runtime_v3.calendar import weekday_options, date_parts, profile_of
+            time = current_time(resolver.before, now)
+            if claim.date is not None:
+                try:
+                    date_parts(claim.date, profile_of(resolver.before))
+                except ValueError as exc:
+                    fatal(str(exc), 'chronology_claim_invalid', repairable=True,
+                          section='chronology_claims', index=i, field='date')
+            options = weekday_options(resolver.before)
+            if claim.weekday is not None and claim.weekday not in {o['id'] for o in options}:
+                fatal('Используйте ID из calendar_weekdays.', 'chronology_claim_invalid',
+                      repairable=True, section='chronology_claims', index=i, field='weekday')
+            # A fallback weekday calculated without a configured calendar is
+            # presentation only, not proof against an unknown in-world date.
+            configured = resolver.before['meta'].get('calendar') or {}
+            weekday = options[time['weekday']]['id'] if configured.get('start_date') or 'start_weekday' in configured else None
+            mismatch = ((claim.date is not None and time['date'] is not None and claim.date != time['date']) or
+                        (claim.weekday is not None and weekday is not None and claim.weekday != weekday))
+            if mismatch:
+                errors.append(StructuralDeltaError(
+                    'Объективная проза противоречит текущему Calendar. Требуется адресная коррекция текста.',
+                    'narrative_chronology_conflict', repairable=False, action='reauthor_narrative',
+                    section='chronology_claims', index=i, source_ids=['calendar'],
+                    chronology=dict(kind='current_calendar', current_minute=now,
+                        actual_date=time['date'], actual_weekday=weekday,
+                        claimed_date=claim.date, claimed_weekday=claim.weekday, evidence=claim.evidence)))
+            continue
+        event = resolver.chronology_events.get(claim.event_id)
+        minute = (event or {}).get('minute')
+        if type(minute) is not int:
+            fatal('Нет известного времени исходного события; recorded_minute не заменяет его.',
+                'chronology_source_unknown', repairable=True, section='chronology_claims', index=i,
+                source_ids=[claim.event_id])
         actual = now // MINUTES_PER_DAY - minute // MINUTES_PER_DAY
         if claim.elapsed_days == actual:
             continue
@@ -692,10 +720,17 @@ def corrected_candidate(original, payload, grounds):
 
 def require_chronology_recheck(raw, grounds):
     """Known corrected assertions cannot disappear from the new interpretation."""
-    required = {g['event_id'] for g in grounds}
-    found = {c.get('event_id') for c in raw.records['chronology_claims']
-             if isinstance(c, dict) and isinstance(c.get('event_id'), str) and c.get('assertion') == 'narrator'}
+    def keys(value, ground=False):
+        if value.get('kind') == 'current_calendar':
+            minute = value.get('current_minute') if ground else value.get('reference_minute')
+            return {('calendar', minute, field) for field in ('date', 'weekday')
+                    if value.get(('claimed_' if ground else '') + field) is not None}
+        return {('event', value.get('event_id'))}
+    required = set().union(*(keys(g, True) for g in grounds))
+    found = set().union(*(keys(c) for c in raw.records['chronology_claims']
+                        if isinstance(c, dict) and c.get('assertion') == 'narrator'))
     if required - found:
-        fatal('Повторно интерпретируйте исправленные утверждения через chronology_claims.',
+        fatal('Повторно интерпретируйте исправленные утверждения через chronology_claims; '
+              'для Calendar сохраните reference_minute исправляемого утверждения.',
               'chronology_recheck_missing', repairable=True, section='chronology_claims',
-              source_ids=sorted(required - found))
+              source_ids=[str(k) for k in sorted(required - found, key=str)])

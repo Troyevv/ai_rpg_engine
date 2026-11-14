@@ -629,10 +629,33 @@ perceived_by, assertion=observation/testimony/rumor, status. Rumor=suspected.
 Runtime builds Event/Fact/Knowledge from exact local IDs, never names. No duplicate
 facts/events/knowledge_gained for these outcomes. Other domains unchanged.
 Controlled speaker needs verified player_action_id + actual target_ids, not overhearers.
-Movement intent/attempt causes no relocation; arrival/departure rules unchanged.
-chronology_claims: significant retrospection only. chronology_events ID, elapsed_days from
-scene start (or in-scene reference_minute), exact evidence, narrator/belief/lie/quotation.
-Unknown time is not recorded time. Report wrong prose; character errors are not narrator truth.
+fact_id means the WHOLE exact existing assertion, not its topic. Partial disclosure:
+"a letter asking advice" does not reveal "a former pupil writes about family tension".
+Use claims.fact for only actually learned content; "if someone wrote after thirty years"
+is hypothetical, not proof Viktor received that letter. secret_disclosures requires actual
+full disclosure, never evidence completed from GM-only context. Perceivers are per claim.
+Movement intent/attempt causes no relocation. With a unique source_event_id, source Event.order
+owns the step; omit duplicate Movement.order. Without a source, Movement owns its order.
+BirthClaim creates the reserved child: no prior contact target/participant or promotion needed.
+An unnamed examining clinician announcing sex: source_actor_id=null,
+source_assertion=direct_observation; actual listeners only, never invent clinician identity.
+Semantic contrasts (same pass, no inventory of everyday gestures):
+- Timur stays at the table and plans a visit -> no departure; walks out -> departure;
+  enters destination -> completed_arrival. Saying a destination is not contact with its owner.
+- Vera absent, no arrival/channel, yet prose makes her answer -> violated Narrative;
+  explicit arrival then answer -> valid NPC initiative. Never invent arrival to repair JSON.
+- Player sorts photos; prose declines tea by a gesture -> new unrequested decision, violated;
+  adjusting a photo while sorting -> incidental execution, no mandatory PlayerAction.
+For violated prose use existing player_agency.status=violated; retain real NPC outcomes in
+interpretation, but do not legitimize the prose by deleting its contradictory records.
+chronology_claims: only significant objective assertions actually made. kind=event_elapsed
+(default for legacy): chronology_events event_id + elapsed_days. kind=current_calendar:
+date and/or weekday ID from calendar_weekdays, no fictitious event. Use reference_minute
+within the scene (default start), exact evidence, narrator/belief/lie/quotation.
+Current canonical Calendar outranks old event titles: narrator "Saturday" on canonical Sunday
+is a current_calendar conflict; the title "Saturday evening", a lie or quotation is not.
+Known event five days ago described as yesterday is event_elapsed conflict. Unknown date
+stays unknown; recorded time is not event time. Missing claims are not proof of checking.
 """
 
 SEMANTIC_RELATIONSHIP_CONTRACT = """

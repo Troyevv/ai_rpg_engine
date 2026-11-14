@@ -1,8 +1,9 @@
 import {expect,test} from '@playwright/test';
 import {defaults} from '../src/types';
 
-test('chronology: explicit local correction, new extraction, reload and next input',async({page,request})=>{
-  const response=await request.post('/test/policy252-seed');
+for (const calendar of [false, true]) {
+test(`chronology ${calendar ? 'Calendar' : 'History'}: explicit local correction, new extraction, reload and next input`,async({page,request})=>{
+  const response=await request.post(`/test/policy252-seed?calendar=${calendar}`);
   expect(response.ok()).toBe(true);
   const selected=await response.json();
   const profile=`policy252-${selected.save}`;
@@ -28,7 +29,7 @@ test('chronology: explicit local correction, new extraction, reload and next inp
   const accepted=await read();
   expect(accepted.job.id).not.toBe(rejected.job.id);
   expect(accepted.turns).toHaveLength(before.turns.length+1);
-  expect(accepted.job.narrative).toBe(selected.narrative.replace('Вчера','Пять дней назад'));
+  expect(accepted.job.narrative).toBe(selected.narrative.replace(selected.correction_original,selected.correction_replacement));
   await page.reload();
   expect((await read()).state).toEqual(accepted.state);
   await expect(input).toBeEnabled();
@@ -38,3 +39,5 @@ test('chronology: explicit local correction, new extraction, reload and next inp
   expect(errors).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+}

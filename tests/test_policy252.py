@@ -453,7 +453,10 @@ def test_optional_contact_annotation_is_not_an_independent_scene_gate():
     assert len(result.history['events'])==1 and 'target_ids' not in result.history['events'][0]
     assert any(w.get('code')=='event_contact_annotation_ignored' for w in result.warnings)
     p['relationship_changes']=[dict(source_id='b',target_id='c',source_event_ids=['talk'],assertion='grounded_feelings',rationale='Общение',dimensions={'trust':3})]
-    with pytest.raises(StructuralDeltaError,match='адресаты'):resolve(s,p)
+    result=resolve(s,p)
+    assert len(result.history['events']) == 1
+    assert not result.history['relationship_changes']
+    assert any(w.get('section') == 'relationships' for w in result.warnings)
 
 
 def test_legacy_acquisition_cannot_borrow_another_claims_perceiver():
