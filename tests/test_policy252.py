@@ -454,3 +454,12 @@ def test_optional_contact_annotation_is_not_an_independent_scene_gate():
     assert any(w.get('code')=='event_contact_annotation_ignored' for w in result.warnings)
     p['relationship_changes']=[dict(source_id='b',target_id='c',source_event_ids=['talk'],assertion='grounded_feelings',rationale='Общение',dimensions={'trust':3})]
     with pytest.raises(StructuralDeltaError,match='адресаты'):resolve(s,p)
+
+
+def test_legacy_acquisition_cannot_borrow_another_claims_perceiver():
+    s=state();p=raw(s);item=info()
+    item['claims'][0]['perceived_by']=['a'];item['claims'][1]['perceived_by']=['c']
+    p['information_events']=[item]
+    p['knowledge_gained']=[dict(actor_id='c',fact_id='local-one',source_event_id='tell',status='known')]
+    with pytest.raises(StructuralDeltaError) as exc:resolve(s,p)
+    assert exc.value.code=='knowledge_claim_perception_missing'

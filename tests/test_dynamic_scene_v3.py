@@ -163,14 +163,15 @@ def test_valid_dynamic_location_saves_with_two_calls_and_rolls_back(db):
     repo.rollback_last(sid)
     assert repo.get_snapshot(sid) == before
 
-def test_scene_contract_overrides_saved_prompt_without_previous_narratives():
-    from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT
+@pytest.mark.parametrize('version', [4,5])
+def test_scene_contract_overrides_saved_prompt_without_previous_narratives(version):
+    from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, SEMANTIC_BASE_CONTRACT
     from test_context_builder_v2 import clean_world, build, section
     snapshot = clean_world()
     snapshot['world_state']['locations']['nail'] = dict(id='nail', name='Гвоздь', description='')
-    messages = build(snapshot, extraction_text=NARRATIVE,
+    messages = build(snapshot, extraction_text=NARRATIVE, extraction_contract=version,
         prompts={'state_update_prompt.md': {'content': 'Сохранённая инструкция'}})
-    contract = EXTRACTION_CONTRACT.split('Departure without destination:')[0]
+    contract = (SEMANTIC_BASE_CONTRACT if version >= 5 else EXTRACTION_CONTRACT).split('Departure without destination:')[0]
     assert contract in messages[0]['content']
     assert 'Movement assertion=departure' in messages[0]['content']
     assert 'CHOICE SOURCE BOUNDARY v4' in messages[0]['content']

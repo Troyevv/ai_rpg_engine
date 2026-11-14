@@ -102,6 +102,10 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=(), unvalidated
             reject('Нет принятого Event этого хода.', 'knowledge_event_unknown', 'source_event_id'); continue
         if actor not in event['witnesses']:
             reject('Получатель не воспринимал Event.', 'knowledge_witness_missing', 'actor_id'); continue
+        if event.get('information_source') and not any(
+                claim.get('fact_id') == fid and actor in claim.get('perceived_by', [])
+                for claim in event['information_source']['claims']):
+            reject('Получатель не воспринимал именно этот факт.', 'knowledge_claim_perception_missing', 'actor_id'); continue
         if event['medium'] not in INFORMATION_MEDIA:
             reject('Канал Event не передаёт знания.', 'knowledge_medium_invalid', 'source_event_id'); continue
         if (not r.observed or r.mode == 'background') and actor in r.protected_knowledge_actor_ids:

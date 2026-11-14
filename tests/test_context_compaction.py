@@ -90,7 +90,8 @@ def test_saturated_world_repeated_reload_preserves_choice_and_scene_context(tmp_
         schema = content('JSON Schema')
         assert 'player_agency' not in schema['required']
         assert 'player_agency' in schema['properties']
-        assert {'events', 'final_scene', 'knowledge_gained'} <= schema['properties'].keys()
+        assert {'events', 'final_scene', 'information_events'} <= schema['properties'].keys()
+        assert 'knowledge_gained' not in schema['properties']  # v5 has one perception representation
         assert 'PLAYER AGENCY:' in messages[0]['content']
         from backend.runtime_v3.context_contract import SCENE_ACTION_EXTRACTION_CONTRACT, CONTINUITY_EXTRACTION_CONTRACT
         if 'scene_actions' not in schema['properties']:
