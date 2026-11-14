@@ -87,8 +87,8 @@ def test_phone_provider_jobs_contract_reload(phone, name, mode):
     assert sum(not c.get('response_format') for c in calls) == 1
     for call in calls[1:]:
         system = call['messages'][0]['content']
-        assert 'future_intent' in system and 'completed_narrative' in system
-        assert 'Place creation/time/plans prove no arrival.' in system
+        assert 'Movement intent/attempt causes no relocation' in system and 'completed_narrative' in system
+        assert 'Plans/place creation/time/END absence prove no relocation/Knowledge.' in system
         assert json.dumps(case['narrative'], ensure_ascii=False) in '\n'.join(m['content'] for m in call['messages'])
     fresh = Repository(repo.path)
     if mode == 'repeat':
