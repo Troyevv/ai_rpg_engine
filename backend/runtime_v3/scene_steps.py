@@ -206,7 +206,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
             if step.actor_id not in positions:
                 fatal('Неизвестный участник маршрута.', 'character_unknown', section='scene_steps', index=index)
             if step.assertion == 'departure' and step.endpoint is not None:
-                fatal('Уход с неизвестным назначением не задаёт endpoint.', 'movement_endpoint_invalid', section='scene_steps', index=index)
+                fatal('Уход с неизвестным назначением не задаёт endpoint.', 'movement_endpoint_invalid', repairable=True, section='scene_steps', index=index)
             movement = dict(actor_id=actor, assertion=step.assertion,
                 from_location_id=positions[actor], to_location_id=step.endpoint,
                 order=order, evidence=step.evidence, source_event_id=eid)

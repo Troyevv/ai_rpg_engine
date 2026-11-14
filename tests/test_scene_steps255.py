@@ -193,7 +193,7 @@ def test_exact_fact_repeated_but_privacy_conflict_rejected():
     with pytest.raises(StructuralDeltaError):resolve(s,p)
 
 
-@pytest.mark.parametrize('mode',['targeted','full','out_of_scope','repeat_error'])
+@pytest.mark.parametrize('mode',['targeted','full','out_of_scope','repeat_error','departure_endpoint','departure_repeat'])
 def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
     import json
     from unittest.mock import patch
@@ -205,6 +205,10 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
     before=repo.get_snapshot(sid);actor=before['world_state']['camera']['controlled_actor_id']
     good=dict(id='walk',kind='movement',actor_id=actor,text='Пришёл.',assertion='completed_arrival',endpoint='park',input_source=dict(quote='Иду в парк.',meaning='preserved'))
     p=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(good,endpoint='missing')],locations=[dict(id='park',name='Парк',evidence='')],facts=[dict(id='untouched',text='Независимое утверждение.',evidence='')])
+    if mode.startswith('departure_'):
+        # Reduced control for the real provider smoke: departure carried a
+        # known endpoint. It must be rejected, but allow the one existing repair.
+        p['scene_steps'][0].update(assertion='departure',endpoint='park')
     calls=[]
     def stream(**kwargs):
         calls.append(kwargs)
@@ -214,7 +218,7 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
         if mode=='full':reply=dict(p,scene_steps=[good])
         else:
             assert 'candidate_hash' in schema['properties']
-            reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[good if mode!='repeat_error' else p['scene_steps'][0]],sections={},reason='Уточнение ошибочного endpoint.')
+            reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[p['scene_steps'][0] if mode in ('repeat_error','departure_repeat') else good],sections={},reason='Уточнение ошибочного endpoint.')
             if mode=='out_of_scope':reply['sections']={'facts':[dict(id='untouched',text='Подмена')]}
         yield json.dumps(reply)
     jid=repo.begin_job(sid,'Иду в парк.','turn',CONFIG)
@@ -222,7 +226,7 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
         engine.run_job(repo.path,jid,engine.Worker())
     job=repo.get_job(jid);fresh=Repository(repo.path)
     assert len(calls)==3
-    if mode in ('targeted','full'):
+    if mode in ('targeted','full','departure_endpoint'):
         assert job['status']=='saved',job['error']
         assert fresh.get_snapshot(sid)['world_state']['characters'][actor]['location_id']=='park'
         assert fresh.get_snapshot(sid)['world_state']['facts']['untouched']['text']=='Независимое утверждение.'
@@ -234,7 +238,7 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
     extraction=[r for r in logs if r['stage'].startswith('extraction')]
     assert all(r['extraction_contract']==6 for r in extraction)
     assert all(r['diagnostics']['extraction_candidate']['contract']==6 for r in extraction)
-    if mode in ('targeted','full'):
+    if mode in ('targeted','full','departure_endpoint'):
         audit=next(r for r in extraction if r['stage']=='extraction_repair')['diagnostics']['extraction_candidate']
         assert audit['compiled']['semantic_candidate']['scene_steps']==[good]
         assert audit['candidate']['facts']==p['facts']
