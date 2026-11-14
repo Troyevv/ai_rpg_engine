@@ -70,6 +70,9 @@ One automatic repair is retained. A parsed candidate receives a hash bound to
 before, Narrative, input, turn and namespace. Allowed step IDs and connected
 sections are server-selected. Replacements preserve step identity/order;
 additions need a listed anchor. Independent sections are retained by code.
+Section arrays contain only keyed edits/additions; omitted records in the same
+section are retained by code. Missing place/person/fact declarations can be added
+only when referenced by the affected group. Unrelated record edits are rejected.
 Section records cannot disappear without explicit per-record `withdrawals`
 (section, record_key, reason), recorded as semantic reinterpretation diagnostics.
 The model reinterprets the unchanged prose; these diagnostics are not proof that

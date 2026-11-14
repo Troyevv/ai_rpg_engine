@@ -99,7 +99,7 @@ def test_targeted_repair_keeps_independent_proposal_and_rejects_stale():
     assert repaired.semantic_candidate['scene_steps'][0]==broken['scene_steps'][0]
     assert StateResolver(s,'Проза',INPUT,**resolver_options(s,INPUT,contract_version=6)).resolve(repaired).state['characters']['a']['location_id']=='park'
     with pytest.raises(StructuralDeltaError):candidate.parse(dict(patch,candidate_hash='stale'))
-    with pytest.raises(StructuralDeltaError):candidate.parse(dict(patch,sections={'facts':[]}))
+    with pytest.raises(StructuralDeltaError):candidate.parse(dict(patch,sections={'facts':[dict(id='independent',text='Подмена')]}))
 
 
 def test_full_repair_invalid_root_and_no_patch_without_base():
@@ -215,7 +215,7 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
         else:
             assert 'candidate_hash' in schema['properties']
             reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[good if mode!='repeat_error' else p['scene_steps'][0]],sections={},reason='Уточнение ошибочного endpoint.')
-            if mode=='out_of_scope':reply['sections']={'facts':[]}
+            if mode=='out_of_scope':reply['sections']={'facts':[dict(id='untouched',text='Подмена')]}
         yield json.dumps(reply)
     jid=repo.begin_job(sid,'Иду в парк.','turn',CONFIG)
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
@@ -265,6 +265,20 @@ def test_v6_saturated_32k_context_and_wire_schema_budget(tmp_path):
     current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
     assert len(current['pregnancies'][0]['children'])==3
     assert current['reproductive_knowledge']
+    from backend.runtime_v3.scene_repair import SceneCandidate
+    candidate=SceneCandidate(snapshot['world_state'],NARRATIVE,'Осматриваю фотографии.',3)
+    payload=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(id='inspect',kind='occurrence',
+        actor_ids=[snapshot['world_state']['camera']['controlled_actor_id']],text='Рассмотрел фотографии.',
+        input_source=dict(quote='Осматриваю фотографии.',meaning='preserved'))])
+    candidate.parse(payload)
+    feedback=candidate.feedback([dict(section='scene_steps',index=0,code='authored_budget_control')],payload)
+    repair=build_context(snapshot,repo.list_turns(sid,context=True),'Осматриваю фотографии.','turn',32768,4096,
+        extraction_text=NARRATIVE,extraction_contract=6,world_history=history,validation_feedback=feedback)
+    assert estimate(repair)<=32768-4096-256
+    assert 'candidate_hash' in request_schema(repair)['required']
+    assert json.loads(next(m['content'].split('\n',1)[1] for m in repair if m['content'].startswith('completed_narrative\n')))==NARRATIVE
+    repair_current=json.loads(next(m['content'].split('\n',1)[1] for m in repair if m['content'].startswith('Текущее состояние / GM-only\n')))
+    assert len(repair_current['pregnancies'][0]['children'])==3 and repair_current['reproductive_knowledge']
 
 
 def test_unusable_step_ids_get_full_repair_without_crashing():
@@ -467,3 +481,49 @@ def test_possession_and_development_keep_linked_sources_without_duplicate_quotes
     result=resolve(s,p,player)
     assert len(profile(result.state)['evidence'])==1
     assert next(iter(profile(result.state)['evidence'].values()))['player_owned']
+
+
+def test_targeted_repair_can_declare_missing_destination_without_rewriting_route():
+    import json
+    from backend.runtime_v3.scene_repair import SceneCandidate
+    s,p=fixture();p['scene_steps']=p['scene_steps'][1:2];p['scene_steps'][0]['endpoint']='new-place'
+    candidate=SceneCandidate(s,'Пришёл в новое место.',INPUT,1);raw=candidate.parse(p)
+    with pytest.raises(StructuralDeltaError) as exc:
+        StateResolver(s,'Пришёл в новое место.',INPUT,**resolver_options(s,INPUT,contract_version=6)).resolve(raw)
+    info=json.loads(candidate.feedback(exc.value.diagnostics('repair'),p))
+    repaired=candidate.parse(dict(candidate_hash=info['candidate_hash'],replacements=[],
+        sections={'locations':[dict(id='new-place',name='Новое место')]},reason='Пропущено объявление установленного места.'))
+    result=StateResolver(s,'Пришёл в новое место.',INPUT,**resolver_options(s,INPUT,contract_version=6)).resolve(repaired)
+    assert result.state['characters']['a']['location_id']=='new-place'
+    assert repaired.semantic_candidate['scene_steps']==p['scene_steps']
+
+
+def test_targeted_repair_cannot_change_independent_record_in_same_section():
+    import json
+    from backend.runtime_v3.scene_repair import SceneCandidate
+    s=state();p=dict(scene={},scene_steps=[dict(id='info',kind='information',source_actor_id='b',medium='conversation',
+        text='Сообщил.',claims=[dict(fact_id='affected',assertion='testimony',status='known',perceived_by=['a'])])],
+        facts=[dict(id='affected',text='Первое'),dict(id='independent',text='Второе')])
+    candidate=SceneCandidate(s,'Проза','',1);candidate.parse(p)
+    info=json.loads(candidate.feedback([dict(section='facts',index=0,code='fact_invalid')],p))
+    assert info['scope']['record_keys']['facts']==['affected']
+    changed=deepcopy(p['facts']);changed[1]['text']='Подменено'
+    with pytest.raises(StructuralDeltaError) as exc:
+        candidate.parse(dict(candidate_hash=info['candidate_hash'],replacements=[],sections={'facts':changed},reason='Недопустимая подмена.'))
+    assert exc.value.code=='scene_repair_scope'
+
+
+def test_scoped_section_edit_retains_unmentioned_neighbor_and_logs_withdrawal():
+    import json
+    from backend.runtime_v3.scene_repair import SceneCandidate,record_key
+    s=state();p=dict(scene={},scene_steps=[],facts=[dict(id='bad',text='Черновик'),dict(id='other',text='Сохранить')])
+    candidate=SceneCandidate(s,'Проза','',1);candidate.parse(p)
+    info=json.loads(candidate.feedback([dict(section='facts',index=0,code='fact_invalid')],p))
+    raw=candidate.parse(dict(candidate_hash=info['candidate_hash'],replacements=[],sections={'facts':[dict(id='bad',text='Уточнено')]},reason='Исправлено исходное утверждение.'))
+    assert raw.semantic_candidate['facts']==[dict(id='bad',text='Уточнено'),p['facts'][1]]
+    candidate=SceneCandidate(s,'Проза','',1);candidate.parse(p)
+    info=json.loads(candidate.feedback([dict(section='facts',index=0,code='fact_invalid')],p))
+    raw=candidate.parse(dict(candidate_hash=info['candidate_hash'],replacements=[],sections={},reason='Первое утверждение было только предположением.',
+        withdrawals=[dict(section='facts',record_key='bad',reason='Не установленный факт.')]))
+    assert raw.semantic_candidate['facts']==[p['facts'][1]]
+    assert any(w.get('record_key')=='bad' and w['code']=='semantic_reinterpretation' for w in raw.warnings)

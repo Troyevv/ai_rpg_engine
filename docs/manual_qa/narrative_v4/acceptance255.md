@@ -58,7 +58,7 @@ and no hidden fallback. Actual acceptance of the full schema by DeepSeek remains
 
 ## Free verification record
 
-- New v6 compiler/provider/production/repair/persistence suites: **55 passed**.
+- New v6 compiler/provider/production/repair/persistence suites: **58 passed**.
 - New suites + context compaction + three affected legacy suites before the final
   audit additions: **149 passed**. Legacy assertions remain intact and request
   their original contract explicitly where they inspect that schema.
