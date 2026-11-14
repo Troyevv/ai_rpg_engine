@@ -21,7 +21,7 @@ for (const mode of ['saved', 'missing', 'uncertain', 'invalid', 'reauthor']) {
     const input = page.getByLabel('Своё действие или реплика');
     await input.fill(selection.action);
     await page.getByRole('button', {name: 'Отправить действие', exact: true}).click();
-    await expect.poll(async () => (await view()).job.status).toBe(['reauthor','invalid'].includes(mode) ? 'error' : 'saved');
+    await expect.poll(async () => (await view()).job?.status).toBe(['reauthor','invalid'].includes(mode) ? 'error' : 'saved');
     const after = await view();
     const requests = (await (await request.get(path + '/accounting')).json()).requests;
     expect(requests.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(mode === 'invalid' ? 3 : 2);
@@ -40,7 +40,7 @@ for (const mode of ['saved', 'missing', 'uncertain', 'invalid', 'reauthor']) {
       expect(after.state).toEqual(before.state);
       await request.post('/test/agency249-allow');
       await retry.click();
-      await expect.poll(async () => (await view()).job.status).toBe('saved');
+      await expect.poll(async () => (await view()).job?.status).toBe('saved');
       const recovered = (await (await request.get(path + '/accounting')).json()).requests;
       expect(recovered.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(4);
       expect(recovered.filter((r: {job_id: string; stage: string}) => r.job_id === after.job.id && r.stage === 'narrative')).toHaveLength(1);

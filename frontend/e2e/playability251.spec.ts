@@ -23,7 +23,9 @@ for (const scenario of ['002','008','016','020']) {
     await input.fill(selection.action);
     await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
     const retry = ['008','016'].includes(scenario);
-    await expect.poll(async () => (await view()).job.status).toBe(retry?'error':'saved');
+    // The click can finish before the submit request creates the first job.
+    // A null job is still pending here, not a polling callback exception.
+    await expect.poll(async () => (await view()).job?.status).toBe(retry?'error':'saved');
     const first = await view();
     if (retry) {
       expect(first.job).toMatchObject({retry_allowed:true,narrative_reauthor_required:false});
@@ -36,7 +38,7 @@ for (const scenario of ['002','008','016','020']) {
         expect((await page.locator('.story-scroll').boundingBox())!.height).toBeGreaterThan(100);
       }
       await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
-      await expect.poll(async () => (await view()).job.status).toBe('saved');
+      await expect.poll(async () => (await view()).job?.status).toBe('saved');
     }
     const after = await view();
     expect(after.turns).toHaveLength(before.turns.length+1);

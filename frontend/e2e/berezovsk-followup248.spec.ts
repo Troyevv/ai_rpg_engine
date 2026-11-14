@@ -21,7 +21,7 @@ for (const scenario of ['002','005']) {
     const input=page.getByLabel('Своё действие или реплика');
     await input.fill(selection.action);
     await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
-    await expect.poll(async () => (await view()).job.status).toBe(scenario==='002'?'saved':'error');
+    await expect.poll(async () => (await view()).job?.status).toBe(scenario==='002'?'saved':'error');
     const first=await view();
     await page.reload();
     expect((await view()).state).toEqual(first.state);
@@ -36,7 +36,7 @@ for (const scenario of ['002','005']) {
       expect(first.state).toEqual(before.state);
       expect(first.turns).toEqual(before.turns);
       await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
-      await expect.poll(async () => (await view()).job.status).toBe('saved');
+      await expect.poll(async () => (await view()).job?.status).toBe('saved');
       const after=await view();
       expect(after.state.world.characters.char_alexey.location_id).toBe('loc_home_viktor');
       expect(after.turns).toHaveLength(before.turns.length+1);

@@ -24,7 +24,7 @@ for (const scenario of ['knowledge', 'family', 'phone', 'crisis', 'retry', 'live
     await input.fill(selection.action);
     await page.getByRole('button', {name: 'Отправить действие', exact: true}).click();
     const refused = base === 'crisis' || base === 'retry';
-    await expect.poll(async () => (await view()).job.status).toBe(refused ? 'error' : 'saved');
+    await expect.poll(async () => (await view()).job?.status).toBe(refused ? 'error' : 'saved');
     const after = await view();
     const accounting = async () => (await (await request.get(path + '/accounting')).json()).requests;
     const spent = await accounting();
@@ -49,7 +49,7 @@ for (const scenario of ['knowledge', 'family', 'phone', 'crisis', 'retry', 'live
       expect(after.state).toEqual(before.state);
       await request.post('/test/integrated247-allow-repair');
       await retry.click();
-      await expect.poll(async () => (await view()).job.status).toBe('saved');
+      await expect.poll(async () => (await view()).job?.status).toBe('saved');
       const requests = await accounting();
       expect(requests.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(4);
       expect(requests.filter((r: {job_id: string; stage: string}) => r.job_id === after.job.id && r.stage === 'narrative')).toHaveLength(1);

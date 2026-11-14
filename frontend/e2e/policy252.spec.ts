@@ -17,14 +17,14 @@ test('chronology: explicit local correction, new extraction, reload and next inp
   const input=page.getByLabel('Своё действие или реплика');
   await input.fill(selected.action);
   await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
-  await expect.poll(async()=>(await read()).job.status).toBe('error');
+  await expect.poll(async()=>(await read()).job?.status).toBe('error');
   const rejected=await read();
   expect(rejected.state).toEqual(before.state);
   expect(rejected.job).toMatchObject({retry_allowed:false,chronology_correction_available:true});
   await page.reload();
   await expect(page.getByText('Запросы к модели могут быть платными.',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Исправить хронологию сцены',exact:true}).click();
-  await expect.poll(async()=>(await read()).job.status).toBe('saved');
+  await expect.poll(async()=>(await read()).job?.status).toBe('saved');
   const accepted=await read();
   expect(accepted.job.id).not.toBe(rejected.job.id);
   expect(accepted.turns).toHaveLength(before.turns.length+1);
