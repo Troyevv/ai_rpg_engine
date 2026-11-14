@@ -104,6 +104,9 @@ Official protocol sources consulted 2026-11-14:
 https://api-docs.deepseek.com/api/create-response/
 https://api-docs.deepseek.com/guides/responses_api/
 
-**Live provider capability with the complete schema: NOT RUN.** Mock transport
-checks establish request/stream handling only; no strict-mode/live success claim.
-Provider smoke requires a separately approved budget before ordinary playtest.
+The separately authorized [live provider smoke](provider255-smoke.md) accepted
+the complete schema through Responses and produced completed usage receipts.
+End-to-end persistence nevertheless **FAILED**, including the single bounded
+repair. Schema transport acceptance is not strict-output or semantic compliance.
+The ordinary playtest remains blocked; see the original responses, narrow fixes
+and remaining combined-diagnostic blocker in the smoke report.

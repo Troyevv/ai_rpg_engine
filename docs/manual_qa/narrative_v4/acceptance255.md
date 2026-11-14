@@ -1,5 +1,12 @@
 # Issue #255 — engineering record
 
+Current live status: the separately authorized [real provider smoke](provider255-smoke.md)
+accepted the full schema but **failed end-to-end persistence**, including one
+bounded repair after two reproduced narrow recovery fixes. Five calls cost
+$0.0446136 conservatively. The ordinary playtest is BLOCKED / NOT RUN. The
+original last player-session SQLite was found in the continuing workspace;
+the evidence limitations below describe the earlier engineering environment.
+
 Baseline: PR #248 `cace6ed35ede13666142e55875b71f2a38c99ae8`.
 Master inspected: `ee343deee65f627932c5a4f13aedbb41fa06be8f`.
 Both AGENTS.md read. Work continues in the existing PR; no merge.
