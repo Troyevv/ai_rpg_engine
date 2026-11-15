@@ -68,7 +68,6 @@ def project_structure(schema):
                 anyOf=[dict(required=['components'], properties=dict(components=dict(minProperties=1))),
                     dict(required=['delegated_to'], properties=dict(status=dict(const='proposed'),
                         delegated_to=deepcopy(NONBLANK)))]),
-            'else': dict(required=['replaces'], properties=dict(replaces=deepcopy(NONBLANK))),
         })
     possession = props['possession_deltas']['items']
     possession['properties']['updates']['minProperties'] = 1

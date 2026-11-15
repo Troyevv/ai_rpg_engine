@@ -225,7 +225,6 @@ def test_domain_structural_shapes_and_valid_partial_forms():
         ('possession_deltas',dict(item,name=None),item),
         ('appearance_deltas',dict(appearance,kind='scar'),appearance),
         ('appearance_deltas',dict(appearance,text='Новая причёска'),appearance),
-        ('naming_decisions',dict(name,status='cancelled'),dict(name,status='cancelled',replaces='old-name')),
         ('possession_deltas',dict(item,updates={'status':None}),dict(item,updates={'status':'available'})),
         ('possession_deltas',dict(item,operation='relocate',name=None,kind=None,updates={'holder_id':'b'}),
             dict(item,operation='relocate',name=None,kind=None,updates={'location_id':None})),
@@ -236,6 +235,9 @@ def test_domain_structural_shapes_and_valid_partial_forms():
         assert list(v.iter_errors(p)),section
         with pytest.raises(StructuralDeltaError):validate(p)
         p[section]=[good];v.validate(p);validate(p)
+    # Cancellation target depends on whether this canonical decision already
+    # exists (idempotent replay); do not impose a new-record requirement globally.
+    v.validate(dict(scene={},scene_steps=[],naming_decisions=[dict(name,status='cancelled')]))
     # Updates that depend on an existing canonical entity remain partial.
     v.validate(dict(scene={},scene_steps=[],role_changes=[dict(id='old-role',assertion='established',status='closed')]))
 
@@ -312,3 +314,20 @@ def test_each_missing_required_field_keeps_its_own_reason_without_cross_product(
     assert len(rows)==3
     for key in ('subject_id','predicate','value'):
         assert any(r['path']==f'scene_steps[0].claims[0].fact.claim.{key}' and r['repair_reason']==f"'{key}' is a required property" for r in rows)
+
+
+def test_schema_error_does_not_hide_independent_claim_validator_error():
+    p=info([claim(fact={}),dict(claim(fact={'text':'Другой факт'}),expected_revisions={'not-a-perceiver':0})])
+    with pytest.raises(StructuralDeltaError) as failure:validate(p)
+    rows=failure.value.diagnostics('repair')
+    assert {r['claim_index'] for r in rows}=={0,1}
+    assert any(r['path']=='scene_steps[0].claims[1]' and 'Invalid perception revision' in r['repair_reason'] for r in rows)
+    from test_scene_steps255 import fixture
+    state,_=fixture();c=SceneCandidate(state,'Проза','Слушаю.',1)
+    with pytest.raises(StructuralDeltaError) as failure:c.parse(p)
+    f=json.loads(c.feedback(failure.value.diagnostics('repair'),p))
+    assert f['scope']['claim_indexes']=={'tell':[0,1]}
+    step=deepcopy(p['scene_steps'][0]);step['claims'][0]['fact']['text']='Первый факт'
+    step['claims'][1]['expected_revisions']={}
+    raw=c.parse(dict(candidate_hash=f['candidate_hash'],replacements=[step],sections={},reason='Authored mixed-error control'))
+    assert len(raw.records['facts'])==2

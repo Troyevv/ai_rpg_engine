@@ -18,7 +18,7 @@ The v6 projection now derives Fact fields and nested Claim bounds from `Fact.mod
 | Perceiver duplicates, negative revisions, rumor with known status | `PerceivedClaim.coherent`; ordinary/background information | `uniqueItems`, nonnegative revision values, rumor → suspected |
 | Chronology kind allowed missing or contradictory basis fields | `ChronologyClaim.coherent` → chronology resolver | event_elapsed requires event_id/elapsed_days only; current_calendar requires date or weekday without event basis |
 | Departure with endpoint, completed arrival without endpoint; deferred/nonperformed interaction with achieved targets | Scene compiler | Conditional endpoint/null and empty achieved-target requirements; corresponding redundant local structural checks removed |
-| Naming decision with no components/delegation, blank/oversized components, cancellation without target | `reproduction._naming` | Expose existing component bounds, proposal delegation alternative and cancellation target shape |
+| Naming decision with no components/delegation, blank/oversized components | `reproduction._naming` | Expose existing component bounds, proposal delegation alternative |
 | Empty possession update, introduce without identity, invalid status or relocate changing ownership | `possessions._transition`, `SignificantPossession` | Nonempty update, introduce name/kind, existing status enum, relocate location-only; other operations cannot rename identity |
 | Appearance category/kind mismatch, removal with text, missing established description or invalid condition-reference shape | `appearance.apply` / existing KINDS | Reuse KINDS; expose existing operation/text and condition-ID requirements |
 | Targeted repair schema allowed arbitrary replacement IDs | `scene_repair` | Replacement IDs constrained to actual scope; claim-only repairs retain step fields, count and independent claims |
@@ -33,13 +33,13 @@ These constraints describe existing declared domain consequences, not new requir
 - New versus partial updates for roles, residence, conditions, life and motivations depend on whether the canonical ID exists. Requiring complete new records on every update would reject legitimate closures. Promotions retain existing pending-review behavior.
 - TemporalValue basis alternatives and numeric bounds already come from its model schema. Ordinary/background/LTA clock ownership is intentionally different.
 - Birth/Service/Name claims already expose their field types/bounds. Biological time, canonical sex, consent, source speaker, witnesses, duplicate transitions and legal decision makers remain domain checks. No weaker acceptance or forced events.
-- Possession transitions depend on prior owner/holder/status; appearance depends on existing identity/revision and accepted evidence. Those owners are unchanged.
+- Possession transitions depend on prior owner/holder/status; appearance depends on existing identity/revision and accepted evidence. Those owners are unchanged. Cancellation targets for naming decisions also stay state-dependent: an already canonical decision can be an idempotent replay, so the projection does not require a new replaces field globally.
 
 ## Addressed diagnostics and bounded repair
 
 The existing jsonschema validator now reports errors from the matching step-kind union arm and actual nullable Fact branch. Each nested claim diagnostic retains the step ID, step index, claim index, field path and reason, with contractual options (new Fact text/structured claim, or an explicit reference to the same existing assertion).
 
-For the real response this includes both `scene_steps[2].claims[0].fact.text` and `scene_steps[4].claims[0].fact.text`, plus both misplaced structured-claim field errors, in **one** repair feedback. Unrelated union errors are not substituted for these paths. Each missing required field retains its own reason; three missing structured-Claim fields produce three diagnostics, not a nine-row cross-product.
+For the real response this includes both `scene_steps[2].claims[0].fact.text` and `scene_steps[4].claims[0].fact.text`, plus both misplaced structured-claim field errors, in **one** repair feedback. Unrelated union errors are not substituted for these paths. A schema error in one claim no longer suppresses another claim's independent Pydantic cross-field error in the same step (for example, a revision key outside perceived_by); both receive indexed diagnostics and can be fixed by one repair. Each missing required field retains its own reason; three missing structured-Claim fields produce three diagnostics, not a nine-row cross-product.
 
 When diagnostics address only claims, the existing repair scope records their indexes. Sharing an actor/location no longer grants permission to rewrite independent steps. Repair cannot drop a claim, alter unaffected claims/step text, add steps or withdraw consequences. A new top-level Fact must actually be referenced by a repaired claim; merely adding unrelated valid Facts cannot satisfy repair. Existing candidate-hash binding, compiler checks and atomic commit remain. Four additional malformed-repair controls (null claim, nonstring fact_id, null Facts section/item) exposed parser exceptions in the new scope guard; the guard now leaves these as structural diagnostics. They are implementation regressions caught offline, not newly observed DeepSeek failures.
 
@@ -61,7 +61,7 @@ Isolated evidence: `/workspace/work/issue255-claim-free/` (final-code replay als
 - SDK transport test verifies the exact `responses.create(text.format.schema=...)` envelope for both initial Extraction and repair; schemas validate under Draft 2020-12. This is free transport-contract coverage, **not evidence of acceptance by the real provider**.
 - v1–v5 projections are unchanged; existing recorded Retry/regeneration, background/LTA, agency, timing, reproduction and provider-recovery tests are included. No SQLite/API migration or Budget changes.
 
-Broader focused result: **332 passed in 110.36s**. After the final missing-field diagnostic correction, the four directly affected suites passed again: **103 passed in 25.31s** (`test_claim_contract255`, `test_scene_steps255`, `test_scene_error_collection255`, `test_structured_extraction255`). `git diff --check` passed.
+Broader focused result: **334 passed in 101.63s**. Final direct verification including reproduction: **143 passed in 34.76s** (`test_claim_contract255`, `test_scene_steps255`, `test_scene_error_collection255`, `test_structured_extraction255`, `test_reproduction`). `git diff --check` passed.
 
 Command (final focused run):
 

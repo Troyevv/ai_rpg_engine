@@ -236,18 +236,23 @@ def independent_scene_errors(payload, state, schema_errors):
         try:
             step = STEP.validate_python(value)
         except ValidationError as exc:
-            if not any(e.path.get('section') == 'scene_steps' and
-                       e.path.get('index') == index for e in schema_errors):
-                for error in exc.errors(include_input=False, include_url=False):
-                    loc = list(error['loc'])
-                    if loc and loc[0] in ('movement', 'interaction', 'information', 'occurrence'):
-                        loc.pop(0)
-                    field = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if n else '') + v
-                                    for n, v in enumerate(loc))
-                    detail = dict(path, field=field, step_id=value.get('id'),
-                                  source_ids=[value['id']] if value.get('id') else [])
-                    if len(loc) > 1 and loc[0] == 'claims': detail['claim_index'] = loc[1]
-                    reject(error['msg'], 'scene_step_invalid', **detail)
+            for error in exc.errors(include_input=False, include_url=False):
+                loc = list(error['loc'])
+                if loc and loc[0] in ('movement', 'interaction', 'information', 'occurrence'):
+                    loc.pop(0)
+                claim_index = loc[1] if len(loc) > 1 and loc[0] == 'claims' else None
+                # Suppress duplicate schema/model errors for the same claim,
+                # never an independent claim's cross-field validator error.
+                if any(e.path.get('section') == 'scene_steps' and e.path.get('index') == index
+                       and (claim_index is None or e.path.get('claim_index') == claim_index)
+                       for e in schema_errors):
+                    continue
+                field = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if n else '') + v
+                                for n, v in enumerate(loc))
+                detail = dict(path, field=field, step_id=value.get('id'),
+                              source_ids=[value['id']] if value.get('id') else [])
+                if claim_index is not None: detail['claim_index'] = claim_index
+                reject(error['msg'], 'scene_step_invalid', **detail)
             continue
         if step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous':
             reject('Не установлен относительный порядок значимых шагов.',
