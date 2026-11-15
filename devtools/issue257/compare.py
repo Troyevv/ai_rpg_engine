@@ -15,9 +15,9 @@ from backend.services.world_delta_errors import StructuralDeltaError
 from .prepare import compact
 
 
-def run(case, variant, generate, record):
+def run(case, variant, generate, record, *, candidate_type=SceneCandidate):
     state=case['snapshot']['world_state'];turn=state['meta']['turn_id']+1
-    candidate=SceneCandidate(state,case['narrative'],case['player_input'],turn,version=7,on_record=lambda audit:record(dict(event='candidate',audit=audit)))
+    candidate=candidate_type(state,case['narrative'],case['player_input'],turn,version=7,on_record=lambda audit:record(dict(event='candidate',audit=audit)))
     messages=deepcopy(case['messages'][variant]);start=time.monotonic();attempts=[]
     for attempt in range(2):
         usage=[];chunks=[];t=time.monotonic()
@@ -44,7 +44,7 @@ def run(case, variant, generate, record):
             if attempt or not exc.repairable:break
             feedback=candidate.feedback(diagnostics,response)
             # Same frozen content and existing production patch schema; no oracle.
-            messages=deepcopy(case['messages']['A'])
+            messages=deepcopy(case['messages']['A' if variant=='B' else variant])
             for m in messages:
                 if m['content'].startswith('JSON Schema\n'):
                     schema=json.loads(m['content'].split('\n',1)[1]);m['content']='JSON Schema\n'+json.dumps(repair_schema(schema,feedback),ensure_ascii=False,separators=(',',':'))
