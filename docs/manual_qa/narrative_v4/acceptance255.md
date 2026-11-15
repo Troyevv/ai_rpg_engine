@@ -1,6 +1,13 @@
 # Issue #255 — engineering record
 
-Current live status: the separately authorized [real provider smoke](provider255-smoke.md)
+Latest narrow live result: [combined-repair recovery](provider255-recovery.md)
+**PASS** on `28378c8`. Alexey's original cafe departure saved unchanged, reached
+his mother's home, and one real next turn continued there after cold reload.
+Eight calls cost $0.0532554; both foreground Extractions required one repair.
+This does not complete #255 or the ordinary 30–50-turn playtest. Earlier records
+below retain their original scope and outcomes.
+
+Earlier live status: the separately authorized [real provider smoke](provider255-smoke.md)
 accepted the full schema but **failed end-to-end persistence**, including one
 bounded repair after two reproduced narrow recovery fixes. Five calls cost
 $0.0446136 conservatively. The ordinary playtest is BLOCKED / NOT RUN. The

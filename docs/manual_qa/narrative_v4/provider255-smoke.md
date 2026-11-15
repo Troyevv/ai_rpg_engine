@@ -2,6 +2,12 @@
 
 **End-to-end result: FAIL. The 30–50-turn playtest remains BLOCKED / NOT RUN.**
 
+This is the historical first smoke. The separately authorized
+[combined-repair recovery](provider255-recovery.md) subsequently **passed** on
+`28378c8`: original Narrative saved, then one natural next turn and cold reload
+passed. Eight new calls cost $0.0532554. Both foreground Extractions needed repair;
+the full ordinary playtest remains unrun.
+
 The user separately authorized at most six new DeepSeek calls and $0.50.
 The smoke used DeepSeek Flash, thinking off, the production FastAPI job path,
 the complete Context Builder schema and the existing shared Budget/ledger.
