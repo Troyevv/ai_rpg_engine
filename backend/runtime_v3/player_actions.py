@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 7
+EXTRACTION_VERSION = 8
 
 
 class NarrativeAgencyItem(BaseModel):

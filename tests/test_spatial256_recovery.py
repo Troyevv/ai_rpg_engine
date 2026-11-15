@@ -12,7 +12,9 @@ from backend.repositories.preparation import Repository
 pytestmark=pytest.mark.extraction_v7
 
 
-def test_recovery_same_prose_new_contract_current_before_and_rollback(api):
+@pytest.mark.parametrize('version',[7,8])
+def test_recovery_same_prose_new_contract_current_before_and_rollback(api, monkeypatch, version):
+    monkeypatch.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION',version)
     client,app=api;repo=app.state.repository;sid=load_fixture(repo)['save']
     with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION',5): ordinary_job(repo,sid,'start')
     before=repo.get_snapshot(sid);calls=[]
@@ -27,7 +29,7 @@ def test_recovery_same_prose_new_contract_current_before_and_rollback(api):
     with patch('engine.chat_stream',side_effect=stream): original=submit(text='Осматриваюсь.')
     assert original['status']=='saved',original['error']
     original=repo.get_job(original['id']);old=deepcopy(original)
-    assert json.loads(original['config_json'])['_extraction_contract']==7
+    assert json.loads(original['config_json'])['_extraction_contract']==version
     assert len(calls)==2
     with repo.connect() as db:
         original_variant=dict(db.execute('select * from response_variants where job_id=?',(original['id'],)).fetchone())

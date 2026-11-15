@@ -263,7 +263,7 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
         assert audit['candidate']['facts']==p['facts']
 
 
-@pytest.mark.parametrize('version',[6,7])
+@pytest.mark.parametrize('version',[6,7,8])
 def test_saturated_32k_context_and_wire_schema_budget(tmp_path,version):
     import json
     from unittest.mock import patch
@@ -371,7 +371,7 @@ def test_uncertain_order_and_simultaneous_contact_not_sorted_into_a_meeting():
     with pytest.raises(StructuralDeltaError):resolve(s,p)
 
 
-@pytest.mark.parametrize('version',[6,7])
+@pytest.mark.parametrize('version',[6,7,8])
 @pytest.mark.parametrize('failure',['sqlite','stale','cancel'])
 def test_scene_job_publication_failures_leave_canon_unchanged(tmp_path,failure,version):
     import json,sqlite3

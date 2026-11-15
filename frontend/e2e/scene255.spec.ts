@@ -3,8 +3,8 @@ import {defaults} from '../src/types';
 
 test.afterEach(async({request})=>{await request.post('/test/scene255-reset')});
 
-for(const version of [6,7]) test(`v${version} rejected scene retains input, targeted repair cap and explicit recovery after reload`,async({page,request})=>{
-  const selection=await (await request.post(version===7?'/test/scene256-seed':'/test/scene255-seed')).json();
+for(const version of [6,7,8]) test(`v${version} rejected scene retains input, targeted repair cap and explicit recovery after reload`,async({page,request})=>{
+  const selection=await (await request.post(version===8?'/test/scene258-seed':version===7?'/test/scene256-seed':'/test/scene255-seed')).json();
   const path=`/api/saves/${selection.save}`;
   const profile=`scene255-${selection.save}`;
   await request.put(`/api/settings/${profile}`,{data:{...defaults,game:{...defaults.game,model:'scene255-test',context_length:65536,update_tokens:8192}}});
@@ -37,7 +37,7 @@ for(const version of [6,7]) test(`v${version} rejected scene retains input, targ
   expect(saved.revision).toBe(failed.revision+1);
   expect(saved.job.narrative).toBe(failed.job.narrative);
   expect(await stages()).toEqual(['extraction','extraction','extraction_repair','narrative']);
-  if(version===7){
+  if(version>=7){
     const source=saved.job.id;
     expect((await request.post(`${path}/rollback`,{data:{revision:saved.revision}})).ok()).toBeTruthy();
     const rolled=await view();

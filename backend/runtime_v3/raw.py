@@ -45,17 +45,14 @@ class RawTurnResult:
 
     @classmethod
     def parse(cls, payload):
-        if isinstance(payload, str):
-            text = payload.strip()
-            if text.startswith('```') and text.endswith('```') and '\n' in text:
-                text = text.split('\n', 1)[1].rsplit('```', 1)[0]
-            try:
-                payload = json.loads(text)
-            except (ValueError, TypeError):
-                fatal('некорректный JSON extraction', 'raw_root_invalid', repairable=True)
+        from backend.runtime_v3.structured_payload import object_payload
+        try:
+            payload, normalization = object_payload(payload)
+        except (ValueError, TypeError):
+            fatal('некорректный JSON extraction', 'raw_root_invalid', repairable=True)
         if not isinstance(payload, dict) or not isinstance(payload.get('final_scene'), dict):
             fatal('ожидается объект RawTurnResult с final_scene', 'raw_root_invalid', repairable=True)
-        warnings, records = [], {}
+        warnings, records = ([dict(code='structured_payload_normalized', action=normalization)] if normalization else []), {}
         for field in set(payload['final_scene']) - input_fields()['final_scene']:
             warnings.append(dict(section='final_scene', path='final_scene.'+field,
                                  code='raw_unknown_field', action='ignore_field'))

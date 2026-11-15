@@ -17,7 +17,7 @@ from .prepare import compact
 
 def run(case, variant, generate, record, *, candidate_type=SceneCandidate):
     state=case['snapshot']['world_state'];turn=state['meta']['turn_id']+1
-    candidate=candidate_type(state,case['narrative'],case['player_input'],turn,version=7,on_record=lambda audit:record(dict(event='candidate',audit=audit)))
+    candidate=candidate_type(state,case['narrative'],case['player_input'],turn,version=case.get('contract_version',7),on_record=lambda audit:record(dict(event='candidate',audit=audit)))
     messages=deepcopy(case['messages'][variant]);start=time.monotonic();attempts=[]
     for attempt in range(2):
         usage=[];chunks=[];t=time.monotonic()
@@ -35,7 +35,7 @@ def run(case, variant, generate, record, *, candidate_type=SceneCandidate):
         record(dict(event='response',**item));attempts.append(item)
         try:
             raw=candidate.parse(response,defer_errors=True)
-            options=case.get('resolver_options') or resolver_options(state,case['player_input'],contract_version=7)
+            options=case.get('resolver_options') or resolver_options(state,case['player_input'],contract_version=case.get('contract_version',7))
             result=StateResolver(state,case['narrative'],case['player_input'],turn_id=turn,**options).resolve(raw)
             record(dict(event='resolved',state=result.state,history=result.history,semantic_status='REQUIRES_INDEPENDENT_REVIEW'))
             break

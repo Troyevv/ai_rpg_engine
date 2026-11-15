@@ -48,7 +48,7 @@ def project_structure(schema, *, movement_type='MovementStep', interaction_type=
         'else': dict(properties=dict(event_id=dict(type='null'), elapsed_days=dict(type='null')),
             anyOf=[dict(required=[key], properties={key: deepcopy(NONBLANK)}) for key in ('date', 'weekday')]),
     })
-    if movement_type == 'GroupMovementStep':
+    if movement_type in ('GroupMovementStep', 'MovementV8'):
         defs[movement_type]['properties']['actor_ids']['uniqueItems'] = True
     defs[movement_type]['allOf'] = [
         dict(**{'if': dict(properties=dict(assertion=dict(enum=['departure', 'local_exit'])))},

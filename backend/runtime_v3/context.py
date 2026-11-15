@@ -505,6 +505,8 @@ class ExtractionContextBuilder:
             from backend.runtime_v3.context_contract import SEMANTIC_BASE_CONTRACT, SEMANTIC_SLICE_CONTRACT
             if self.contract_version >= 7:
                 from backend.runtime_v3.scene_steps import SPATIAL_CONTRACT as scene_contract
+            if self.contract_version >= 8:
+                scene_contract = scene_contract.replace('Extraction/7', 'Extraction/8') + "\nMovement input_source contains only quote and meaning, never intended_target_ids. Travellers are not speech addressees. Preserve separate questions and perceived replies, using during_step_id for speech on a route.\n"
             rules = rules.replace(SEMANTIC_BASE_CONTRACT, scene_contract).replace(SEMANTIC_SLICE_CONTRACT, '')
             from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
             rules = rules.replace(CONSEQUENCE_CONTRACT, '')

@@ -91,6 +91,6 @@ class DestinationCandidate(SceneCandidate):
         ids=[s.get('id') for s in value['scene_steps'] if isinstance(s,dict)]
         self.base=deepcopy(value) if len(ids)==len(value['scene_steps']) and all(isinstance(i,str) and i for i in ids) and len(set(ids))==len(ids) else None
         compiled=adapt(value,self.before,self.turn_id,self.namespace)
-        self.raw=compile_scene(compiled,self.before,self.narrative,self.turn_id,namespace=self.namespace,version=7,defer_errors=defer_errors)
+        self.raw=compile_scene(compiled,self.before,self.narrative,self.turn_id,namespace=self.namespace,version=self.version,defer_errors=defer_errors)
         self.raw.warnings.extend(self.revisions)
         return self.raw

@@ -46,12 +46,21 @@ class SceneCandidate:
     def parse(self, payload, *, defer_errors=False):
         self.raw = None
         mode = 'targeted' if self.scope is not None else 'full'
+        normalization = None
         try:
-            return self._parse(payload, defer_errors=defer_errors)
+            from backend.runtime_v3.structured_payload import object_payload
+            try:
+                payload, normalization = object_payload(payload)
+            except (ValueError, TypeError):
+                fatal('Ожидается один полный JSON object.', 'raw_root_invalid', repairable=True)
+            result = self._parse(payload, defer_errors=defer_errors)
+            if normalization:
+                result.warnings.append(dict(code='structured_payload_normalized', action=normalization))
+            return result
         finally:
             if self.on_record:
                 from dataclasses import asdict
-                self.on_record(dict(contract=self.version, binding=self.binding, mode=mode,
+                self.on_record(dict(contract=self.version, binding=self.binding, mode=mode, normalization=normalization,
                     candidate_hash=digest([self.binding,self.base]) if self.base is not None else None,
                     candidate=self.base, compiled=asdict(self.raw) if self.raw is not None else None,
                     turn_id=self.turn_id, namespace=self.namespace, version=self.version, defer_errors=defer_errors))
@@ -66,8 +75,36 @@ class SceneCandidate:
         self.raw.warnings.extend(self.revisions)
         return self.raw
 
+    def external_feedback(self, rows):
+        """Explain compiler errors using fields the current provider can edit."""
+        if self.base is None:
+            return
+        for row in rows:
+            index = row.get('index')
+            if row.get('section') != 'scene_steps' or not isinstance(index, int) or not 0 <= index < len(self.base['scene_steps']):
+                continue
+            step = self.base['scene_steps'][index]
+            source = step.get('input_source') or {}
+            code = row.get('code')
+            if code == 'player_action_targets_inconsistent' or (step['kind']=='movement' and row.get('path', '').endswith('.input_source.intended_target_ids')):
+                row['local_id'] = step['id']
+                row['compiled_reason'] = row.get('repair_reason')
+                row['path'] = f'scene_steps[{index}].input_source.intended_target_ids'
+                if step['kind'] == 'movement':
+                    row['repair_reason'] = 'Movement has travellers, not speech addressees. Remove inapplicable input_source.intended_target_ids; preserve actual actor_ids, endpoint and relevant movement quote. Keep any separate question and perceived replies in their own steps. Do not copy travellers into addressees.'
+                else:
+                    row['repair_reason'] = 'Compare input_source.intended_target_ids with actual target_ids and outcome. Keep partial delivery explicit; use input_source.meaning=changed or agency_findings only if the Narrative changed the player choice.'
+            if code == 'player_action_source_invalid':
+                row['local_id'] = step['id']
+                row['compiled_reason'] = row.get('repair_reason')
+                row['path'] = f'scene_steps[{index}].input_source.quote'
+                row['player_input'] = self.player_input
+                row['supplied_quote'] = source.get('quote')
+                row['repair_reason'] = 'input_source.quote must come from the player_input shown separately, not from Narrative. Distinguish an extraction source mistake from an unchosen substantial decision in prose. Correct a mistaken binding using the relevant actual input; for a real unchosen decision use agency_findings classification=unauthorized_choice with narrative_evidence. Do not remove a substantial consequence or use an unrelated quote to authorize it.'
+
     def feedback(self, diagnostics, original):
-        rows=diagnostics if isinstance(diagnostics,list) else [diagnostics]
+        rows=deepcopy(diagnostics if isinstance(diagnostics,list) else [diagnostics])
+        self.external_feedback(rows)
         if self.base is None:
             return json.dumps(dict(repair_mode='full',diagnostics=rows,original_extraction=original,
                 contract=f'Return one complete Extraction/{self.version} scene_steps + scene. No patch base exists. Never rewrite Narrative/input/before.'),ensure_ascii=False)
@@ -173,7 +210,9 @@ class SceneCandidate:
                 'Invalid prose uses agency_findings/chronology_claims for existing narrative recovery. One automatic repair only.'),ensure_ascii=False,separators=(',',':'))
 
     def apply(self,payload):
-        try:p=json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+        try:
+            from backend.runtime_v3.structured_payload import object_payload
+            p=deepcopy(object_payload(payload)[0])
         except (ValueError,TypeError):fatal('Некорректный repair JSON.', 'scene_repair_invalid')
         if not isinstance(p,dict) or set(p)-{'candidate_hash','replacements','sections','additions','withdrawals','reason'} or p.get('candidate_hash')!=self.hash:
             fatal('Repair относится к другому кандидату или имеет неверную форму.', 'scene_repair_stale')

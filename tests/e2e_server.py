@@ -680,7 +680,7 @@ def stream(**kwargs):
             reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[step],sections={},reason='Повторная ошибочная интерпретация в authored negative control.')
         else:
             reply=dict(scene=dict(elapsed_minutes=1),scene_steps=[step],locations=[dict(id='park255',name='Парк',evidence='')])
-        yield json.dumps(reply)
+        yield ('```json\n'+json.dumps(reply)+'\n```') if extraction_versions.EXTRACTION_VERSION>=8 else json.dumps(reply)
         return
     # Upgrade old scripted provider fixtures to the mandatory #232 review envelope.
     # Preserve malformed/partial transport output and explicit negative reviews.
@@ -787,6 +787,12 @@ if __name__ == '__main__':
     def scene256_seed():
         result=scene255_seed()
         extraction_versions.EXTRACTION_VERSION=7
+        return result
+
+    @app.post('/test/scene258-seed')
+    def scene258_seed():
+        result=scene255_seed()
+        extraction_versions.EXTRACTION_VERSION=8
         return result
 
     @app.post('/test/editor173')

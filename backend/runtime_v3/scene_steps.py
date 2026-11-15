@@ -25,6 +25,11 @@ class InputSource(StrictModel):
     intended_target_ids: list[str] | None = None
 
 
+class MovementInputSource(StrictModel):
+    quote: str = Field(min_length=1)
+    meaning: Literal['preserved', 'changed', 'uncertain']
+
+
 class Step(StrictModel):
     id: str = Field(min_length=1)
     text: str = Field(min_length=1)
@@ -93,8 +98,16 @@ GROUP_STEP = TypeAdapter(Annotated[GroupMovementStep | TravellingInteraction | T
                                    Field(discriminator='kind')])
 
 
+class MovementV8(GroupMovementStep):
+    input_source: MovementInputSource | None = None
+
+
+STEP_V8 = TypeAdapter(Annotated[MovementV8 | TravellingInteraction | TravellingInformation | OccurrenceStep,
+                                Field(discriminator='kind')])
+
+
 def step_adapter(version):
-    return GROUP_STEP if version >= 7 else STEP
+    return STEP_V8 if version >= 8 else GROUP_STEP if version >= 7 else STEP
 
 
 def movers(step):
@@ -138,7 +151,7 @@ def project_schema(schema, *, version=6, camera_mode=None):
             'required':['narrative_evidence','classification']}})
     schema['required'] = ['scene', 'scene_steps']
     from backend.runtime_v3.scene_schema import project_structure
-    project_structure(schema, movement_type='GroupMovementStep' if version >= 7 else 'MovementStep', interaction_type='TravellingInteraction' if version >= 7 else 'InteractionStep')
+    project_structure(schema, movement_type='MovementV8' if version >= 8 else 'GroupMovementStep' if version >= 7 else 'MovementStep', interaction_type='TravellingInteraction' if version >= 7 else 'InteractionStep')
     return schema
 
 
@@ -152,7 +165,8 @@ def input_schema(version=6, camera_mode=None):
 def decode(payload):
     if isinstance(payload, str):
         try:
-            payload = json.loads(payload)
+            from backend.runtime_v3.structured_payload import object_payload
+            payload, _ = object_payload(payload)
         except (ValueError, TypeError):
             fatal('Некорректный JSON Extraction/6.', 'raw_root_invalid', repairable=True)
     if not isinstance(payload, dict) or not isinstance(payload.get('scene_steps'), list) or not isinstance(payload.get('scene'), dict):
@@ -198,7 +212,7 @@ def schema_diagnostics(error, payload):
             'camera_invalid', section='scene', field='observer_location_id', path='scene.observer_location_id')]
     if error.validator == 'oneOf' and len(path) == 2 and path[0] == 'scene_steps':
         kind = error.instance.get('kind') if isinstance(error.instance, dict) else None
-        names = {'movement': ('MovementStep', 'GroupMovementStep'),
+        names = {'movement': ('MovementStep', 'GroupMovementStep', 'MovementV8'),
                  'interaction': ('InteractionStep', 'TravellingInteraction'),
                  'information': ('InformationStep', 'TravellingInformation'),
                  'occurrence': ('OccurrenceStep',)}.get(kind, ())
@@ -217,6 +231,8 @@ def schema_diagnostics(error, payload):
     if children:
         return [row for child in children for row in schema_diagnostics(child, payload)]
     paths = [path]
+    if error.validator == 'additionalProperties' and isinstance(error.instance, dict):
+        paths = [path + [key] for key in error.instance if key not in error.schema.get('properties', {})] or [path]
     if error.validator == 'required' and isinstance(error.instance, dict):
         # jsonschema emits a separate ValidationError for EACH missing key.
         # Its required array contains all keys; expanding that array would mix
@@ -392,8 +408,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             if isinstance(step, MovementFields) and step.assertion in ('intent','preparation','attempt'):
                 outcome = 'attempted'
             actions.append(dict(id=action_id, player_evidence=step.input_source.quote,
-                meaning=step.input_source.meaning, target_ids=step.input_source.intended_target_ids
-                if step.input_source.intended_target_ids is not None else targets,
+                meaning=step.input_source.meaning, target_ids=getattr(step.input_source, 'intended_target_ids', None)
+                if getattr(step.input_source, 'intended_target_ids', None) is not None else targets,
                 narrative_target_ids=targets, outcome=outcome,
                 target_mode='interaction' if targets else 'reference'))
         common = dict(id=eid, text=step.text, evidence=step.evidence, order=order,
