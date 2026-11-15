@@ -27,7 +27,7 @@ def prepare(data):
     rows = error.value.diagnostics('extraction_repair')
     assert error.value.repairable
     assert {(d['code'], d['path']) for d in rows} == {
-        ('movement_endpoint_invalid', 'scene_steps[3]'),
+        ('movement_endpoint_invalid', 'scene_steps[3].endpoint'),
         ('movement_agency', 'scene_steps[5]'),
         ('camera_invalid', 'scene.observer_location_id'),
     }

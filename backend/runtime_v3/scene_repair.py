@@ -72,6 +72,12 @@ class SceneCandidate:
                 contract='Return one complete Extraction/6 scene_steps + scene. No patch base exists. Never rewrite Narrative/input/before.'),ensure_ascii=False)
         steps=self.base['scene_steps']
         selected=set(); sections=set(); selected_records={}
+        claim_only = bool(rows) and all(row.get('section') == 'scene_steps'
+            and isinstance(row.get('index'), int) and isinstance(row.get('claim_index'), int) for row in rows)
+        claim_indexes = {}
+        if claim_only:
+            for row in rows:
+                claim_indexes.setdefault(steps[row['index']]['id'], set()).add(row['claim_index'])
         # Map derived paths back to their semantic source, never ask the model
         # to edit compiler-owned Event/Movement identifiers.
         for row in rows:
@@ -112,18 +118,19 @@ class SceneCandidate:
                         actors.update(strings(s.get(key)))
             for s in steps:
                 roles=set().union(*(strings(s.get(k)) for k in ('actor_id','source_actor_id','actor_ids','target_ids','claims')))
-                if roles & actors or strings(s)&selected: selected.add(s['id'])
+                if not claim_only and (roles & actors or strings(s)&selected): selected.add(s['id'])
             dependencies=set(selected)
             for step in steps:
                 if step['id'] in selected:dependencies.update(references(step))
             for section,indexes in selected_records.items():
                 for index in indexes:dependencies.update(references(self.base[section][index]))
             for step in steps:
-                if references(step)&dependencies:selected.add(step['id'])
+                if not claim_only and references(step)&dependencies:selected.add(step['id'])
             record_count=sum(map(len,selected_records.values()))
             for section,values in self.base.items():
                 if section in ('scene_steps','scene','choices','agency_findings','chronology_claims') or not isinstance(values,list):continue
                 for index,item in enumerate(values):
+                    if claim_only and (not isinstance(item,dict) or item.get('id') not in dependencies):continue
                     role_dependent=section in ('promotions','character_changes') and isinstance(item,dict) and item.get('id') in actors
                     if references(item)&dependencies or role_dependent:
                         sections.add(section);selected_records.setdefault(section,set()).add(index)
@@ -137,6 +144,7 @@ class SceneCandidate:
         self.scope=dict(step_ids=sorted(selected),sections=sorted(sections),
             record_keys={section:[record_key(self.base[section][i]) for i in sorted(indexes)]
                          for section,indexes in selected_records.items()}, dependencies=sorted(dependencies),actor_ids=sorted(actors))
+        if claim_only: self.scope['claim_indexes'] = {key: sorted(value) for key, value in claim_indexes.items()}
         return json.dumps(dict(repair_mode='targeted',candidate_hash=self.hash,scope=self.scope,
             diagnostics=rows,original_extraction=self.base,record_keys={k:[record_key(item) for item in v] for k,v in self.base.items() if k in sections and isinstance(v,list)},
             contract='Return candidate_hash, replacements, sections, reason only. Replace listed step IDs in place; no deletions or reordering. '
@@ -144,6 +152,7 @@ class SceneCandidate:
                 'Remove a mistaken scoped record only with withdrawals listing section, record_key (id or digest), and individual reason. '
                 'New dependencies may be supplied as additions after an allowed step. Reinterpret the full unchanged Narrative/input. '
                 'Address ALL listed diagnostics together, not only the first. '
+                'When scope.claim_indexes is present, replace only those claims at the same indexes; preserve the step fields, claim count and all other claims. No additions or withdrawals in this mode. '
                 'scene is merged: omission keeps a prior field; set observer_location_id=null to clear an invalid observer override in actor mode. '
                 'All connected affected consequences must agree; independent records are retained by code. '
                 'Do not erase a confirmed outcome or invent arrival/consent to pass. Semantic correction of a mistaken assertion needs an explicit reason. '
@@ -160,6 +169,22 @@ class SceneCandidate:
         ids=[s.get('id') if isinstance(s,dict) else None for s in replacements]
         if any(not isinstance(s,str) for s in ids) or len(set(ids))!=len(ids) or set(ids)-set(self.scope['step_ids']) or set(sections)-set(self.scope['sections']):
             fatal('Repair изменяет запись вне разрешённой области.', 'scene_repair_scope')
+        claim_indexes = self.scope.get('claim_indexes')
+        if claim_indexes:
+            if additions or p.get('withdrawals'):
+                fatal('Исправление claims не добавляет и не удаляет независимые последствия.', 'scene_repair_scope')
+            originals = {s['id']: s for s in self.base['scene_steps']}
+            for step in replacements:
+                old = originals[step['id']]
+                claims = step.get('claims')
+                if (not isinstance(claims, list) or len(claims) != len(old['claims'])
+                        or {k:v for k,v in step.items() if k != 'claims'} != {k:v for k,v in old.items() if k != 'claims'}
+                        or any(value != claims[i] for i,value in enumerate(old['claims']) if i not in claim_indexes[step['id']])):
+                    fatal('Repair меняет неповреждённый шаг или claim.', 'scene_repair_scope', entity=step['id'])
+            referenced = {claim.get('fact_id') for step in replacements for claim in step['claims']}
+            existing = {record_key(item) for item in self.base.get('facts', [])}
+            if any(record_key(item) not in existing and item.get('id') not in referenced for item in sections.get('facts', [])):
+                fatal('Новый Fact должен быть явно указан в исправленном claim.fact_id.', 'scene_repair_scope', section='facts')
         result=deepcopy(self.base)
         edits={s['id']:s for s in replacements}
         result['scene_steps']=[edits.get(s['id'],s) for s in result['scene_steps']]
@@ -242,10 +267,11 @@ def repair_schema(full_schema, feedback):
     info=json.loads(feedback)
     if info.get('repair_mode')!='targeted':return full_schema
     steps=full_schema['properties']['scene_steps']['items']
+    replacements = dict(allOf=[deepcopy(steps), dict(properties=dict(id=dict(enum=info['scope']['step_ids'])))])
     schema = dict(type='object',additionalProperties=False,
         **{'$defs':deepcopy(full_schema.get('$defs',{}))},
         properties=dict(candidate_hash=dict(type='string',const=info['candidate_hash']),
-            replacements=dict(type='array',items=deepcopy(steps)),
+            replacements=dict(type='array',items=replacements),
             sections=dict(type='object',additionalProperties=False,properties={k:deepcopy(v) for k,v in full_schema['properties'].items() if k in info['scope']['sections']}),
             additions=dict(type='array',items=dict(type='object',additionalProperties=False,properties=dict(after_id=dict(type='string',enum=info['scope']['step_ids']),step=deepcopy(steps)),required=['after_id','step'])),
             withdrawals=dict(type='array',items=dict(type='object',additionalProperties=False,properties={k:dict(type='string',minLength=1) for k in ('section','record_key','reason')},required=['section','record_key','reason'])),
@@ -253,5 +279,8 @@ def repair_schema(full_schema, feedback):
 
     scene=schema['properties']['sections']['properties'].get('scene')
     if scene is not None:scene['required']=[]
+    if info['scope'].get('claim_indexes'):
+        schema['properties']['additions']['maxItems'] = 0
+        schema['properties']['withdrawals']['maxItems'] = 0
     from backend.runtime_v3.raw import prune_schema_definitions
     return prune_schema_definitions(schema)

@@ -107,6 +107,8 @@ def project_schema(schema):
                 'classification':{'enum':['unauthorized_choice','uncertain','incidental_detail']}},
             'required':['narrative_evidence','classification']}})
     schema['required'] = ['scene', 'scene_steps']
+    from backend.runtime_v3.scene_schema import project_structure
+    project_structure(schema)
     return schema
 
 
@@ -137,9 +139,7 @@ def validate(payload, state=None):
         path = list(error.absolute_path)
         if path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
             continue  # Existing optional-domain owners still isolate annotation errors.
-        errors.append(StructuralDeltaError(error.message, 'scene_schema_invalid',
-            section=path[0] if path else 'scene_steps', path='.'.join(map(str,path)) or '$',
-            **({'index':path[1]} if len(path)>1 and isinstance(path[1],int) else {})))
+        errors.extend(schema_diagnostics(error, p))
     ids = [s['id'] for s in p['scene_steps']
            if isinstance(s, dict) and isinstance(s.get('id'), str)]
     if len(set(ids)) != len(ids):
@@ -149,6 +149,63 @@ def validate(payload, state=None):
     if errors:
         raise StructuralDeltaError.combine(errors)
     return p
+
+
+def schema_diagnostics(error, payload):
+    """Unwrap our step discriminator/nullable fields, not unrelated union arms.
+
+    jsonschema already does validation. This only translates its errors back to
+    model field paths, retaining every independent claim rather than best_match.
+    """
+    from backend.services.world_delta_errors import StructuralDeltaError
+    path = list(error.absolute_path)
+    children = error.context
+    if error.validator == 'oneOf' and len(path) == 2 and path[0] == 'scene_steps':
+        kind = error.instance.get('kind') if isinstance(error.instance, dict) else None
+        name = {'movement': 'MovementStep', 'interaction': 'InteractionStep',
+                'information': 'InformationStep', 'occurrence': 'OccurrenceStep'}.get(kind)
+        branches = error.schema['oneOf']
+        selected = next((i for i, arm in enumerate(branches)
+                         if arm.get('$ref', '').endswith('/' + str(name))), None)
+        if selected is not None:
+            children = [e for e in children if list(e.schema_path)[0] == selected]
+        else:
+            children = []  # Unknown kind: one useful discriminator error.
+    elif error.validator == 'anyOf' and error.instance is not None:
+        children = [e for e in children if not (e.validator == 'type' and e.validator_value == 'null')]
+    else:
+        children = []  # Keep XOR/conditional errors at their actual claim path.
+    if children:
+        return [row for child in children for row in schema_diagnostics(child, payload)]
+    paths = [path]
+    if error.validator == 'required' and isinstance(error.instance, dict):
+        paths = [path + [key] for key in error.validator_value if key not in error.instance]
+    result = []
+    for parts in paths:
+        rendered = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if i else '') + v
+                           for i, v in enumerate(parts)) or '$'
+        detail = dict(section=parts[0] if parts else 'scene_steps', path=rendered)
+        if len(parts) > 1 and isinstance(parts[1], int):
+            detail['index'] = parts[1]
+            if parts[0] == 'scene_steps':
+                step = payload['scene_steps'][parts[1]]
+                if isinstance(step, dict):
+                    detail.update(step_id=step.get('id'), source_ids=[step['id']] if step.get('id') else [])
+                if 'claims' in parts:
+                    at = parts.index('claims')
+                    if len(parts) > at + 1:
+                        detail['claim_index'] = parts[at + 1]
+                        detail['repair_options'] = [
+                            'New fact: supply fact.text and optional structured fact.claim; preserve the perceived meaning.',
+                            'Existing whole assertion: use fact_id instead of fact. Never invent a link or repeat it as an unrelated top-level Fact.',
+                            'Retain other claims, perceivers and independent steps unless their own diagnostics require correction.']
+        code = 'scene_schema_invalid'
+        if parts[:1] == ['scene_steps'] and len(parts) > 2:
+            step = payload['scene_steps'][parts[1]]
+            if step.get('kind') == 'movement' and parts[2] == 'endpoint': code = 'movement_endpoint_invalid'
+            if step.get('kind') == 'interaction' and parts[2] == 'target_ids' and error.validator == 'maxItems': code = 'scene_step_invalid'
+        result.append(StructuralDeltaError(error.message, code, **detail))
+    return result
 
 
 def independent_scene_errors(payload, state, schema_errors):
@@ -177,7 +234,16 @@ def independent_scene_errors(payload, state, schema_errors):
         except ValidationError as exc:
             if not any(e.path.get('section') == 'scene_steps' and
                        e.path.get('index') == index for e in schema_errors):
-                reject(str(exc), 'scene_step_invalid', **path)
+                for error in exc.errors(include_input=False, include_url=False):
+                    loc = list(error['loc'])
+                    if loc and loc[0] in ('movement', 'interaction', 'information', 'occurrence'):
+                        loc.pop(0)
+                    field = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if n else '') + v
+                                    for n, v in enumerate(loc))
+                    detail = dict(path, field=field, step_id=value.get('id'),
+                                  source_ids=[value['id']] if value.get('id') else [])
+                    if len(loc) > 1 and loc[0] == 'claims': detail['claim_index'] = loc[1]
+                    reject(error['msg'], 'scene_step_invalid', **detail)
             continue
         if step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous':
             reject('Не установлен относительный порядок значимых шагов.',
@@ -197,9 +263,6 @@ def independent_scene_errors(payload, state, schema_errors):
             if step.input_source and (actor is None or actor != camera['controlled_actor_id']):
                 reject('Источник ввода принадлежит только управляемому автору.',
                        'player_action_source_invalid', **path)
-        if isinstance(step, MovementStep) and step.assertion == 'departure' and step.endpoint is not None:
-            reject('Уход с неизвестным назначением не задаёт endpoint.',
-                   'movement_endpoint_invalid', **path)
         if (camera is not None and isinstance(step, MovementStep)
                 and actor is not None and actor == camera['controlled_actor_id']
                 and step.assertion in ('departure', 'completed_arrival')
@@ -207,9 +270,6 @@ def independent_scene_errors(payload, state, schema_errors):
             reject('Перемещение управляемого героя требует input_source с релевантной цитатой '
                    'ввода или involuntary_source_id. Источник соседнего шага не наследуется.',
                    'movement_agency', **path)
-        if isinstance(step, InteractionStep) and step.outcome in ('deferred', 'not_performed') and targets:
-            reject('Несостоявшееся взаимодействие не имеет достигнутых адресатов.',
-                   'scene_step_invalid', **path)
 
     scene = payload['scene']
     if camera is not None:
