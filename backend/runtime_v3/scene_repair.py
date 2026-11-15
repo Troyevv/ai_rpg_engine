@@ -87,6 +87,10 @@ class SceneCandidate:
                 row.update(source, path=f"scene_steps[{source['index']}]")
                 section,index='scene_steps',source['index']
             if section=='scene_steps' and isinstance(index,int) and index<len(steps): selected.add(steps[index]['id'])
+            elif section=='scene' and row.get('field')=='observer_location_id':
+                # Camera-mode authority is independent of any route. Clearing
+                # its override must not authorize edits to unrelated NPC steps.
+                sections.add('scene')
             elif section in ('events','movements','player_agency','information_events','knowledge_gained','final_scene','scene','runtime',None):
                 selected.update(s['id'] for s in steps);sections.add('scene')
             elif section in SECTIONS or section in self.base:
@@ -139,6 +143,8 @@ class SceneCandidate:
                 'sections arrays contain only keyed edits/additions; code keeps unmentioned records, also within the same section. scene is a partial field update. New declarations must be referenced by affected steps. '
                 'Remove a mistaken scoped record only with withdrawals listing section, record_key (id or digest), and individual reason. '
                 'New dependencies may be supplied as additions after an allowed step. Reinterpret the full unchanged Narrative/input. '
+                'Address ALL listed diagnostics together, not only the first. '
+                'scene is merged: omission keeps a prior field; set observer_location_id=null to clear an invalid observer override in actor mode. '
                 'All connected affected consequences must agree; independent records are retained by code. '
                 'Do not erase a confirmed outcome or invent arrival/consent to pass. Semantic correction of a mistaken assertion needs an explicit reason. '
                 'Invalid prose uses agency_findings/chronology_claims for existing narrative recovery. One automatic repair only.'),ensure_ascii=False,separators=(',',':'))

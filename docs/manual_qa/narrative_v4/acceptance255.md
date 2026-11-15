@@ -7,6 +7,14 @@ $0.0446136 conservatively. The ordinary playtest is BLOCKED / NOT RUN. The
 original last player-session SQLite was found in the continuing workspace;
 the evidence limitations below describe the earlier engineering environment.
 
+2026-11-15 follow-up: independent scene/step errors now reach the single repair
+together, including missing controlled-arrival authority exposed by the original
+third answer. **170 focused tests passed**; offline production replay on isolated
+original SQLite copies verifies rejection of the real incomplete repair and save,
+reload and next-turn location with a clearly authored three-field control. No new
+paid call or live PASS is claimed. See the smoke report's follow-up and proposed
+separate budget. The original Narrative and source artifacts remain unchanged.
+
 Baseline: PR #248 `cace6ed35ede13666142e55875b71f2a38c99ae8`.
 Master inspected: `ee343deee65f627932c5a4f13aedbb41fa06be8f`.
 Both AGENTS.md read. Work continues in the existing PR; no merge.

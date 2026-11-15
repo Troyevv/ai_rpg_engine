@@ -128,7 +128,7 @@ def decode(payload):
     return deepcopy(payload)
 
 
-def validate(payload):
+def validate(payload, state=None):
     from jsonschema import Draft202012Validator
     from backend.services.world_delta_errors import StructuralDeltaError
     p = decode(payload)
@@ -140,16 +140,92 @@ def validate(payload):
         errors.append(StructuralDeltaError(error.message, 'scene_schema_invalid',
             section=path[0] if path else 'scene_steps', path='.'.join(map(str,path)) or '$',
             **({'index':path[1]} if len(path)>1 and isinstance(path[1],int) else {})))
+    ids = [s['id'] for s in p['scene_steps']
+           if isinstance(s, dict) and isinstance(s.get('id'), str)]
+    if len(set(ids)) != len(ids):
+        errors.append(StructuralDeltaError('Повторный ID смыслового шага.',
+            'semantic_duplicate', section='scene_steps'))
+    errors.extend(independent_scene_errors(p, state, errors))
     if errors:
         raise StructuralDeltaError.combine(errors)
-    ids = [s['id'] for s in p['scene_steps']]
-    if len(set(ids)) != len(ids):
-        fatal('Повторный ID смыслового шага.', 'semantic_duplicate', section='scene_steps')
     return p
 
 
+def independent_scene_errors(payload, state, schema_errors):
+    """Check declarations, never tentative routes or partially compiled records.
+
+    A malformed node cannot support dependent checks. Other valid nodes and
+    scene fields can still report their own errors in the same bounded repair.
+    No WorldState or candidate is changed during this pass.
+    """
+    from backend.services.world_delta_errors import StructuralDeltaError
+    errors = []
+    camera = state['camera'] if state is not None else None
+    known = set(state['characters']) if state is not None else set()
+    promotions = payload.get('promotions', [])
+    if isinstance(promotions, list):
+        known.update(p['id'] for p in promotions
+                     if isinstance(p, dict) and isinstance(p.get('id'), str))
+
+    def reject(message, code, **path):
+        errors.append(StructuralDeltaError('Runtime v3: ' + message, code, **path))
+
+    for index, value in enumerate(payload['scene_steps']):
+        path = dict(section='scene_steps', index=index)
+        try:
+            step = STEP.validate_python(value)
+        except ValidationError as exc:
+            if not any(e.path.get('section') == 'scene_steps' and
+                       e.path.get('index') == index for e in schema_errors):
+                reject(str(exc), 'scene_step_invalid', **path)
+            continue
+        if step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous':
+            reject('Не установлен относительный порядок значимых шагов.',
+                   'scene_order_ambiguous', **path)
+        actor = getattr(step, 'actor_id', getattr(step, 'source_actor_id', None))
+        targets = getattr(step, 'target_ids', [])
+        if camera is not None:
+            roles = set(([actor] if actor else []) + targets)
+            if isinstance(step, InformationStep):
+                roles.update(cid for claim in step.claims for cid in claim.perceived_by)
+            if isinstance(step, OccurrenceStep):
+                roles.update(step.actor_ids + step.witnesses)
+                actor = camera['controlled_actor_id'] if camera['controlled_actor_id'] in step.actor_ids else None
+            if roles - known:
+                reject('Неизвестная личность в смысловом шаге.', 'scene_actor_unknown',
+                       source_ids=sorted(roles - known), **path)
+            if step.input_source and (actor is None or actor != camera['controlled_actor_id']):
+                reject('Источник ввода принадлежит только управляемому автору.',
+                       'player_action_source_invalid', **path)
+        if isinstance(step, MovementStep) and step.assertion == 'departure' and step.endpoint is not None:
+            reject('Уход с неизвестным назначением не задаёт endpoint.',
+                   'movement_endpoint_invalid', **path)
+        if (camera is not None and isinstance(step, MovementStep)
+                and actor is not None and actor == camera['controlled_actor_id']
+                and step.assertion in ('departure', 'completed_arrival')
+                and step.input_source is None and step.involuntary_source_id is None):
+            reject('Перемещение управляемого героя требует input_source с релевантной цитатой '
+                   'ввода или involuntary_source_id. Источник соседнего шага не наследуется.',
+                   'movement_agency', **path)
+        if isinstance(step, InteractionStep) and step.outcome in ('deferred', 'not_performed') and targets:
+            reject('Несостоявшееся взаимодействие не имеет достигнутых адресатов.',
+                   'scene_step_invalid', **path)
+
+    scene = payload['scene']
+    if camera is not None:
+        if camera['mode'] != 'observer' and isinstance(scene.get('observer_location_id'), str):
+            reject('Extraction не меняет режим камеры. Сними observer_location_id через null '
+                   'в адресном repair; положение героя определяется маршрутом.',
+                   'camera_invalid', section='scene', field='observer_location_id')
+        visible = scene.get('visible_character_ids')
+        if camera['mode'] == 'actor' and isinstance(visible, list) and all(isinstance(cid, str) for cid in visible) and camera['controlled_actor_id'] not in visible:
+            reject('Явная композиция исключает управляемого персонажа.',
+                   'camera_actor_missing', section='scene', field='visible_character_ids')
+    return errors
+
+
 def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
-    p = validate(payload)
+    p = validate(payload, state)
     original=deepcopy(p)
     records = {name:deepcopy(p.get(name, [])) for name in SECTIONS}
     warnings=[]
@@ -165,29 +241,15 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
     actions, movement_sources = [], {}
     order=-1
     for index, value in enumerate(p['scene_steps']):
-        try:
-            step = STEP.validate_python(value)
-        except ValidationError as exc:
-            fatal(str(exc), 'scene_step_invalid', section='scene_steps', index=index)
-        if step.timing=='uncertain' or index==0 and step.timing=='simultaneous':
-            fatal('Не установлен относительный порядок значимых шагов.', 'scene_order_ambiguous', section='scene_steps', index=index)
+        step = STEP.validate_python(value)
         if step.timing!='simultaneous': order += 1
         eid = aliases[step.id]
         actor = getattr(step, 'actor_id', getattr(step, 'source_actor_id', None))
         targets = getattr(step, 'target_ids', [])
-        role_ids=set(([actor] if actor else []) + targets)
-        if isinstance(step, InformationStep):
-            role_ids.update(cid for claim in step.claims for cid in claim.perceived_by)
-        if isinstance(step, OccurrenceStep):role_ids.update(step.actor_ids+step.witnesses)
-        if role_ids - positions.keys():
-            fatal('Неизвестная личность в смысловом шаге.', 'scene_actor_unknown',
-                  section='scene_steps', index=index, source_ids=sorted(role_ids-positions.keys()))
         if isinstance(step, OccurrenceStep) and step.input_source:
             actor = camera['controlled_actor_id'] if camera['controlled_actor_id'] in step.actor_ids else None
         action_id = None
         if step.input_source:
-            if actor != camera['controlled_actor_id'] or actor is None:
-                fatal('Источник ввода принадлежит только управляемому автору.', 'player_action_source_invalid', section='scene_steps', index=index)
             action_id = identity('scene-action', turn_id, namespace, step.id)
             outcome = getattr(step, 'outcome', 'completed')
             if isinstance(step, MovementStep) and step.assertion in ('intent','preparation','attempt'):
@@ -203,10 +265,6 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
         if isinstance(step, MovementStep):
             if step.assertion in ('intent','preparation','attempt'):
                 continue  # No completed geography, contact, or Knowledge.
-            if step.actor_id not in positions:
-                fatal('Неизвестный участник маршрута.', 'character_unknown', section='scene_steps', index=index)
-            if step.assertion == 'departure' and step.endpoint is not None:
-                fatal('Уход с неизвестным назначением не задаёт endpoint.', 'movement_endpoint_invalid', repairable=True, section='scene_steps', index=index)
             movement = dict(actor_id=actor, assertion=step.assertion,
                 from_location_id=positions[actor], to_location_id=step.endpoint,
                 order=order, evidence=step.evidence, source_event_id=eid)
@@ -229,8 +287,6 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
             records['information_events'].append(item)
             continue
         elif isinstance(step, InteractionStep):
-            if step.outcome in ('deferred','not_performed') and targets:
-                fatal('Несостоявшееся взаимодействие не имеет достигнутых адресатов.', 'scene_step_invalid', section='scene_steps', index=index)
             event = dict(common, participants=list(dict.fromkeys([actor]+targets)), witnesses=[],
                 actor_id=actor, target_ids=targets, medium='conversation', interaction_channel=step.channel)
             if step.channel == 'physical' and positions.get(actor) is not None:
@@ -250,15 +306,11 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
         observer_location = scene.pop('observer_location_id')
         if camera['mode'] == 'observer':
             location = observer_location
-        elif observer_location is not None:
-            fatal('Extraction не меняет режим камеры.', 'camera_invalid', repairable=True, section='scene', field='observer_location_id')
     visible = scene.pop('visible_character_ids', None)
     if visible is None:
         visible = [cid for cid in camera['present_character_ids'] if positions.get(cid)==location]
         if subject in positions and subject not in visible:
             visible.append(subject)
-    elif camera['mode']=='actor' and subject not in visible:
-        fatal('Явная композиция исключает управляемого персонажа.', 'camera_actor_missing', section='scene', field='visible_character_ids')
     scene.update(location_id=location,present_character_ids=visible)
     scene.setdefault('observed_character_ids', [])
     # Exact local references only, including unchanged domain consumers.

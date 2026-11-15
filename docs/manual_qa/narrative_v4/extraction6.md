@@ -66,6 +66,16 @@ empty scene_steps list; blank/malformed output cannot stand in for that answer.
 
 ## Repair and replay
 
+Before record compilation, independent scene/step schema, ordering, identity,
+input-source, departure-endpoint and camera declarations are checked together.
+Malformed nodes do not hide errors in independently valid nodes. Actual controlled
+movement without input/involuntary authority is reported here rather than after
+spending the only repair. Dependent geography/agency/Knowledge checks still run
+on the rebuilt candidate. The combined feedback covers all errors; a camera-mode
+error adds scene scope without authorizing unrelated NPC step edits. Because scene
+patches merge fields, null explicitly clears an observer override in actor mode;
+omission retains it. No extra automatic repair is introduced.
+
 One automatic repair is retained. A parsed candidate receives a hash bound to
 before, Narrative, input, turn and namespace. Allowed step IDs and connected
 sections are server-selected. Replacements preserve step identity/order;

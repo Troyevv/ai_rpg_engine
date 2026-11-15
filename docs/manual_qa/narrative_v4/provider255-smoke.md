@@ -84,7 +84,7 @@ departure endpoint to repair; the already-present independent observer error
 became visible only after that repair. The real repair preserved the override.
 No second automatic repair was attempted, and no unsupported override committed.
 
-The next focused change should collect these independently checkable scene and
+The follow-up below implements collection of these independently checkable scene and
 step errors before the single repair, and explicitly describe clearing the
 observer-only field in actor mode. Preserve the route, input authority and
 independent outcomes. Reproduce using this original candidate, test combined
@@ -116,3 +116,59 @@ provider streams, usage receipts, before/after/reload snapshots and the final
 SQLite are retained outside Git at `/workspace/work/issue255-live/`. Paid servers
 were stopped. The unused allowance was not spent on further attempts. PR #248
 remains unmerged; #255 is not accepted.
+
+## Follow-up: combined diagnostics, free verification (2026-11-15)
+
+The compiler now checks independent scene/step declarations before compiling
+records and combines their diagnostics for the existing single repair. Invalid
+nodes do not prevent checks of other valid nodes; dependent route/domain checks
+still run during full compilation/resolution. No partial state is committed.
+The original third Extraction reveals **three** independent errors:
+
+| Source | Diagnostic | Required interpretation |
+|---|---|---|
+| `scene_steps[3]` | `movement_endpoint_invalid` | Departure has null endpoint; arrival is a separate step |
+| `scene_steps[5]` | `movement_agency` | Controlled arrival needs its own explicit input source or involuntary source |
+| `scene.observer_location_id` | `camera_invalid` | Actor-mode repair must clear the observer override with null |
+
+The missing arrival authority was previously hidden behind the first two errors.
+It is not automatically inherited or synthesized. Feedback now includes all three,
+explains partial scene merge/null clearing, and instructs repair to address the
+entire list. A camera error alone does not authorize editing unrelated NPC steps.
+Geography, input authority, Knowledge and atomic persistence checks remain active.
+
+The original real repair still fails: it fixes only departure, leaving camera and
+arrival authority invalid. The failed replay leaves the complete canonical snapshot
+unchanged. An **explicitly authored offline control**, changing only those three
+fields, passes the production Retry → compilation → Runtime → SQLite path on an
+isolated backup of the original save. Original prose, independent farewell/NPC
+outcomes, prior History/variants and Knowledge survive. Alexey and actor camera
+arrive at `loc_home_galina`; a fresh production app reloads the save and the next
+authored ordinary turn receives this location in its Narrative context and saves.
+This is **not a successful new DeepSeek reply or live acceptance**.
+
+```sh
+python -m pytest -q tests/test_scene_error_collection255.py tests/test_scene_steps255.py tests/test_structured_extraction255.py tests/test_context_compaction.py tests/test_player_agency.py tests/test_movement_semantics223.py tests/test_action_provenance_repair.py
+python -m devtools.live99.replay255 --source /workspace/work/issue255-live --output /workspace/work/issue255-collection-free-v3
+```
+
+Focused regression: **170 passed in 78.58s**. The replay mocks only provider IO,
+including optional background/remote replies; normal production startup recovery
+remains enabled, one app at a time per independent SQLite. Initial offline replay
+needed a harness correction to supply optional background IO; that was not a new
+product failure. Full CI was not manually rerun. No UI behavior changed or new UI
+PASS claimed. The raw evidence remains outside Git; the committed fixture retains
+the original world state/replies and source hashes needed for regression.
+
+New paid calls: **0**. Existing ledger remains at receipt 646, with no unsettled
+reservations; the preceding five calls remain charged at $0.0446136. The proposed
+separate live allowance is **up to 8 new calls / $0.50**, thinking off, for one
+manual recovery of this same Narrative (at most one automatic repair), then one
+natural next turn if saved, including any existing background dispatches. Expected
+actual cost is about $0.04–$0.08 from the preceding receipts, not a guarantee. The
+larger hard ceiling accommodates the existing full-context reservation per call
+(about $0.33 at 16K output), without changing the accounting mechanism. Before
+dispatch, the existing cumulative limits would become 449 calls / $3.830492 from
+phase baseline 205; approval is still required. No further manual retries or
+successful Narrative regeneration are planned. #255 remains pending real recovery
+and the ordinary playtest.
