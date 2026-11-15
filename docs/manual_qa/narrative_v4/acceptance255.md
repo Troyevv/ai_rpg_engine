@@ -1,5 +1,13 @@
 # Issue #255 — engineering record
 
+Latest ordinary UI playtest: **interrupted after five new inputs**, four saved,
+one failed and one manual Retry. Read the [player diary](playtest255-diary.md)
+before the separate [technical follow-up](playtest255-technical.md). An incomplete
+provider stream without usage left reservation 665 unresolved; the QA Budget
+blocked Retry before dispatch. No Runtime rejection is established for that turn.
+The four completed Extractions needed no repair. 30–50-turn acceptance remains
+BLOCKED. Product code was unchanged; prior narrow recovery PASS remains valid.
+
 Latest narrow live result: [combined-repair recovery](provider255-recovery.md)
 **PASS** on `28378c8`. Alexey's original cafe departure saved unchanged, reached
 his mother's home, and one real next turn continued there after cold reload.
