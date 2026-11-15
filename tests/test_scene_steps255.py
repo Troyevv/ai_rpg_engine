@@ -239,8 +239,10 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(repo.path,jid,engine.Worker())
     job=repo.get_job(jid);fresh=Repository(repo.path)
-    assert len(calls)==3
-    if mode in ('targeted','full','departure_endpoint','observer_location','combined'):
+    harmless_camera=mode.startswith('observer_')
+    successful=mode in ('targeted','full','departure_endpoint','observer_location','observer_repeat','combined','combined_incomplete')
+    assert len(calls)==(2 if harmless_camera else 3)
+    if successful:
         assert job['status']=='saved',job['error']
         assert fresh.get_snapshot(sid)['world_state']['characters'][actor]['location_id']=='park'
         assert fresh.get_snapshot(sid)['world_state']['camera']['mode']==before['world_state']['camera']['mode']
@@ -249,17 +251,20 @@ def test_production_one_repair_atomic_reload_and_recorded_schema(tmp_path,mode):
         assert job['status']=='error'
         assert fresh.get_snapshot(sid)==before
     logs=repo.request_log(job_id=jid)
-    assert len(logs)==3 and all(r['response_text'] for r in logs)
+    assert len(logs)==len(calls) and all(r['response_text'] for r in logs)
     extraction=[r for r in logs if r['stage'].startswith('extraction')]
     assert all(r['extraction_contract']==6 for r in extraction)
     assert all(r['diagnostics']['extraction_candidate']['contract']==6 for r in extraction)
-    if mode in ('targeted','full','departure_endpoint','observer_location','combined'):
-        audit=next(r for r in extraction if r['stage']=='extraction_repair')['diagnostics']['extraction_candidate']
+    if harmless_camera or mode=='combined_incomplete':
+        assert 'camera_annotation_ignored' in job['warnings_json']
+    if successful:
+        audit=next(r for r in extraction if r['stage']==('extraction' if harmless_camera else 'extraction_repair'))['diagnostics']['extraction_candidate']
         assert audit['compiled']['semantic_candidate']['scene_steps']==[good]
         assert audit['candidate']['facts']==p['facts']
 
 
-def test_v6_saturated_32k_context_and_wire_schema_budget(tmp_path):
+@pytest.mark.parametrize('version',[6,7])
+def test_saturated_32k_context_and_wire_schema_budget(tmp_path,version):
     import json
     from unittest.mock import patch
     from backend.repositories.preparation import Repository
@@ -275,7 +280,7 @@ def test_v6_saturated_32k_context_and_wire_schema_budget(tmp_path):
     snapshot=repo.get_snapshot(sid)
     with repo.connect() as db:history,_=read_history(db,snapshot['history_head'])
     messages=build_context(snapshot,repo.list_turns(sid,context=True),'Осматриваю фотографии.','turn',32768,4096,
-        extraction_text=NARRATIVE,extraction_contract=6,world_history=history)
+        extraction_text=NARRATIVE,extraction_contract=version,world_history=history)
     assert estimate(messages)<=32768-4096-256
     sent=request_schema(messages)
     assert set(sent['required'])=={'scene','scene_steps'}
@@ -285,14 +290,14 @@ def test_v6_saturated_32k_context_and_wire_schema_budget(tmp_path):
     assert len(current['pregnancies'][0]['children'])==3
     assert current['reproductive_knowledge']
     from backend.runtime_v3.scene_repair import SceneCandidate
-    candidate=SceneCandidate(snapshot['world_state'],NARRATIVE,'Осматриваю фотографии.',3)
+    candidate=SceneCandidate(snapshot['world_state'],NARRATIVE,'Осматриваю фотографии.',3,version=version)
     payload=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(id='inspect',kind='occurrence',
         actor_ids=[snapshot['world_state']['camera']['controlled_actor_id']],text='Рассмотрел фотографии.',
         input_source=dict(quote='Осматриваю фотографии.',meaning='preserved'))])
     candidate.parse(payload)
     feedback=candidate.feedback([dict(section='scene_steps',index=0,code='authored_budget_control')],payload)
     repair=build_context(snapshot,repo.list_turns(sid,context=True),'Осматриваю фотографии.','turn',32768,4096,
-        extraction_text=NARRATIVE,extraction_contract=6,world_history=history,validation_feedback=feedback)
+        extraction_text=NARRATIVE,extraction_contract=version,world_history=history,validation_feedback=feedback)
     assert estimate(repair)<=32768-4096-256
     assert 'candidate_hash' in request_schema(repair)['required']
     assert json.loads(next(m['content'].split('\n',1)[1] for m in repair if m['content'].startswith('completed_narrative\n')))==NARRATIVE
@@ -366,8 +371,9 @@ def test_uncertain_order_and_simultaneous_contact_not_sorted_into_a_meeting():
     with pytest.raises(StructuralDeltaError):resolve(s,p)
 
 
+@pytest.mark.parametrize('version',[6,7])
 @pytest.mark.parametrize('failure',['sqlite','stale','cancel'])
-def test_v6_job_publication_failures_leave_canon_unchanged(tmp_path,failure):
+def test_scene_job_publication_failures_leave_canon_unchanged(tmp_path,failure,version):
     import json,sqlite3
     from unittest.mock import patch
     import engine
@@ -376,7 +382,9 @@ def test_v6_job_publication_failures_leave_canon_unchanged(tmp_path,failure):
     with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION',5):
         data=archived('knowledge');repo=Repository(tmp_path/'atomic.sqlite');sid=seed(repo,data)['save']
     before=repo.get_snapshot(sid);turns=repo.list_turns(sid)
-    jid=repo.begin_job(sid,'Осматриваюсь.','turn',CONFIG);worker=engine.Worker(epoch=0)
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION',version):
+        jid=repo.begin_job(sid,'Осматриваюсь.','turn',CONFIG)
+    worker=engine.Worker(epoch=0)
     def stream(**kw):
         if kw.get('response_format'):
             if failure=='stale':

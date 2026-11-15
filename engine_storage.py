@@ -68,6 +68,27 @@ class EngineStorage:
             save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
             if save is None:
                 raise ValueError('Прохождение не найдено.')
+            recovery = None
+            source_id = config.pop('_recovery_source_job_id', None)
+            if source_id:
+                if kind != 'turn' or user_text:
+                    raise ValueError('Восстановление принимает только сохранённый обычный ход.')
+                recovery = db.execute('SELECT * FROM game_jobs WHERE id=? AND save_id=?', (source_id,save_id)).fetchone()
+                if recovery is None or recovery['kind'] != 'turn' or not recovery['narrative_complete'] or not recovery['narrative'].strip():
+                    raise ValueError('Нет завершённого исходного Narrative для восстановления.')
+                source_before = json.loads(recovery['before_json'])
+                current_before = json.loads(save['state_json'])
+                if source_before['world_state']['meta']['turn_id'] != current_before['world_state']['meta']['turn_id']:
+                    raise ValueError('Сначала откати цепочку к позиции исходного хода; повторное применение запрещено.')
+                from hashlib import sha256
+                config['_narrative_recovery'] = dict(source_job_id=source_id,
+                    source_revision=recovery['revision'], source_contract=json.loads(recovery['config_json']).get('_extraction_contract',1),
+                    narrative_sha256=sha256(recovery['narrative'].encode()).hexdigest())
+                source_config = json.loads(recovery['config_json'])
+                for key in ('interaction_channel','time_skip'):
+                    config.pop(key, None)
+                    if key in source_config: config[key] = source_config[key]
+                user_text = recovery['user_text']
             if kind == 'communication':
                 from backend.runtime_v3.communication import Continuation
                 config = dict(config)
@@ -206,6 +227,8 @@ class EngineStorage:
             session_id = self.ensure_session(db, save_id)
             db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
             db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else config.get('actor_id') if kind=='pov' else controlled(json.loads(before)),job_id))
+            if recovery is not None:
+                db.execute("UPDATE game_jobs SET narrative=?,narrative_complete=1,status='extracting' WHERE id=?", (recovery['narrative'],job_id))
             if kind == 'communication':
                 db.execute('UPDATE game_jobs SET narrative_complete=1 WHERE id=?',(job_id,))
         return job_id
@@ -336,6 +359,18 @@ class EngineStorage:
                 tid = db.execute('INSERT INTO turns(user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json,save_id,sequence) VALUES(?,?,?,?,?,?,?,?,?)', (*values,job['save_id'],sequence)).lastrowid
             db.execute('UPDATE turns SET pov_actor_id=?,audience_json=?,timing_json=? WHERE id=?',(job['pov_actor_id'],job['audience_json'],json.dumps(timing) if timing else None,tid))
             record = dict(db.execute('SELECT * FROM turns WHERE id=?', (tid,)).fetchone())
+            recovery = json.loads(job['config_json']).get('_narrative_recovery')
+            if recovery and job['replaces_id'] is None:
+                source = db.execute('SELECT * FROM response_variants WHERE job_id=? ORDER BY rowid DESC LIMIT 1',
+                                    (recovery['source_job_id'],)).fetchone()
+                parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? AND sequence<? ORDER BY sequence DESC LIMIT 1',
+                                    (job['save_id'], sequence)).fetchone()
+                # A sibling may share a node only with the identical before and
+                # parent. A corrected suffix has new parents and remains a new
+                # branch with its explicit source-job provenance.
+                if (source and source['parent_variant_id'] == (parent[0] if parent else None)
+                        and json.loads(source['payload'])['before_json'] == job['before_json']):
+                    record['node_id'] = source['node_id']
             self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
             self._archive_memory(db, job['save_id'], state)
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (after, job['save_id']))

@@ -596,7 +596,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             from backend.runtime_v3.scene_repair import SceneCandidate
             semantic_candidate = SceneCandidate(resolution_state, narrative, '', turn,
                 namespace=identity('advance-group', sorted(c.id for c in group)),
-                on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if config.get('_extraction_contract', 1) >= 6 else None
+                version=config.get('_extraction_contract', 1), on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if config.get('_extraction_contract', 1) >= 6 else None
             for attempt in range(2):
                 payload = None
                 try:
@@ -626,7 +626,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             response_format={"type": "json_object"},
                         )
                     )
-                    raw = semantic_candidate.parse(payload) if semantic_candidate else RawTurnResult.parse(payload)
+                    raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else RawTurnResult.parse(payload)
                     if config.get('_extraction_contract', 1) >= 5:
                         from backend.runtime_v3.raw import compile_semantic
                         raw = compile_semantic(raw, resolution_state, narrative, turn,

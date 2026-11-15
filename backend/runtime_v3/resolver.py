@@ -32,11 +32,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None, scene_sequence=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None, scene_sequence=False, scene_version=6):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.scene_version = scene_version
         self.scene_sequence = scene_sequence
         self.semantic_slice = semantic_slice
         self.chronology_events = {e['id']:e for e in (chronology_events or []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
@@ -230,7 +231,12 @@ class StateResolver:
             if raw is None or not raw.semantic_candidate:raise
             from backend.runtime_v3.scene_steps import source_diagnostic
             errors=[]
-            for row in exc.diagnostics('validation'):
+            pending = getattr(self, 'preflight_errors', [])
+            rows = exc.diagnostics('validation')
+            for prior in pending:
+                for row in prior.diagnostics('validation'):
+                    if not any(r['code']==row['code'] and r.get('path')==row.get('path') for r in rows): rows.append(row)
+            for row in rows:
                 translated=source_diagnostic(raw,row)
                 path={k:v for k,v in translated.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
                 errors.append(StructuralDeltaError(row.get('repair_reason',str(exc)),row['code'],repairable=exc.repairable,**path))
@@ -240,7 +246,7 @@ class StateResolver:
         from backend.services.world_delta_errors import StructuralDeltaError
         if self.scene_sequence and not isinstance(payload, RawTurnResult):
             from backend.runtime_v3.scene_steps import compile_scene
-            raw = compile_scene(payload, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
+            raw = compile_scene(payload, self.before, self.narrative, self.turn_id, namespace=self.event_namespace, version=self.scene_version, defer_errors=True)
         else:
             raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         if self.semantic_slice:
@@ -255,7 +261,12 @@ class StateResolver:
         from backend.runtime_v3.continuity import validate_due_birth_assessments
         validate_due_birth_assessments(self, raw)
         from backend.runtime_v3.player_actions import review
-        player_actions = review(self, raw)
+        preflight_errors = []
+        for row in raw.preflight_errors:
+            path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
+            preflight_errors.append(StructuralDeltaError(row['repair_reason'], row['code'], **path))
+        self.preflight_errors = preflight_errors
+        player_actions = review(self, raw, errors=preflight_errors if self.scene_sequence else None)
         s = self.state
         from backend.runtime_v3.pacing import validate_risk
         validate_risk(self, raw)
@@ -444,6 +455,9 @@ class StateResolver:
                         'для явного reauthor/abandon. Не выдумывайте прибытие и не скрывайте противоречие удалением Events.',
                         'scene_arrival_unproven', repairable=True, section='final_scene',
                         field='present_character_ids', entity=cid, source_ids=[cid]))
+                    # Rejected end composition is not a route, even in diagnostic
+                    # scratch state: it must not invalidate earlier encounters.
+                    continue
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
@@ -483,11 +497,14 @@ class StateResolver:
         event_indices = {}
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
-        event_errors = list(scene_errors) + movement_errors
+        event_errors = list(preflight_errors) + list(scene_errors) + movement_errors
         rejected_events = set()
         for i, item in self.records(raw,'events'):
             error_start = len(event_errors)
             eid = item.get('id')
+            if item.get('player_action_id') in getattr(self, 'rejected_player_actions', set()):
+                rejected_events.add(eid)
+                continue  # Dependent authority is inconclusive, not a second source error.
             if 'minute' in item:
                 minute = item['minute']
                 if type(minute) is not int or not scene_start <= minute <= scene_end:
@@ -523,6 +540,9 @@ class StateResolver:
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=scene_end)
+            if eid in raw.event_routes:
+                route_id = raw.event_routes[eid]
+                event['during_event_id'] = identity('event',self.turn_id,route_id,self.narrative,self.event_namespace) if self.event_namespace else identity('event',self.turn_id,route_id,self.narrative)
             if self.semantic_slice and item.get('information_source'):
                 event['information_source'] = deepcopy(item['information_source'])
             if item.get('interaction_channel') is not None:
@@ -635,6 +655,15 @@ class StateResolver:
                             unvalidated_fact_ids=unvalidated_facts)
         except StructuralDeltaError as exc:
             event_errors.append(exc)
+        if (event_errors and all(e.code == 'camera_invalid' and e.path.get('field') == 'observer_location_id' for e in event_errors)
+                and raw.semantic_candidate and self.before['camera']['mode']=='actor'
+                and raw.semantic_candidate['scene'].get('observer_location_id') == lid):
+            # The complete independently validated route already establishes this
+            # place. A legacy observer annotation adds no authority or outcome.
+            self.warn('scene', 0, 'Избыточная observer-аннотация не меняет принятую географию.',
+                      field='observer_location_id', code='camera_annotation_ignored')
+            event_errors = []
+            self.preflight_errors = []
         if event_errors:
             self.raise_independent_errors(raw, events, rejected_events, elapsed, event_errors)
         from backend.runtime_v3.secrets import apply_disclosures

@@ -198,6 +198,21 @@ def run_job(path, job_id, handle):
                       'cancel_event': handle.cancelled, 'on_stream': on_stream,
                       'provider': config.get('provider', 'local'), 'api_key': handle.api_key}
             def generate(stage, messages, limit, temperature, **extra):
+                if stage == 'world_simulation' and config.get('_narrative_recovery'):
+                    # Preserve the source branch's authored background too. The
+                    # new Extraction still receives corrected before/context.
+                    source = config['_narrative_recovery']['source_job_id']
+                    originals = [r for r in storage.request_log(job_id=source)
+                                 if r['stage']==stage and r['status']=='complete' and r.get('response_text')]
+                    def subject(rows):
+                        for row in rows:
+                            if row.get('content','').startswith('Текущее состояние / GM-only\n'):
+                                return json.loads(row['content'].split('\n',1)[1])['camera'].get('subject_id')
+                    current_subject = subject(messages)
+                    matches = [r for r in originals if current_subject is not None and subject(r['messages'])==current_subject]
+                    if len(matches)!=1:
+                        raise RuntimeError('Не найден однозначный исходный background Narrative для recovery.')
+                    return iter([matches[0]['response_text']])
                 if stage in ('remote_initiative', 'remote_group_semantics'):
                     # Reuse a completed source-identical request after a later
                     # provider failure; the existing usage journal owns the text.
@@ -284,6 +299,13 @@ def run_job(path, job_id, handle):
                 letter_sources = parse(narrative) if enabled(before['world_state']) else []
             if handle.cancelled.is_set() or storage.get_job(job_id)['status'] != 'extracting':
                 return
+            if config.get('_narrative_recovery') and not job['context_json']:
+                # A new, explicitly linked candidate uses corrected current canon.
+                # No Narrative request; old context/hash belongs to the old branch.
+                messages = build_context(before, history, job['user_text'], job['kind'], context,
+                    config['max_tokens'], recent_turns=config.get('recent_turns',6),
+                    prompts=config.get('_prompts'), world_history=world_history)
+                storage.save_context(job_id, messages, before)
             # Use exactly the policy supplied to this narrative, including retry /
             # regenerate's recorded context. Extraction cannot expand its budget.
             recorded_messages = json.loads(storage.get_job(job_id).get('context_json') or '[]')
@@ -319,7 +341,7 @@ def run_job(path, job_id, handle):
                     feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], latest_payload, before['world_state'], previous_complete=complete_payload)
             from backend.runtime_v3.scene_repair import SceneCandidate
             semantic_candidate = SceneCandidate(before['world_state'], narrative, job['user_text'], sequence+1,
-                on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if config.get('_extraction_contract', 1) >= 6 else None
+                version=config.get('_extraction_contract', 1), on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if config.get('_extraction_contract', 1) >= 6 else None
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
@@ -352,7 +374,7 @@ def run_job(path, job_id, handle):
                     from copy import deepcopy
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_revision_warnings
-                    raw=semantic_candidate.parse(result) if semantic_candidate else RawTurnResult.parse(result)
+                    raw=semantic_candidate.parse(result, defer_errors=True) if semantic_candidate else RawTurnResult.parse(result)
                     if config.get('_narrative_correction'):
                         from backend.runtime_v3.continuity import require_chronology_recheck
                         require_chronology_recheck(raw, config['_narrative_correction']['grounds'])

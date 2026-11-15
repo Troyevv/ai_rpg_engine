@@ -674,6 +674,8 @@ def stream(**kwargs):
         schema=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('JSON Schema\n')))
         actor=current['camera']['controlled_actor_id']
         step=dict(id='walk',kind='movement',actor_id=actor,text='Дошёл до парка.',assertion='completed_arrival',endpoint='park255',input_source=dict(quote='несуществующий ввод' if scene255_attempts<=2 else 'Иду в парк.',meaning='preserved'))
+        if extraction_versions.EXTRACTION_VERSION >= 7:
+            step['actor_ids']=[step.pop('actor_id')]
         if 'candidate_hash' in schema['properties']:
             reply=dict(candidate_hash=schema['properties']['candidate_hash']['const'],replacements=[step],sections={},reason='Повторная ошибочная интерпретация в authored negative control.')
         else:
@@ -779,6 +781,12 @@ if __name__ == '__main__':
         result=seed(app.state.repository,archived('knowledge'))
         extraction_versions.EXTRACTION_VERSION=6
         scene255_mode=True;scene255_attempts=0
+        return result
+
+    @app.post('/test/scene256-seed')
+    def scene256_seed():
+        result=scene255_seed()
+        extraction_versions.EXTRACTION_VERSION=7
         return result
 
     @app.post('/test/editor173')

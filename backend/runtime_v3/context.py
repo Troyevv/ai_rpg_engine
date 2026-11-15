@@ -503,6 +503,8 @@ class ExtractionContextBuilder:
         if self.contract_version >= 6:
             from backend.runtime_v3.scene_steps import CONTRACT as scene_contract
             from backend.runtime_v3.context_contract import SEMANTIC_BASE_CONTRACT, SEMANTIC_SLICE_CONTRACT
+            if self.contract_version >= 7:
+                from backend.runtime_v3.scene_steps import SPATIAL_CONTRACT as scene_contract
             rules = rules.replace(SEMANTIC_BASE_CONTRACT, scene_contract).replace(SEMANTIC_SLICE_CONTRACT, '')
             from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
             rules = rules.replace(CONSEQUENCE_CONTRACT, '')
@@ -539,7 +541,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(scene_sequence=self.contract_version >= 6, semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(spatial_version=self.contract_version, camera_mode=snapshot['world_state']['camera']['mode'], scene_sequence=self.contract_version >= 6, semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):

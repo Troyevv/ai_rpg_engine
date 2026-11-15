@@ -9,7 +9,7 @@ from backend.runtime_v3.models import Fact, SignificantPossession
 NONBLANK = dict(type='string', minLength=1, pattern=r'\S')
 
 
-def project_structure(schema):
+def project_structure(schema, *, movement_type='MovementStep', interaction_type='InteractionStep'):
     props, defs = schema['properties'], schema['$defs']
     # Reuse canonical fields/types (including Claim bounds and secrecy fields).
     # Identity/evidence are compiler-owned for an inline perception Fact.
@@ -48,13 +48,15 @@ def project_structure(schema):
         'else': dict(properties=dict(event_id=dict(type='null'), elapsed_days=dict(type='null')),
             anyOf=[dict(required=[key], properties={key: deepcopy(NONBLANK)}) for key in ('date', 'weekday')]),
     })
-    defs['MovementStep']['allOf'] = [
-        dict(**{'if': dict(properties=dict(assertion=dict(const='departure')))},
+    if movement_type == 'GroupMovementStep':
+        defs[movement_type]['properties']['actor_ids']['uniqueItems'] = True
+    defs[movement_type]['allOf'] = [
+        dict(**{'if': dict(properties=dict(assertion=dict(enum=['departure', 'local_exit'])))},
              then=dict(properties=dict(endpoint=dict(type='null')))),
         dict(**{'if': dict(properties=dict(assertion=dict(const='completed_arrival')))},
              then=dict(required=['endpoint'], properties=dict(endpoint=deepcopy(NONBLANK)))),
     ]
-    defs['InteractionStep'].update({
+    defs[interaction_type].update({
         'if': dict(properties=dict(outcome=dict(enum=['deferred', 'not_performed']))),
         'then': dict(properties=dict(target_ids=dict(maxItems=0))),
     })

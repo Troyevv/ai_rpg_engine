@@ -93,6 +93,22 @@ def validate_event_presence(resolver, event, index, written):
             reject('location_id', f'Место {location} не связано ни с одной стороной контакта {eid}.')
         return readers.intersection(event['participants'] + event['witnesses'])
 
+    route_source = getattr(getattr(resolver, 'source_raw', None), 'event_routes', {}).get(eid)
+    if route_source:
+        # Compiler-owned linkage to ONE explicitly extracted shared trip. This
+        # is a co-travel phase, not a union of unknown locations or parent rooms.
+        legs = [m for m in resolver.history.movements if m.get('source_event_id')==route_source]
+        travellers = {m['actor_id'] for m in legs}
+        origins = {m['from_location_id'] for m in legs}
+        endpoints = {m['to_location_id'] for m in legs}
+        if not legs or len(origins)!=1 or None in origins or len(endpoints)!=1 or None in endpoints:
+            reject('participants', 'Не установлен общий фактический путь для разговора.')
+        for role in ('participants','witnesses'):
+            for n, actor in enumerate(event[role]):
+                if actor not in travellers:
+                    reject(f'{role}[{n}]', 'Персонаж не участвует в указанном совместном пути.', actor)
+        return set(event['participants'] + event['witnesses'])
+
     allowed_places = {location} if location is not None else None
     if medium == 'message' and location is None:
         # A local reading of an artifact has no live remote audience.

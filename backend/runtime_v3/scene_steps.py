@@ -35,12 +35,20 @@ class Step(StrictModel):
     timing: Literal['after_previous','simultaneous','uncertain'] = 'after_previous'
 
 
-class MovementStep(Step):
+class MovementFields(Step):
     kind: Literal['movement']
-    actor_id: str
     assertion: Literal['intent', 'preparation', 'attempt', 'departure', 'completed_arrival']
     endpoint: str | None = None
     involuntary_source_id: str | None = None
+
+
+class MovementStep(MovementFields):
+    actor_id: str
+
+
+class GroupMovementStep(MovementFields):
+    actor_ids: list[str] = Field(min_length=1)
+    assertion: Literal['intent', 'preparation', 'attempt', 'departure', 'completed_arrival', 'local_exit']
 
 
 class InteractionStep(Step):
@@ -73,7 +81,27 @@ STEP = TypeAdapter(Annotated[MovementStep | InteractionStep | InformationStep | 
                              Field(discriminator='kind')])
 
 
-def project_schema(schema):
+class TravellingInteraction(InteractionStep):
+    during_step_id: str | None = None
+
+
+class TravellingInformation(InformationStep):
+    during_step_id: str | None = None
+
+
+GROUP_STEP = TypeAdapter(Annotated[GroupMovementStep | TravellingInteraction | TravellingInformation | OccurrenceStep,
+                                   Field(discriminator='kind')])
+
+
+def step_adapter(version):
+    return GROUP_STEP if version >= 7 else STEP
+
+
+def movers(step):
+    return step.actor_ids if isinstance(step, GroupMovementStep) else [step.actor_id]
+
+
+def project_schema(schema, *, version=6, camera_mode=None):
     """Replace, never supplement, the duplicate model-facing representations."""
     props = schema['properties']
     for section,(limit,_) in SECTION_BUDGETS.items():
@@ -99,7 +127,9 @@ def project_schema(schema):
         visible_character_ids={'type':'array', 'items':{'type':'string'}},
         observed_character_ids={'type':'array', 'items':{'type':'string'}},
         observer_location_id={'type':['string','null']})
-    steps = STEP.json_schema()
+    if version >= 7 and camera_mode == 'actor':
+        scene['properties'].pop('observer_location_id')
+    steps = step_adapter(version).json_schema()
     schema.setdefault('$defs', {}).update(steps.pop('$defs', {}))
     props.update(scene=scene, scene_steps={'type':'array', 'maxItems':64, 'items':steps},
         agency_findings={'type':'array','items':{'type':'object','additionalProperties':False,
@@ -108,14 +138,14 @@ def project_schema(schema):
             'required':['narrative_evidence','classification']}})
     schema['required'] = ['scene', 'scene_steps']
     from backend.runtime_v3.scene_schema import project_structure
-    project_structure(schema)
+    project_structure(schema, movement_type='GroupMovementStep' if version >= 7 else 'MovementStep', interaction_type='TravellingInteraction' if version >= 7 else 'InteractionStep')
     return schema
 
 
-@lru_cache(maxsize=1)
-def input_schema():
+@lru_cache(maxsize=8)
+def input_schema(version=6, camera_mode=None):
     from backend.runtime_v3.raw import prompt_schema
-    return prompt_schema(semantic_slice=True, scene_sequence=True, consequence_first=True,
+    return prompt_schema(semantic_slice=True, scene_sequence=True, spatial_version=version, camera_mode=camera_mode, consequence_first=True,
                          explicit_departures=True, grounded_choices=True, player_agency_required=True)
 
 
@@ -130,12 +160,12 @@ def decode(payload):
     return deepcopy(payload)
 
 
-def validate(payload, state=None):
+def validate(payload, state=None, *, version=6, collect=False):
     from jsonschema import Draft202012Validator
     from backend.services.world_delta_errors import StructuralDeltaError
     p = decode(payload)
     errors = []
-    for error in Draft202012Validator(input_schema()).iter_errors(p):
+    for error in Draft202012Validator(input_schema(version, state['camera']['mode'] if state else None)).iter_errors(p):
         path = list(error.absolute_path)
         if path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
             continue  # Existing optional-domain owners still isolate annotation errors.
@@ -145,7 +175,9 @@ def validate(payload, state=None):
     if len(set(ids)) != len(ids):
         errors.append(StructuralDeltaError('Повторный ID смыслового шага.',
             'semantic_duplicate', section='scene_steps'))
-    errors.extend(independent_scene_errors(p, state, errors))
+    errors.extend(independent_scene_errors(p, state, errors, version=version))
+    if collect:
+        return p, errors
     if errors:
         raise StructuralDeltaError.combine(errors)
     return p
@@ -160,13 +192,19 @@ def schema_diagnostics(error, payload):
     from backend.services.world_delta_errors import StructuralDeltaError
     path = list(error.absolute_path)
     children = error.context
+    if (error.validator == 'additionalProperties' and path == ['scene']
+            and set(error.instance) - set(error.schema.get('properties', {})) == {'observer_location_id'}):
+        return [StructuralDeltaError('Камера актёра не принимает observer_location_id. Repair scene снимает эту недопустимую аннотацию.',
+            'camera_invalid', section='scene', field='observer_location_id', path='scene.observer_location_id')]
     if error.validator == 'oneOf' and len(path) == 2 and path[0] == 'scene_steps':
         kind = error.instance.get('kind') if isinstance(error.instance, dict) else None
-        name = {'movement': 'MovementStep', 'interaction': 'InteractionStep',
-                'information': 'InformationStep', 'occurrence': 'OccurrenceStep'}.get(kind)
+        names = {'movement': ('MovementStep', 'GroupMovementStep'),
+                 'interaction': ('InteractionStep', 'TravellingInteraction'),
+                 'information': ('InformationStep', 'TravellingInformation'),
+                 'occurrence': ('OccurrenceStep',)}.get(kind, ())
         branches = error.schema['oneOf']
         selected = next((i for i, arm in enumerate(branches)
-                         if arm.get('$ref', '').endswith('/' + str(name))
+                         if any(arm.get('$ref', '').endswith('/' + name) for name in names)
                          or arm.get('properties', {}).get('kind', {}).get('const') == kind), None)
         if selected is not None:
             children = [e for e in children if list(e.schema_path)[0] == selected]
@@ -213,7 +251,7 @@ def schema_diagnostics(error, payload):
     return result
 
 
-def independent_scene_errors(payload, state, schema_errors):
+def independent_scene_errors(payload, state, schema_errors, *, version=6):
     """Check declarations, never tentative routes or partially compiled records.
 
     A malformed node cannot support dependent checks. Other valid nodes and
@@ -235,7 +273,7 @@ def independent_scene_errors(payload, state, schema_errors):
     for index, value in enumerate(payload['scene_steps']):
         path = dict(section='scene_steps', index=index)
         try:
-            step = STEP.validate_python(value)
+            step = step_adapter(version).validate_python(value)
         except ValidationError as exc:
             for error in exc.errors(include_input=False, include_url=False):
                 loc = list(error['loc'])
@@ -258,10 +296,22 @@ def independent_scene_errors(payload, state, schema_errors):
         if step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous':
             reject('Не установлен относительный порядок значимых шагов.',
                    'scene_order_ambiguous', **path)
+        during = getattr(step, 'during_step_id', None)
+        if during:
+            source = next((s for s in payload['scene_steps'][:index] if isinstance(s, dict) and s.get('id')==during), None)
+            if not source or source.get('kind')!='movement' or source.get('assertion')!='completed_arrival':
+                reject('Разговор в пути требует предшествующий фактический совместный маршрут.',
+                       'scene_route_invalid', field='during_step_id', **path)
         actor = getattr(step, 'actor_id', getattr(step, 'source_actor_id', None))
         targets = getattr(step, 'target_ids', [])
+        if isinstance(step, GroupMovementStep):
+            actor = camera['controlled_actor_id'] if camera and camera['controlled_actor_id'] in step.actor_ids else step.actor_ids[0]
         if camera is not None:
             roles = set(([actor] if actor else []) + targets)
+            if isinstance(step, GroupMovementStep):
+                roles.update(step.actor_ids)
+                if len(set(step.actor_ids)) != len(step.actor_ids):
+                    reject('Повторный участник пути.', 'scene_step_invalid', **path)
             if isinstance(step, InformationStep):
                 roles.update(cid for claim in step.claims for cid in claim.perceived_by)
             if isinstance(step, OccurrenceStep):
@@ -273,9 +323,9 @@ def independent_scene_errors(payload, state, schema_errors):
             if step.input_source and (actor is None or actor != camera['controlled_actor_id']):
                 reject('Источник ввода принадлежит только управляемому автору.',
                        'player_action_source_invalid', **path)
-        if (camera is not None and isinstance(step, MovementStep)
+        if (camera is not None and isinstance(step, MovementFields)
                 and actor is not None and actor == camera['controlled_actor_id']
-                and step.assertion in ('departure', 'completed_arrival')
+                and step.assertion in ('departure', 'completed_arrival', 'local_exit')
                 and step.input_source is None and step.involuntary_source_id is None):
             reject('Перемещение управляемого героя требует input_source с релевантной цитатой '
                    'ввода или involuntary_source_id. Источник соседнего шага не наследуется.',
@@ -294,8 +344,21 @@ def independent_scene_errors(payload, state, schema_errors):
     return errors
 
 
-def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
-    p = validate(payload, state)
+def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version=6, defer_errors=False):
+    from backend.services.world_delta_errors import StructuralDeltaError
+    p, errors = validate(payload, state, version=version, collect=True)
+    # Typed declarations remain usable as proposals for independent diagnostics.
+    # They confer no authority and pending errors make publication impossible.
+    deferred = {'camera_invalid', 'movement_agency', 'player_action_source_invalid', 'movement_endpoint_invalid'}
+    if errors and (not defer_errors or any(e.code not in deferred for e in errors)):
+        raise StructuralDeltaError.combine(errors)
+    # Conditional endpoint rules do not make an otherwise typed proposal
+    # unreadable; malformed field types still cannot support dependent checks.
+    if errors:
+        try:
+            for step in p['scene_steps']: step_adapter(version).validate_python(step)
+        except ValidationError:
+            raise StructuralDeltaError.combine(errors)
     original=deepcopy(p)
     records = {name:deepcopy(p.get(name, [])) for name in SECTIONS}
     warnings=[]
@@ -309,20 +372,24 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
     positions.update({c['id']:None for c in records['promotions']})
     aliases = {s['id']:identity('scene-step', turn_id, namespace, s['id']) for s in p['scene_steps']}
     actions, movement_sources = [], {}
+    event_routes = {}
+    local_exits = set()
     order=-1
     for index, value in enumerate(p['scene_steps']):
-        step = STEP.validate_python(value)
+        step = step_adapter(version).validate_python(value)
         if step.timing!='simultaneous': order += 1
         eid = aliases[step.id]
         actor = getattr(step, 'actor_id', getattr(step, 'source_actor_id', None))
         targets = getattr(step, 'target_ids', [])
+        if isinstance(step, GroupMovementStep):
+            actor = camera['controlled_actor_id'] if camera and camera['controlled_actor_id'] in step.actor_ids else step.actor_ids[0]
         if isinstance(step, OccurrenceStep) and step.input_source:
             actor = camera['controlled_actor_id'] if camera['controlled_actor_id'] in step.actor_ids else None
         action_id = None
         if step.input_source:
             action_id = identity('scene-action', turn_id, namespace, step.id)
             outcome = getattr(step, 'outcome', 'completed')
-            if isinstance(step, MovementStep) and step.assertion in ('intent','preparation','attempt'):
+            if isinstance(step, MovementFields) and step.assertion in ('intent','preparation','attempt'):
                 outcome = 'attempted'
             actions.append(dict(id=action_id, player_evidence=step.input_source.quote,
                 meaning=step.input_source.meaning, target_ids=step.input_source.intended_target_ids
@@ -332,34 +399,45 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
         common = dict(id=eid, text=step.text, evidence=step.evidence, order=order,
                       advance_candidate_ids=step.advance_candidate_ids)
         if step.minute is not None: common['minute'] = step.minute
-        if isinstance(step, MovementStep):
+        during = getattr(step, 'during_step_id', None)
+        if during:
+            event_routes[eid] = aliases[during]
+        if isinstance(step, MovementFields):
             if step.assertion in ('intent','preparation','attempt'):
                 continue  # No completed geography, contact, or Knowledge.
-            movement = dict(actor_id=actor, assertion=step.assertion,
-                from_location_id=positions[actor], to_location_id=step.endpoint,
-                order=order, evidence=step.evidence, source_event_id=eid)
-            if action_id: movement['player_action_id'] = action_id
-            if step.involuntary_source_id:
-                movement.update(player_assertion='involuntary', source_event_id=step.involuntary_source_id)
-            movement_sources[len(records['movements'])] = index
-            records['movements'].append(movement)
-            positions[actor] = step.endpoint
-            event = dict(common, participants=[actor], witnesses=[], medium='action',
-                location_id=step.endpoint if step.endpoint is not None else movement['from_location_id'])
+            participants = movers(step)
+            if step.assertion == 'local_exit':
+                # Leaving a local interaction is not crossing a canonical address.
+                local_exits.update(participants)
+                event = dict(common, participants=participants, witnesses=[], medium='action')
+            else:
+                for traveller in participants:
+                    movement = dict(actor_id=traveller, assertion=step.assertion,
+                        from_location_id=positions[traveller], to_location_id=step.endpoint,
+                        order=order, evidence=step.evidence, source_event_id=eid)
+                    if action_id and traveller == camera['controlled_actor_id']:
+                        movement['player_action_id'] = action_id
+                    if step.involuntary_source_id and traveller == camera['controlled_actor_id']:
+                        movement.update(player_assertion='involuntary', source_event_id=step.involuntary_source_id)
+                    movement_sources[len(records['movements'])] = index
+                    records['movements'].append(movement)
+                    positions[traveller] = step.endpoint
+                event = dict(common, participants=participants, witnesses=[], medium='action',
+                    location_id=step.endpoint if step.endpoint is not None else movement['from_location_id'])
             if action_id: event.update(actor_id=actor, target_ids=[], player_action_id=action_id)
         elif isinstance(step, InformationStep):
             item = dict(common, source_actor_id=step.source_actor_id, target_ids=targets,
                 medium=step.medium, claims=[c.model_dump(exclude_none=True) for c in step.claims])
             if step.channel: item['interaction_channel'] = step.channel
             if action_id: item['player_action_id'] = action_id
-            if step.channel != 'call' and actor in positions and positions[actor] is not None:
+            if not during and step.channel != 'call' and actor in positions and positions[actor] is not None:
                 item['location_id'] = positions[actor]
             records['information_events'].append(item)
             continue
         elif isinstance(step, InteractionStep):
             event = dict(common, participants=list(dict.fromkeys([actor]+targets)), witnesses=[],
                 actor_id=actor, target_ids=targets, medium='conversation', interaction_channel=step.channel)
-            if step.channel == 'physical' and positions.get(actor) is not None:
+            if not during and step.channel == 'physical' and positions.get(actor) is not None:
                 event['location_id'] = positions[actor]
             if action_id:
                 event['player_action_id'] = action_id
@@ -378,7 +456,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
             location = observer_location
     visible = scene.pop('visible_character_ids', None)
     if visible is None:
-        visible = [cid for cid in camera['present_character_ids'] if positions.get(cid)==location]
+        visible = ([subject] if camera['mode']=='actor' and subject in local_exits else
+                   [cid for cid in camera['present_character_ids'] if positions.get(cid)==location and cid not in local_exits])
         if subject in positions and subject not in visible:
             visible.append(subject)
     scene.update(location_id=location,present_character_ids=visible)
@@ -414,12 +493,13 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
              actions=actions, narrative_audit=[dict(f,player_action_id=None) for f in p.get('agency_findings',[])]))
     raw.semantic_candidate = original
     raw.movement_sources = movement_sources
+    raw.event_routes = event_routes
     # Map compiler failures too: they happen before a Resolver can own the raw.
     from backend.services.world_delta_errors import StructuralDeltaError
     try:
         raw = compile_semantic(raw,state,narrative,turn_id,namespace=namespace)
     except StructuralDeltaError as exc:
-        errors=[]
+        compiled_errors=[]
         for row in exc.diagnostics('compilation'):
             section,index=row.get('section'),row.get('index')
             if section=='information_events' and isinstance(index,int):
@@ -427,8 +507,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
                 row.update(compiled_path=row.get('path'),section='scene_steps',domain='scene_steps',index=candidates[index],
                     path=f'scene_steps[{candidates[index]}]',source_ids=[original['scene_steps'][candidates[index]]['id']])
             path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
-            errors.append(StructuralDeltaError(row['repair_reason'],row['code'],repairable=exc.repairable,**path))
-        raise StructuralDeltaError.combine(errors) from exc
+            compiled_errors.append(StructuralDeltaError(row['repair_reason'],row['code'],repairable=exc.repairable,**path))
+        raise StructuralDeltaError.combine(errors + compiled_errors) from exc
     raw.records['events'].sort(key=lambda event:event['order'])
     raw.event_sources = {}
     for i, event in enumerate(raw.records['events']):
@@ -437,6 +517,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None):
             raw.event_sources[i] = dict(section='scene_steps',index=next(n for n,s in enumerate(p['scene_steps']) if s['id']==local),local_id=local)
     raw.semantic_candidate = original
     raw.movement_sources = movement_sources
+    raw.event_routes = event_routes
+    raw.preflight_errors = [row for e in errors for row in e.diagnostics('compilation')]
     return raw
 
 
@@ -537,3 +619,21 @@ def source_diagnostic(raw, row):
     elif section=='final_scene':
         row.update(compiled_path=row.get('path'),section='scene',domain='scene',path='scene')
     return row
+
+
+SPATIAL_CONTRACT = CONTRACT.replace('Extraction/6', 'Extraction/7') + """
+A movement uses actor_ids for ALL actually travelling together, one reached endpoint and one input_source
+only when the controlled actor travels. Runtime creates per-actor routes; NPCs inherit no player choice.
+One completed_arrival suffices for a completed shared trip; do not duplicate departure/arrival/quotes.
+Retain conversation as separate steps before/after the trip. For conversation DURING a completed shared trip,
+reference its earlier movement step with during_step_id; Runtime checks co-travellers, no fake intermediate location.
+Examples: two people walk to a square and talk there => one arrival [both], then conversation.
+One stays behind => arrival names only traveller. Preparing coats/planning a trip => preparation/intent, no arrival.
+departure means crossing the boundary of the canonical location to unknown destination.
+Leaving the kitchen for another room INSIDE the same canonical home => local_exit, endpoint=null;
+retain address, remove from local visible cast. A closed door grants no perception: perceived_by only actual hearers.
+If rooms already are canonical child locations, use arrival to that room; common parent proves no contact.
+A new reached shore may be declared in locations; never keep the old address just because destination is new.
+Preserve BOTH travel and conversation from compound actions. Visibility never supplies missing travellers.
+Create each new assertion once: inline fact OR a top-level fact referenced by fact_id, not both.
+"""

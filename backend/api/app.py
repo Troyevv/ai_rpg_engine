@@ -236,6 +236,10 @@ def create_app(db_path=None, recover=True):
             if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
             settings['time_skip'] = body.time_skip.model_dump()
         settings['expected_revision'] = body.revision
+        if body.recovery_source_job_id:
+            if body.kind != 'turn' or body.text or body.time_skip:
+                raise ValueError('Восстановление использует исходный ввод и Narrative обычного хода.')
+            settings['_recovery_source_job_id'] = body.recovery_source_job_id
         settings['target_turn_id'] = body.target_turn_id
         settings['rollback_following'] = body.rollback_following
         jid = engine.submit(repo, sid, body.text, body.kind, settings, api_key=credentials.resolve(body.config.provider, body.key()))

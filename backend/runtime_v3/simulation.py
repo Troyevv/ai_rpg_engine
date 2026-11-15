@@ -125,13 +125,13 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     feedback=None
     from backend.runtime_v3.scene_repair import SceneCandidate
     semantic_candidate = SceneCandidate(camera['world_state'], narrative, '', state['meta']['turn_id'],
-        on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if contract_version >= 6 else None
+        version=config.get('_extraction_contract', 1), on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if contract_version >= 6 else None
     for attempt in range(2):
         messages=background_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            raw = semantic_candidate.parse(payload) if semantic_candidate else payload
+            raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else payload
             resolved=StateResolver(camera['world_state'],narrative,'',chronology_events=(world_history or {}).get('events', []),letter_sources=artifacts,pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],**boundary,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 relationship_query=(world_history or {}).get('_relationship_query'),relationship_receipts=history_batch.get('relationship_changes',[]),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(raw)

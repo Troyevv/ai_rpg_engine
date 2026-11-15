@@ -17,9 +17,12 @@ def recorded_extraction_fixture_version(request, monkeypatch):
     opt out explicitly; no production parser accepts legacy payloads as v6.
     Direct tests specifying v1-v5 resolver/context options remain unchanged.
     """
-    if request.node.get_closest_marker('extraction_v6') is None:
-        monkeypatch.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 5)
+    if request.node.get_closest_marker('extraction_v7') is not None:
+        return
+    monkeypatch.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION',
+                        6 if request.node.get_closest_marker('extraction_v6') else 5)
 
 
 def pytest_configure(config):
-    config.addinivalue_line('markers', 'extraction_v6: exercise new server-default Extraction/6 jobs')
+    config.addinivalue_line('markers', 'extraction_v6: exercise recorded Extraction/6 jobs')
+    config.addinivalue_line('markers', 'extraction_v7: exercise server-default Extraction/7 jobs')

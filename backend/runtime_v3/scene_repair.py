@@ -35,33 +35,34 @@ def record_key(item):
 
 
 class SceneCandidate:
-    def __init__(self, before, narrative, player_input, turn_id, *, namespace=None, on_record=None):
+    def __init__(self, before, narrative, player_input, turn_id, *, namespace=None, on_record=None, version=6):
         self.before,self.narrative,self.player_input,self.turn_id=before,narrative,player_input,turn_id
+        self.version=version
         self.namespace=namespace
         self.on_record=on_record
         self.base=None;self.raw=None;self.scope=None;self.hash=None;self.revisions=[]
-        self.binding=digest([before,narrative,player_input,turn_id,namespace,6])
+        self.binding=digest([before,narrative,player_input,turn_id,namespace,version])
 
-    def parse(self, payload):
+    def parse(self, payload, *, defer_errors=False):
         self.raw = None
         mode = 'targeted' if self.scope is not None else 'full'
         try:
-            return self._parse(payload)
+            return self._parse(payload, defer_errors=defer_errors)
         finally:
             if self.on_record:
                 from dataclasses import asdict
-                self.on_record(dict(contract=6, binding=self.binding, mode=mode,
+                self.on_record(dict(contract=self.version, binding=self.binding, mode=mode,
                     candidate_hash=digest([self.binding,self.base]) if self.base is not None else None,
                     candidate=self.base, compiled=asdict(self.raw) if self.raw is not None else None,
-                    turn_id=self.turn_id, namespace=self.namespace))
+                    turn_id=self.turn_id, namespace=self.namespace, version=self.version, defer_errors=defer_errors))
 
-    def _parse(self, payload):
+    def _parse(self, payload, *, defer_errors=False):
         if self.scope is not None:
             candidate=self.apply(payload)
         else:
             candidate=decode(payload)
         self.base=deepcopy(candidate) if all(isinstance(s,dict) and isinstance(s.get('id'),str) and s['id'] for s in candidate['scene_steps']) and len({s['id'] for s in candidate['scene_steps']})==len(candidate['scene_steps']) else None
-        self.raw=compile_scene(candidate,self.before,self.narrative,self.turn_id,namespace=self.namespace)
+        self.raw=compile_scene(candidate,self.before,self.narrative,self.turn_id,namespace=self.namespace, version=self.version, defer_errors=defer_errors)
         self.raw.warnings.extend(self.revisions)
         return self.raw
 
@@ -69,7 +70,7 @@ class SceneCandidate:
         rows=diagnostics if isinstance(diagnostics,list) else [diagnostics]
         if self.base is None:
             return json.dumps(dict(repair_mode='full',diagnostics=rows,original_extraction=original,
-                contract='Return one complete Extraction/6 scene_steps + scene. No patch base exists. Never rewrite Narrative/input/before.'),ensure_ascii=False)
+                contract=f'Return one complete Extraction/{self.version} scene_steps + scene. No patch base exists. Never rewrite Narrative/input/before.'),ensure_ascii=False)
         steps=self.base['scene_steps']
         selected=set(); sections=set(); selected_records={}
         claim_only = bool(rows) and all(row.get('section') == 'scene_steps'
@@ -94,9 +95,20 @@ class SceneCandidate:
                 section,index='scene_steps',source['index']
             if section=='scene_steps' and isinstance(index,int) and index<len(steps): selected.add(steps[index]['id'])
             elif section=='scene' and row.get('field')=='observer_location_id':
-                # Camera-mode authority is independent of any route. Clearing
-                # its override must not authorize edits to unrelated NPC steps.
                 sections.add('scene')
+                # A conflicting legacy camera declaration may be the only typed
+                # evidence of an omitted route. Reopen its connected spatial
+                # group, never infer travellers from the final cast.
+                actor = self.before['camera']['controlled_actor_id']
+                endpoint = self.before['characters'].get(actor, {}).get('location_id')
+                for step in steps:
+                    travellers = step.get('actor_ids', [step.get('actor_id')])
+                    if step.get('kind') == 'movement' and actor in travellers and step.get('assertion') in ('departure','completed_arrival'):
+                        endpoint = step.get('endpoint')
+                declared = self.base['scene'].get('observer_location_id')
+                if actor and isinstance(declared, str) and declared != endpoint:
+                    selected.update(step['id'] for step in steps if actor in set().union(
+                        *(strings(step.get(k)) for k in ('actor_id','actor_ids','source_actor_id','target_ids'))))
             elif section in ('events','movements','player_agency','information_events','knowledge_gained','final_scene','scene','runtime',None):
                 selected.update(s['id'] for s in steps);sections.add('scene')
             elif section in SECTIONS or section in self.base:
@@ -145,6 +157,9 @@ class SceneCandidate:
             record_keys={section:[record_key(self.base[section][i]) for i in sorted(indexes)]
                          for section,indexes in selected_records.items()}, dependencies=sorted(dependencies),actor_ids=sorted(actors))
         if claim_only: self.scope['claim_indexes'] = {key: sorted(value) for key, value in claim_indexes.items()}
+        camera_repair = ('scene is merged; supplying sections.scene removes any forbidden observer annotation in actor mode. '
+                         if self.version >= 7 and self.before['camera']['mode']=='actor' else
+                         'scene is merged: omission keeps a prior field; set observer_location_id=null to clear an invalid observer override in actor mode. ')
         return json.dumps(dict(repair_mode='targeted',candidate_hash=self.hash,scope=self.scope,
             diagnostics=rows,original_extraction=self.base,record_keys={k:[record_key(item) for item in v] for k,v in self.base.items() if k in sections and isinstance(v,list)},
             contract='Return candidate_hash, replacements, sections, reason only. Replace listed step IDs in place; no deletions or reordering. '
@@ -153,8 +168,7 @@ class SceneCandidate:
                 'New dependencies may be supplied as additions after an allowed step. Reinterpret the full unchanged Narrative/input. '
                 'Address ALL listed diagnostics together, not only the first. '
                 'When scope.claim_indexes is present, replace only those claims at the same indexes; preserve the step fields, claim count and all other claims. No additions or withdrawals in this mode. '
-                'scene is merged: omission keeps a prior field; set observer_location_id=null to clear an invalid observer override in actor mode. '
-                'All connected affected consequences must agree; independent records are retained by code. '
+                + camera_repair + 'All connected affected consequences must agree; independent records are retained by code. '
                 'Do not erase a confirmed outcome or invent arrival/consent to pass. Semantic correction of a mistaken assertion needs an explicit reason. '
                 'Invalid prose uses agency_findings/chronology_claims for existing narrative recovery. One automatic repair only.'),ensure_ascii=False,separators=(',',':'))
 
@@ -232,7 +246,13 @@ class SceneCandidate:
         for section,value in sections.items():
             if section=='scene':
                 if not isinstance(value,dict):fatal('Неверная сцена repair.', 'scene_repair_invalid')
-                result['scene'].update(deepcopy(value));continue
+                result['scene'].update(deepcopy(value))
+                if self.version >= 7 and self.before['camera']['mode']=='actor':
+                    # Never ask the actor-camera provider for a forbidden field,
+                    # even to null it. Replacing this section drops only that
+                    # non-executable annotation, not any canonical consequence.
+                    result['scene'].pop('observer_location_id', None)
+                continue
             if not isinstance(value,list):fatal('Секция repair должна оставаться списком.', 'scene_repair_invalid',section=section)
             old=self.base.get(section,[])
             if not isinstance(old,list):old=[]

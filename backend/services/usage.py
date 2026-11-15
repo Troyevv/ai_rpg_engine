@@ -57,7 +57,7 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         if stage in STAGES:
             selected=config.get('_extraction_transport',transport(config))
             schema=request_schema(messages)
-            effective.update(extraction_contract=6, extraction_transport=selected, extraction_schema=schema)
+            effective.update(extraction_contract=config['_extraction_contract'], extraction_transport=selected, extraction_schema=schema)
             if selected=='responses_json_schema':
                 effective.pop('response_format',None)
                 effective['text_format']={'type':'json_schema','name':'extraction_v6'}

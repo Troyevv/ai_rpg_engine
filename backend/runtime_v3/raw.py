@@ -33,6 +33,8 @@ class RawTurnResult:
     event_sources: dict = field(default_factory=dict)
     semantic_candidate: dict | None = None
     movement_sources: dict = field(default_factory=dict)
+    preflight_errors: list = field(default_factory=list)
+    event_routes: dict = field(default_factory=dict)
 
     def __post_init__(self):
         # Internal metadata default shared by legacy parsing and semantic compilation.
@@ -525,7 +527,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False, spatial_version=6, camera_mode=None):
     """Model-facing projection of canonical types, with focused field guidance."""
     def structural(node):
         if isinstance(node, dict):
@@ -674,7 +676,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
                                 'final_scene': schema['properties']['final_scene']}
     if scene_sequence:
         from backend.runtime_v3.scene_steps import project_schema
-        schema = structural(project_schema(schema))
+        schema = structural(project_schema(schema, version=spatial_version, camera_mode=camera_mode))
     return compact_prompt_schema(schema, agency_audit_required=agency_audit_required, scene_sequence=scene_sequence)
 
 

@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 6
+EXTRACTION_VERSION = 7
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -130,10 +130,11 @@ def resolver_options(state, player_input, kind='turn', contract_version=1, *, ti
 def contract_options(version):
     """Resolver half of the recorded producer contract, independent of mode."""
     return dict(consequence_first=version >= 3, preserve_scene_locations=version >= 4,
-                choice_grounding_required=version >= 4, semantic_slice=version >= 5, scene_sequence=version >= 6)
+                choice_grounding_required=version >= 4, semantic_slice=version >= 5, scene_sequence=version >= 6,
+                **(dict(scene_version=version) if version >= 7 else {}))
 
 
-def review(resolver, raw):
+def review(resolver, raw, *, errors=None):
     """Run before any domain application, including optional Event salvage."""
     from backend.runtime_v3.resolver import normalized
     value = raw.player_agency
@@ -195,30 +196,37 @@ def review(resolver, raw):
     if resolver.agency_audit_required and not resolver.consequence_first and parsed.narrative_audit is None:
         fatal('Новый Extraction требует narrative_audit всего Narrative, даже вне Events.',
               'player_agency_audit_missing', repairable=True, section='player_agency')
+    from backend.services.world_delta_errors import StructuralDeltaError
     actions = {}
+    resolver.rejected_player_actions = set()
     for i, action in enumerate(parsed.actions):
-        path = dict(section='player_agency', path=f'player_agency.actions[{i}]')
-        if resolver.agency_audit_required and 'target_mode' not in action.model_fields_set:
-            fatal('Укажите явный target_mode: interaction или reference.',
-                  'player_action_target_mode_missing', repairable=True, **path)
-        if (resolver.mode != 'turn' or not resolver.protected_actor_id
-                or action.id in actions or not normalized(action.player_evidence)
-                or normalized(action.player_evidence) not in normalized(resolver.player_input)):
-            fatal('Нет однозначного источника действия в текущем вводе игрока.',
-                  'player_action_source_invalid', repairable=True, **path)
-        intended, actual = set(action.target_ids), set(action.narrative_target_ids)
-        partial_subset = action.outcome == 'partial' and actual <= intended
-        deferred = action.outcome in ('deferred', 'not_performed') and not actual
-        if action.meaning != 'preserved':
-            narrative_conflict(**path)
-        if actual != intended and not (partial_subset or deferred):
-            fatal('Extraction пометила смысл как preserved, но target_ids и narrative_target_ids противоречат друг другу. '
-                  'Перечитайте исходный ввод и неизменный Narrative, исправьте классификацию и ID целей вместе. '
-                  'Упоминание/невмешательство использует reference и не требует контакта. '
-                  'Если сама проза изменила выбранное действие или адресата, укажите meaning=changed/status=violated; '
-                  'не подменяйте цели ради сохранения.',
-                  'player_action_targets_inconsistent', repairable=True, **path)
-        actions[action.id] = action
+        try:
+            path = dict(section='player_agency', path=f'player_agency.actions[{i}]')
+            if resolver.agency_audit_required and 'target_mode' not in action.model_fields_set:
+                fatal('Укажите явный target_mode: interaction или reference.',
+                      'player_action_target_mode_missing', repairable=True, **path)
+            if (resolver.mode != 'turn' or not resolver.protected_actor_id
+                    or action.id in actions or not normalized(action.player_evidence)
+                    or normalized(action.player_evidence) not in normalized(resolver.player_input)):
+                fatal('Нет однозначного источника действия в текущем вводе игрока.',
+                      'player_action_source_invalid', repairable=True, **path)
+            intended, actual = set(action.target_ids), set(action.narrative_target_ids)
+            partial_subset = action.outcome == 'partial' and actual <= intended
+            deferred = action.outcome in ('deferred', 'not_performed') and not actual
+            if action.meaning != 'preserved':
+                narrative_conflict(**path)
+            if actual != intended and not (partial_subset or deferred):
+                fatal('Extraction пометила смысл как preserved, но target_ids и narrative_target_ids противоречат друг другу. '
+                      'Перечитайте исходный ввод и неизменный Narrative, исправьте классификацию и ID целей вместе. '
+                      'Упоминание/невмешательство использует reference и не требует контакта. '
+                      'Если сама проза изменила выбранное действие или адресата, укажите meaning=changed/status=violated; '
+                      'не подменяйте цели ради сохранения.',
+                      'player_action_targets_inconsistent', repairable=True, **path)
+            actions[action.id] = action
+        except StructuralDeltaError as exc:
+            if errors is None: raise
+            resolver.rejected_player_actions.add(action.id)
+            errors.append(exc)
     for i, finding in enumerate(parsed.narrative_audit or []):
         path = dict(section='player_agency', path=f'player_agency.narrative_audit[{i}]')
         reference = finding.player_action_id
