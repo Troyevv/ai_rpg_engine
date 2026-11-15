@@ -1,5 +1,7 @@
 # #257: A/B/C live comparison — no production candidate selected
 
+Subsequent separately authorized D experiment: [results and remaining blockers](semantic257-d-results.md). The proposal at the end of this historical A/B/C report has now been executed; D also did not qualify for production.
+
 2026-11-15, code `b7f96d8202f77f548f51739f868241d184886b44`. The approved maximum was 90 new calls / $6.00. The independent first series completed **27 candidates / 44 actual calls** (reservations 700–743), all with real usage receipts and zero reasoning tokens. Model-specific cold/peak conservative expense: **$0.90545616**. The existing Budget deliberately accounted every call at Pro rates: **$1.5916824**, below its $6 ceiling. All 699 historical reservation rows are unchanged; no unknown new outcome remains.
 
 **Neither B nor C qualifies for production.** The porch failure and unauthorized-refusal failure remain in every arm. Therefore the conditional confirmation series, six holdouts, sequential recovery, gameplay and production integration are **NOT RUN**. The unused allowance is not permission for D or gameplay. No original Narrative was regenerated and no successful or failed candidate was rerolled. One permitted repair was the only second chance.
