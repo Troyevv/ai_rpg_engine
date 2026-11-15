@@ -728,7 +728,7 @@ def generation_fixture(prep, jid, config, *args):
 draft_generation.run = generation_fixture
 
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072}.get(model, 32768)}
+    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536}.get(model, 32768)}
 }
 def authoring_stream(**kwargs):
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):

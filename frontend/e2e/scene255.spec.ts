@@ -18,6 +18,12 @@ test('v6 rejected scene retains input, targeted repair cap and explicit recovery
   const view=async()=>(await request.get(path)).json();
   const failed=await view();
   expect(failed.job.status).toBe('error');
+  expect(failed.job.error).toContain('Нет однозначного источника действия');
+  const stages=async()=>{
+    const accounting=await(await request.get(`${path}/accounting`)).json();
+    return accounting.requests.filter((r:{job_id:string})=>r.job_id===failed.job.id).map((r:{stage:string})=>r.stage).sort();
+  };
+  expect(await stages()).toEqual(['extraction','extraction_repair','narrative']);
   expect(failed.job.user_text).toBe('Иду в парк.');
   expect(failed.job.narrative).toContain('дошёл до парка');
   await expect(page.getByText('Сцена не сохранена.',{exact:false})).toBeVisible();
@@ -29,6 +35,8 @@ test('v6 rejected scene retains input, targeted repair cap and explicit recovery
   await expect.poll(async()=>(await view()).job.status).toBe('saved');
   const saved=await view();
   expect(saved.revision).toBe(failed.revision+1);
+  expect(saved.job.narrative).toBe(failed.job.narrative);
+  expect(await stages()).toEqual(['extraction','extraction','extraction_repair','narrative']);
   await page.reload();
   await expect(input).toBeEnabled();
   await input.fill('Иду в парк.');

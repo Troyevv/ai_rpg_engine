@@ -71,6 +71,14 @@ python -m pytest -q tests/test_claim_contract255.py tests/test_scene_steps255.py
 
 Full CI results for the implementing commit are linked in PR #248 after completion, separately from earlier green runs. This report does not claim full CI or live acceptance before those checks finish.
 
+## Full-CI finding: E2E fixture capacity mismatch
+
+Verify #525 exposed a reproducible `scene255.spec.ts` failure on desktop/mobile. The test requested a 65,536 context window, but its local model stub advertised 32,768. With the larger structural schema, the mandatory context was 24,740 tokens against a 24,320 input budget. No Extraction call was dispatched. The test previously asserted only an error and Narrative presence, so it mistook this capacity refusal for its intended agency failure.
+
+The fixture now advertises the same **65,536** window already requested by this specific test. The default mock capacity and every production context limit remain unchanged. Assertions are stronger: the initial failure must be the intended player-action source error, accounting must show one Narrative/Extraction/repair, and manual Retry must preserve that Narrative and add exactly one Extraction. Local desktop/mobile result: **2 passed in 22.5s**. No timeout increase, test skip, production assertion relaxation or model call.
+
+This is a QA fixture/configuration defect uncovered by real schema growth, not evidence that production Retry failed. The larger schema does consume more context: genuinely insufficient model windows still fail explicitly without dropping essential state. Real DeepSeek acceptance remains separate.
+
 ## Paid recovery proposal (not executed)
 
 Keep reservation 665's full conservative charge and actual receipts 666/667 unchanged. No new ledger rows/calls were created for this free stage. The previous two real extractions used 44,009 input / 2,936 output tokens, conservative cost $0.0167259; this is an estimate source, not a new authorization.
