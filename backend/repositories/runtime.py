@@ -112,10 +112,13 @@ class RuntimeStorage:
         from backend.services.usage import price_snapshot
         rid = uuid.uuid4().hex
         with self.connect() as db:
-            job = db.execute('SELECT save_id,session_id FROM game_jobs WHERE id=?', (job_id,)).fetchone()
+            job = db.execute('SELECT save_id,session_id,attempt_epoch,revision FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             workspace = None
             if not job and save_id is None:
                 workspace = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()[0]
+            diagnostics = dict(diagnostics)
+            diagnostics['provider_attempt'] = dict(request_id=rid, job_id=job_id, stage=stage,
+                **(dict(attempt_epoch=getattr(self,'worker_epoch',None) if getattr(self,'worker_epoch',None) is not None else job['attempt_epoch'], revision=job['revision']) if job else {}))
             db.execute('''INSERT INTO llm_requests(id,job_id,save_id,workspace_id,session_id,stage,provider,model,thinking,context_json,diagnostics_json,config_json,pricing_json)
               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (rid, job_id, job['save_id'] if job else save_id, workspace,
               job['session_id'] if job else None, stage, config.get('provider','local'), config['model'], config.get('thinking','off'),
@@ -130,7 +133,11 @@ class RuntimeStorage:
             db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.extraction_candidate',json(?)) WHERE id=?",
                        (dump(audit), request_id))
 
-    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None):
+    def record_provider_attempt(self, rid, attempt):
+        with self.connect() as db:
+            db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.provider_attempt',json_patch(COALESCE(json_extract(diagnostics_json,'$.provider_attempt'),'{}'),json(?))) WHERE id=?", (dump(attempt), rid))
+
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None, provider_attempt=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
@@ -138,6 +145,11 @@ class RuntimeStorage:
             amount = cost(inp, out, cached, pricing)
             db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=?,response_text=? WHERE id=?',
                        (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, response_text, rid))
+            if provider_attempt is not None:
+                # json_patch would remove null values; preserve explicit unknown finish/status.
+                current = json.loads(db.execute('SELECT diagnostics_json FROM llm_requests WHERE id=?',(rid,)).fetchone()[0])
+                current.setdefault('provider_attempt',{}).update(provider_attempt)
+                db.execute('UPDATE llm_requests SET diagnostics_json=? WHERE id=?',(dump(current),rid))
             if provider_error is not None:
                 db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.provider_error',json(?)) WHERE id=?",(dump(provider_error),rid))
 

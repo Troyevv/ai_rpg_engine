@@ -321,6 +321,7 @@ def chat_stream(
     if not key:
         raise ValueError('Укажи API-ключ провайдера.')
     client = OpenAI(base_url=spec.base_url, api_key=key, timeout=60.0, max_retries=0)
+    from backend.services.provider_attempt import emit, failed, identifier
     stream = None
     finish_reason = None
     from backend.services.answer_stream import AnswerStream
@@ -334,11 +335,13 @@ def chat_stream(
             effective_thinking = thinking_options(provider,model,thinking)[0]
             # Schema occupies one context slot, not both prompt text and API schema.
             wire_messages=[m for m in messages if not m.get('content','').startswith('JSON Schema\n')]
+            emit(phase='responses_create')
             stream=client.responses.create(model=model,input=wire_messages,
                 text={'format':{'type':'json_schema','name':'extraction_v6','schema':structured_schema}},
                 reasoning={'effort':'none' if effective_thinking=='off' else effective_thinking},
                 max_output_tokens=max_tokens,stream=True,
                 **({'temperature':temperature} if effective_thinking=='off' else {}))
+            emit(phase='responses_stream', provider_request_id=identifier((getattr(getattr(stream,'response',None),'headers',{}) or {}).get('x-request-id')))
             if on_stream:on_stream(stream)
             yield from response_events(stream,cancel_event,on_usage,on_finish)
             return
@@ -353,6 +356,7 @@ def chat_stream(
             extra['temperature'] = temperature
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
+        emit(phase='chat_create')
         stream = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -360,6 +364,7 @@ def chat_stream(
             stream=True,
             **extra,
         )
+        emit(phase='chat_stream')
         if on_stream is not None:
             on_stream(stream)
         for chunk in stream:
@@ -375,6 +380,7 @@ def chat_stream(
 
             if chunk.choices[0].finish_reason is not None:
                 finish_reason = chunk.choices[0].finish_reason
+                emit(terminal_seen=True, provider_status=identifier(finish_reason))
                 if on_finish:on_finish(finish_reason)
 
             delta = chunk.choices[0].delta
@@ -398,6 +404,7 @@ def chat_stream(
         if require_complete and finish_reason != "stop":
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:
+        failed(exc)
         if stream is None and getattr(exc,'status_code',None) is not None:
             raise ProviderHTTPError(deepseek_error(exc),exc.status_code,
                 provider_rejection(exc,messages,max_tokens,response_format)) from None

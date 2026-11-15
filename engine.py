@@ -81,7 +81,7 @@ def retry(storage, job_id, config, api_key=None, *, correct_chronology=False, re
         # change cannot silently turn it into a different experiment.
         job_id = storage.correct_chronology_job(job_id, revision, attempt_epoch)
     else:
-        storage.retry_job(job_id, config)
+        storage.retry_job(job_id, config, revision=revision, attempt_epoch=attempt_epoch)
     if config.get('provider') == 'deepseek':
         launch(storage.path, job_id, api_key=api_key)
     else:

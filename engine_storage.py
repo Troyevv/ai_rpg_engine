@@ -275,12 +275,15 @@ class EngineStorage:
             db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
         return new_id
 
-    def retry_job(self, job_id, config=None):
+    def retry_job(self, job_id, config=None, *, revision=None, attempt_epoch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             if job is None or not job['narrative_complete'] or job['status'] not in ('error', 'stopped'):
                 raise ValueError('Нет завершённого текста для повторной обработки.')
+            if ((revision is not None and revision != job['revision']) or
+                    (attempt_epoch is not None and attempt_epoch != job['attempt_epoch'])):
+                raise ValueError('Запрос восстановления устарел. Обнови состояние игры.')
             from backend.services.world_delta_errors import requires_narrative_reauthor
             if requires_narrative_reauthor(json.loads(job['repair_diagnostics_json'] or '[]')):
                 raise ValueError('Этот текст противоречит канону или выбору игрока. '

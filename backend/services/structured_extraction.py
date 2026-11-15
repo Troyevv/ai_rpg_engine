@@ -41,20 +41,28 @@ def request_schema(messages):
 
 def response_events(stream, cancel_event, on_usage, on_finish):
     """Parse Responses SSE; terminal status and a single text output required."""
+    from backend.services.provider_attempt import emit, identifier, ResponseStreamError
+    def reject(code, message): raise ResponseStreamError(code, message)
     complete=False;chunks=[];seen=set()
     for event in stream:
         if cancel_event is not None and cancel_event.is_set():raise RuntimeError('Генерация остановлена.')
-        if complete:raise RuntimeError('Данные после terminal response.')
+        if complete:reject('after_terminal', 'Данные после terminal response.')
         obj=event if isinstance(event,dict) else event.model_dump()
         kind=obj.get('type')
+        if kind in ('response.created','response.in_progress'):
+            response=obj.get('response') or {}
+            emit(provider_response_id=identifier(response.get('id')), provider_status=identifier(response.get('status')))
         if kind=='response.output_text.delta':
             seen.add((obj.get('output_index',0),obj.get('content_index',0)))
-            if len(seen)>1:raise RuntimeError('Несколько структурированных результатов провайдера.')
+            if len(seen)>1:reject('multiple_outputs', 'Несколько структурированных результатов провайдера.')
             delta=obj.get('delta')
-            if not isinstance(delta,str):raise RuntimeError('Повреждённый Responses stream.')
+            if not isinstance(delta,str):reject('malformed_delta', 'Повреждённый Responses stream.')
             chunks.append(delta);yield delta
         elif kind in ('response.completed','response.incomplete','response.failed'):
             response=obj.get('response',{})
+            emit(terminal_seen=True, terminal_event=kind, provider_status=identifier(response.get('status')),
+                 **(dict(provider_response_id=identifier(response['id'])) if response.get('id') else {}),
+                 incomplete_reason=identifier((response.get('incomplete_details') or {}).get('reason')))
             usage=response.get('usage')
             if usage and on_usage:
                 on_usage(dict(prompt_tokens=usage['input_tokens'],completion_tokens=usage['output_tokens'],
@@ -68,14 +76,14 @@ def response_events(stream, cancel_event, on_usage, on_finish):
             if finish=='length':
                 from llm import OutputLimitReached
                 raise OutputLimitReached('Достигнут лимит структурированного ответа.')
-            if finish!='stop':raise RuntimeError('Структурированный ответ не завершён.')
+            if finish!='stop':reject('provider_incomplete', 'Структурированный ответ не завершён.')
             outputs=response.get('output',[])
             messages=[o for o in outputs if o.get('type')=='message']
             if len(messages)!=1 or any(o.get('type') not in ('message','reasoning') for o in outputs):
-                raise RuntimeError('Ожидался один текстовый результат, без tool calls.')
+                reject('unexpected_output', 'Ожидался один текстовый результат, без tool calls.')
             parts=messages[0].get('content',[])
             if len(parts)!=1 or parts[0].get('type')!='output_text' or parts[0].get('text')!=''.join(chunks):
-                raise RuntimeError('Терминальный результат не совпадает с Responses stream.')
-            if complete:raise RuntimeError('Повторный terminal response.')
+                reject('terminal_mismatch', 'Терминальный результат не совпадает с Responses stream.')
+            if complete:reject('duplicate_terminal', 'Повторный terminal response.')
             complete=True
-    if not complete or not ''.join(chunks).strip():raise RuntimeError('Пустой или незавершённый структурированный ответ.')
+    if not complete or not ''.join(chunks).strip():reject('missing_terminal_or_text', 'Пустой или незавершённый структурированный ответ.')
