@@ -1171,6 +1171,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if builder.extraction:
         choices = contents('Choice context / controlled actor') or {}
         diagnostics['choice_context'] = dict(enabled=choices.get('enabled', False), actor_id=choices.get('actor_id'),
-            omitted_for_budget=not bool(choices),
             recent_inputs=len(choices.get('recent_player_expression', [])), knowledge=len(choices.get('knowledge', [])))
+        if not choices:
+            diagnostics['choice_context']['omitted_for_budget'] = True
     return ContextMessages(messages, diagnostics)

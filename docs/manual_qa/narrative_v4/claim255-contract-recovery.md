@@ -91,6 +91,8 @@ The saturated-phone test explicitly covers **both v5 and v6** at the original 32
 
 CI's backend wall limit is 35 minutes based on the measured 28m42s test duration plus setup/reporting and variance. Per-test assertions/timeouts and the full suite are unchanged; the timing adjustment does not conceal the failed phone test, which must pass independently.
 
+Verify #526 confirmed the tight-context and desktop/mobile recovery fixes: 722 full E2E passed / 24 skipped, smoke 88 passed / 4 skipped, frontend 153 passed plus build, and Streaming #46 passed 8 checks. Backend completed in 1,573.24s with 4,109 passed / 1 skipped / 1 failed. The sole failure was an unnecessary `omitted_for_budget: false` diagnostic field in normal choice context. The existing exact compatibility assertion caught it; that assertion is unchanged. The diagnostic now adds this field only when context was actually omitted. The final choice/phone/claim/context regression run passed **114 tests in 27.32s**. Final CI results are recorded in the PR separately; #526 itself is not a full PASS.
+
 ## Paid recovery proposal (not executed)
 
 Keep reservation 665's full conservative charge and actual receipts 666/667 unchanged. No new ledger rows/calls were created for this free stage. The previous two real extractions used 44,009 input / 2,936 output tokens, conservative cost $0.0167259; this is an estimate source, not a new authorization.
