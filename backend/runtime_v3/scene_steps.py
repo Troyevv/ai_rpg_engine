@@ -349,7 +349,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
     p, errors = validate(payload, state, version=version, collect=True)
     # Typed declarations remain usable as proposals for independent diagnostics.
     # They confer no authority and pending errors make publication impossible.
-    deferred = {'camera_invalid', 'movement_agency', 'player_action_source_invalid', 'movement_endpoint_invalid'}
+    deferred = {'camera_invalid', 'camera_actor_missing', 'movement_agency', 'player_action_source_invalid', 'movement_endpoint_invalid'}
     if errors and (not defer_errors or any(e.code not in deferred for e in errors)):
         raise StructuralDeltaError.combine(errors)
     # Conditional endpoint rules do not make an otherwise typed proposal

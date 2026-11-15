@@ -221,7 +221,7 @@ def test_v7_one_feedback_for_independent_route_agency_camera_and_one_repair():
         StateResolver(s,'Проза.',text,turn_id=1,**resolver_options(s,text,contract_version=7)).resolve(raw)
     rows=e.value.diagnostics('repair');codes={r['code'] for r in rows}
     assert {'camera_invalid','player_action_source_invalid'}<=codes
-    assert any('location' in r.get('field','') or 'movement' in r['code'] for r in rows),rows
+    assert 'movement_endpoint_invalid' in codes,rows
     fb=c.feedback(rows,p)
     schema=repair_schema(input_schema(7,'actor'),fb)
     assert 'observer_location_id' not in schema['properties']['sections']['properties']['scene']['properties']
@@ -285,3 +285,33 @@ def test_group_return_route_leaves_nontraveller_and_preserves_order():
     assert len(out.history['movements'])==5
     assert sum(bool(m.get('player_action')) for m in out.history['movements'])==2
     assert out.state['knowledge']==s['knowledge']
+
+
+def test_conversation_on_earlier_trip_cannot_anchor_departed_npc_situation():
+    from test_scene_steps255 import fixture
+    s,_=fixture();text='Иду с b в парк.'
+    p=dict(scene=dict(elapsed_minutes=3),scene_steps=[
+        dict(id='trip',kind='movement',actor_ids=['a','b'],assertion='completed_arrival',endpoint='park',text='Дошли.',input_source=dict(quote=text,meaning='preserved')),
+        dict(id='talk',kind='interaction',actor_id='b',target_ids=['a'],outcome='completed',during_step_id='trip',text='Говорит по пути.'),
+        dict(id='away',kind='movement',actor_ids=['b'],assertion='departure',endpoint=None,text='b затем уходит в неизвестном направлении.')],
+        character_changes=[dict(id='b',situation='Всё ещё разговаривает с a в пути.',source_event_id='talk',evidence='Контроль')])
+    out=StateResolver(s,'Проза.',text,turn_id=1,**resolver_options(s,text,contract_version=7)).resolve(p)
+    assert out.state['characters']['b']['location_id'] is None
+    assert out.state['characters']['b']['situation']==s['characters']['b']['situation']
+    assert len(out.history['events'])==3
+
+
+def test_independent_actor_routes_survive_an_ambiguous_route_for_diagnostics():
+    from test_scene_steps255 import fixture
+    s,_=fixture();text='Иду в парк и возвращаюсь домой.'
+    p=dict(scene=dict(elapsed_minutes=3,visible_character_ids=['b']),scene_steps=[
+        dict(id='out',kind='movement',actor_ids=['a'],assertion='completed_arrival',endpoint='park',text='Идёт.',input_source=dict(quote='Иду в парк',meaning='preserved')),
+        dict(id='back',kind='movement',actor_ids=['a'],assertion='completed_arrival',endpoint='home',text='Возвращается.',timing='simultaneous',input_source=dict(quote='Не было во вводе.',meaning='preserved')),
+        dict(id='npc',kind='movement',actor_ids=['b'],assertion='completed_arrival',endpoint='unknown',text='Приходит.')])
+    resolver=StateResolver(s,'Проза.',text,turn_id=1,**resolver_options(s,text,contract_version=7))
+    with pytest.raises(StructuralDeltaError) as e:resolver.resolve(p)
+    codes={r['code'] for r in e.value.diagnostics('repair')}
+    assert {'camera_actor_missing','movement_ambiguous','movement_endpoint_invalid','player_action_source_invalid'}<=codes
+    assert not resolver.history.movements
+    assert resolver.state['characters']['a']['location_id']=='home'
+    assert resolver.state['characters']['b']['location_id']=='home'

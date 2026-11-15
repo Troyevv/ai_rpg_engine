@@ -302,7 +302,10 @@ class StateResolver:
         scene = raw.final_scene
         lid, present = scene.get('location_id'), scene.get('present_character_ids')
         if lid is not None and (not isinstance(lid,str) or lid not in s['locations']):
-            fatal('неизвестное конечное место камеры', 'camera_location_invalid', repairable=True)
+            error = StructuralDeltaError('неизвестное конечное место камеры', 'camera_location_invalid',
+                                         section='final_scene', field='location_id')
+            if not self.scene_sequence: fatal(str(error), error.code, repairable=True)
+            preflight_errors.append(error)
         if not isinstance(present,list) or any(not isinstance(cid,str) for cid in present):
             fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
         reserved = {ch['id'] for p in s['pregnancies'].values() if p['status']!='born' for ch in p['children']}
@@ -327,7 +330,10 @@ class StateResolver:
         lid, present = scene.get('location_id'), scene['present_character_ids']
         camera = deepcopy(s['camera'])
         if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
-            fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
+            error = StructuralDeltaError('controlled actor отсутствует в final_scene', 'camera_actor_missing',
+                                         section='final_scene', field='present_character_ids')
+            if not self.scene_sequence: fatal(str(error), error.code, repairable=True)
+            preflight_errors.append(error)
         if self.require_elapsed and 'elapsed_minutes' not in scene:
             fatal('Extraction не указал elapsed_minutes.', 'elapsed_minutes_missing', repairable=True, section='final_scene', path='final_scene.elapsed_minutes')
         elapsed = scene.get('elapsed_minutes',0)
@@ -414,28 +420,37 @@ class StateResolver:
         for cid, route in moves.items():
             if cid in invalid_route_actors:
                 continue  # Dependent geography is inconclusive, never publish this candidate.
-            if len({r[1] for r in route}) > 1:
-                if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
-                    fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
-                route.sort(key=lambda r:r[0])
-            if cid in present:
-                if route[-1][1] != lid:
-                    fatal('конечное перемещение участника противоречит final_scene',
-                          'scene_movement_conflict', repairable=True, entity=cid,
-                          scene_location_id=lid, movement_location_id=route[-1][1])
-            origin = s['characters'][cid]['location_id']
-            for order,target,evidence,item in route:
-                if 'from_location_id' in item and item['from_location_id'] != origin:
-                    fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
-                self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
-                    evidence=evidence,order=order,turn_id=self.turn_id,
-                    **({'assertion': item['assertion']} if 'assertion' in item else {}),
-                    **{key:item[key] for key in ('player_assertion','player_evidence') if key in item},
-                    **({'player_action':player_actions[item['player_action_id']].model_dump()}
-                       if isinstance(item.get('player_action_id'),str) and item['player_action_id'] in player_actions else {}),
-                    **({'source_event_id':item['source_event_id']} if item.get('source_event_id') else {})))
-                origin = target
-            s['characters'][cid]['location_id'] = origin
+            history_start = len(self.history.movements)
+            try:
+                if len({r[1] for r in route}) > 1:
+                    if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
+                        fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
+                    route.sort(key=lambda r:r[0])
+                if cid in present:
+                    if route[-1][1] != lid:
+                        fatal('конечное перемещение участника противоречит final_scene',
+                              'scene_movement_conflict', repairable=True, entity=cid,
+                              scene_location_id=lid, movement_location_id=route[-1][1])
+                origin = s['characters'][cid]['location_id']
+                for order,target,evidence,item in route:
+                    if 'from_location_id' in item and item['from_location_id'] != origin:
+                        fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
+                    self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
+                        evidence=evidence,order=order,turn_id=self.turn_id,
+                        **({'assertion': item['assertion']} if 'assertion' in item else {}),
+                        **{key:item[key] for key in ('player_assertion','player_evidence') if key in item},
+                        **({'player_action':player_actions[item['player_action_id']].model_dump()}
+                           if isinstance(item.get('player_action_id'),str) and item['player_action_id'] in player_actions else {}),
+                        **({'source_event_id':item['source_event_id']} if item.get('source_event_id') else {})))
+                    origin = target
+                s['characters'][cid]['location_id'] = origin
+            except StructuralDeltaError as exc:
+                if not self.scene_sequence: raise
+                # Do not let a rejected partial route become diagnostic history
+                # for other actors/earlier encounters. Independent routes proceed.
+                del self.history.movements[history_start:]
+                invalid_route_actors.add(cid)
+                movement_errors.append(exc)
         scene_errors = []
         for cid in present:
             if cid in invalid_route_actors:
@@ -498,11 +513,13 @@ class StateResolver:
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
         event_errors = list(preflight_errors) + list(scene_errors) + movement_errors
+        self.preflight_errors = list(event_errors)
         rejected_events = set()
         for i, item in self.records(raw,'events'):
             error_start = len(event_errors)
             eid = item.get('id')
-            if item.get('player_action_id') in getattr(self, 'rejected_player_actions', set()):
+            action_ref = item.get('player_action_id')
+            if isinstance(action_ref, str) and action_ref in getattr(self, 'rejected_player_actions', set()):
                 rejected_events.add(eid)
                 continue  # Dependent authority is inconclusive, not a second source error.
             if 'minute' in item:

@@ -47,7 +47,7 @@ Free authored control:
 RPG_SEMANTIC_ENABLED=0 python devtools/issue256/replay.py EVIDENCE_DIR NEW_OUTPUT_DIR
 ```
 
-`/workspace/work/issue256-free/control-final/` recovered all four unchanged original Narrative texts through production jobs on another SQLite copy, using explicitly labelled authored Extraction controls. Both characters reach porch → shore → cafe; Olga keeps `loc_home_sokolov`. Five mock Extraction calls (four foreground, one background), no Narrative generation, no repair. Each commit/reload matches, SQLite integrity is OK, original jobs remain unchanged. This proves the mechanism, **not DeepSeek semantic accuracy**. The authored places and answers are not installed into the real campaign.
+`/workspace/work/issue256-free/control-stable/` recovered all four unchanged original Narrative texts through production jobs on another SQLite copy, using explicitly labelled authored Extraction controls. Both characters reach porch → shore → cafe; Olga keeps `loc_home_sokolov`. Five mock Extraction calls (four foreground, one background), no Narrative generation, no repair. Each commit/reload matches, SQLite integrity is OK, original jobs remain unchanged. This proves the mechanism, **not DeepSeek semantic accuracy**. The authored places and answers are not installed into the real campaign.
 
 ## Free validation
 
@@ -57,7 +57,11 @@ RPG_SEMANTIC_ENABLED=0 python devtools/issue256/replay.py EVIDENCE_DIR NEW_OUTPU
 - Existing suites exercise cancellation, stale epoch/revision, publication failure, one bounded repair, fact/provenance, Crisis/agency, old contracts, background and LTA.
 - Desktop/mobile Chromium: **4 passed**, v6/v7 Retry → reload → continued turn; v7 additionally rolls back and recovers original Narrative through the production API without a Narrative call.
 - Frontend unit: **153 passed**; TypeScript and production build PASS.
-- Initial broader profile: **250 passed**; final expanded profile/full CI results are recorded in the PR conversation for the actual commit. A full run started before final compatibility changes is diagnostic, not a claim of final-HEAD success.
+- Expanded profile: **344 passed**; old evidence-first compatibility: **28 passed**; v6/v7 publication failure controls: **6 passed**. Final follow-up checks/full CI results are recorded in the PR conversation for the actual commit. A full run started before final compatibility changes is diagnostic, not a claim of final-HEAD success.
+
+Follow-up controls reproduced two further gaps: a route-time conversation must not anchor an NPC's current situation after a later departure, and an unknown camera endpoint must not hide independent route errors. End-of-turn situation support now respects the accepted trip endpoint; scene/route diagnostics continue independently without keeping rejected partial routes in scratch History. The trip's accepted Event and Knowledge remain intact.
+
+A legacy integration test also caught unhashable malformed PlayerAction references in the new rejected-action lookup. That lookup now checks the reference type before set membership; both original negative inputs still reach the existing repair. Assertions were retained.
 
 During free checks, two old-contract tests exposed changed first-error behavior; accumulation is now restricted to scene contracts. Three legacy camera tests expected needless repair for a correct route; their assertions now require saved outcome plus the specific warning and unchanged independent Fact, rather than merely loosening status checks. Two new authored controls initially used an invalid claim enum/missing LTA cause and an incorrect History field assertion; those test fixtures were corrected to the existing contracts, with no Runtime weakening.
 

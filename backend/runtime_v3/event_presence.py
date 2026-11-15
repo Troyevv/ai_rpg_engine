@@ -107,7 +107,11 @@ def validate_event_presence(resolver, event, index, written):
             for n, actor in enumerate(event[role]):
                 if actor not in travellers:
                     reject(f'{role}[{n}]', 'Персонаж не участвует в указанном совместном пути.', actor)
-        return set(event['participants'] + event['witnesses'])
+        # This result authorizes an end-of-turn situation, not Knowledge.
+        # A later departure/return must not leave an earlier conversation as
+        # the source for the actor's current location-dependent situation.
+        return {actor for actor in event['participants'] + event['witnesses']
+                if state['characters'][actor]['location_id'] in endpoints}
 
     allowed_places = {location} if location is not None else None
     if medium == 'message' and location is None:
