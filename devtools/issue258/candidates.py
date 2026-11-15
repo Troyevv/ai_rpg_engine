@@ -56,7 +56,8 @@ class SemanticCandidate(DestinationCandidate):
 
     def _parse(self,payload,*,defer_errors=False):
         value=self.apply(payload) if self.scope is not None else decode(payload)
-        self.base=deepcopy(value)
+        ids=[s.get('id') for s in value['scene_steps'] if isinstance(s,dict)]
+        self.base=deepcopy(value) if len(ids)==len(value['scene_steps']) and all(isinstance(i,str) and i for i in ids) and len(set(ids))==len(ids) else None
         from backend.runtime_v3.scene_steps import schema_diagnostics
         from backend.services.world_delta_errors import StructuralDeltaError
         errors=[row for error in Draft202012Validator(self.schema).iter_errors(value) for row in schema_diagnostics(error,value)]

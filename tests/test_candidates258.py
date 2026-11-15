@@ -54,3 +54,11 @@ def test_review_repair_keeps_same_source_and_independent_step():
     assert c.base['scene_steps']==p['scene_steps']
     assert c.narrative=='Поздоровался.'
     assert not raw.records['knowledge_gained']
+
+
+def test_duplicate_source_ids_use_full_repair_not_an_ambiguous_patch():
+    s,_=fixture();step=dict(id='same',kind='interaction',actor_id='b',target_ids=['a'],outcome='completed',text='Поздоровался.')
+    p=dict(scene={},scene_steps=[step,deepcopy(step)])
+    c=SemanticCandidate(s,'Приветствие.','Слушаю.',1,version=8)
+    with pytest.raises(StructuralDeltaError) as exc:c.parse(p)
+    assert json.loads(c.feedback(exc.value.diagnostics('test'),json.dumps(p)))['repair_mode']=='full'
