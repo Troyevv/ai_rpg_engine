@@ -28,6 +28,7 @@ def project(messages, *, speech=False, review=False):
             interaction=next(a for a in arms if a.get('properties',{}).get('kind',{}).get('const')=='interaction')
             sp['outcome']=deepcopy(interaction['properties']['outcome']);spoken['required'].append('outcome')
             sp['medium']['enum']=['conversation','testimony']
+            spoken.setdefault('allOf',[]).append({'if':{'properties':{'outcome':{'enum':['attempted','deferred','not_performed']}}},'then':{'properties':{'claims':{'maxItems':0}}}})
             info['properties']['medium']['enum']=['observation','discovery','message']
             arms.append(spoken)
         if review:
@@ -35,6 +36,7 @@ def project(messages, *, speech=False, review=False):
             props['semantic_reviews']={'type':'array','minItems':2,'maxItems':2,'items':{'oneOf':[
                 dict(type='object',additionalProperties=False,required=['domain','assessment','findings'],properties=dict(domain=dict(const='agency'),assessment=dict(enum=['conflict','no_significant_conflict','unassessed','not_applicable']),findings=findings)),
                 dict(type='object',additionalProperties=False,required=['domain','assessment','claims'],properties=dict(domain=dict(const='time'),assessment=dict(enum=['conflict','no_significant_conflict','unassessed','not_applicable']),claims=claims))]}}
+            props['semantic_reviews']['allOf']=[{'contains':{'properties':{'domain':{'const':domain}},'required':['domain']}} for domain in ('agency','time')]
             schema['required'].append('semantic_reviews')
         message['content']='JSON Schema\n'+json.dumps(schema,ensure_ascii=False,separators=(',',':'))
     if speech:out[0]['content']+='\nExperimental speech projection: every spoken interaction uses kind=speech, with source_actor_id, actual target_ids, outcome, channel, medium and explicit perceived claims in ONE step. interaction is for nonverbal contact; information is for observation/discovery/messages. Empty claims are valid for a greeting/question or no significant new information. Preserve during_step_id for speech along a route. Targets never imply perceivers. Testimony is not objective truth; partial disclosure is not the full secret. Unknown speaker remains null. No duplicate interaction/information copy of speech.\n'
