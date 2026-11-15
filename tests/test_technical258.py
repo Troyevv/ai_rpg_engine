@@ -86,3 +86,23 @@ def test_original_river_pair_and_refusal_diagnostics():
     assert d['player_input']==refusal['player_input'] and d['supplied_quote']!=d['player_input']
     assert d['path']=='scene_steps[2].input_source.quote'
     assert 'agency_findings' in d['repair_reason']
+
+
+def test_movement_feedback_never_requests_internal_authority_fields():
+    s,text,p,c=candidate();p['scene_steps'][0].pop('input_source')
+    with pytest.raises(StructuralDeltaError) as exc:c.parse(p)
+    info=json.loads(c.feedback(exc.value.diagnostics('repair'),json.dumps(p)))
+    row=next(d for d in info['diagnostics'] if d['code']=='movement_agency')
+    assert row['path']=='scene_steps[0].input_source'
+    assert row['player_input']==text
+    assert 'involuntary_source_id' in row['repair_reason']
+    assert 'explicit_choice' not in row['repair_reason'] and 'player_action_id' not in row['repair_reason']
+
+
+def test_narrative_recovery_hint_uses_visible_contract():
+    s,text,p,c=candidate();c.parse(p)
+    info=json.loads(c.feedback([dict(section='scene_steps',index=0,code='event_presence_invalid',repair_reason='Use player_agency.status=violated for an unchosen act.')],json.dumps(p)))
+    row=info['diagnostics'][0]
+    assert 'player_agency.status' not in row['repair_reason']
+    assert 'agency_findings' in row['repair_reason']
+    assert 'player_agency.status' in row['compiled_reason']

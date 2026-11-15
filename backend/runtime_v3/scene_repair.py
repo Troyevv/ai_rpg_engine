@@ -80,6 +80,9 @@ class SceneCandidate:
         if self.base is None:
             return
         for row in rows:
+            if self.version >= 8 and 'player_agency.status=violated' in row.get('repair_reason', ''):
+                row['compiled_reason'] = row['repair_reason']
+                row['repair_reason'] = row['repair_reason'].replace('player_agency.status=violated', 'agency_findings classification=unauthorized_choice with narrative_evidence')
             index = row.get('index')
             if row.get('section') != 'scene_steps' or not isinstance(index, int) or not 0 <= index < len(self.base['scene_steps']):
                 continue
@@ -94,6 +97,12 @@ class SceneCandidate:
                     row['repair_reason'] = 'Movement has travellers, not speech addressees. Remove inapplicable input_source.intended_target_ids; preserve actual actor_ids, endpoint and relevant movement quote. Keep any separate question and perceived replies in their own steps. Do not copy travellers into addressees.'
                 else:
                     row['repair_reason'] = 'Compare input_source.intended_target_ids with actual target_ids and outcome. Keep partial delivery explicit; use input_source.meaning=changed or agency_findings only if the Narrative changed the player choice.'
+            if self.version >= 8 and code == 'movement_agency' and step['kind'] == 'movement':
+                row['local_id'] = step['id']
+                row['compiled_reason'] = row.get('repair_reason')
+                row['path'] = f'scene_steps[{index}].input_source'
+                row['player_input'] = self.player_input
+                row['repair_reason'] = 'For voluntary controlled-actor movement supply input_source.quote from the relevant player_input and input_source.meaning. For an actual involuntary movement use involuntary_source_id referencing its accepted semantic cause. Do not inherit a neighbouring source, infer arrival from input, or fabricate authority. NPC travellers keep their own autonomous action; do not supply player evidence for them.'
             if code == 'player_action_source_invalid':
                 row['local_id'] = step['id']
                 row['compiled_reason'] = row.get('repair_reason')

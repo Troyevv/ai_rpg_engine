@@ -88,6 +88,9 @@ class SemanticCandidate(DestinationCandidate):
         for action in self.raw.player_agency['actions']:
             for sid,outcome in outcomes.items():
                 if action['id']==identity('scene-action',self.turn_id,self.namespace,sid):action['outcome']=outcome
+        if reviews and self.raw.player_agency['status'] != 'violated':
+            agency=next(row for row in reviews if row['domain']=='agency')
+            if agency['assessment'] != 'no_significant_conflict':self.raw.player_agency['status']='uncertain'
         if reviews:self.raw.warnings.append(dict(code='experimental_semantic_assessment',reviews=deepcopy(reviews),action='record_only'))
         self.raw.warnings.extend(self.revisions)
         return self.raw

@@ -24,7 +24,9 @@ def test_speech_perceivers_not_addressees_and_partial_secret():
 def test_empty_question_and_explicit_assessment_no_permission():
     s,_=fixture();p=dict(scene=dict(elapsed_minutes=1),scene_steps=[dict(id='question',kind='speech',source_actor_id='b',target_ids=['a'],outcome='completed',medium='conversation',channel='physical',text='Как дела?',claims=[])],semantic_reviews=[dict(domain='agency',assessment='unassessed',findings=[]),dict(domain='time',assessment='not_applicable',claims=[])])
     c=SemanticCandidate(s,'Как дела?','Слушаю.',1,version=8,speech=True,review=True)
-    raw=c.parse(p);result=StateResolver(s,'Как дела?','Слушаю.',turn_id=1,**resolver_options(s,'Слушаю.',contract_version=8)).resolve(raw)
+    raw=c.parse(p)
+    assert raw.player_agency['status']=='uncertain'
+    result=StateResolver(s,'Как дела?','Слушаю.',turn_id=1,**resolver_options(s,'Слушаю.',contract_version=8)).resolve(raw)
     assert not result.history['knowledge_acquisitions']
     assert len(result.history['events'])==1
     p['semantic_reviews'][0]['findings']=[dict(narrative_evidence='Игрок отказался без выбора.',classification='unauthorized_choice')]
