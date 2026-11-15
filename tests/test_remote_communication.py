@@ -649,7 +649,8 @@ def test_extraction_call_audibility_cannot_create_physical_witness_knowledge():
     assert exc.value.code == "event_presence_invalid"
 
 
-def test_saturated_context_keeps_phone_bounded_without_unread_payload(tmp_path):
+@pytest.mark.parametrize('contract', [5, 6])
+def test_saturated_context_keeps_phone_bounded_without_unread_payload(tmp_path, contract):
     from backend.repositories.preparation import Repository
     from devtools.narrative_test_world import load_fixture
     from backend.runtime_v3.context import build_context
@@ -686,9 +687,16 @@ def test_saturated_context_keeps_phone_bounded_without_unread_payload(tmp_path):
         s["remote_events"][e.id] = e.model_dump()
     for extraction in (None, NARRATIVE):
         messages = build_context(
-            snap, [], "Смотрю в окно.", "turn", 32768, 4096, extraction_text=extraction
+            snap, [], "Смотрю в окно.", "turn", 32768, 4096, extraction_text=extraction, extraction_contract=contract
         )
         assert estimate(messages) <= 32768 - 4096 - 256
+        if extraction is not None and contract == 6:
+            # Critical scene and POV survive; optional personalization cannot
+            # consume the last room needed by the full structural contract.
+            schema=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('JSON Schema\n')))
+            assert 'choices' in schema['properties'] and 'scene_steps' in schema['properties']
+            assert not any(m['content'].startswith('Choice context / controlled actor\n') for m in messages)
+            assert messages.selection['choice_context']['omitted_for_budget'] is True
         assert "UNREAD_PRIVATE_PAYLOAD" not in json.dumps(messages)
         current = json.loads(
             next(

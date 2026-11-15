@@ -331,3 +331,21 @@ def test_schema_error_does_not_hide_independent_claim_validator_error():
     step['claims'][1]['expected_revisions']={}
     raw=c.parse(dict(candidate_hash=f['candidate_hash'],replacements=[step],sections={},reason='Authored mixed-error control'))
     assert len(raw.records['facts'])==2
+
+
+def test_v6_factoring_preserves_the_complete_structural_schema():
+    from backend.runtime_v3.raw import extraction_schema, compact_prompt_schema
+    from backend.runtime_v3.scene_steps import project_schema
+    full=wire_schema(project_schema(extraction_schema()))
+    compact=compact_prompt_schema(full,agency_audit_required=True,scene_sequence=True)
+    Draft202012Validator.check_schema(full);Draft202012Validator.check_schema(compact)
+    def expand(node,root):
+        if isinstance(node,dict):
+            if '$ref' in node:
+                assert set(node)=={'$ref'}
+                return expand(root['$defs'][node['$ref'].split('/')[-1]],root)
+            return {k:expand(v,root) for k,v in node.items() if k not in ('$defs','$anchor')}
+        if isinstance(node,list):return [expand(v,root) for v in node]
+        return node
+    assert expand(compact,compact)==expand(full,full)
+    assert len(json.dumps(compact))<len(json.dumps(full))

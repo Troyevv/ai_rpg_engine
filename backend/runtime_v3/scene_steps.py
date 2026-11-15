@@ -166,7 +166,8 @@ def schema_diagnostics(error, payload):
                 'information': 'InformationStep', 'occurrence': 'OccurrenceStep'}.get(kind)
         branches = error.schema['oneOf']
         selected = next((i for i, arm in enumerate(branches)
-                         if arm.get('$ref', '').endswith('/' + str(name))), None)
+                         if arm.get('$ref', '').endswith('/' + str(name))
+                         or arm.get('properties', {}).get('kind', {}).get('const') == kind), None)
         if selected is not None:
             children = [e for e in children if list(e.schema_path)[0] == selected]
         else:

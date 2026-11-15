@@ -527,7 +527,6 @@ def input_fields():
 
 def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False):
     """Model-facing projection of canonical types, with focused field guidance."""
-    from collections import Counter
     def structural(node):
         if isinstance(node, dict):
             result = {k:structural(v) for k,v in node.items() if (k != 'title' or not isinstance(v,str)) and k != 'default' and (k != 'description' or not isinstance(v, str))}
@@ -676,20 +675,30 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if scene_sequence:
         from backend.runtime_v3.scene_steps import project_schema
         schema = structural(project_schema(schema))
+    return compact_prompt_schema(schema, agency_audit_required=agency_audit_required, scene_sequence=scene_sequence)
+
+
+def compact_prompt_schema(schema, *, agency_audit_required, scene_sequence):
+    """Existing lossless factoring, shared by the prompt and wire schema."""
+    from collections import Counter
     counts = Counter()
+    schema_keywords = {'type', 'enum', 'const', 'anyOf'} | ({'properties', 'required', 'allOf', 'oneOf'} if scene_sequence else set())
 
     def key(node):
         return json.dumps(node, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
     def count(node):
         if isinstance(node, dict):
-            if set(node) & {'type', 'enum', 'const', 'anyOf'} and len(key(node)) > 13:
+            if set(node) & schema_keywords and len(key(node)) > 13:
                 counts[key(node)] += 1
             for value in node.values(): count(value)
         elif isinstance(node, list):
             for value in node: count(value)
     count(schema)
-    shared = {value: ('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'[index] if index<52 else 's'+str(index)) for index, value in enumerate(sorted((k for k, n in counts.items() if n > 1 and n*(len(k)-13)>len(k)+25),key=lambda k:(-counts[k],k)))}
+    # v6 transport expands anchors to standard JSON pointers. Factoring tiny
+    # primitives using the shorter legacy anchor cost would grow the wire schema.
+    ref_size = 20 if scene_sequence else 13
+    shared = {value: ('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'[index] if index<52 else 's'+str(index)) for index, value in enumerate(sorted((k for k, n in counts.items() if n > 1 and n*(len(k)-ref_size)>len(k)+25),key=lambda k:(-counts[k],k)))}
 
     if agency_audit_required:
         def name_records(node, hint='Record'):
@@ -725,11 +734,11 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
             elif isinstance(node, list):
                 for child in node: references(child)
         references(result)
-        single = {name for name in result['$defs'] if refs['#'+name] == 1}
+        single = {name for name in result['$defs'] if refs['#'+name] + (refs['#/$defs/'+name] if scene_sequence else 0) == 1}
         if not single: break
         def inline(node):
             if isinstance(node, dict):
-                name = node.get('$ref', '').removeprefix('#')
+                name = node.get('$ref', '').removeprefix('#/$defs/').removeprefix('#')
                 if set(node) == {'$ref'} and name in single:
                     return inline({k:v for k,v in result['$defs'][name].items() if k != '$anchor'})
                 return {k:inline(v) for k,v in node.items()}

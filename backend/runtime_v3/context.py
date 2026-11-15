@@ -1114,6 +1114,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     prune_schema_definitions(schema)
                     replace_schema(schema)
                 break
+    if builder.extraction and extraction_contract >= 6 and estimate(messages) > hard_context_limit:
+        # Optional choice personalization must not block mandatory consequences.
+        # Keep the choices schema and canonical actor/Knowledge context; the
+        # existing choice owner still rejects inaccessible sources. Narrative
+        # authoring and its personalization are unaffected.
+        messages[:] = [m for m in messages if not m['content'].startswith('Choice context / controlled actor\n')]
     # Give lossless/default/schema compaction a chance before discarding the last
     # canonical relationship source to make room for the mandatory agency review.
     if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
@@ -1163,7 +1169,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if not builder.extraction:
         diagnostics['genre_guidance'] = contents('Genre / soft creative guidance') or None
     if builder.extraction:
-        choices = contents('Choice context / controlled actor')
-        diagnostics['choice_context'] = dict(enabled=choices['enabled'], actor_id=choices.get('actor_id'),
+        choices = contents('Choice context / controlled actor') or {}
+        diagnostics['choice_context'] = dict(enabled=choices.get('enabled', False), actor_id=choices.get('actor_id'),
+            omitted_for_budget=not bool(choices),
             recent_inputs=len(choices.get('recent_player_expression', [])), knowledge=len(choices.get('knowledge', [])))
     return ContextMessages(messages, diagnostics)

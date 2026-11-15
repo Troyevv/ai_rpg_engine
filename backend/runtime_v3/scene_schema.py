@@ -17,11 +17,15 @@ def project_structure(schema):
     defs.update(fact.pop('$defs', {}))
     fact['properties'].pop('origin_remote_event_id')
     fact['properties']['evidence'] = dict(type='string')
-    props['facts']['items'] = deepcopy(fact)
-    fact['required'] = ['text']
-    fact['properties']['id'] = dict(type=['string', 'null'], minLength=1)
-    fact['properties']['text'] = deepcopy(NONBLANK)
-    defs['PerceivedFact'] = fact
+    # One shared closed field set; required identity differs for a top-level
+    # Fact and an inline assertion whose identity is compiler-owned.
+    fact.pop('required', None)
+    fact['properties']['id'] = dict(type=['string', 'null'])
+    defs['FactFields'] = fact
+    props['facts']['items'] = dict(allOf=[{'$ref': '#/$defs/FactFields'}],
+        required=['id', 'text'], properties=dict(id=dict(type='string')))
+    defs['PerceivedFact'] = dict(allOf=[{'$ref': '#/$defs/FactFields'}],
+        required=['text'], properties=dict(id=dict(type=['string','null'],minLength=1), text=deepcopy(NONBLANK)))
     claim = defs['PerceivedClaim']
     claim['properties']['fact'] = {'anyOf': [{'$ref': '#/$defs/PerceivedFact'}, {'type': 'null'}]}
     claim['properties']['fact_id'] = dict(type=['string', 'null'], minLength=1)

@@ -61,12 +61,12 @@ Isolated evidence: `/workspace/work/issue255-claim-free/` (final-code replay als
 - SDK transport test verifies the exact `responses.create(text.format.schema=...)` envelope for both initial Extraction and repair; schemas validate under Draft 2020-12. This is free transport-contract coverage, **not evidence of acceptance by the real provider**.
 - v1–v5 projections are unchanged; existing recorded Retry/regeneration, background/LTA, agency, timing, reproduction and provider-recovery tests are included. No SQLite/API migration or Budget changes.
 
-Broader focused result: **334 passed in 101.63s**. Final direct verification including reproduction: **143 passed in 34.76s** (`test_claim_contract255`, `test_scene_steps255`, `test_scene_error_collection255`, `test_structured_extraction255`, `test_reproduction`). `git diff --check` passed.
+Final broader focused result: **406 passed in 119.72s**, including context compaction, v5/v6 bounded phone context, old contracts, repair, recovery, reproduction and LTA. Desktop/mobile recovery after the context changes: **2 passed in 19.2s**. `git diff --check` passed.
 
 Command (final focused run):
 
 ```bash
-python -m pytest -q tests/test_claim_contract255.py tests/test_scene_steps255.py tests/test_scene_error_collection255.py tests/test_structured_extraction255.py tests/test_extraction_semantics248.py tests/test_integrated_repair247.py tests/test_request_responses.py tests/test_reproduction.py tests/test_birth_sex.py tests/test_background_time.py tests/test_long_term_advance.py tests/test_event_chronology.py tests/test_repair_policy.py tests/test_provider_recovery255.py
+python -m pytest -q tests/test_claim_contract255.py tests/test_scene_steps255.py tests/test_scene_error_collection255.py tests/test_structured_extraction255.py tests/test_extraction_semantics248.py tests/test_integrated_repair247.py tests/test_request_responses.py tests/test_reproduction.py tests/test_birth_sex.py tests/test_background_time.py tests/test_long_term_advance.py tests/test_event_chronology.py tests/test_repair_policy.py tests/test_provider_recovery255.py tests/test_remote_communication.py tests/test_context_compaction.py tests/test_context_v2_states.py
 ```
 
 Full CI results for the implementing commit are linked in PR #248 after completion, separately from earlier green runs. This report does not claim full CI or live acceptance before those checks finish.
@@ -78,6 +78,18 @@ Verify #525 exposed a reproducible `scene255.spec.ts` failure on desktop/mobile.
 The fixture now advertises the same **65,536** window already requested by this specific test. The default mock capacity and every production context limit remain unchanged. Assertions are stronger: the initial failure must be the intended player-action source error, accounting must show one Narrative/Extraction/repair, and manual Retry must preserve that Narrative and add exactly one Extraction. Local desktop/mobile result: **2 passed in 22.5s**. No timeout increase, test skip, production assertion relaxation or model call.
 
 This is a QA fixture/configuration defect uncovered by real schema growth, not evidence that production Retry failed. The larger schema does consume more context: genuinely insufficient model windows still fail explicitly without dropping essential state. Real DeepSeek acceptance remains separate.
+
+## Full-CI finding: tight-context regression
+
+The same full run found one backend failure: saturated phone context grew to 29,495 estimated tokens against the unchanged 28,416 input budget (32,768 total, 4,096 response reserve). The other 4,107 tests passed; the job reached its 30-minute wall limit after 1,722.43 seconds of tests plus setup. This was a real context-size regression, distinct from the E2E mock mismatch above.
+
+The existing schema factoring now accounts for the actual v6 JSON-pointer reference length (20 bytes instead of the legacy anchor's 13), includes repeated structural fragments and inlines single-use pointer definitions. Canonical Fact fields are shared once between top-level and inline representations, while their different required identity/text constraints remain explicit. A regression expands every reference and compares the entire structural schema before/after factoring, as well as checking Draft 2020-12 validity. No semantic constraint is removed.
+
+Only if the v6 Extraction context still exceeds its hard budget, the existing optional-context elision now omits choice personalization before sacrificing a required consequence. The choices output schema, canonical actor/Knowledge state and existing accessibility validation remain. Narrative authoring retains its personalization. Diagnostics explicitly record `choice_context.omitted_for_budget`. This does not omit domain consequences or grant Knowledge/agency.
+
+The saturated-phone test explicitly covers **both v5 and v6** at the original 32,768/4,096 budget, preserving the unread-payload and scene-presence assertions. Its earlier isolated invocation had inherited an old default contract through import order; that was insufficient evidence of v6 success and is corrected by explicit parametrization. The large real DeepSeek recovery configuration remains unchanged.
+
+CI's backend wall limit is 35 minutes based on the measured 28m42s test duration plus setup/reporting and variance. Per-test assertions/timeouts and the full suite are unchanged; the timing adjustment does not conceal the failed phone test, which must pass independently.
 
 ## Paid recovery proposal (not executed)
 
