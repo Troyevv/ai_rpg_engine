@@ -293,3 +293,22 @@ def test_production_one_bounded_repair_of_two_claims(tmp_path):
     assert len(calls)==2 and len(narratives)==1 and job['narrative']==d['narrative']
     assert [r['stage'] for r in repo.request_log(job_id=jid) if r['stage'].startswith('extraction')]==['extraction_repair','extraction']
     assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
+
+
+@pytest.mark.parametrize('malformed', ['null_claim', 'nonstring_fact_id', 'null_facts', 'null_fact'])
+def test_malformed_claim_repair_has_structural_diagnostics_not_parser_exception(malformed):
+    d,c,_,f=prepare();reply=authored_patch(d,f)
+    if malformed=='null_claim':reply['replacements'][0]['claims'][0]=None
+    elif malformed=='nonstring_fact_id':reply['replacements'][0]['claims'][0]['fact_id']=[]
+    elif malformed=='null_facts':reply['sections']['facts']=None
+    else:reply['sections']['facts']=[None]
+    with pytest.raises(StructuralDeltaError):c.parse(reply)
+
+
+def test_each_missing_required_field_keeps_its_own_reason_without_cross_product():
+    p=info([claim(fact={'text':'Утверждение','claim':{}})])
+    with pytest.raises(StructuralDeltaError) as failure:validate(p)
+    rows=[r for r in failure.value.diagnostics('repair') if 'required property' in r['repair_reason']]
+    assert len(rows)==3
+    for key in ('subject_id','predicate','value'):
+        assert any(r['path']==f'scene_steps[0].claims[0].fact.claim.{key}' and r['repair_reason']==f"'{key}' is a required property" for r in rows)

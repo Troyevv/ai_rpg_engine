@@ -181,9 +181,13 @@ class SceneCandidate:
                         or {k:v for k,v in step.items() if k != 'claims'} != {k:v for k,v in old.items() if k != 'claims'}
                         or any(value != claims[i] for i,value in enumerate(old['claims']) if i not in claim_indexes[step['id']])):
                     fatal('Repair меняет неповреждённый шаг или claim.', 'scene_repair_scope', entity=step['id'])
-            referenced = {claim.get('fact_id') for step in replacements for claim in step['claims']}
+            referenced = {claim['fact_id'] for step in replacements for claim in step['claims']
+                          if isinstance(claim, dict) and isinstance(claim.get('fact_id'), str)}
             existing = {record_key(item) for item in self.base.get('facts', [])}
-            if any(record_key(item) not in existing and item.get('id') not in referenced for item in sections.get('facts', [])):
+            facts = sections.get('facts', [])
+            if not isinstance(facts, list):
+                fatal('Секция repair должна оставаться списком.', 'scene_repair_invalid', section='facts')
+            if any(not isinstance(item, dict) or record_key(item) not in existing and (not isinstance(item.get('id'), str) or item['id'] not in referenced) for item in facts):
                 fatal('Новый Fact должен быть явно указан в исправленном claim.fact_id.', 'scene_repair_scope', section='facts')
         result=deepcopy(self.base)
         edits={s['id']:s for s in replacements}

@@ -179,7 +179,11 @@ def schema_diagnostics(error, payload):
         return [row for child in children for row in schema_diagnostics(child, payload)]
     paths = [path]
     if error.validator == 'required' and isinstance(error.instance, dict):
-        paths = [path + [key] for key in error.validator_value if key not in error.instance]
+        # jsonschema emits a separate ValidationError for EACH missing key.
+        # Its required array contains all keys; expanding that array would mix
+        # one key's reason with every other missing field (and duplicate rows).
+        paths = [path + [key] for key in error.validator_value
+                 if key not in error.instance and error.message == f'{key!r} is a required property'] or [path]
     result = []
     for parts in paths:
         rendered = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if i else '') + v

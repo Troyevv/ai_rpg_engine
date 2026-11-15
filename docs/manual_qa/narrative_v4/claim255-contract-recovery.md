@@ -10,7 +10,7 @@ Both information steps (`step_45_03`, `step_45_05`) supplied `fact={subject_id,p
 
 ## Contract audit and fixes
 
-The v6 projection now derives Fact fields and nested Claim bounds from `Fact.model_json_schema()`, including existing secrecy fields. It uses the same projected schema for provider transport, local jsonschema validation and targeted repair. Canonical identity/origin remain compiler/Runtime owned. New inline Facts require nonblank `text`; a whole existing assertion can instead use `fact_id`, exclusively, without creating a duplicate. No text, link or perception is invented.
+The v6 projection now derives Fact fields and nested Claim bounds from `Fact.model_json_schema()`, including existing secrecy fields. It uses the same projected schema for provider transport, local jsonschema validation and targeted repair. Canonical identity/origin remain compiler/Runtime owned. New inline Facts require nonblank `text`; a whole existing assertion can instead use `fact_id`, exclusively, without creating a duplicate. No text, link or perception is invented. The shared v1–v5 `PerceivedClaim` model is deliberately not retyped: the stricter structural projection is confined to v6, avoiding a reinterpretation of recorded legacy jobs.
 
 | Confirmed structural gap | Production owner / path | Minimal v6 correction |
 | --- | --- | --- |
@@ -39,9 +39,9 @@ These constraints describe existing declared domain consequences, not new requir
 
 The existing jsonschema validator now reports errors from the matching step-kind union arm and actual nullable Fact branch. Each nested claim diagnostic retains the step ID, step index, claim index, field path and reason, with contractual options (new Fact text/structured claim, or an explicit reference to the same existing assertion).
 
-For the real response this includes both `scene_steps[2].claims[0].fact.text` and `scene_steps[4].claims[0].fact.text`, plus both misplaced structured-claim field errors, in **one** repair feedback. Unrelated union errors are not substituted for these paths.
+For the real response this includes both `scene_steps[2].claims[0].fact.text` and `scene_steps[4].claims[0].fact.text`, plus both misplaced structured-claim field errors, in **one** repair feedback. Unrelated union errors are not substituted for these paths. Each missing required field retains its own reason; three missing structured-Claim fields produce three diagnostics, not a nine-row cross-product.
 
-When diagnostics address only claims, the existing repair scope records their indexes. Sharing an actor/location no longer grants permission to rewrite independent steps. Repair cannot drop a claim, alter unaffected claims/step text, add steps or withdraw consequences. A new top-level Fact must actually be referenced by a repaired claim; merely adding unrelated valid Facts cannot satisfy repair. Existing candidate-hash binding, compiler checks and atomic commit remain.
+When diagnostics address only claims, the existing repair scope records their indexes. Sharing an actor/location no longer grants permission to rewrite independent steps. Repair cannot drop a claim, alter unaffected claims/step text, add steps or withdraw consequences. A new top-level Fact must actually be referenced by a repaired claim; merely adding unrelated valid Facts cannot satisfy repair. Existing candidate-hash binding, compiler checks and atomic commit remain. Four additional malformed-repair controls (null claim, nonstring fact_id, null Facts section/item) exposed parser exceptions in the new scope guard; the guard now leaves these as structural diagnostics. They are implementation regressions caught offline, not newly observed DeepSeek failures.
 
 ## Separate input-provenance finding
 
@@ -51,7 +51,7 @@ The Fact-only control explicitly asserts this remaining rejection. A second, lab
 
 ## Free production replay and regressions
 
-Isolated evidence: `/workspace/work/issue255-claim-free/` (script, original rejection diagnostics, projected transport schema, labelled control, jobs/requests, before/after, working and accepted SQLite copies). Original source SHA256 remains `fe4991bdcf0373cdf4c86c3d9e4ecb6601f0fa813790df06e9093909f11c6454`.
+Isolated evidence: `/workspace/work/issue255-claim-free/` (final-code replay also in its `final/` subdirectory) (script, original rejection diagnostics, projected transport schema, labelled control, jobs/requests, before/after, working and accepted SQLite copies). Original source SHA256 remains `fe4991bdcf0373cdf4c86c3d9e4ecb6601f0fa813790df06e9093909f11c6454`.
 
 - Both original real responses replayed unchanged and rejected; original candidate hash retained.
 - One authored repair corrects both claims and compiles without changing independent steps, choices or Narrative. Existing-fact reference separately resolves without duplication.
@@ -61,7 +61,7 @@ Isolated evidence: `/workspace/work/issue255-claim-free/` (script, original reje
 - SDK transport test verifies the exact `responses.create(text.format.schema=...)` envelope for both initial Extraction and repair; schemas validate under Draft 2020-12. This is free transport-contract coverage, **not evidence of acceptance by the real provider**.
 - v1–v5 projections are unchanged; existing recorded Retry/regeneration, background/LTA, agency, timing, reproduction and provider-recovery tests are included. No SQLite/API migration or Budget changes.
 
-Final focused result: **328 passed in 102.22s**. `git diff --check` passed.
+Broader focused result: **332 passed in 110.36s**. After the final missing-field diagnostic correction, the four directly affected suites passed again: **103 passed in 25.31s** (`test_claim_contract255`, `test_scene_steps255`, `test_scene_error_collection255`, `test_structured_extraction255`). `git diff --check` passed.
 
 Command (final focused run):
 
