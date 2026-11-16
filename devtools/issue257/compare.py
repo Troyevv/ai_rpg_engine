@@ -15,15 +15,25 @@ from backend.services.world_delta_errors import StructuralDeltaError
 from .prepare import compact
 
 
+def extraction_profile(case):
+    """Explicit qualification profile; no implicit fallback or extra retry."""
+    profile = case.get('extraction_profile', {})
+    thinking = profile.get('thinking', 'off')
+    maximum = profile.get('max_tokens', 8192)
+    if (thinking, maximum) not in {('off', 8192), ('low', 16384), ('low', 32768)}:
+        raise ValueError('Unapproved qualification profile')
+    return dict(thinking=thinking, max_tokens=maximum)
+
+
 def run(case, variant, generate, record, *, candidate_type=SceneCandidate):
     state=case['snapshot']['world_state'];turn=state['meta']['turn_id']+1
     candidate=candidate_type(state,case['narrative'],case['player_input'],turn,version=case.get('contract_version',7),on_record=lambda audit:record(dict(event='candidate',audit=audit)))
     messages=deepcopy(case['messages'][variant]);start=time.monotonic();attempts=[]
     for attempt in range(2):
         usage=[];chunks=[];t=time.monotonic()
-        config=dict(provider='deepseek',model=case['profiles'][variant],thinking='off',temperature=.1,max_tokens=8192,
+        config=dict(provider='deepseek',model=case['profiles'][variant],**extraction_profile(case),temperature=.1,
                     response_format={'type':'json_object'},structured_schema=request_schema(messages),extraction_transport='responses_json_schema')
-        assert estimate(messages)<case['config']['context_length']-8192-256
+        assert estimate(messages)<case['config']['context_length']-config['max_tokens']-256
         record(dict(event='request',attempt=attempt,messages=messages,config=config))
         try:
             for chunk in generate(messages=messages,require_complete=True,on_usage=usage.append,**config):

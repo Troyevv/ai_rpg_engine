@@ -15,6 +15,13 @@ from devtools.issue259.compound import project, CompoundCandidate
 pytestmark = pytest.mark.extraction_v8
 
 
+def test_qualification_profile_is_explicit_and_bounded():
+ from devtools.issue257.compare import extraction_profile
+ assert extraction_profile({})=={'thinking':'off','max_tokens':8192}
+ assert extraction_profile({'extraction_profile':{'thinking':'low','max_tokens':16384}})=={'thinking':'low','max_tokens':16384}
+ with pytest.raises(ValueError):extraction_profile({'extraction_profile':{'thinking':'high','max_tokens':16384}})
+
+
 def setup():
  s,_=fixture();messages=project([{'role':'system','content':''},{'role':'user','content':'JSON Schema\n'+json.dumps(input_schema(8,'actor'))}]);schema=request_schema(messages)
  c=CompoundCandidate(s,'Они пришли в парк. По дороге b рассказал о встрече.','Иду с b в парк.',1,version=8,schema=schema)
