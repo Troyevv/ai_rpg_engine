@@ -117,3 +117,54 @@ def test_single_effect_reference_alias_and_external_authority_feedback():
  assert row['path']=='scene_steps[0].effects[1].input_source'
  assert 'unrelated genuine input quote' in row['repair_reason'] and 'unauthorized_choice' in row['repair_reason']
  assert 'player_action_id' not in row['repair_reason']
+
+
+def test_collect_compound_references_and_refine_without_duplicate_domain_record():
+ s,c,p=setup()
+ p['relationship_changes']=[{'source_id':'a','target_id':'b','source_event_ids':['walk'],'assertion':'grounded_feelings','rationale':'b shared news with a.','dimensions':{'trust':1}}]
+ p['character_changes']=[{'id':'b','source_event_id':'walk','situation':'At park.'}]
+ with pytest.raises(StructuralDeltaError) as exc:resolve(s,c,p)
+ diagnostics=exc.value.diagnostics('test')
+ assert {d['path'] for d in diagnostics}=={'relationship_changes[0].source_event_ids[0]','character_changes[0].source_event_id'}
+ feedback=json.loads(c.feedback(diagnostics,json.dumps(p)))
+ assert {'walk/0','walk/1'}<=set(feedback['scope']['dependencies'])
+ rel=deepcopy(p['relationship_changes'][0]);rel['source_event_ids']=['walk/1']
+ char=deepcopy(p['character_changes'][0]);char['source_event_id']='walk/1'
+ patch={'candidate_hash':feedback['candidate_hash'],'replacements':[],'sections':{'relationship_changes':[rel],'character_changes':[char]},'reason':'Select the actual spoken effect.'}
+ out=resolve(s,c,patch)
+ assert c.base['relationship_changes']==[rel]
+ assert c.base['character_changes']==[char]
+ assert c.base['scene_steps']==p['scene_steps']
+ assert out.state['characters']['a']['location_id']=='park'
+ assert [k['actor_id'] for k in out.history['knowledge_acquisitions']]==['a']
+ assert patch.get('withdrawals') is None  # Never rewrite the original provider payload.
+
+
+def test_reference_refinement_does_not_guess_an_effect_or_edit_independent_fields():
+ s,c,p=setup()
+ rel={'source_id':'a','target_id':'b','source_event_ids':['walk'],'assertion':'grounded_feelings','rationale':'b shared news.','dimensions':{'trust':1}}
+ p['relationship_changes']=[rel]
+ with pytest.raises(StructuralDeltaError) as exc:resolve(s,c,p)
+ f=json.loads(c.feedback(exc.value.diagnostics('test'),json.dumps(p)))
+ changed=deepcopy(rel);changed['source_event_ids']=['walk/1'];changed['dimensions']['trust']=5
+ patch={'candidate_hash':f['candidate_hash'],'replacements':[],'sections':{'relationship_changes':[changed]},'reason':'Also change the feeling.'}
+ with pytest.raises(StructuralDeltaError):resolve(s,c,patch)
+ # The ambiguous predecessor was not implicitly withdrawn when other meaning changed.
+ assert rel in c.base['relationship_changes']
+
+
+def test_optional_annotation_reference_keeps_existing_owner_and_cannot_gate_outcomes():
+ s,c,p=setup()
+ from backend.runtime_v3.initiative import SceneAction
+ # A schema-valid optional annotation with a reference that cannot identify
+ # one effect. The existing initiative owner must reject only its authority.
+ p['scene_actions']=[{'actor_id':'b','target_ids':['a'],'source_event_id':'walk','phase':'answer','modality':'speech','evidence':p['scene_steps'][0]['evidence']}]
+ SceneAction.model_validate(p['scene_actions'][0])
+ out=resolve(s,c,p)
+ assert out.state['characters']['a']['location_id']=='park'
+ assert [k['actor_id'] for k in out.history['knowledge_acquisitions']]==['a']
+ assert any(w.get('code')=='initiative_event_invalid' for w in out.warnings)
+ p['agency_findings']=[{'narrative_evidence':'a refuses an unchosen offer.','classification':'unauthorized_choice'}]
+ with pytest.raises(StructuralDeltaError) as exc:resolve(s,c,p)
+ assert not exc.value.repairable
+ assert exc.value.diagnostics('test')[0]['code']=='narrative_agency_conflict'

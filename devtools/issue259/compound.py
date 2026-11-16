@@ -5,8 +5,9 @@ The existing compiler owns every canonical record. Evidence is copied, not read.
 from copy import deepcopy
 import json
 from jsonschema import Draft202012Validator
-from backend.runtime_v3.scene_repair import SceneCandidate, digest
+from backend.runtime_v3.scene_repair import SceneCandidate, digest, record_key
 from backend.runtime_v3.scene_steps import compile_scene, schema_diagnostics
+from backend.runtime_v3.raw import OPTIONAL_SECTIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 from devtools.issue257.destination_prototype import adapt, project as destination
 
@@ -81,14 +82,16 @@ def effect_id(source,index):
 
 
 def expand(value):
-    result=deepcopy(value);steps=[];origins=[]
+    result=deepcopy(value);steps=[];origins=[];errors=[]
     aliases={f"{s['id']}/0":s['id'] for s in value['scene_steps'] if len(s['effects'])==1}
     ambiguous={s['id'] for s in value['scene_steps'] if len(s['effects'])>1}
     def references(node,key='',path=()):
         if isinstance(node,dict):return {k:references(v,k,path+(k,)) for k,v in node.items()}
         if isinstance(node,list):return [references(v,key,path+(i,)) for i,v in enumerate(node)]
         if isinstance(node,str) and key in ('source_event_id','source_event_ids','during_step_id','involuntary_source_id'):
-            if node in ambiguous:raise StructuralDeltaError('Select the specific effect of this compound source.',code='scene_schema_invalid',entity=node,section=path[0] if path else 'scene_steps',index=path[1] if len(path)>1 and isinstance(path[1],int) else None,field=key)
+            if node in ambiguous and (not path or path[0] not in OPTIONAL_SECTIONS):
+                suffix=''.join(f'[{part}]' if isinstance(part,int) else ('.' if j else '')+part for j,part in enumerate(path[2:]))
+                errors.append(StructuralDeltaError('Select the specific effect of this compound source.',code='scene_schema_invalid',entity=node,section=path[0] if path else 'scene_steps',index=path[1] if len(path)>1 and isinstance(path[1],int) else None,field=suffix or key))
             return aliases.get(node,node)
         return node
     result=references(result)
@@ -98,10 +101,11 @@ def expand(value):
             if 'during' in step:
                 index=step.pop('during')
                 if 'during_step_id' in step or index>=len(source['effects']) or source['effects'][index].get('kind')!='movement':
-                    raise StructuralDeltaError('during must identify one movement effect in this source, without another route reference.',code='scene_schema_invalid',section='scene_steps',index=i,field=f'effects[{j}].during')
-                step['during_step_id']=effect_id(source,index)
+                    errors.append(StructuralDeltaError('during must identify one movement effect in this source, without another route reference.',code='scene_schema_invalid',section='scene_steps',index=i,field=f'effects[{j}].during'))
+                else:step['during_step_id']=effect_id(source,index)
             steps.append(step);origins.append((i,j))
     result['scene_steps']=steps
+    if errors:raise StructuralDeltaError.combine(errors)
     return result,origins
 
 
@@ -118,6 +122,7 @@ class CompoundCandidate(SceneCandidate):
         ids=[s['id'] for s in value['scene_steps']]
         if len(set(ids))!=len(ids):raise StructuralDeltaError('Duplicate source IDs',code='scene_schema_invalid',section='scene_steps')
         self.base=deepcopy(value)
+        self.origins=[]
         expanded,self.origins=expand(value)
         expanded=adapt(expanded,self.before,self.turn_id,self.namespace)
         self.raw=compile_scene(expanded,self.before,self.narrative,self.turn_id,version=8,namespace=self.namespace,defer_errors=defer_errors)
@@ -143,10 +148,43 @@ class CompoundCandidate(SceneCandidate):
 
     def feedback(self,diagnostics,original):
         result=json.loads(super().feedback(diagnostics,original))
+        if self.scope is not None:
+            # The existing scope owner selects semantic sources. Their derived
+            # identities are the same dependency, not unrelated new records.
+            derived={effect_id(s,j) for s in self.base['scene_steps'] if s['id'] in self.scope['step_ids'] for j in range(len(s['effects']))}
+            self.scope['dependencies']=sorted(set(self.scope['dependencies'])|derived)
+            result['scope']=deepcopy(self.scope)
         result['contract']+=' Source records contain evidence and effects; never return flattened compiler steps. Preserve independent effects within each replacement.'
         return json.dumps(result,ensure_ascii=False)
 
     def apply(self,payload):
+        payload=deepcopy(payload)
+        if (not isinstance(payload.get('sections',{}),dict)
+                or not isinstance(payload.get('withdrawals',[]),list)
+                or any(not isinstance(v,dict) for v in payload.get('withdrawals',[]))):
+            return super().apply(payload)
+        # A model explicitly selecting an effect of the SAME scoped source is
+        # a reference refinement. Digest-keyed domain records otherwise become
+        # additions and leave their damaged predecessor behind. Match all other
+        # fields exactly; never infer which effect the model intended.
+        parents={effect_id(s,j):s['id'] for s in self.base['scene_steps'] if s['id'] in self.scope['step_ids'] and len(s['effects'])>1 for j in range(len(s['effects']))}
+        def parent_refs(node,key=''):
+            if isinstance(node,dict):return {k:parent_refs(v,k) for k,v in node.items()}
+            if isinstance(node,list):return [parent_refs(v,key) for v in node]
+            return parents.get(node,node) if isinstance(node,str) and key in ('source_event_id','source_event_ids','during_step_id','involuntary_source_id') else node
+        for section,items in payload.get('sections',{}).items():
+            if not isinstance(items,list):continue
+            editable=set(self.scope['record_keys'].get(section,[]))
+            old=self.base.get(section,[])
+            if not isinstance(old,list):continue
+            for item in items:
+                if record_key(item) in {record_key(v) for v in old}:continue
+                matches=[v for v in old if record_key(v) in editable and not v.get('id') and parent_refs(item)==v and item!=v]
+                if len(matches)==1:
+                    key=record_key(matches[0])
+                    withdrawals=payload.setdefault('withdrawals',[])
+                    if not any(v.get('section')==section and v.get('record_key')==key for v in withdrawals):
+                        withdrawals.append(dict(section=section,record_key=key,reason='Explicit typed reference refined to an effect of the same source; all other fields unchanged.'))
         result=super().apply(payload)
         for old,new in zip(self.base['scene_steps'],[s for s in result['scene_steps'] if s['id'] in {v['id'] for v in self.base['scene_steps']}]):
             allowed=self.effect_scope.get(old['id'])

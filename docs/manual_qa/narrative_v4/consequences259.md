@@ -55,3 +55,7 @@ Previous #258 receipts: 22 calls, 570,941 input / 20,062 output, $0.1953567. Ear
 Before dispatch freeze severity: lost movement/wrong identity/address/secret leak/lost substantial information/unchosen decision/serious date conflict/save damage are blockers. Route ordering/detail is assessed by effect on listeners, access, outcomes and choice; equivalent harmless representation is not a blocker. Historical #257/#258 tables remain unchanged. A semantically wrong structural acceptance never gets an oracle-driven repair.
 
 If initial results fail, establish the cause and execute only the predeclared correction/profile branch. Integration errors are fixed deterministically; persistent semantic failures do not trigger new Runtime gates. A third semantic request is NOT authorized by this plan. Stop paid dispatch on unresolved spend, either cap, or a demonstrated unresolved blocker after the allowed branch. Confirmation, recovery and game require passing preceding gates. Do not play over a false accepted predecessor. Keep the 30-turn diary separate from technical investigation; no code edits during the UI session.
+
+## Executed qualification
+
+The approved primary, correction and Flash/low fallback are complete. See [live outcomes, receipts and stop decision](consequences259-live.md). No candidate qualified for campaign recovery; this preparation document is not a completion claim.
