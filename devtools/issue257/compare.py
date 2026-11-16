@@ -37,7 +37,7 @@ def run(case, variant, generate, record, *, candidate_type=SceneCandidate):
             raw=candidate.parse(response,defer_errors=True)
             options=case.get('resolver_options') or resolver_options(state,case['player_input'],contract_version=case.get('contract_version',7))
             result=StateResolver(state,case['narrative'],case['player_input'],turn_id=turn,**options).resolve(raw)
-            record(dict(event='resolved',state=result.state,history=result.history,semantic_status='REQUIRES_INDEPENDENT_REVIEW'))
+            record(dict(event='resolved',state=result.state,history=result.history,warnings=result.warnings,choices=result.choices,semantic_status='REQUIRES_INDEPENDENT_REVIEW'))
             break
         except StructuralDeltaError as exc:
             diagnostics=exc.diagnostics('comparison');record(dict(event='diagnostics',diagnostics=diagnostics))

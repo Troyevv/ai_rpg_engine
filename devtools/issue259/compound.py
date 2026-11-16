@@ -15,8 +15,9 @@ Return one structured result, not a chronological retelling. scene_steps are com
 sources: id, a short verbatim evidence excerpt, and effects. One source can establish
 travel AND heard information AND contact. Do not select just one kind for compound
 consequences. Do not put a consequence only in evidence. Omit incidental gestures.
-Effects have server-derived identity id/zero-based-effect-index. Domain source_event_id
-and cross-source during_step_id reference that identity. A speech effect may use
+A source with one effect uses its source id. Multiple effects have derived identity
+id/zero-based-effect-index; domain references must identify the relevant effect,
+never an ambiguous whole group. Domain source_event_id and during_step_id use these references. A speech effect may use
 `during` with the index of a movement effect IN THE SAME source; this preserves actual
 route-time hearing. Otherwise retain explicit during_step_id. Do not infer hearing.
 Movement: explicit travellers, actual assertion and destination. A proposal, preparation
@@ -52,7 +53,8 @@ valid for a scene without meaningful change. Return only the provided JSON schem
 
 def project(messages):
     out=destination(messages)
-    out[0]['content']=RULES
+    from backend.runtime_v3.context_contract import SEMANTIC_RELATIONSHIP_CONTRACT
+    out[0]['content']=RULES + SEMANTIC_RELATIONSHIP_CONTRACT
     for m in out:
         if not m['content'].startswith('JSON Schema\n'):continue
         s=json.loads(m['content'].split('\n',1)[1]);p=s['properties']
@@ -74,16 +76,30 @@ def project(messages):
     return out
 
 
+def effect_id(source,index):
+    return source['id'] if len(source['effects'])==1 else f"{source['id']}/{index}"
+
+
 def expand(value):
     result=deepcopy(value);steps=[];origins=[]
-    for i,source in enumerate(value['scene_steps']):
+    aliases={f"{s['id']}/0":s['id'] for s in value['scene_steps'] if len(s['effects'])==1}
+    ambiguous={s['id'] for s in value['scene_steps'] if len(s['effects'])>1}
+    def references(node,key='',path=()):
+        if isinstance(node,dict):return {k:references(v,k,path+(k,)) for k,v in node.items()}
+        if isinstance(node,list):return [references(v,key,path+(i,)) for i,v in enumerate(node)]
+        if isinstance(node,str) and key in ('source_event_id','source_event_ids','during_step_id','involuntary_source_id'):
+            if node in ambiguous:raise StructuralDeltaError('Select the specific effect of this compound source.',code='scene_schema_invalid',entity=node,section=path[0] if path else 'scene_steps',index=path[1] if len(path)>1 and isinstance(path[1],int) else None,field=key)
+            return aliases.get(node,node)
+        return node
+    result=references(result)
+    for i,source in enumerate(result['scene_steps']):
         for j,effect in enumerate(source['effects']):
-            step=deepcopy(effect);step.update(id=f"{source['id']}/{j}",text=source['evidence'],evidence=source['evidence'])
+            step=deepcopy(effect);step.update(id=effect_id(source,j),text=source['evidence'],evidence=source['evidence'])
             if 'during' in step:
                 index=step.pop('during')
                 if 'during_step_id' in step or index>=len(source['effects']) or source['effects'][index].get('kind')!='movement':
                     raise StructuralDeltaError('during must identify one movement effect in this source, without another route reference.',code='scene_schema_invalid',section='scene_steps',index=i,field=f'effects[{j}].during')
-                step['during_step_id']=f"{source['id']}/{index}"
+                step['during_step_id']=effect_id(source,index)
             steps.append(step);origins.append((i,j))
     result['scene_steps']=steps
     return result,origins
@@ -119,6 +135,11 @@ class CompoundCandidate(SceneCandidate):
                 if 'claim_index' in row:
                     row['path']+=f".claims[{row.pop('claim_index')}]"
                 row['player_input']=self.player_input
+                row['source_evidence']=self.base['scene_steps'][group]['evidence']
+                if row.get('code') in ('player_action_source_invalid','movement_agency') or (row.get('code')=='player_action_event_mismatch' and row.get('reason') in ('missing_player_action_id','missing_player_evidence')):
+                    row['compiled_reason']=row.get('repair_reason')
+                    row['repair_reason']='This effect lacks a valid source of controlled-actor authority. Compare its actual decision with player_input; an unrelated genuine input quote does not authorize it. For an actually chosen effect use input_source with the relevant input quote and meaning. For a substantial unchosen decision in Narrative, retain the consequence and add agency_findings unauthorized_choice with its evidence. NPC effects have no player input_source. Do not fabricate a source, remove a significant outcome, or edit internal compiler records.'
+                    row['path']+='.input_source'
 
     def feedback(self,diagnostics,original):
         result=json.loads(super().feedback(diagnostics,original))

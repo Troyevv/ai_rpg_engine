@@ -56,7 +56,7 @@ def test_scoped_repair_keeps_independent_source_and_hash():
  p['scene_steps'].append({'id':'independent','evidence':'b замечает свет.','effects':[{'kind':'occurrence','actor_ids':['b']}]})
  with pytest.raises(StructuralDeltaError) as exc:resolve(s,c,p)
  feedback=json.loads(c.feedback(exc.value.diagnostics('test'),json.dumps(p)))
- assert feedback['diagnostics'][0]['path']=='scene_steps[0].effects[0]'
+ assert feedback['diagnostics'][0]['path']=='scene_steps[0].effects[0].input_source'
  fixed=deepcopy(p['scene_steps'][0]);fixed['effects'][0]['input_source']={'quote':c.player_input,'meaning':'preserved'}
  patch={'candidate_hash':feedback['candidate_hash'],'replacements':[fixed],'sections':{},'reason':'Restore actual input source.'}
  r=resolve(s,c,patch)
@@ -96,3 +96,17 @@ def test_repair_cannot_drop_other_consequences_in_same_source():
  f=json.loads(c.feedback(exc.value.diagnostics('test'),json.dumps(p)))
  replacement=deepcopy(p['scene_steps'][0]);replacement['effects']=replacement['effects'][:1]
  with pytest.raises(StructuralDeltaError):c.parse({'candidate_hash':f['candidate_hash'],'replacements':[replacement],'sections':{},'reason':'Drop speech to save movement.'})
+
+
+def test_single_effect_reference_alias_and_external_authority_feedback():
+ from devtools.issue259.compound import expand
+ p={'scene':{},'scene_steps':[{'id':'source','evidence':'Сообщение.','effects':[{'kind':'occurrence','actor_ids':['a']}]}], 'thread_changes':[{'id':'t','source_event_id':'source/0'}]}
+ expanded,_=expand(p)
+ assert expanded['scene_steps'][0]['id']=='source'
+ assert expanded['thread_changes'][0]['source_event_id']=='source'
+ s,c,p=setup();c.parse(p)
+ f=json.loads(c.feedback([{'section':'scene_steps','index':1,'code':'player_action_event_mismatch','reason':'missing_player_action_id','repair_reason':'Specify internal player_action_id'}],json.dumps(p)))
+ row=f['diagnostics'][0]
+ assert row['path']=='scene_steps[0].effects[1].input_source'
+ assert 'unrelated genuine input quote' in row['repair_reason'] and 'unauthorized_choice' in row['repair_reason']
+ assert 'player_action_id' not in row['repair_reason']
