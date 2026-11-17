@@ -3,7 +3,7 @@ import json
 import time
 from unittest.mock import patch
 
-from backend.chat.context import TEMPLATE, INITIAL_PROMPT, OPENING_PROMPT, SUMMARY_PROMPT
+from backend.chat.context import TEMPLATE, INITIAL_PROMPT, OPENING_PROMPT, SUMMARY_PROMPT, RP_PROMPT
 from backend.chat import capabilities
 from backend.chat.models import ModelSettings
 from test_chat_mode import env, tok, provider, wait, state, url, body, generate, checkpoint, MEMORY
@@ -47,7 +47,17 @@ def approve(client,d,**kw):
 
 def test_idea_review_opening_chapter_one_attempt_each(env):
     client,app=env;d,payload=draft(client)
-    with patch('llm.chat_stream',side_effect=provider(TEMPLATE)) as transport, \
+    # Authored transport fixture: verifies routing/persistence, not model compliance.
+    scene = ('Лена прислушивается к стуку.\n\n'
+             '1. Действие: «Кто там?»\n2. Действие: осмотреть окно.\n'
+             '3. Действие: «Лена, ты ждёшь гостей?»\n4. Действие: остаться у стола.\n\n'
+             'Свободный ввод: свой вариант.\n\n'
+             'Время: 9 октября, точное время не установлено.\n'
+             'Место: комната у маяка.\nРядом: Лена, стол, стук за дверью.')
+    def stream(**kw):
+        text = TEMPLATE if INITIAL_PROMPT in kw['messages'][0]['content'] else scene
+        return provider(text)(**kw)
+    with patch('llm.chat_stream',side_effect=stream) as transport, \
          patch('engine.submit',side_effect=AssertionError('Narrative forbidden')), \
          patch('engine.chat_stream',side_effect=AssertionError('Extraction forbidden')):
         request=body(d,kind='initial')
@@ -71,23 +81,33 @@ def test_idea_review_opening_chapter_one_attempt_each(env):
         assert approve(client,d)['id']==c['id'] and transport.call_count==2
         messages=client.get(url(c,'/messages')).json()['messages']
         assert len(messages)==1 and messages[0]['role']=='assistant'
+        assert messages[0]['content']==scene and opening['response']==scene
         assert c['memory']['text']==edit['text']
         with app.state.repository.connect() as db:
             ctx=json.loads(db.execute('SELECT context_json FROM chat_jobs WHERE id=?',(opening['id'],)).fetchone()[0])
-            assert OPENING_PROMPT in ctx[0]['content']
+            assert RP_PROMPT in ctx[0]['content'] and OPENING_PROMPT in ctx[0]['content']
             assert len(ctx)==2 and 'Авторская память' in ctx[1]['content']
             assert db.execute('SELECT COUNT(*) FROM game_jobs').fetchone()[0]==0
         c=state(client,c)
         duplicate=client.post(url(c,'/generate'),json=body(c,kind='start'))
         assert duplicate.status_code==409 and transport.call_count==2
-        generate(client,c,text='Я спрашиваю о маяке.')
+        reply=generate(client,c,text='Я спрашиваю о маяке.')
         assert transport.call_count==3
+        sent=transport.call_args.kwargs['messages']
+        assert RP_PROMPT in sent[0]['content'] and OPENING_PROMPT not in sent[0]['content']
+        assert reply['response']==scene
         c=state(client,c)
-    c,_=checkpoint(client,c,text=TEMPLATE)
+    c,summary=checkpoint(client,c,text=TEMPLATE)
     assert len(c['chapters'])==2
-    with patch('llm.chat_stream',side_effect=provider()) as transport:
+    with app.state.repository.connect() as db:
+        ctx=json.loads(db.execute('SELECT context_json FROM chat_jobs WHERE id=?',(summary['id'],)).fetchone()[0])
+        assert SUMMARY_PROMPT in ctx[0]['content'] and INITIAL_PROMPT not in ctx[0]['content']
+        assert any(m['content']==scene for m in ctx)
+    assert c['memory']['text']==TEMPLATE  # Game footer is not appended to memory by the engine.
+    with patch('llm.chat_stream',side_effect=provider(scene)) as transport:
         generate(client,c,text='Продолжим разговор.')
         assert transport.call_count==1
+        assert RP_PROMPT in transport.call_args.kwargs['messages'][0]['content']
     with app.state.repository.connect() as db:
         assert db.execute('SELECT COUNT(*) FROM chat_messages').fetchone()[0]==5
 

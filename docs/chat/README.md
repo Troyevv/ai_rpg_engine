@@ -27,7 +27,8 @@ The ordinary UI offers **Create from idea**, **Use ready Markdown**, and **Impor
 `chat_creations` and `chat_creation_jobs` persist author drafts, settings, streamed output,
 immutable generated variants and actual usage before any playable campaign exists. The separate
 `chat_initial.md` prompt includes the entire Issue #260 template; it receives the author's idea
-verbatim and requests world/NPC/knowledge/relationship setup without deciding player actions.
+verbatim and allows invention of unspecified world facts and character backstories, including
+the protagonist's past. Explicit author wishes take priority; future player choices remain open.
 One streamed call normally produces the document. The author can edit/import/export it,
 regenerate it, save/reopen the draft or explicitly continue an interrupted document.
 Length/error/empty responses and structurally missing sections/labels require explicit review;
@@ -40,6 +41,15 @@ no artificial player action/message. Player input waits for a complete (or expli
 opening. Regeneration/retry retains the original request and creates another branch. Reload,
 repeated confirmation and restart never generate another opening automatically. The old
 `POST /campaigns` API is retained for compatibility; the normal UI uses `/creations`.
+
+The default RP prompt requests 4–6 optional actions, `Свободный ввод: свой вариант.`, then
+a brief `Время / Место / Рядом` footer in every game response, including the opening. These
+are suggestions, never completed player actions. Initial and updated memory keep the original
+Issue #260 template without this footer; summary instructions preserve only established history
+and exclude unchosen suggestions. Formatting belongs to the model, with no response parser,
+semantic validator or extra inference. Saved campaign prompts and recorded retry contexts are
+not rewritten: existing campaigns can adopt the new RP text through advanced prompt settings;
+regeneration of an old response deliberately uses its original recorded instructions.
 
 The additive v2 migration preserves old campaigns with `opening_required=0`; an established
 conversation never acquires a retroactive opening. Creation edits use their own revision and
