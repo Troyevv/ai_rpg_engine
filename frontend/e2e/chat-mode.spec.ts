@@ -216,6 +216,12 @@ test('Chat: idea review, automatic opening, variants and reload without duplicat
   await page.reload();await expect(page.locator('.chat-assistant')).toHaveCount(1);
   const after=await (await request.get(`/api/chat/campaigns/${id}`)).json();expect(after.job.id).toBe(before.job.id);
   await page.locator('.chat-assistant').getByRole('button',{name:'Перегенерировать',exact:true}).click();
+  // The old enabled composer/absent Stop can still be visible before POST returns.
+  // Budget probes must use the complete regenerated scene, not a streaming prefix.
+  await expect.poll(async()=>{
+    const c=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+    return {changed:c.job.id!==before.job.id,status:c.job.status};
+  }).toEqual({changed:true,status:'complete'});
   await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
   await expect(page.getByLabel('Твоё сообщение',{exact:true})).toBeEnabled();
   const variant=await (await request.get(`/api/chat/campaigns/${id}`)).json();expect(variant.branches).toHaveLength(2);expect(variant.branch.head).toBe(1);
