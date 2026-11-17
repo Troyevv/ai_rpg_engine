@@ -1131,6 +1131,32 @@ if __name__ == '__main__':
         evolve(app.state.repository,sid)
         return app.state.repository.get_save(sid)
 
+    @app.post('/test/chat-history')
+    def chat_history():
+        # Synthetic storage/rendering fixture, not 1000 played turns.
+        from backend.chat.models import Create, Settings, Generate, Confirm
+        from backend.chat.context import RP_PROMPT, TEMPLATE
+        from uuid import uuid4
+        r=app.state.chat.repo
+        settings=Settings(prompt=RP_PROMPT)
+        settings.reply.model='chat-fixture';settings.summary.model='chat-summary-fixture'
+        cid=r.create(Create(token=uuid4().hex,name='Архив 1000 сообщений',memory=TEMPLATE,settings=settings).model_dump())
+        for chapter in range(4):
+            with r.transaction() as db:
+                b=r.branch(db,cid)
+                for i in range(250):
+                    r.add_message(db,cid,b,'user' if i%2==0 else 'assistant',f'Глава {chapter+1}, сообщение {i+1}.')
+            c=r.state(cid)
+            job=app.state.chat.start(cid,Generate(revision=c['revision'],token=uuid4().hex,kind='summary',next_chapter=True).model_dump())
+            for _ in range(1000):
+                job=r.job(cid,job['id'])
+                if job['status']!='running':break
+                time.sleep(.01)
+            if job['status']!='complete':raise ValueError('Synthetic summary did not complete')
+            c=r.state(cid)
+            r.confirm(cid,job['output_id'],Confirm(revision=c['revision'],token=uuid4().hex,text=job['response'],next_chapter=True).model_dump())
+        return r.state(cid)
+
     @app.post('/test/seed')
     def seed():
         repo = app.state.repository

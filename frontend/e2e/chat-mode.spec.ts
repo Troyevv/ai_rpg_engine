@@ -120,3 +120,46 @@ test('Chat: persisted draft review, settings, request receipts and browser Back'
     expect(main!.y+main!.height).toBeLessThanOrEqual(nav!.y+nav!.height);
   }
 });
+
+test('Chat: explicit Narrative snapshot copy leaves source unchanged',async({page,request})=>{
+  const seed=await (await request.post('/test/seed')).json();
+  const before=await (await request.get(`/api/saves/${seed.save}/author-state`)).json();
+  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Продолжить в Chat Mode',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByRole('button',{name:'Подготовить снимок бесплатно',exact:true}).click();
+  await expect(dialog.getByText('Снимок подготовлен',{exact:true})).toBeVisible();
+  await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/ИСХОДНЫЙ СНИМОК/);
+  await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-fixture');
+  await dialog.getByRole('group',{name:'Обновление выжимки — отдельный вызов'}).getByLabel('Модель',{exact:true}).fill('chat-summary-fixture');
+  await dialog.getByRole('button',{name:'Создать RP-кампанию',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  const id=await page.evaluate(()=>localStorage.getItem('chat-selection'));
+  const c=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+  expect(c.source.origin.save_id).toBe(seed.save);
+  expect(await (await request.get(`/api/saves/${seed.save}/author-state`)).json()).toEqual(before);
+  await page.getByRole('button',{name:'Вернуться в Narrative',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Продолжить в Chat Mode',exact:true})).toBeVisible();
+});
+
+test('Chat: thousand-message archive renders bounded pages across chapters',async({page,request})=>{
+  const seeded=await request.post('/test/chat-history');
+  expect(seeded.ok(),await seeded.text()).toBeTruthy();
+  const c=await seeded.json();
+  expect(c.branch.head).toBe(1000);expect(c.chapters).toHaveLength(5);
+  await page.addInitScript(id=>{localStorage.setItem('active-mode','chat');localStorage.setItem('chat-selection',id)},c.id);
+  await page.goto('/');
+  await expect(page.locator('.chat-message')).toHaveCount(40);
+  await page.getByRole('button',{name:'Ранее в истории',exact:true}).click();
+  await expect(page.locator('.chat-message')).toHaveCount(80);
+  await page.getByRole('button',{name:'Главы и ветки',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Глава 1 Архив · читать'}).click();
+  await expect(page.locator('.chat-message')).toHaveCount(40);
+  await expect(page.locator('.chat-message').first()).toContainText('Глава 1');
+  await page.getByRole('button',{name:'К активной главе',exact:true}).click();
+  await expect(page.locator('.chat-heading')).toContainText('Глава 5');
+  const after=await (await request.get(`/api/chat/campaigns/${c.id}`)).json();
+  expect(after.active_branch).toBe(c.active_branch);expect(after.branch.head).toBe(1000);
+  expect(after.budgets.reply.estimated_tokens).toBeLessThan(12000);
+});
