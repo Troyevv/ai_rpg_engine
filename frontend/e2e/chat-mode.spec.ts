@@ -1,0 +1,122 @@
+import {test,expect,type Page} from '@playwright/test';
+
+async function createChat(page:Page) {
+  await page.goto('/');
+  await page.getByRole('button',{name:'RP-чат',exact:true}).click();
+  await page.getByRole('button',{name:'Новая RP-кампания',exact:true}).last().click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Название кампании',{exact:true}).fill('Непрерывная история');
+  await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-fixture');
+  await dialog.getByRole('group',{name:'Обновление выжимки — отдельный вызов'}).getByLabel('Модель',{exact:true}).fill('chat-summary-fixture');
+  await dialog.getByRole('button',{name:'Создать RP-кампанию',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Непрерывная история',exact:true})).toBeVisible();
+}
+
+for(const skin of ['graphite','parchment'])test(`Chat: campaign, stream, memory, chapters, edit and reload (${skin})`,async({page},info)=>{
+  if(info.project.name==='mobile')await page.setViewportSize({width:360,height:780});
+  await page.addInitScript(s=>localStorage.setItem('workshop-theme',JSON.stringify({theme_id:s,mode:'manual'})),skin);
+  await createChat(page);
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Я оставляю обещанную книгу на столе. «Ты хотел сказать…»');
+  await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
+  await expect(page.locator('.chat-assistant')).toContainText('Лена ставит чашку');
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Неотправленный ввод переживёт reload');
+  await page.reload();
+  await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('Неотправленный ввод переживёт reload');
+  await page.getByRole('button',{name:'Обновить выжимку и продолжить',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await expect(dialog.getByRole('heading',{name:'Проверка новой выжимки'})).toBeVisible();
+  await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toContainText('Ошибочно считает:');
+  const value=await dialog.getByLabel('Текст выжимки',{exact:true}).inputValue();
+  await dialog.getByLabel('Текст выжимки',{exact:true}).fill(value+'\nАвторская проверка: дата и тайна сохранены.');
+  await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();
+  await expect(page.locator('.chat-heading')).toContainText('Глава 2');
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Продолжай незавершённый разговор.');
+  await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await expect(page.locator('.chat-assistant')).toHaveCount(2);
+  await page.locator('.chat-scroll').evaluate(el=>{el.scrollTop=0});
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
+  expect(await page.locator('.chat-scroll').evaluate(el=>el.scrollTop)).toBeLessThan(5);
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Черновик основной ветки');
+  await page.getByRole('button',{name:'Главы и ветки',exact:true}).click();
+  await dialog.getByRole('button',{name:'Глава 1 Архив · читать'}).click();
+  await expect(page.getByRole('button',{name:'К активной главе',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveCount(0);
+  await page.locator('.chat-user').first().getByRole('button',{name:'Редактировать',exact:true}).click();
+  await dialog.getByLabel('Новый текст',{exact:true}).fill('Я оставляю книгу у себя.');
+  await dialog.getByRole('button',{name:'Сохранить как новую ветку',exact:true}).click();
+  await expect(page.locator('.chat-message')).toHaveCount(1);
+  await expect(page.locator('.chat-user')).toContainText('Я оставляю книгу у себя.');
+  await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('');
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Черновик альтернативной ветки');
+  await page.getByRole('button',{name:'Главы и ветки',exact:true}).click();
+  await dialog.getByRole('button',{name:/Основная ветка/}).click();
+  await expect(page.locator('.chat-message')).toHaveCount(4);
+  await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('Черновик основной ветки');
+  await page.getByRole('button',{name:'Выжимка',exact:true}).click();
+  await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toHaveValue(/Авторская проверка/);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  const box=await page.getByLabel('Твоё сообщение',{exact:true}).boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
+  if(process.env.CHAT_QA_SCREENSHOTS)await page.screenshot({path:`/tmp/chat260-${info.project.name}-${skin}.png`});
+});
+
+test('Chat: stop, explicit retry, safe markdown, hard limit and no hidden replay',async({page})=>{
+  await createChat(page);
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('<script>window.chatXss=true</script>');
+  await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await page.getByRole('button',{name:'Остановить',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Повторить явно (новый вызов)'})).toBeVisible();
+  await expect(page.locator('.chat-user')).toContainText('<script>');
+  expect(await page.evaluate(()=>('chatXss' in window))).toBeFalsy();
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Повторить явно (новый вызов)'})).toBeVisible();
+  await page.getByRole('button',{name:'Повторить явно (новый вызов)'}).click();
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
+  await expect(page.locator('.chat-assistant')).toContainText('Лена ставит чашку');
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Очень большой ввод '.repeat(4000));
+  await expect(page.getByRole('button',{name:'Отправить',exact:true})).toBeDisabled();
+  await expect(page.getByText('Ввод не помещается в контекст.',{exact:false})).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue(/Очень большой ввод/);
+});
+
+test('Chat: persisted draft review, settings, request receipts and browser Back',async({page,request},info)=>{
+  await createChat(page);
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Начать сцену');
+  await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
+  await page.locator('.chat-assistant').getByRole('button',{name:'Запрос и расход',exact:true}).click();
+  await expect(page.getByRole('dialog')).toContainText('prompt_tokens');
+  await page.goBack();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Обновить выжимку',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toBeVisible();
+  await dialog.getByLabel('Текст выжимки',{exact:true}).fill('Проверенный серверный черновик. Тайна остаётся у Лены.');
+  await dialog.getByRole('button',{name:'Сохранить черновик',exact:true}).click();
+  await page.reload();
+  await page.getByRole('button',{name:'Черновик выжимки',exact:true}).click();
+  await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toHaveValue('Проверенный серверный черновик. Тайна остаётся у Лены.');
+  await dialog.getByRole('button',{name:'Утвердить в этой главе',exact:true}).click();
+  await expect(page.locator('.chat-heading')).toContainText('Глава 1');
+  await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();
+  await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Температура',{exact:true}).fill('0.5');
+  await dialog.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  const id=await page.evaluate(()=>localStorage.getItem('chat-selection'));
+  const campaign=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+  expect(campaign.settings.reply.temperature).toBe(.5);
+  expect(campaign.memory.text).toContain('Тайна остаётся');
+  if(info.project.name==='mobile'){
+    const main=await page.getByRole('button',{name:'Обновить выжимку и продолжить',exact:true}).boundingBox();
+    const nav=await page.locator('.chat-toolbar').boundingBox();
+    expect(main!.y+main!.height).toBeLessThanOrEqual(nav!.y+nav!.height);
+  }
+});

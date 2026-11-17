@@ -23,11 +23,16 @@ import {inspectorSections,it,panelLabel} from "./lib/inspector";
 import { Library } from "./Library";
 import { WorldWorkshop } from "./WorldWorkshop";
 import { Game } from "./Game";
+import {ChatMode} from "./ChatMode";
+import type {ChatSource} from "./chatTypes";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
 const GameCalendar=lazy(()=>import('./GameCalendar').then(m=>({default:m.GameCalendar})));
 const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
 export default function App() {
+  const [chatOpen,setChatOpen]=useState(()=>localStorage.getItem("active-mode")==="chat");
+  const [chatSource,setChatSource]=useState<ChatSource|undefined>();
+  const openChat=(source?:ChatSource)=>{setChatSource(source);setChatOpen(true);localStorage.setItem("active-mode","chat")};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
   const mobileMenuVisible=useRef(mobileMenu);mobileMenuVisible.current=mobileMenu;
@@ -208,6 +213,7 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
+  if(chatOpen)return <ThemeProvider world={null} preview><ThemedToaster/><ChatMode source={chatSource} onBack={()=>{setChatOpen(false);localStorage.setItem("active-mode","narrative")}} onConnections={()=>setSettings(true)}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,"PUT");setPrefs(p)}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
   return (
     <ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
       <ThemedToaster />
@@ -246,6 +252,8 @@ export default function App() {
       </nav>}
       <div className="app-main">
         <header className="topbar" hidden={inspector}>
+          <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
+          {save&&<Button className="chat-copy-entry" aria-label="Продолжить в Chat Mode" variant="ghost" size="sm" onClick={()=>openChat({save_id:save.id,revision:save.revision})}><span className="chat-copy-long">Продолжить в Chat Mode</span><span className="chat-copy-short">В Chat</span></Button>}
           <button className="breadcrumb" onClick={() => setLibrary(true)}>
             <LibraryIcon size={17} />
             <span>
@@ -342,6 +350,7 @@ export default function App() {
         onOpenChange={setLibrary}
         choose={choose}
         prepare={() => setView("prepare")}
+        chat={(source)=>{setLibrary(false);openChat(source)}}
       />
       <Inspector
         storyTarget={storyTarget}

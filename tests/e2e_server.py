@@ -590,6 +590,17 @@ engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
     'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960}.get(model, 32768)}
 }
 def authoring_stream(**kwargs):
+    if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture'):
+        # Chat production service/context/API/SQLite; substitute external provider IO only.
+        from backend.chat.context import TEMPLATE
+        text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
+        kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
+        for offset in range(0,len(text),80):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield text[offset:offset+80]
+            time.sleep(.025)
+        kwargs['on_finish']('stop')
+        return
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
         yield json.dumps({"value":"Выросла у моря. Работала в мастерской, затем открыла своё дело."},ensure_ascii=False)
         return
