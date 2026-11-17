@@ -41,6 +41,8 @@ def env(tmp_path):
 
 def create(client, memory=MEMORY, **overrides):
     settings=client.get('/api/chat/defaults').json()['settings']
+    for stage in ('reply','summary'):
+        settings[stage].update(auto_context=False,auto_output=False)
     settings['reply']['model']='fixture-model'
     settings['summary']['model']='fixture-summary'
     body=dict(token=tok(),name='RP история',memory=memory,settings=settings,**overrides)
@@ -326,6 +328,10 @@ def test_legacy_narrative_and_world_source_are_unchanged(env):
 
 def test_long_history_thousand_messages_multiple_checkpoints_and_bounded_pages(env):
     client,app=env;c=create(client);r=app.state.chat.repo
+    # Capacity for 250-message chunks under the byte-level conservative estimator.
+    settings=copy.deepcopy(c['settings'])
+    settings['summary']['context_length']=65536
+    c=client.put(url(c,'/settings'),json=body(c,settings=settings)).json()
     for chapter in range(4):
         with r.transaction() as db:
             b=r.branch(db,c['id'])

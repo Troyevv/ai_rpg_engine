@@ -6,16 +6,23 @@ from pathlib import Path
 PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
 TEMPLATE = (PROMPTS / 'chat_summary_template.md').read_text()
 RP_PROMPT = (PROMPTS / 'chat_rp.md').read_text()
+INITIAL_PROMPT = (PROMPTS / 'chat_initial.md').read_text()
+OPENING_PROMPT = (PROMPTS / 'chat_opening.md').read_text()
 SUMMARY_PROMPT = (PROMPTS / 'chat_summary.md').read_text()
 
 
 def estimate(value):
-    # UTF-8/2 is deliberately conservative for mixed Cyrillic/Latin prose;
-    # NOT a tokenizer or provider usage. Include JSON framing and 15% reserve.
-    return math.ceil(len(json.dumps(value, ensure_ascii=False).encode()) / 2)
+    # Byte-level upper estimate for text, including JSON framing; unlike bytes/2
+    # this also budgets punctuation, emoji and poorly compressible input safely.
+    # NOT a tokenizer or provider usage. Keep an additional protocol/safety reserve.
+    return len(json.dumps(value, ensure_ascii=False).encode())
 
 
 def budget(messages, config):
+    from backend.chat.capabilities import DEEPSEEK
+    config = dict(config)
+    if config['provider']=='deepseek' and config['model'] in DEEPSEEK:
+        config['context_length'] = min(config['context_length'], 1000000)
     tokens = estimate({'messages': messages, 'max_tokens': config['max_tokens'],
                        'temperature': config['temperature'], 'thinking': config['thinking']}) + 32
     margin = max(512, math.ceil(config['context_length'] * .15))

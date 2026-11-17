@@ -2,9 +2,13 @@
 import json
 import sqlite3
 import threading
+from contextlib import nullcontext
+
+from backend.chat import capabilities
+from backend.chat.creation import CreationStore, missing_sections
 
 import llm
-from backend.chat.context import assemble, require_fit
+from backend.chat.context import assemble, require_fit, OPENING_PROMPT
 from backend.chat.repository import dump, row, uid
 from backend.services.coordinator import model_lease
 from backend.services.usage import tracked_stream
@@ -14,17 +18,19 @@ class ChatService:
     def __init__(self, repository, credentials):
         self.repo = repository
         self.credentials = credentials
+        self.creations = CreationStore(repository, credentials)
         self.workers = {}
         self.lock = threading.Lock()
 
-    def reserve(self, cid, body):
+    def reserve(self, cid, body, db=None, resolved=None):
         r = self.repo
-        with r.transaction() as db:
+        with r.transaction() if db is None else nullcontext(db) as db:
             fp, previous = r.operation(db, cid, body['token'], body)
             if previous: return previous['job'], False
             r.guard(db, cid, body['revision'])
             b, m, settings, tail, messages = r.inputs(db, cid)
             kind = body['kind']
+            if resolved: settings = resolved
             if kind in ('retry', 'regenerate'):
                 if kind == 'retry':
                     original = row(db, 'chat_jobs', body['target'], cid)
@@ -44,10 +50,17 @@ class ChatService:
             else:
                 if any(message['status'] != 'complete' for message in messages):
                     raise ValueError('Есть незавершённый ответ. Повторите его или явно примите текст через редактирование.')
+                if kind == 'start' and b['head']:
+                    raise ValueError('Стартовая сцена уже запрошена. Используйте регенерацию или повтор существующего запроса.')
+                if kind in ('reply','summary') and r.campaign(db,cid)['opening_required']:
+                    first = r.messages(db,b['id'],through=1)
+                    if not first or first[0]['role']!='assistant' or first[0]['status']!='complete':
+                        raise ValueError('Сначала завершите стартовую сцену: повторите запрос или явно примите текст через редактирование.')
                 if kind == 'reply':
                     if not body['text'].strip(): raise ValueError('Введите сообщение.')
                     messages.append({'role':'user','content':body['text']})
                 context = assemble(settings, m['text'], tail, messages, summary=kind=='summary')
+                if kind=='start': context[0]['content'] += '\n\n'+OPENING_PROMPT
                 config = settings['summary' if kind=='summary' else 'reply']
             if not config['model'].strip(): raise ValueError('Выберите модель в настройках RP-чата.')
             require_fit(context, config)
@@ -64,13 +77,49 @@ class ChatService:
             r.record(db, cid, body['token'], fp, {'job':jid})
             return jid, True
 
-    def start(self, cid, body):
-        jid, fresh = self.reserve(cid, body)
+    def launch(self, cid, jid, fresh):
         if fresh:
             event = threading.Event()
             with self.lock: self.workers[jid] = {'event':event,'stream':None}
             threading.Thread(target=self.run, args=(cid,jid,event), daemon=True).start()
-        return self.repo.job(cid, jid)
+        return self.job(cid, jid)
+
+    def job(self, cid, jid):
+        return self.creations.job(cid,jid) if cid.startswith('creation_') else self.repo.job(cid,jid)
+
+    def start(self, cid, body):
+        if cid.startswith('creation_'):
+            jid,fresh = self.creations.reserve(cid,body)
+        else:
+            with self.repo.connect() as db:
+                _,old = self.repo.operation(db,cid,body['token'],body)
+                settings = self.repo.inputs(db,cid)[2]
+            if old: return self.repo.job(cid,old['job'])
+            resolved = capabilities.settings(settings,self.credentials) if body['kind'] not in ('retry','regenerate') else None
+            jid,fresh = self.reserve(cid,body,resolved=resolved)
+        return self.launch(cid,jid,fresh)
+
+    def confirm_creation(self, cid, body):
+        with self.repo.connect() as db:
+            d = row(db,'chat_creations',cid)
+            if d['campaign_id']: return self.repo.state(d['campaign_id'])
+            value = json.loads(d['payload'])
+        settings = capabilities.settings(value['settings'],self.credentials)
+        with self.repo.transaction() as db:
+            d = row(db,'chat_creations',cid)
+            if d['campaign_id']:
+                campaign = d['campaign_id']; jid = None; fresh = False
+            else:
+                d = self.creations.guard(db,cid,body['revision'])
+                if not d['text'].strip(): raise ValueError('Выжимка пуста.')
+                if d['job_id'] and (d['status']!='complete' or missing_sections(d['text'])) and not body['accept_partial']:
+                    raise ValueError('Неполный ответ: исправьте текст и явно подтвердите проверку документа.')
+                campaign = self.repo.create(dict(token=cid,name=value['name'],memory=d['text'],settings=settings,source=value.get('snapshot')),db=db)
+                db.execute('UPDATE chat_campaigns SET opening_required=1 WHERE id=?',(campaign,))
+                jid,fresh = self.reserve(campaign,dict(token=cid,revision=0,kind='start',text=''),db=db,resolved=settings)
+                db.execute("UPDATE chat_creations SET campaign_id=?,status='confirmed',revision=revision+1 WHERE id=?",(campaign,cid))
+        if jid: self.launch(campaign,jid,fresh)
+        return self.repo.state(campaign)
 
     def stream_opened(self, jid, stream):
         with self.lock:
@@ -81,6 +130,7 @@ class ChatService:
         stream.close()
 
     def persist(self, cid, jid, text, status='running', error=''):
+        if cid.startswith('creation_'): return self.creations.persist(cid,jid,text,status,error)
         with self.repo.transaction() as db:
             j = row(db, 'chat_jobs', jid, cid)
             c = self.repo.campaign(db, cid)
@@ -97,10 +147,17 @@ class ChatService:
     def run(self, cid, jid, event):
         text = ''
         try:
-            with self.repo.connect() as db: j = row(db, 'chat_jobs', jid, cid)
+            initial = cid.startswith('creation_')
+            with self.repo.connect() as db: j = row(db, 'chat_creation_jobs' if initial else 'chat_jobs', jid, None if initial else cid)
+            if initial and j['kind']=='continue': text = j['response']
             config = json.loads(j['config_json'])
             with model_lease(config['provider']):
                 if event.is_set(): return
+                # Recheck the serving limit under the shared model lease, including
+                # recorded retries after a model was reloaded with a smaller window.
+                known = capabilities.discover(config['provider'],config['model'],self.credentials)
+                if known.get('context_length'):
+                    require_fit(json.loads(j['context_json']),dict(config,context_length=min(config['context_length'],known['context_length'])))
                 key = self.credentials.resolve(config['provider'])
                 for chunk in tracked_stream(self.repo.storage, llm.chat_stream, jid, 'chat_'+j['kind'], config,
                     json.loads(j['context_json']), model=config['model'], provider=config['provider'], api_key=key,
@@ -124,7 +181,8 @@ class ChatService:
                 # Preserve an emergency journal independently if the DB still accepts writes.
                 try:
                     with self.repo.connect() as db:
-                        db.execute("UPDATE chat_jobs SET status='error',response=?,error=? WHERE id=? AND status='running'",
+                        table = 'chat_creation_jobs' if cid.startswith('creation_') else 'chat_jobs'
+                        db.execute(f"UPDATE {table} SET status='error',response=?,error=? WHERE id=? AND status='running'",
                                    (text,'Ошибка записи ответа. Доступный текст сохранён в журнале; примите его через редактор или повторите явно.',jid))
                 except sqlite3.Error:
                     # A completely unwritable disk can preserve only the last durable prefix.
@@ -134,25 +192,36 @@ class ChatService:
             with self.lock: self.workers.pop(jid, None)
 
     def stop(self, cid, jid):
-        j = self.repo.job(cid, jid)
+        j = self.job(cid, jid)
         with self.lock:
             worker = self.workers.get(jid)
             if worker: worker['event'].set()
             stream = worker['stream'] if worker else None
         # Read latest persisted prefix inside the same transaction as cancellation.
         with self.repo.transaction() as db:
-            j = row(db, 'chat_jobs', jid, cid)
-            if j['status']=='running':
+            initial = cid.startswith('creation_')
+            j = row(db, 'chat_creation_jobs' if initial else 'chat_jobs', jid, None if initial else cid)
+            if initial and j['status']=='running':
+                db.execute("UPDATE chat_creation_jobs SET status='stopped',error='Остановлено. Частичный текст сохранён.' WHERE id=?",(jid,))
+                db.execute("UPDATE chat_creations SET status='stopped' WHERE id=? AND job_id=?",(cid,jid))
+            elif j['status']=='running':
                 db.execute("UPDATE chat_jobs SET status='stopped',error='Остановлено. Частичный текст сохранён.' WHERE id=?", (jid,))
                 table = 'chat_drafts' if j['kind']=='summary' else 'chat_messages'
                 db.execute(f"UPDATE {table} SET status='stopped' WHERE id=?", (j['output_id'],))
         if stream:
             try: stream.close()
             except Exception: pass
-        return self.repo.job(cid, jid)
+        return self.job(cid, jid)
 
     def recover(self):
         with self.repo.transaction() as db:
+            for j in db.execute("SELECT * FROM chat_creation_jobs WHERE status='running'").fetchall():
+                receipt = db.execute('SELECT response_text FROM llm_requests WHERE job_id=? ORDER BY rowid DESC LIMIT 1',(j['id'],)).fetchone()
+                prefix = json.loads(j['context_json'])[-2]['content'] if j['kind']=='continue' else ''
+                recovered = prefix+(receipt['response_text'] or '') if receipt else ''
+                text = recovered if len(recovered)>len(j['response']) else j['response']
+                db.execute("UPDATE chat_creation_jobs SET status='interrupted',response=?,error='Сервер перезапущен. Повтор только вручную.' WHERE id=?",(text,j['id']))
+                db.execute("UPDATE chat_creations SET status='interrupted',text=? WHERE id=? AND job_id=?",(text,j['creation_id'],j['id']))
             for j in db.execute("SELECT * FROM chat_jobs WHERE status='running'").fetchall():
                 # A DB failure can leave more text in the completed provider journal.
                 receipt = db.execute('SELECT response_text FROM llm_requests WHERE job_id=? ORDER BY rowid DESC LIMIT 1', (j['id'],)).fetchone()
@@ -166,4 +235,5 @@ class ChatService:
     def shutdown(self):
         with self.repo.connect() as db:
             active = list(db.execute("SELECT campaign_id,id FROM chat_jobs WHERE status='running'"))
+            active += list(db.execute("SELECT creation_id AS campaign_id,id FROM chat_creation_jobs WHERE status='running'"))
         for j in active: self.stop(j['campaign_id'], j['id'])

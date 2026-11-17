@@ -4,7 +4,7 @@ import json
 
 from fastapi import Query
 from fastapi.responses import StreamingResponse
-from backend.chat import models
+from backend.chat import models, capabilities
 from backend.chat.context import RP_PROMPT, TEMPLATE
 from backend.chat.repository import ChatRepository, row
 from backend.chat.service import ChatService
@@ -20,6 +20,52 @@ def install(app, storage, credentials):
     def defaults():
         return dict(template=TEMPLATE, settings=models.Settings(prompt=RP_PROMPT).model_dump())
 
+    @app.post('/api/chat/capabilities')
+    def model_capabilities(body: models.ModelSettings):
+        info = capabilities.discover(body.provider,body.model,credentials)
+        info['approximate'] = True
+        return info
+
+    @app.get('/api/chat/creations')
+    def creations():
+        with repo.connect() as db:
+            ids = [r['id'] for r in db.execute("SELECT id FROM chat_creations WHERE campaign_id IS NULL ORDER BY rowid DESC")]
+        return [service.creations.state(cid) for cid in ids]
+
+    @app.post('/api/chat/creations')
+    def creation(body: models.Creation):
+        cid = service.creations.create(body.model_dump())
+        return service.creations.state(cid)
+
+    @app.get('/api/chat/creations/{cid}')
+    def creation_state(cid: str):
+        return service.creations.state(cid)
+
+    @app.put('/api/chat/creations/{cid}')
+    def creation_save(cid: str, body: models.CreationEdit):
+        service.creations.save(cid,body.model_dump())
+        return service.creations.state(cid)
+
+    @app.post('/api/chat/creations/{cid}/generate')
+    def creation_generate(cid: str,body: models.CreationGenerate):
+        return service.start(cid,body.model_dump())
+
+    @app.post('/api/chat/creations/{cid}/confirm')
+    def creation_confirm(cid: str,body: models.CreationConfirm):
+        return service.confirm_creation(cid,body.model_dump())
+
+    @app.get('/api/chat/creations/{cid}/jobs/{jid}')
+    def creation_job(cid: str,jid: str):
+        return service.creations.job(cid,jid)
+
+    @app.post('/api/chat/creations/{cid}/jobs/{jid}/stop')
+    def creation_stop(cid: str,jid: str):
+        return service.stop(cid,jid)
+
+    @app.get('/api/chat/creations/{cid}/jobs/{jid}/events')
+    async def creation_events(cid: str,jid: str):
+        return await events(cid,jid)
+
     @app.post('/api/chat/source')
     def source(body: models.Source):
         return preview(storage, body)
@@ -31,6 +77,7 @@ def install(app, storage, credentials):
     @app.post('/api/chat/campaigns')
     def create(body: models.Create):
         value = body.model_dump()
+        value['settings'] = capabilities.settings(value['settings'],credentials)
         if not body.name.strip(): raise ValueError('Введите название кампании.')
         if body.source:
             if set(body.source) != {'id'}: raise ValueError('Некорректный источник.')
@@ -56,7 +103,9 @@ def install(app, storage, credentials):
 
     @app.put('/api/chat/campaigns/{cid}/settings')
     def configure(cid: str, body: models.Configure):
-        repo.configure(cid,body.model_dump())
+        value=body.model_dump()
+        value['settings']=capabilities.settings(value['settings'],credentials)
+        repo.configure(cid,value)
         return repo.state(cid)
 
     @app.post('/api/chat/campaigns/{cid}/select')
@@ -88,11 +137,11 @@ def install(app, storage, credentials):
 
     @app.get('/api/chat/campaigns/{cid}/jobs/{jid}/events')
     async def events(cid: str,jid: str):
-        repo.job(cid,jid)  # Validate scope before headers are sent.
+        service.job(cid,jid)  # Validate scope before headers are sent.
         async def stream():
             previous = None
             while True:
-                value = await asyncio.to_thread(repo.job,cid,jid)
+                value = await asyncio.to_thread(service.job,cid,jid)
                 data = json.dumps(value,ensure_ascii=False)
                 if data != previous:
                     yield 'event: snapshot\ndata: '+data+'\n\n'

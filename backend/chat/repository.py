@@ -2,7 +2,7 @@
 import hashlib
 import json
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 from backend.chat.context import assemble, budget, estimate, require_fit
 
@@ -91,6 +91,24 @@ class ChatRepository:
             COMMIT;
             ''')
 
+        with self.transaction() as db:
+            if not db.execute("SELECT 1 FROM schema_migrations WHERE name='chat_creation_v2'").fetchone():
+                db.execute("ALTER TABLE chat_campaigns ADD COLUMN opening_required INTEGER NOT NULL DEFAULT 0")
+                db.execute("""CREATE TABLE chat_creations (
+                  id TEXT PRIMARY KEY, token TEXT UNIQUE NOT NULL, fingerprint TEXT NOT NULL,
+                  revision INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL, text TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'draft', campaign_id TEXT, job_id TEXT,
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                db.execute("""CREATE TABLE chat_creation_jobs (
+                  id TEXT PRIMARY KEY, creation_id TEXT NOT NULL REFERENCES chat_creations(id),
+                  kind TEXT NOT NULL, source_revision INTEGER NOT NULL, context_json TEXT NOT NULL,
+                  config_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'running',
+                  response TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+                  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                db.execute("CREATE UNIQUE INDEX chat_creation_active ON chat_creation_jobs(creation_id) WHERE status='running'")
+                db.execute("CREATE TABLE chat_creation_operations (creation_id TEXT NOT NULL, token TEXT NOT NULL, fingerprint TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(creation_id,token))")
+                db.execute("INSERT INTO schema_migrations(name) VALUES('chat_creation_v2')")
+
     @contextmanager
     def transaction(self):
         with self.connect() as db:
@@ -125,9 +143,9 @@ class ChatRepository:
         db.execute('UPDATE chat_campaigns SET revision=revision+1 WHERE id=?', (cid,))
         return result
 
-    def create(self, body):
+    def create(self, body, db=None):
         fingerprint = hashlib.sha256(dump(body).encode()).hexdigest()
-        with self.transaction() as db:
+        with self.transaction() if db is None else nullcontext(db) as db:
             previous = db.execute('SELECT * FROM chat_campaigns WHERE creation_token=?', (body['token'],)).fetchone()
             if previous:
                 if previous['creation_hash'] != fingerprint:
@@ -171,8 +189,12 @@ class ChatRepository:
         b, m, s, tail, messages = self.inputs(db, cid, extra=extra)
         reply = budget(assemble(s, m['text'], tail, messages), s['reply'])
         summary = budget(assemble(s, m['text'], [], messages, summary=True), s['summary'])
+        # Warn before the pending reply consumes the space needed for the next
+        # summary. This is a reserve, not an invented measurement of future prose.
+        summary['next_reply_reserve'] = s['reply']['max_tokens'] + 64
+        projected_summary = (summary['estimated_tokens'] + summary['next_reply_reserve']) / max(1,summary['available'])
         return dict(reply=reply, summary=summary,
-                    warning=max(reply['ratio'], summary['ratio']) >= s['soft_threshold'],
+                    warning=max(reply['ratio'], projected_summary) >= s['soft_threshold'],
                     unfinished=any(x['status'] != 'complete' for x in messages))
 
     def state(self, cid):

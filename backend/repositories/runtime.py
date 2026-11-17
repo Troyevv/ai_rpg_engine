@@ -119,7 +119,10 @@ class RuntimeStorage:
                 # Chat jobs share the usage ledger, but never a Narrative save/workspace.
                 if not preparation:
                     chat_table = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_jobs'").fetchone()
-                    if not chat_table or not db.execute('SELECT 1 FROM chat_jobs WHERE id=?',(job_id,)).fetchone():
+                    creation_table = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_creation_jobs'").fetchone()
+                    chat_job = chat_table and db.execute('SELECT 1 FROM chat_jobs WHERE id=?',(job_id,)).fetchone()
+                    creation_job = creation_table and db.execute('SELECT 1 FROM chat_creation_jobs WHERE id=?',(job_id,)).fetchone()
+                    if not chat_job and not creation_job:
                         raise ValueError('Задача генерации не найдена.')
                 workspace = preparation[0] if preparation else None
             db.execute('''INSERT INTO llm_requests(id,job_id,save_id,workspace_id,session_id,stage,provider,model,thinking,context_json,diagnostics_json,config_json,pricing_json)

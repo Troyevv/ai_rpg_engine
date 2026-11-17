@@ -12,11 +12,13 @@ class ModelSettings(Strict):
     temperature: float = Field(default=.8, ge=0, le=2)
     max_tokens: int = Field(default=4096, ge=128, le=131072)
     context_length: int = Field(default=32768, ge=2048, le=2097152)
+    auto_context: bool = True
+    auto_output: bool = True
     thinking: Literal['off', 'low', 'high'] = 'off'
 
     @model_validator(mode='after')
     def capacity(self):
-        if self.max_tokens >= self.context_length * .8:
+        if not self.auto_context and not self.auto_output and self.max_tokens >= self.context_length * .8:
             raise ValueError('Оставьте место для входного контекста.')
         return self
 
@@ -45,7 +47,7 @@ class Create(Strict):
 
 
 class Generate(Revision):
-    kind: Literal['reply', 'summary', 'regenerate', 'retry'] = 'reply'
+    kind: Literal['reply', 'summary', 'start', 'regenerate', 'retry'] = 'reply'
     text: str = Field(default='', max_length=100000)
     target: str | None = None
     next_chapter: bool = False
@@ -84,3 +86,24 @@ class Source(Strict):
     save_id: int | None = None
     revision: int | None = None
     history_turns: int = Field(default=2, ge=0, le=10)
+
+
+class Creation(Strict):
+    token: str = Field(min_length=8, max_length=100)
+    name: str = Field(min_length=1, max_length=120)
+    idea: str = Field(default='', max_length=100000)
+    text: str = Field(default='', max_length=500000)
+    settings: Settings
+    source: Source | None = None
+
+
+class CreationEdit(Creation, Revision):
+    pass
+
+
+class CreationGenerate(Revision):
+    kind: Literal['initial', 'continue'] = 'initial'
+
+
+class CreationConfirm(Revision):
+    accept_partial: bool = False
