@@ -57,6 +57,8 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     campaignRef.current=next;setCampaignState(next);return true;
   };
   const active=job?.status==='running';
+  // Budget recalculation clears transient estimates; it must not unlock the opening.
+  const openingPending=!!campaign?.opening_required&&(campaign.branch.head===0||(campaign.branch.head===1&&(active||campaign.budgets.unfinished)));
   const path=`${prefix}/${selected}`;
   const revision=()=>({revision:campaign!.revision,token:token()});
   const panelRef=useRef(panel);panelRef.current=panel;
@@ -182,7 +184,7 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
         </div>}
       </div></div>
       {!archive&&campaign.opening_required&&!campaign.branch.head&&<Button disabled={busy} onClick={()=>void run(()=>generate('start'))}>Начать игру</Button>}
-      {!archive&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void run(()=>generate())}}><label className="sr-only" htmlFor="chat-input">Твоё сообщение</label><Textarea id="chat-input" disabled={!!campaign.opening_required&&(campaign.branch.head===0||!!budgets?.unfinished)} placeholder="Действие или реплика…" rows={3} value={draft} onChange={e=>writeDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();if(!active&&!busy&&!budgets?.unfinished&&(!campaign.opening_required||campaign.branch.head>0)&&budgets?.reply.fits)void run(()=>generate())}}}/><div><span className="muted small">Ctrl/⌘ + Enter · ввод сохраняется на этом устройстве</span>{active?<Button type="button" variant="outline" onClick={()=>void run(async()=>{setJob(await api(`${path}/jobs/${job.id}/stop`,{}));await refresh();await loadPage(selected,null,campaign.active_branch)})}><Square size={16}/>Остановить</Button>:<Button type="submit" disabled={busy||!!campaign.opening_required&&!campaign.branch.head||!draft.trim()||!budgets?.reply.fits||budgets.unfinished}><Send size={16}/>Отправить</Button>}</div>
+      {!archive&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void run(()=>generate())}}><label className="sr-only" htmlFor="chat-input">Твоё сообщение</label><Textarea id="chat-input" disabled={openingPending} placeholder="Действие или реплика…" rows={3} value={draft} onChange={e=>writeDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();if(!active&&!busy&&!budgets?.unfinished&&!openingPending&&budgets?.reply.fits)void run(()=>generate())}}}/><div><span className="muted small">Ctrl/⌘ + Enter · ввод сохраняется на этом устройстве</span>{active?<Button type="button" variant="outline" onClick={()=>void run(async()=>{setJob(await api(`${path}/jobs/${job.id}/stop`,{}));await refresh();await loadPage(selected,null,campaign.active_branch)})}><Square size={16}/>Остановить</Button>:<Button type="submit" disabled={busy||openingPending||!draft.trim()||!budgets?.reply.fits||budgets.unfinished}><Send size={16}/>Отправить</Button>}</div>
         {pending&&<Button type="button" variant="ghost" onClick={()=>void run(async()=>{const payload=JSON.parse(readLocal(`chat-pending:${selected}`));await api(`${path}/generate`,payload);saveLocal(`chat-pending:${selected}`,'');setPending(false);writeDraft('');const c=await refresh();await loadPage(selected,null,c.active_branch)})}>Проверить отправку без повторного вызова</Button>}
         {budgets?.unfinished&&<p className="small">Примите частичный ответ через «Редактировать» или повторите его явно.</p>}
       </form>}
