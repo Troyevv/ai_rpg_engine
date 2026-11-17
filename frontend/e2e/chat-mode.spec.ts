@@ -72,12 +72,16 @@ for(const skin of ['graphite','parchment'])test(`Chat: campaign, stream, memory,
   if(process.env.CHAT_QA_SCREENSHOTS)await page.screenshot({path:`/tmp/chat260-${info.project.name}-${skin}.png`});
 });
 
-test('Chat: stop, explicit retry, safe markdown, hard limit and no hidden replay',async({page})=>{
+test('Chat: stop, explicit retry, safe markdown, hard limit and no hidden replay',async({page,request})=>{
   await createChat(page);
+  // The external fixture stream stays open until cancellation; no race against a short response.
+  expect((await request.post('/test/chat-cancel-window')).ok()).toBeTruthy();
   await page.getByLabel('Твоё сообщение',{exact:true}).fill('<script>window.chatXss=true</script>');
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
   await page.getByRole('button',{name:'Остановить',exact:true}).click();
   await expect(page.getByRole('button',{name:'Повторить явно (новый вызов)'})).toBeVisible();
+  const stoppedId=await page.evaluate(()=>localStorage.getItem('chat-selection'));
+  expect((await (await request.get(`/api/chat/campaigns/${stoppedId}`)).json()).job.status).toBe('stopped');
   await expect(page.locator('.chat-user')).toContainText('<script>');
   expect(await page.evaluate(()=>('chatXss' in window))).toBeFalsy();
   await page.reload();

@@ -589,12 +589,20 @@ draft_generation.run = generation_fixture
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
     'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960}.get(model, 32768)}
 }
+chat_cancel_next = False
+
 def authoring_stream(**kwargs):
+    global chat_cancel_next
     if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture'):
         # Chat production service/context/API/SQLite; substitute external provider IO only.
         from backend.chat.context import TEMPLATE
         text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' or 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content'] else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
         kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
+        if chat_cancel_next:
+            chat_cancel_next = False
+            yield 'Лена ставит чашку. Незавершённый ответ…'
+            if not kwargs['cancel_event'].wait(30): raise RuntimeError('fixture: expected explicit cancellation')
+            raise RuntimeError('stopped')
         for offset in range(0,len(text),80):
             if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
             yield text[offset:offset+80]
@@ -1131,6 +1139,12 @@ if __name__ == '__main__':
         from test_npc_review_revision import evolve
         evolve(app.state.repository,sid)
         return app.state.repository.get_save(sid)
+
+    @app.post('/test/chat-cancel-window')
+    def chat_cancel_window():
+        global chat_cancel_next
+        chat_cancel_next = True
+        return {'armed':True}
 
     @app.post('/test/chat-history')
     def chat_history():
