@@ -71,12 +71,24 @@ Initial generation requires at least 8,192 output capacity and enough input spac
 prompt/template; it fails before a provider call if that capacity is unavailable. This is a
 capacity safeguard, not a guarantee that any arbitrary number of NPCs fits one answer.
 
-No compatible model-specific tokenizer assets are configured in this repository (the installed
-Transformers/tokenizers libraries serve other models, including embeddings). We do not label
-those as the selected chat model's tokenizer. Budget uses the deliberately conservative UTF-8
-byte estimate plus protocol/output/safety reserves and labels it approximate. It may warn early;
-actual provider token usage is displayed separately. No history is silently removed and memory
-updates/next chapters still require explicit user confirmation.
+An optional real offline tokenizer is supported for the known DeepSeek API models. The
+advanced model settings offer **Install DeepSeek tokenizer for free**; this explicit action
+fetches the archive linked by [DeepSeek's current token-usage documentation](https://api-docs.deepseek.com/quick_start/token_usage/).
+The installer verifies pinned archive/JSON SHA-256 hashes and reads only `tokenizer.json`,
+never executing the archive's Python demo or `trust_remote_code`. The approximately 1.9 MB
+archive / 6.4 MB JSON are cached under `.runtime/chat-tokenizers` (ignored), not redistributed
+in git. `RPG_CHAT_TOKENIZER_PATH` can select another server cache file. Offline installation
+is also available via `python -m backend.chat.tokenization`. No inference or API key is used.
+
+When the matching verified JSON and the existing tokenizers library are available, budgets
+use real tokenization of the serialized request, with an additional protocol estimate and
+15% safety reserve. Total request usage remains explicitly approximate because API framing
+is not an exact offline contract; actual usage still comes from the response. The demo's
+`model_max_length` is deliberately NOT used as the serving context window. Unknown model
+identities, absent/unverified files or unavailable libraries retain the conservative UTF-8
+byte estimate. No files download silently on ordinary turns and no fallback tokenizer is
+guessed from an arbitrary compatible model name. Context warnings may appear early; history
+is never silently removed and memory/next-chapter updates still require explicit confirmation.
 
 The new three-part workflow has **not** used paid LLM calls. The live acceptance below predates
 this follow-up; it does not verify idea generation or opening quality. Free tests substitute only
@@ -117,8 +129,9 @@ bounded (40 default, 100 maximum); the browser initially renders only one page.
 
 ## Context and costs
 
-Budget is explicitly **an estimate**, UTF-8 serialized input bytes plus framing, output
-reserve and 15% window reserve (at least 512). It is not a tokenizer. The configured
+Budget is explicitly **an estimate**: matching verified tokenizer counts when available,
+otherwise UTF-8 serialized input bytes; plus framing, output reserve and a 15% window
+reserve (at least 512). Provider-reported usage remains separate. The configured
 manual context window must match the actual endpoint/model; known limits cap it. Soft threshold defaults to .85 and
 checks both ordinary reply and the separately reserved summary request, including the
 next RP output plus framing before warning about a future summary. Imported memory,

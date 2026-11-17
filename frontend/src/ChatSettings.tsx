@@ -6,7 +6,7 @@ import type {ChatSettings as Settings, ChatModel} from './chatTypes';
 import {Textarea} from './components/ui/textarea';
 import {Input} from './components/ui/input';
 
-type Capability={context_length:number|null;source:string};
+type Capability={context_length:number|null;source:string;tokenizer?:string};
 function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onChange:(s:Partial<ChatModel>)=>void;stage:string;title:string}){
   const [available,setAvailable]=useState<string[]>([]);
   const [info,setInfo]=useState<Capability|null>(null);
@@ -31,7 +31,7 @@ function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onCh
     <label>Максимум ответа<Input type="number" min={128} disabled={v.auto_output} value={v.auto_output?Math.min(stage==='reply'?4096:16384,Math.floor((v.auto_context&&info?.context_length?info.context_length:v.context_length)/3)):v.max_tokens} onChange={e=>change({max_tokens:Number(e.target.value)})}/></label>
     <label>Температура<Input type="number" step="0.1" min={0} max={2} value={v.temperature} onChange={e=>change({temperature:Number(e.target.value)})}/></label>
     <label>Thinking<select value={v.thinking} onChange={e=>change({thinking:e.target.value as ChatModel['thinking']})}><option value="off">Выключен</option><option value="low">Low (если поддерживается)</option><option value="high">High (если поддерживается)</option></select></label>
-  </div></details></fieldset>;
+  </div>{v.provider==='deepseek'&&<><p className="small">{info?.tokenizer||'Консервативная оценка UTF-8'}. Итог запроса остаётся оценкой; фактические токены сообщает провайдер.</p><Button className="chat-tokenizer-install" variant="outline" disabled={loading||!v.model} onClick={async()=>{setLoading(true);try{await api('/chat/tokenizer',v);setInfo(await api<Capability>('/chat/capabilities',v));toast.success('Официальный tokenizer установлен. Загрузка бесплатная, LLM-вызова нет.')}catch(e){toast.error((e as Error).message)}finally{setLoading(false)}}}>Установить tokenizer DeepSeek бесплатно</Button></>}</details></fieldset>;
 }
 
 export function ChatSettingsEditor({value,onChange}:{value:Settings;onChange:(s:Settings)=>void}) {
@@ -39,7 +39,7 @@ export function ChatSettingsEditor({value,onChange}:{value:Settings;onChange:(s:
   return <div className="chat-settings-editor">
     <ModelEditor stage="reply" title="Обычный RP-ответ" value={value.reply} onChange={patch=>onChange({...value,reply:{...value.reply,...patch},summary:linked?{...value.summary,...patch,temperature:value.summary.temperature,max_tokens:value.summary.max_tokens}:value.summary})}/>
     <details><summary>Дополнительные настройки</summary>
-      <p className="muted">По умолчанию выжимку создаёт выбранная игровая модель. Здесь можно выбрать другую. Ключи и адрес API хранятся на сервере. Контекст — консервативная оценка, не точный tokenizer.</p>
+      <p className="muted">По умолчанию выжимку создаёт выбранная игровая модель. Здесь можно выбрать другую. Ключи и адрес API хранятся на сервере. Размер запроса оценивается с запасом; способ подсчёта указан у модели.</p>
       <ModelEditor stage="summary" title="Обновление выжимки — отдельный вызов" value={value.summary} onChange={patch=>onChange({...value,summary:{...value.summary,...patch}})}/>
       <div className="chat-settings-grid"><label>Предупреждать при доле бюджета<Input type="number" min={.5} max={.95} step={.05} value={value.soft_threshold} onChange={e=>onChange({...value,soft_threshold:Number(e.target.value)})}/></label>
       <label>Целевой размер выжимки<Input type="number" value={value.summary_target} onChange={e=>onChange({...value,summary_target:Number(e.target.value)})}/></label>

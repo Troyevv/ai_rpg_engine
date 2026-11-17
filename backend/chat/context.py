@@ -23,13 +23,15 @@ def budget(messages, config):
     config = dict(config)
     if config['provider']=='deepseek' and config['model'] in DEEPSEEK:
         config['context_length'] = min(config['context_length'], 1000000)
-    tokens = estimate({'messages': messages, 'max_tokens': config['max_tokens'],
-                       'temperature': config['temperature'], 'thinking': config['thinking']}) + 32
+    from backend.chat.tokenization import count
+    tokens, method = count({'messages': messages, 'max_tokens': config['max_tokens'],
+                           'temperature': config['temperature'], 'thinking': config['thinking']},config)
+    tokens += 32
     margin = max(512, math.ceil(config['context_length'] * .15))
     available = config['context_length'] - config['max_tokens'] - margin
     return dict(estimated_tokens=tokens, available=available, output=config['max_tokens'],
                 margin=margin, context_length=config['context_length'], fits=tokens <= available,
-                ratio=round(tokens / max(1, available), 3), approximate=True)
+                ratio=round(tokens / max(1, available), 3), approximate=True, token_method=method)
 
 
 def assemble(settings, memory, tail, messages, *, summary=False):

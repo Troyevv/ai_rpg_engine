@@ -11,3 +11,5 @@
 @media(max-width:600px){.chat-mode .chat-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:none;overflow:visible}.chat-mode .chat-toolbar button{white-space:normal;line-height:1.3;min-height:44px}.chat-message footer{flex-wrap:wrap}}
 
 .chat-creation{display:flex;flex-direction:column;gap:16px;min-width:0}.chat-creation>.actions{display:flex;flex-wrap:wrap;gap:8px}.chat-creation>button{align-self:flex-start;max-width:100%;white-space:normal;height:auto;min-height:44px}.chat-creation select{min-height:44px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}.chat-creation .chat-import input{max-width:100%}.chat-creation details>button{margin:6px;white-space:normal;height:auto;min-height:44px}
+
+.chat-settings-editor .chat-tokenizer-install{white-space:normal;height:auto;min-height:44px;max-width:100%}

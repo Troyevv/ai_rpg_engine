@@ -4,7 +4,7 @@ import json
 
 from fastapi import Query
 from fastapi.responses import StreamingResponse
-from backend.chat import models, capabilities
+from backend.chat import models, capabilities, tokenization
 from backend.chat.context import RP_PROMPT, TEMPLATE
 from backend.chat.repository import ChatRepository, row
 from backend.chat.service import ChatService
@@ -24,7 +24,14 @@ def install(app, storage, credentials):
     def model_capabilities(body: models.ModelSettings):
         info = capabilities.discover(body.provider,body.model,credentials)
         info['approximate'] = True
+        info['tokenizer'] = tokenization.method(body.model_dump())
         return info
+
+    @app.post('/api/chat/tokenizer')
+    def install_tokenizer(body: models.ModelSettings):
+        if body.provider!='deepseek' or body.model not in capabilities.DEEPSEEK:
+            raise ValueError('Этот tokenizer предназначен для известных моделей DeepSeek API.')
+        return tokenization.install()
 
     @app.get('/api/chat/creations')
     def creations():
