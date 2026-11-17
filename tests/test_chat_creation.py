@@ -153,7 +153,7 @@ def test_ready_creation_restart_and_reservation_recovery(env):
 def test_capabilities_are_free_explicit_and_bound_models(env):
     client,app=env
     with patch('llm.chat_stream',side_effect=AssertionError('No probing inference')):
-        config=ModelSettings(provider='deepseek',model='deepseek-flash').model_dump()
+        config=ModelSettings(provider='deepseek',model='deepseek-flash',auto_context=True,auto_output=True).model_dump()
         assert client.post('/api/chat/capabilities',json=config).json()['context_length']==1000000
         assert capabilities.resolve(config,None)['context_length']==1000000
         assert capabilities.resolve(dict(config,auto_context=False,context_length=2000000),None)['context_length']==1000000
@@ -229,6 +229,11 @@ def test_additive_v2_migration_preserves_legacy_chat_and_narrative(env):
         db.execute('UPDATE chat_configs SET payload=? WHERE id=?',(json.dumps(value),cfg['id']))
     repo=ChatRepository(app.state.repository)
     assert repo.state(c['id'])['opening_required']==0
+    legacy=repo.state(c['id'])
+    assert legacy['settings']['reply']['auto_context'] is False
+    assert legacy['settings']['summary']['auto_output'] is False
+    saved=client.put(url(c,'/settings'),json=body(legacy,settings=legacy['settings']))
+    assert saved.status_code==200,saved.text
     with repo.connect() as db:assert [tuple(r) for r in db.execute('SELECT * FROM chat_messages')]==messages
     with patch('llm.chat_stream',side_effect=provider()) as io:
         generate(client,state(client,c));assert io.call_count==1
@@ -302,3 +307,16 @@ def test_cancel_between_reservation_and_worker_start_never_calls_provider(env):
             app.state.chat.run(owner,jid,threading.Event())
             assert io.call_count==0
         assert app.state.chat.job(owner,jid)['status']=='stopped'
+
+
+def test_new_ui_defaults_auto_but_legacy_api_payload_stays_manual(env):
+    client,app=env
+    settings=client.get('/api/chat/defaults').json()['settings']
+    for stage in ('reply','summary'):
+        assert settings[stage]['auto_context'] and settings[stage]['auto_output']
+        settings[stage].pop('auto_context');settings[stage].pop('auto_output')
+        settings[stage]['model']='legacy-model'
+    response=client.post('/api/chat/campaigns',json=dict(token=tok(),name='Legacy API',memory=MEMORY,settings=settings))
+    assert response.status_code==200,response.text
+    assert response.json()['settings']['reply']['auto_context'] is False
+    assert response.json()['settings']['summary']['auto_output'] is False

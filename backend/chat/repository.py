@@ -15,6 +15,16 @@ def dump(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def load_settings(payload):
+    value = json.loads(payload)
+    # Old immutable configs predate automatic context. Materialize their manual
+    # flags in API responses so a read/edit/save round trip cannot opt them in.
+    for stage in ('reply','summary'):
+        value[stage].setdefault('auto_context',False)
+        value[stage].setdefault('auto_output',False)
+    return value
+
+
 def row(db, table, ident, campaign=None):
     # Table names are module constants at call sites, never request parameters.
     value = db.execute(f'SELECT * FROM {table} WHERE id=?', (ident,)).fetchone()
@@ -176,7 +186,7 @@ class ChatRepository:
     def inputs(self, db, cid, bid=None, extra=''):
         b = self.branch(db, cid, bid)
         memory = row(db, 'chat_memories', b['memory_id'], cid)
-        settings = json.loads(row(db, 'chat_configs', b['config_id'], cid)['payload'])
+        settings = load_settings(row(db, 'chat_configs', b['config_id'], cid)['payload'])
         messages = self.messages(db, b['id'], memory['cutoff'])
         tail = []
         for ident in json.loads(memory['tail_json']):
@@ -204,7 +214,7 @@ class ChatRepository:
             c['source'] = json.loads(c.pop('source_json'))
             c.pop('creation_hash'); c.pop('creation_token')
             c.update(branch=b, memory=row(db, 'chat_memories', b['memory_id'], cid),
-                     settings=json.loads(row(db, 'chat_configs', b['config_id'], cid)['payload']),
+                     settings=load_settings(row(db, 'chat_configs', b['config_id'], cid)['payload']),
                      branches=[dict(r) for r in db.execute('SELECT id,name,head,parent_id FROM chat_branches WHERE campaign_id=? ORDER BY rowid', (cid,))],
                      chapters=[dict(r) for r in db.execute('SELECT * FROM chat_chapters WHERE branch_id=? ORDER BY ordinal', (b['id'],))],
                      budgets=self.budgets(db, cid))
@@ -351,7 +361,7 @@ class ChatRepository:
             if d['status'] != 'complete' and not body['accept_partial']:
                 raise ValueError('Ответ неполный. Исправьте текст и явно подтвердите принятие частичного ответа.')
             if not body['text'].strip(): raise ValueError('Выжимка пуста.')
-            settings = json.loads(row(db, 'chat_configs', b['config_id'], cid)['payload'])
+            settings = load_settings(row(db, 'chat_configs', b['config_id'], cid)['payload'])
             tail = []
             for m in reversed(self.messages(db, b['id'], max(0,d['cutoff']-8), d['cutoff'])):
                 if m['status'] != 'complete' or estimate([m['content']] + [x['content'] for x in tail]) > settings['tail_tokens']: break

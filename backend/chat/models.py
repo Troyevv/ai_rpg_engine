@@ -12,8 +12,8 @@ class ModelSettings(Strict):
     temperature: float = Field(default=.8, ge=0, le=2)
     max_tokens: int = Field(default=4096, ge=128, le=131072)
     context_length: int = Field(default=32768, ge=2048, le=2097152)
-    auto_context: bool = True
-    auto_output: bool = True
+    auto_context: bool = False
+    auto_output: bool = False
     thinking: Literal['off', 'low', 'high'] = 'off'
 
     @model_validator(mode='after')
@@ -26,8 +26,8 @@ class ModelSettings(Strict):
 class Settings(Strict):
     prompt: str = Field(max_length=100000)
     language: str = Field(default='Русский', max_length=80)
-    reply: ModelSettings = Field(default_factory=ModelSettings)
-    summary: ModelSettings = Field(default_factory=lambda: ModelSettings(temperature=.2, max_tokens=8192))
+    reply: ModelSettings = Field(default_factory=lambda: ModelSettings(auto_context=True, auto_output=True))
+    summary: ModelSettings = Field(default_factory=lambda: ModelSettings(temperature=.2, max_tokens=8192, auto_context=True, auto_output=True))
     soft_threshold: float = Field(default=.85, ge=.5, le=.95)
     summary_target: int = Field(default=6000, ge=256, le=65536)
     tail_tokens: int = Field(default=1200, ge=0, le=8192)
