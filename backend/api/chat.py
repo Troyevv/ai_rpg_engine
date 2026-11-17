@@ -1,0 +1,131 @@
+"""HTTP adapter for the local trusted-operator app (same origin policy as Narrative)."""
+import asyncio
+import json
+
+from fastapi import Query
+from fastapi.responses import StreamingResponse
+from backend.chat import models
+from backend.chat.context import RP_PROMPT, TEMPLATE
+from backend.chat.repository import ChatRepository, row
+from backend.chat.service import ChatService
+from backend.chat.source import preview
+
+
+def install(app, storage, credentials):
+    repo = ChatRepository(storage)
+    service = ChatService(repo, credentials)
+    app.state.chat = service
+
+    @app.get('/api/chat/defaults')
+    def defaults():
+        return dict(template=TEMPLATE, settings=models.Settings(prompt=RP_PROMPT).model_dump())
+
+    @app.post('/api/chat/source')
+    def source(body: models.Source):
+        return preview(storage, body)
+
+    @app.get('/api/chat/campaigns')
+    def campaigns():
+        return repo.list()
+
+    @app.post('/api/chat/campaigns')
+    def create(body: models.Create):
+        value = body.model_dump()
+        if not body.name.strip(): raise ValueError('Введите название кампании.')
+        if body.source:
+            if set(body.source) != {'id'}: raise ValueError('Некорректный источник.')
+            with storage.connect() as db:
+                captured = row(db, 'chat_sources', body.source['id'])
+                value['source'] = dict(id=captured['id'],memory=captured['memory'],origin=json.loads(captured['origin_json']))
+        return repo.state(repo.create(value))
+
+    @app.get('/api/chat/campaigns/{cid}')
+    def state(cid: str):
+        return repo.state(cid)
+
+    @app.get('/api/chat/campaigns/{cid}/messages')
+    def messages(cid: str, branch: str | None = None, chapter: str | None = None,
+                 before: int = Query(2147483647, ge=1), limit: int = Query(40,ge=1,le=100)):
+        return repo.page(cid,branch,chapter,before,limit)
+
+    @app.post('/api/chat/campaigns/{cid}/budget')
+    def budget(cid: str, body: models.Memory):
+        with repo.connect() as db:
+            repo.campaign(db,cid)
+            return repo.budgets(db,cid,body.text)
+
+    @app.put('/api/chat/campaigns/{cid}/settings')
+    def configure(cid: str, body: models.Configure):
+        repo.configure(cid,body.model_dump())
+        return repo.state(cid)
+
+    @app.post('/api/chat/campaigns/{cid}/select')
+    def select(cid: str, body: models.Select):
+        repo.select(cid,body.model_dump())
+        return repo.state(cid)
+
+    @app.post('/api/chat/campaigns/{cid}/edit')
+    def edit(cid: str, body: models.Edit):
+        repo.edit(cid,body.model_dump())
+        return repo.state(cid)
+
+    @app.post('/api/chat/campaigns/{cid}/generate')
+    def generate(cid: str, body: models.Generate):
+        return service.start(cid,body.model_dump())
+
+    @app.get('/api/chat/campaigns/{cid}/jobs/{jid}')
+    def job(cid: str,jid: str):
+        return repo.job(cid,jid)
+
+    @app.get('/api/chat/campaigns/{cid}/jobs/{jid}/requests')
+    def requests(cid: str,jid: str):
+        repo.job(cid,jid)
+        return storage.request_log(job_id=jid)
+
+    @app.post('/api/chat/campaigns/{cid}/jobs/{jid}/stop')
+    def stop(cid: str,jid: str):
+        return service.stop(cid,jid)
+
+    @app.get('/api/chat/campaigns/{cid}/jobs/{jid}/events')
+    async def events(cid: str,jid: str):
+        repo.job(cid,jid)  # Validate scope before headers are sent.
+        async def stream():
+            previous = None
+            while True:
+                value = await asyncio.to_thread(repo.job,cid,jid)
+                data = json.dumps(value,ensure_ascii=False)
+                if data != previous:
+                    yield 'event: snapshot\ndata: '+data+'\n\n'
+                    previous = data
+                if value['status'] != 'running': break
+                await asyncio.sleep(.15)
+        return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
+
+    @app.post('/api/chat/campaigns/{cid}/memory')
+    def memory(cid: str,body: models.Memory):
+        return repo.manual_memory(cid,body.model_dump())
+
+    @app.get('/api/chat/campaigns/{cid}/versions')
+    def versions(cid: str,before: int = Query(2147483647,ge=1)):
+        return repo.versions(cid,before)
+
+    @app.get('/api/chat/campaigns/{cid}/drafts/{did}')
+    def draft(cid: str,did: str):
+        return repo.draft(cid,did)
+
+    @app.put('/api/chat/campaigns/{cid}/drafts/{did}')
+    def save_draft(cid: str,did: str,body: models.DraftEdit):
+        repo.save_draft(cid,did,body.model_dump())
+        return repo.draft(cid,did)
+
+    @app.post('/api/chat/campaigns/{cid}/drafts/{did}/confirm')
+    def confirm(cid: str,did: str,body: models.Confirm):
+        repo.confirm(cid,did,body.model_dump())
+        return repo.state(cid)
+
+    @app.post('/api/chat/campaigns/{cid}/drafts/{did}/cancel')
+    def cancel(cid: str,did: str,body: models.Revision):
+        repo.cancel_draft(cid,did,body.revision)
+        return repo.state(cid)
+
+    return service

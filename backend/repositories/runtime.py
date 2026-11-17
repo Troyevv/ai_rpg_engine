@@ -115,7 +115,13 @@ class RuntimeStorage:
             job = db.execute('SELECT save_id,session_id FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             workspace = None
             if not job and save_id is None:
-                workspace = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()[0]
+                preparation = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()
+                # Chat jobs share the usage ledger, but never a Narrative save/workspace.
+                if not preparation:
+                    chat_table = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_jobs'").fetchone()
+                    if not chat_table or not db.execute('SELECT 1 FROM chat_jobs WHERE id=?',(job_id,)).fetchone():
+                        raise ValueError('Задача генерации не найдена.')
+                workspace = preparation[0] if preparation else None
             db.execute('''INSERT INTO llm_requests(id,job_id,save_id,workspace_id,session_id,stage,provider,model,thinking,context_json,diagnostics_json,config_json,pricing_json)
               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (rid, job_id, job['save_id'] if job else save_id, workspace,
               job['session_id'] if job else None, stage, config.get('provider','local'), config['model'], config.get('thinking','off'),
