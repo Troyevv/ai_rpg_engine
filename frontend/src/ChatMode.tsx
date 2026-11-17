@@ -8,6 +8,7 @@ import {Input} from './components/ui/input';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {Markdown} from './Markdown';
 import {ThemeSelector} from './ThemeProvider';
+import {ChatCreationEditor} from './ChatCreation';
 import {ChatSettingsEditor} from './ChatSettings';
 import {useChatScroll} from './useChatScroll';
 import type {ChatCampaign,ChatDraft,ChatJob,ChatMemory,ChatMessage,ChatSettings,ChatSource,Budgets} from './chatTypes';
@@ -30,11 +31,7 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
   const [panel,setPanel]=useState<Panel>(source?'create':selected?null:'library');
   const [defaults,setDefaults]=useState<{template:string;settings:ChatSettings}|null>(null);
   const [settings,setSettings]=useState<ChatSettings|null>(null);
-  const [name,setName]=useState('Новая RP-кампания');
-  const [initial,setInitial]=useState(()=>readLocal('chat-create-memory'));
   const [sourceSpec,setSourceSpec]=useState(source);
-  const [origin,setOrigin]=useState<{id:string;origin:unknown}|null>(null);
-  const [sourceTurns,setSourceTurns]=useState(2);
   const [draft,setDraft]=useState('');
   const [pending,setPending]=useState(false);
   const [busy,setBusy]=useState(false);
@@ -91,7 +88,7 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     if(selectedRef.current===cid&&setCampaign(c)){setJob(c.job);setBudgets(c.budgets)}
     return c;
   },[]);
-  useEffect(()=>{void api<{template:string;settings:ChatSettings}>('/chat/defaults').then(d=>{setDefaults(d);setSettings(d.settings);setInitial(v=>v||d.template)}).catch(e=>setError(e.message))},[]);
+  useEffect(()=>{void api<{template:string;settings:ChatSettings}>('/chat/defaults').then(d=>{setDefaults(d);setSettings(d.settings)}).catch(e=>setError(e.message))},[]);
   useEffect(()=>{
     if(panel==='library')void api<{id:string;name:string;mode:string}[]>(prefix).then(setList).catch(e=>setError(e.message));
   },[panel]);
@@ -143,13 +140,6 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
   const changeBranch=(id:string)=>void run(async()=>{
     const c=await api<ChatCampaign>(`${path}/select`,{...revision(),branch:id});setCampaign(c);setJob(c.job);setBudgets(c.budgets);setArchive(null);setLater(false);await loadPage(c.id,null,c.active_branch);closePanel();
   });
-  const sourcePreview=()=>void run(async()=>{
-    const p=await api<{id:string;memory:string;origin:unknown}>('/chat/source',{...sourceSpec,history_turns:sourceTurns});setOrigin(p);setInitial(p.memory);saveLocal('chat-create-memory',p.memory);
-  });
-  const newCampaign=()=>void run(async()=>{
-    const c=await api<ChatCampaign>(prefix,{token:token(),name,memory:initial,settings,source:origin?{id:origin.id}:null});
-    saveLocal('chat-create-memory','');setSelected(c.id);closePanel();
-  });
   const commitMemory=()=>void run(async()=>{
     let id=review?.id;
     let rev=campaign!.revision;
@@ -173,7 +163,7 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     {campaign?<>
       <nav className="chat-toolbar" aria-label="Кампания"><Button variant="outline" onClick={()=>openPanel('chapters')}><GitBranch size={16}/>Главы и ветки</Button><Button variant="outline" onClick={openMemory}><FileText size={16}/>Выжимка</Button><Button disabled={busy||active} variant="ghost" onClick={()=>summary(false)}>Обновить выжимку</Button><Button disabled={busy||active} onClick={()=>summary(true)}>Обновить выжимку и продолжить</Button></nav>
       {error&&<div className="chat-notice" role="alert">{error}<Button variant="ghost" onClick={()=>void run(async()=>{const c=await refresh();await loadPage(c.id,archive,c.active_branch)})}>Обновить состояние</Button></div>}
-      {budgets&&<div className="chat-budget"><span>Контекст ≈ {budgets.reply.estimated_tokens.toLocaleString()} / {budgets.reply.available.toLocaleString()} входных токенов</span><meter aria-label="Оценка контекста" min={0} max={1} value={Math.min(budgets.reply.ratio,1)}/><details><summary>Оценка и резервы</summary><p>Окно: {budgets.reply.context_length}. Ответ: {budgets.reply.output}. Запас: {budgets.reply.margin}. Суммаризация: ≈ {budgets.summary.estimated_tokens} / {budgets.summary.available}, резерв ответа {budgets.summary.output}. Точный usage — в завершённых запросах.</p></details></div>}
+      {budgets&&<div className="chat-budget"><span>Контекст ≈ {budgets.reply.estimated_tokens.toLocaleString()} / {budgets.reply.available.toLocaleString()} входных токенов</span><meter aria-label="Оценка контекста" min={0} max={1} value={Math.min(budgets.reply.ratio,1)}/><details><summary>Оценка и резервы</summary><p>Окно: {budgets.reply.context_length}. Ответ: {budgets.reply.output}. Запас: {budgets.reply.margin}. Суммаризация: ≈ {budgets.summary.estimated_tokens} / {budgets.summary.available}, резерв выжимки {budgets.summary.output}, следующего RP-ответа {budgets.summary.next_reply_reserve||0}. Точный usage — в завершённых запросах.</p></details></div>}
       {budgets?.warning&&(!later||!budgets.reply.fits)&&<div className="chat-notice" role="status"><p>{budgets.reply.fits?'Контекст почти заполнен.':'Ввод не помещается в контекст.'} Обновите выжимку и начните следующую главу. Переписка останется в кампании.{!budgets.summary.fits?' Суммаризация тоже не помещается: отредактируйте память или настройте большее совместимое окно.':''}</p><Button disabled={busy||active||!budgets.summary.fits} onClick={()=>summary(true)}>Обновить и продолжить</Button>{budgets.reply.fits&&<Button variant="ghost" onClick={()=>setLater(true)}>Позже</Button>}<Button variant="ghost" onClick={openMemory}>Редактор памяти</Button></div>}
       {campaign.drafts.filter(d=>d.status!=='running').length>0&&<div className="chat-draft-links">{campaign.drafts.filter(d=>d.status!=='running').map(d=><Button key={d.id} size="sm" variant="ghost" onClick={()=>loadReview(d.id)}>Черновик выжимки{d.source_revision!==campaign.revision?' · устарел':''}</Button>)}</div>}
       {archive&&<div className="chat-notice">Архив: просмотр не меняет контекст. Редактирование создаст отдельную ветку.<Button onClick={()=>changeChapter(null)}>К активной главе</Button></div>}
@@ -191,7 +181,8 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
           {job.status!=='running'&&job.status!=='complete'&&job.kind!=='summary'&&<Button disabled={busy} variant="outline" onClick={()=>void run(()=>generate('retry',job.id))}>Повторить явно (новый вызов)</Button>}
         </div>}
       </div></div>
-      {!archive&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void run(()=>generate())}}><label className="sr-only" htmlFor="chat-input">Твоё сообщение</label><Textarea id="chat-input" placeholder="Действие или реплика…" rows={3} value={draft} onChange={e=>writeDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();if(!active&&!busy&&budgets?.reply.fits)void run(()=>generate())}}}/><div><span className="muted small">Ctrl/⌘ + Enter · ввод сохраняется на этом устройстве</span>{active?<Button type="button" variant="outline" onClick={()=>void run(async()=>{setJob(await api(`${path}/jobs/${job.id}/stop`,{}));await refresh();await loadPage(selected,null,campaign.active_branch)})}><Square size={16}/>Остановить</Button>:<Button type="submit" disabled={busy||!draft.trim()||!budgets?.reply.fits||budgets.unfinished}><Send size={16}/>Отправить</Button>}</div>
+      {!archive&&campaign.opening_required&&!campaign.branch.head&&<Button disabled={busy} onClick={()=>void run(()=>generate('start'))}>Начать игру</Button>}
+      {!archive&&<form className="chat-composer" onSubmit={e=>{e.preventDefault();void run(()=>generate())}}><label className="sr-only" htmlFor="chat-input">Твоё сообщение</label><Textarea id="chat-input" disabled={!!campaign.opening_required&&(campaign.branch.head===0||!!budgets?.unfinished)} placeholder="Действие или реплика…" rows={3} value={draft} onChange={e=>writeDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();if(!active&&!busy&&!budgets?.unfinished&&(!campaign.opening_required||campaign.branch.head>0)&&budgets?.reply.fits)void run(()=>generate())}}}/><div><span className="muted small">Ctrl/⌘ + Enter · ввод сохраняется на этом устройстве</span>{active?<Button type="button" variant="outline" onClick={()=>void run(async()=>{setJob(await api(`${path}/jobs/${job.id}/stop`,{}));await refresh();await loadPage(selected,null,campaign.active_branch)})}><Square size={16}/>Остановить</Button>:<Button type="submit" disabled={busy||!!campaign.opening_required&&!campaign.branch.head||!draft.trim()||!budgets?.reply.fits||budgets.unfinished}><Send size={16}/>Отправить</Button>}</div>
         {pending&&<Button type="button" variant="ghost" onClick={()=>void run(async()=>{const payload=JSON.parse(readLocal(`chat-pending:${selected}`));await api(`${path}/generate`,payload);saveLocal(`chat-pending:${selected}`,'');setPending(false);writeDraft('');const c=await refresh();await loadPage(selected,null,c.active_branch)})}>Проверить отправку без повторного вызова</Button>}
         {budgets?.unfinished&&<p className="small">Примите частичный ответ через «Редактировать» или повторите его явно.</p>}
       </form>}
@@ -199,13 +190,8 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     <Dialog open={!!panel} onOpenChange={open=>{if(!open)closePanel()}}><DialogContent className={`chat-dialog ${panel==='memory'?'chat-memory-dialog':''}`}><DialogHeader><DialogTitle>{{library:'RP-кампании',create:'Новая история · Chat Mode',chapters:'Главы и варианты истории',memory:review?'Проверка новой выжимки':'Авторская выжимка',settings:'Настройки RP-чата',edit:'Редактировать сообщение',request:'Записанный запрос и расход'}[panel||'library']}</DialogTitle><DialogDescription>{panel==='memory'?'Авторский документ может содержать спойлеры. Просмотр тайны не передаёт её знания главному герою.':panel==='edit'?'Изменение создаст новую ветку без прежнего продолжения. Исходный текст и поздние главы сохранятся.':'Chat Mode хранится отдельно от Narrative. Режим существующего прохождения не меняется.'}</DialogDescription></DialogHeader>
       <div className="chat-dialog-body">
       {error&&<p className="chat-error" role="alert">{error}</p>}
-      {panel==='library'&&<><Button onClick={()=>{setSourceSpec(undefined);setOrigin(null);setSettings(defaults!.settings);setPanel('create')}}><Plus size={16}/>Новая RP-кампания</Button>{!list.length&&<p>Пока нет кампаний.</p>}{list.map(c=><button className="chat-campaign-card" key={c.id} disabled={busy} onClick={()=>choose(c.id)}><strong>{c.name}</strong><span>RP-чат · продолжить →</span></button>)}</>}
-      {panel==='create'&&defaults&&settings&&<><label>Название кампании<Input value={name} onChange={e=>setName(e.target.value)}/></label>
-        {sourceSpec&&<section className="chat-notice"><p>Создать отдельную копию {sourceSpec.save_id?'принятого состояния Narrative':'исходного мира'}. Снимок будет доступен для редактирования; исходное сохранение не изменится.</p>{sourceSpec.save_id&&<label>Принятых ходов в стартовом фрагменте<Input type="number" min={0} max={10} value={sourceTurns} onChange={e=>setSourceTurns(Number(e.target.value))}/></label>}<Button disabled={busy} onClick={sourcePreview}>Подготовить снимок бесплатно</Button>{origin&&<span>Снимок подготовлен</span>}</section>}
-        <label htmlFor="chat-initial-memory">Стартовая выжимка</label><Textarea id="chat-initial-memory" rows={12} value={initial} onChange={e=>{setInitial(e.target.value);saveLocal('chat-create-memory',e.target.value)}}/>
-        <div className="actions"><Button variant="ghost" onClick={()=>{setInitial(defaults.template);saveLocal('chat-create-memory',defaults.template)}}>Полный шаблон</Button><TextImport onText={t=>{setInitial(t);saveLocal('chat-create-memory',t)}}/></div>
-        <ChatSettingsEditor value={settings} onChange={setSettings}/><Button variant="ghost" onClick={onConnections}>Подключения и серверный ключ</Button><Button disabled={busy||!name.trim()||!!sourceSpec&&!origin} onClick={newCampaign}>Создать RP-кампанию</Button>
-      </>}
+      {panel==='library'&&<><Button onClick={()=>{setSourceSpec(undefined);setSettings(defaults!.settings);setPanel('create')}}><Plus size={16}/>Новая RP-кампания</Button>{!list.length&&<p>Пока нет кампаний.</p>}{list.map(c=><button className="chat-campaign-card" key={c.id} disabled={busy} onClick={()=>choose(c.id)}><strong>{c.name}</strong><span>RP-чат · продолжить →</span></button>)}</>}
+      {panel==='create'&&defaults&&<ChatCreationEditor defaults={defaults} source={sourceSpec} onConnections={onConnections} onCreated={c=>{setSelected(c.id);closePanel()}}/>}
       {panel==='chapters'&&campaign&&<><h3>Главы активной ветки</h3>{campaign.chapters.map(c=><button className="chat-campaign-card" key={c.id} onClick={()=>changeChapter(c.id===campaign.branch.chapter_id?null:c.id)}><strong>{c.name}</strong><span>{c.id===campaign.branch.chapter_id?'Активная':'Архив · читать'}</span></button>)}<h3>Сохранённые ветки / варианты</h3><p>Выбор ветки меняет продолжение кампании. Просмотр главы выше — только чтение.</p>{campaign.branches.map(b=><Button key={b.id} disabled={active||busy||b.id===campaign.active_branch} variant="outline" onClick={()=>changeBranch(b.id)}>{b.name} · {b.head} сообщений{b.id===campaign.active_branch?' · активна':''}</Button>)}{campaign.source!=null&&<details><summary>Происхождение исходной копии</summary><pre>{JSON.stringify(campaign.source,null,2)}</pre></details>}</>}
       {panel==='request'&&<><p>Авторская диагностика: фактический usage хранится отдельно от оценки. Стоимость рассчитана по сохранённым ставкам; неизвестные значения не считаются нулём. Контекст содержит только эту точку истории.</p>{requestDetails.map((receipt,i)=><pre key={i}>{JSON.stringify(receipt,null,2)}</pre>)}</>}
       {panel==='settings'&&settings&&<><ChatSettingsEditor value={settings} onChange={setSettings}/><Button disabled={busy||active} onClick={()=>void run(async()=>{const c=await api<ChatCampaign>(`${path}/settings`,{...revision(),settings},'PUT');setCampaign(c);setBudgets(c.budgets);setLater(false);closePanel()})}>Сохранить настройки</Button><Button variant="ghost" onClick={onConnections}>Подключения и серверный ключ</Button><ThemeSelector/></>}

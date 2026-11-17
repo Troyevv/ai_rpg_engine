@@ -5,7 +5,7 @@ Independent branch/PR; no dependency on or changes to PR #248. Nothing merged.
 
 ## Owners and boundaries
 
-- `backend/chat/repository.py`: additive `chat_mode_v1` migration and short SQLite transactions.
+- `backend/chat/repository.py`: additive `chat_mode_v1` / `chat_creation_v2` migrations and short SQLite transactions.
 - `backend/chat/service.py`: explicit jobs, one provider attempt, cancel and restart recovery.
 - `backend/chat/context.py`, `prompts/chat_*`: standalone context, full user template, RP and memory prompts.
 - `backend/chat/source.py`: explicit read-only snapshot of a world/current accepted Narrative state.
@@ -20,6 +20,67 @@ source adapter reuses existing human-readable world projection; it is never call
 by a Chat turn. Original source text, accepted history fragment and provenance are
 captured before creating the copy; users review them before starting. No hidden LLM
 conversion, title generation, search, speech, tools, memory agent or automatic rollover.
+
+## Creating and starting a campaign (PR #261 follow-up)
+
+The ordinary UI offers **Create from idea**, **Use ready Markdown**, and **Import existing world**.
+`chat_creations` and `chat_creation_jobs` persist author drafts, settings, streamed output,
+immutable generated variants and actual usage before any playable campaign exists. The separate
+`chat_initial.md` prompt includes the entire Issue #260 template; it receives the author's idea
+verbatim and requests world/NPC/knowledge/relationship setup without deciding player actions.
+One streamed call normally produces the document. The author can edit/import/export it,
+regenerate it, save/reopen the draft or explicitly continue an interrupted document.
+Length/error/empty responses and structurally missing sections/labels require explicit review;
+these are structural checks of a document, not literary validation or Narrative Runtime.
+
+**Confirm initial memory → Start game** atomically creates the campaign, its approved initial
+memory and one `start` job. The shared Chat worker streams the opening as the first assistant
+message. Its recorded system context combines the RP prompt with `chat_opening.md`; there is
+no artificial player action/message. Player input waits for a complete (or explicitly edited)
+opening. Regeneration/retry retains the original request and creates another branch. Reload,
+repeated confirmation and restart never generate another opening automatically. The old
+`POST /campaigns` API is retained for compatibility; the normal UI uses `/creations`.
+
+The additive v2 migration preserves old campaigns with `opening_required=0`; an established
+conversation never acquires a retroactive opening. Creation edits use their own revision and
+idempotency records; approval and opening reservation roll back together on capacity failure.
+Keys, transport, workers, model lease and usage ledger remain shared infrastructure.
+
+## Automatic context
+
+New settings default to automatic context and output limits. Old stored settings without those
+flags retain their explicit values. The server resolves capabilities on model selection/settings
+save and before requests, and checks the serving limit under the model lease for retries too.
+No completion is used to discover a limit.
+
+- DeepSeek's [official model table](https://api-docs.deepseek.com/quick_start/pricing/), checked
+  2026-11-17, publishes 1M context / 384K maximum output for `deepseek-flash` and `deepseek-v4-pro`.
+  Its explicitly documented `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` aliases use Flash.
+  The code uses a conservative decimal 1,000,000-token window. Other names require manual input.
+- [LM Studio metadata](https://lmstudio.ai/docs/developer/rest/list): use the loaded instance's
+  `config.context_length`, never the larger model training maximum. Ambiguous matching loaded
+  instances use the smallest declared window; absent loaded-window data requires manual input.
+- Compatible providers: free authenticated `GET /models` through the existing registered client;
+  only explicit numeric `context_length` / `context_window` declarations are used. No inference
+  from model names, parameter count or a generic training maximum.
+
+The ordinary screen shows model selection and automatic context. Output/temperature/manual
+window, thinking, summary-model override and memory reserves live under additional settings.
+Automatic output is up to 4,096 for RP and 16,384 for memory, bounded by one third of the window.
+Initial generation requires at least 8,192 output capacity and enough input space for the full
+prompt/template; it fails before a provider call if that capacity is unavailable. This is a
+capacity safeguard, not a guarantee that any arbitrary number of NPCs fits one answer.
+
+No compatible model-specific tokenizer assets are configured in this repository (the installed
+Transformers/tokenizers libraries serve other models, including embeddings). We do not label
+those as the selected chat model's tokenizer. Budget uses the deliberately conservative UTF-8
+byte estimate plus protocol/output/safety reserves and labels it approximate. It may warn early;
+actual provider token usage is displayed separately. No history is silently removed and memory
+updates/next chapters still require explicit user confirmation.
+
+The new three-part workflow has **not** used paid LLM calls. The live acceptance below predates
+this follow-up; it does not verify idea generation or opening quality. Free tests substitute only
+provider IO and exercise the actual production API, service, SQLite and browser UI.
 
 ## Storage, revisions and cutoff
 
@@ -56,10 +117,11 @@ bounded (40 default, 100 maximum); the browser initially renders only one page.
 
 ## Context and costs
 
-Budget is explicitly **an estimate**, UTF-8 serialized input / 2 plus framing, output
+Budget is explicitly **an estimate**, UTF-8 serialized input bytes plus framing, output
 reserve and 15% window reserve (at least 512). It is not a tokenizer. The configured
-context window must match the actual endpoint/model. Soft threshold defaults to .85 and
-checks both ordinary reply and the separately reserved summary request. Imported memory,
+manual context window must match the actual endpoint/model; known limits cap it. Soft threshold defaults to .85 and
+checks both ordinary reply and the separately reserved summary request, including the
+next RP output plus framing before warning about a future summary. Imported memory,
 new input, prompt/model/window changes are checked again. Oversized requests are rejected
 before provider IO without truncation. Confirmation reserves another 512 estimated input
 tokens for the next turn. Tail is bounded by configured tokens and at most eight messages;
@@ -71,7 +133,7 @@ retrieval of forgotten archived facts is promised. User-confirmed memory may con
 Prompts direct literary behavior but do not prove model accuracy or Knowledge compliance.
 
 Usage, finish reason, latency and versioned pricing use the existing ledger. Stages distinguish
-`chat_reply`, `chat_summary`, `chat_regenerate`, `chat_retry`. Unknown remote usage/cost remains
+`chat_initial`, `chat_continue`, `chat_start`, `chat_reply`, `chat_summary`, `chat_regenerate`, `chat_retry`. Unknown remote usage/cost remains
 unknown; local provider pricing follows existing zero API-cost semantics. Synthetic
 1000-message tests establish storage, context and UI behavior, not 1000 played turns
 or literary reliability.
@@ -112,7 +174,9 @@ and selected UI state. Markdown uses the existing renderer with name linking dis
 
 ## Main API
 
-`GET /chat/defaults`, `POST /chat/source`, `GET|POST /chat/campaigns`;
+`GET /chat/defaults`, `POST /chat/capabilities`, `POST /chat/source`, `GET|POST /chat/campaigns`;
+`GET|POST /chat/creations`, `GET|PUT /chat/creations/{id}`, `POST /generate|confirm`,
+`GET /jobs/{id}|/jobs/{id}/events`, `POST /jobs/{id}/stop` under a creation;
 `GET /chat/campaigns/{id}` and `/messages?branch=&chapter=&before=&limit=`;
 `POST /budget`, `/generate`, `/edit`, `/select`, `/memory`;
 `PUT /settings`; `GET /versions`;

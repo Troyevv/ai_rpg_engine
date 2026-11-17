@@ -18,6 +18,7 @@
 - The application uses a FastAPI backend, SQLite persistence, and a React + TypeScript frontend built with Vite.
 - Keep domain logic out of HTTP handlers and UI components. Preserve existing service, persistence, provider, and runtime boundaries; inspect actual module layout before choosing files.
 - Narrative and Chat are separate playable modes. Narrative is the only canonical WorldState runtime: keep world generation, literary Extraction, Resolver and canonical persistence in their existing owners. Chat owns only text campaigns, message branches, approved memory and configuration versions; it must not write Narrative WorldState or run Extraction/Resolver. Never convert an existing save in place; an explicit Narrative → Chat action creates a separate snapshot-based campaign.
+- Chat creation remains an author draft until explicit memory approval; the opening is one ordinary Chat request without a synthetic player action. Preserve automatic context capability provenance and require a manual limit when metadata is unknown.
 - Prefer existing abstractions and established dependencies to new frameworks, parallel implementations, or speculative generalization.
 - Do not implement future modes or features unless requested by the task.
 

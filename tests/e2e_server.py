@@ -593,7 +593,7 @@ def authoring_stream(**kwargs):
     if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture'):
         # Chat production service/context/API/SQLite; substitute external provider IO only.
         from backend.chat.context import TEMPLATE
-        text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
+        text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' or 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content'] else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
         kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
         for offset in range(0,len(text),80):
             if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
@@ -607,7 +607,8 @@ def authoring_stream(**kwargs):
     yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
-llm.get_available_models = lambda: ['local-model']
+llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture']
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192)]]}
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
@@ -1140,6 +1141,9 @@ if __name__ == '__main__':
         r=app.state.chat.repo
         settings=Settings(prompt=RP_PROMPT)
         settings.reply.model='chat-fixture';settings.summary.model='chat-summary-fixture'
+        settings.reply.auto_context=False;settings.reply.auto_output=False
+        settings.summary.auto_context=False;settings.summary.auto_output=False
+        settings.summary.context_length=65536
         cid=r.create(Create(token=uuid4().hex,name='Архив 1000 сообщений',memory=TEMPLATE,settings=settings).model_dump())
         for chapter in range(4):
             with r.transaction() as db:
