@@ -72,9 +72,27 @@ Prompts direct literary behavior but do not prove model accuracy or Knowledge co
 
 Usage, finish reason, latency and versioned pricing use the existing ledger. Stages distinguish
 `chat_reply`, `chat_summary`, `chat_regenerate`, `chat_retry`. Unknown remote usage/cost remains
-unknown; local provider pricing follows existing zero API-cost semantics. No paid live QA
-has been authorized or run for this Issue. Synthetic 1000-message tests establish storage,
-context and UI behavior, not 1000 played turns or literary reliability.
+unknown; local provider pricing follows existing zero API-cost semantics. Synthetic
+1000-message tests establish storage, context and UI behavior, not 1000 played turns
+or literary reliability.
+
+Live acceptance on 2026-11-17 used an explicitly approved $1 ceiling: 12 RP replies and
+2 summaries with DeepSeek V4 Flash, thinking off, through the production UI in an isolated
+database. The ledger recorded exactly 14 attempts, 92,811 input and 16,519 output tokens,
+including 52,480 cached input tokens; the versioned tariff estimate was $0.016118490
+(not an independently verified invoice). Three chapters retained all 24 messages, with
+two reviewed memory versions; reload, composer draft and archive navigation worked.
+
+Literary acceptance required manual review. The first summary hit the deliberately selected
+4096 output limit and was visibly partial; it was completed/edited before explicit acceptance.
+The second used 8192 output tokens and completed, preserving dates, asymmetric trust,
+secrets, unknown fields and a completed promise, but needed a correction to already answered
+questions. Memory grew instead of reliably reaching its target size. RP invented an earlier
+meeting and twice withheld a letter's content despite explicit reading. The RP prompt now
+clarifies observable action results, private reading and established knowledge; the last two
+approved calls exercised that exact prompt and exposed the letter without giving its content
+to the other NPC. This is limited evidence, not a guarantee against further chronology,
+perspective or knowledge errors. Detailed settings and results are in the PR.
 
 ## Failure and access model
 
