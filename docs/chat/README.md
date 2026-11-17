@@ -42,14 +42,19 @@ opening. Regeneration/retry retains the original request and creates another bra
 repeated confirmation and restart never generate another opening automatically. The old
 `POST /campaigns` API is retained for compatibility; the normal UI uses `/creations`.
 
-The default RP prompt requests 4–6 optional actions, `Свободный ввод: свой вариант.`, then
-a brief `Время / Место / Рядом` footer in every game response, including the opening. These
+The default RP prompt requests `---`, `### Варианты действий`, 4–6 numbered actions with
+bold concrete action titles, `**Свободный ввод:** свой вариант.`, then another `---`,
+`### Текущая сцена` and brief bold `Время / Место / Рядом` labels, with blank lines between
+blocks, in every game response including the opening. These
 are suggestions, never completed player actions. Initial and updated memory keep the original
 Issue #260 template without this footer; summary instructions preserve only established history
 and exclude unchosen suggestions. Formatting belongs to the model, with no response parser,
 semantic validator or extra inference. Saved campaign prompts and recorded retry contexts are
 not rewritten: existing campaigns can adopt the new RP text through advanced prompt settings;
 regeneration of an old response deliberately uses its original recorded instructions.
+Chat messages render safe CommonMark locally while streaming (no per-chunk HTTP), then
+use the existing server Markdown renderer after completion. Both disable raw HTML; letter
+fences remain literal. This opt-in presentation does not change Narrative streaming.
 
 The additive v2 migration preserves old campaigns with `opening_required=0`; an established
 conversation never acquires a retroactive opening. Creation edits use their own revision and

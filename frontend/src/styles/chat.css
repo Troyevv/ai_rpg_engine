@@ -15,3 +15,7 @@
 .chat-settings-editor .chat-tokenizer-install{white-space:normal;height:auto;min-height:44px;max-width:100%}
 
 .chat-creation-settings{border:0;padding:0;margin:0;min-width:0}
+
+.chat-message .prose hr{border:0;border-top:1px solid var(--border-strong);margin:1.4em 0}
+.chat-message .prose h3{font-family:var(--ui-font);font-weight:700}
+.chat-message .prose li+li{margin-top:.45em}

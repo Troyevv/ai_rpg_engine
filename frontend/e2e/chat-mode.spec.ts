@@ -1,6 +1,6 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page,type Locator} from '@playwright/test';
 
-async function createChat(page:Page) {
+async function createChat(page:Page, model='chat-fixture', waitComplete=true) {
   await page.goto('/');
   await page.getByRole('button',{name:'RP-чат',exact:true}).click();
   await page.getByRole('button',{name:'Новая RP-кампания',exact:true}).last().click();
@@ -8,11 +8,12 @@ async function createChat(page:Page) {
   await dialog.getByRole('button',{name:'Использовать готовую выжимку',exact:true}).click();
   await dialog.getByLabel('Стартовая выжимка',{exact:true}).fill('Лена и Илья у маяка. Дата 9 октября. Тайну знает только Лена. Незавершённый разговор.');
   await dialog.getByLabel('Название кампании',{exact:true}).fill('Непрерывная история');
-  await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-fixture');
+  await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill(model);
   await dialog.getByText('Дополнительные настройки',{exact:true}).click();
   await dialog.getByRole('group',{name:'Обновление выжимки — отдельный вызов'}).getByLabel('Модель',{exact:true}).fill('chat-summary-fixture');
   await dialog.getByLabel('Подтверждаю первоначальную выжимку',{exact:true}).check();
   await dialog.getByRole('button',{name:'Начать игру',exact:true}).click();
+  if(!waitComplete)return;
   await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
   await expect(page.locator('.chat-assistant')).toHaveCount(1);
   await expect(page.getByLabel('Твоё сообщение',{exact:true})).toBeEnabled();
@@ -288,4 +289,69 @@ test('Chat: import Markdown or existing world through the creation chooser',asyn
   await expect(dialog).toHaveCount(0);await expect(page.locator('.chat-assistant')).toHaveCount(1);
   await expect(page.getByLabel('Твоё сообщение',{exact:true})).toBeEnabled();
   expect(await (await request.get(`/api/worlds/${seed.world}`)).json()).toEqual(before);
+});
+
+test('Chat: Markdown blocks render during streaming, persist and reopen without replay',async({page,request},info)=>{
+  const mobile=info.project.name==='mobile';
+  if(mobile)await page.setViewportSize({width:360,height:900});
+  await page.addInitScript(s=>localStorage.setItem('workshop-theme',JSON.stringify({theme_id:s,mode:'manual'})),mobile?'parchment':'graphite');
+  const renders:string[]=[];
+  page.on('request',r=>{
+    if(r.url().endsWith('/api/markdown')&&r.postDataJSON()?.text?.startsWith('Лена ставит чашку на стол.'))renders.push(r.postDataJSON().text);
+  });
+  const formatted=async(article:Locator)=>{
+    await expect(article.locator('.prose hr')).toHaveCount(2);
+    await expect(article.locator('.prose h3')).toHaveText(['Варианты действий','Текущая сцена']);
+    await expect(article.locator('.prose ol li strong')).toHaveText(['Спросить Лену:','Осмотреть дверь:','Позвать гостя:','Подождать:']);
+    await expect(article.locator('.prose p>strong')).toHaveText(['Свободный ввод:','Время:','Место:','Рядом:']);
+    expect(await article.locator('.prose ol').evaluate(el=>getComputedStyle(el).listStyleType)).toBe('decimal');
+    expect(await article.locator('.prose hr').first().evaluate(el=>parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0);
+    expect(await article.locator('.prose ol strong').first().evaluate(el=>Number(getComputedStyle(el).fontWeight))).toBeGreaterThanOrEqual(600);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  };
+  const release=async()=>expect((await request.post('/test/chat-markdown-release')).ok()).toBeTruthy();
+  await createChat(page,'chat-markdown-fixture',false);
+  const opening=page.locator('.chat-assistant').first();
+  await formatted(opening);
+  await expect(opening.locator('header')).toContainText('Ответ поступает');
+  await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
+  expect(renders).toHaveLength(0); // Local formatting, no server render per chunk.
+  if(process.env.CHAT_QA_SCREENSHOTS){
+    await opening.getByRole('heading',{name:'Варианты действий',exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:`/tmp/chat261-markdown-stream-${info.project.name}.png`});
+  }
+  await release();await expect(opening.locator('header')).toContainText('Сохранено');
+  await expect.poll(()=>renders.length).toBeGreaterThan(0);
+  await formatted(opening);
+  const id=await page.evaluate(()=>localStorage.getItem('chat-selection'));
+  const original=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+  expect(original.job.kind).toBe('start');
+  await page.getByLabel('Твоё сообщение',{exact:true}).fill('Я спрашиваю, кто пришёл.');
+  await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await expect(page.locator('.chat-assistant')).toHaveCount(2);
+  const reply=page.locator('.chat-assistant').last();
+  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');
+  await release();await expect(reply.locator('header')).toContainText('Сохранено');
+  const before=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+  const saved=await (await request.get(`/api/chat/campaigns/${id}/messages`)).json();
+  expect(saved.messages.filter((m:{role:string})=>m.role==='assistant')).toHaveLength(2);
+  expect(saved.messages[0].content).toContain('\n\n---\n\n### Варианты действий\n\n');
+  expect(saved.messages[0].content).toContain('**Время:**');
+  await page.reload();await expect(page.locator('.chat-assistant')).toHaveCount(2);await formatted(reply);
+  expect((await (await request.get(`/api/chat/campaigns/${id}`)).json()).job.id).toBe(before.job.id);
+  expect(await (await request.get(`/api/chat/campaigns/${id}/messages`)).json()).toEqual(saved);
+  if(process.env.CHAT_QA_SCREENSHOTS){
+    await reply.getByRole('heading',{name:'Текущая сцена',exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:`/tmp/chat261-markdown-reopened-${info.project.name}.png`});
+  }
+  await reply.getByRole('button',{name:'Перегенерировать',exact:true}).click();
+  await expect.poll(async()=>{
+    const c=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+    return {changed:c.job.id!==before.job.id,status:c.job.status};
+  }).toEqual({changed:true,status:'running'});
+  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');
+  await release();await expect(reply.locator('header')).toContainText('Сохранено');
+  const after=await (await request.get(`/api/chat/campaigns/${id}`)).json();
+  expect(after.branches).toHaveLength(2);
+  expect(after.job.kind).toBe('regenerate');
 });

@@ -1,7 +1,17 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import MarkdownIt from "markdown-it";
 import { api } from "./api";
 const sourceParser = new MarkdownIt("commonmark");
+// Chat renders ordinary Markdown during streaming, with the same safe CommonMark
+// options as /markdown. No game-format parsing or per-chunk HTTP requests.
+const liveParser = new MarkdownIt("commonmark", {html: false, breaks: true}).enable("table");
+const defaultFence = liveParser.renderer.rules.fence!;
+liveParser.renderer.rules.fence = (tokens, index, options, env, renderer) => {
+  const token = tokens[index];
+  if (token.level === 0 && token.info.trim() === "letter")
+    return '<blockquote class="narrative-letter" style="white-space:pre-wrap">' + liveParser.utils.escapeHtml(token.content) + '</blockquote>\n';
+  return defaultFence(tokens, index, options, env, renderer);
+};
 
 // Presentation only: canonical binding is exclusively performed by Runtime.
 // CommonMark knows which fences are letters, including an unfinished stream.
@@ -29,10 +39,12 @@ export const Markdown = memo(function Markdown({
   onCharacter,
   links = true,
   streaming = false,
+  liveMarkdown = false,
   onReady,
 }: {
   text: string;
   streaming?: boolean;
+  liveMarkdown?: boolean;
   onReady?:()=>void;
   saveId?: number;
   worldId?: number;
@@ -40,6 +52,7 @@ export const Markdown = memo(function Markdown({
   links?: boolean;
 }) {
   const [html, setHtml] = useState<{text:string;html:string|null}|null>(null);
+  const liveHtml = useMemo(() => liveMarkdown ? liveParser.render(text) : null, [text, liveMarkdown]);
   const ready=useRef(onReady);ready.current=onReady;
   useEffect(()=>{if(!streaming&&html?.text===text)ready.current?.()},[html,text,streaming]);
   useEffect(() => {
@@ -73,6 +86,8 @@ export const Markdown = memo(function Markdown({
     >
       {!streaming && html?.text===text && html.html ? (
         <div dangerouslySetInnerHTML={{ __html: html.html }} />
+      ) : liveHtml !== null ? (
+        <div dangerouslySetInnerHTML={{ __html: liveHtml }} />
       ) : (
         <div>{streamingProse(text)}</div>
       )}

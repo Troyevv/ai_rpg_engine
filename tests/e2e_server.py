@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -590,9 +591,45 @@ engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
     'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960}.get(model, 32768)}
 }
 chat_cancel_next = False
+chat_markdown_release = threading.Event()
+CHAT_MARKDOWN = '''Лена ставит чашку на стол. За окном шумит дождь. «Кто-то стучал», — говорит она.
+
+---
+
+### Варианты действий
+
+1. **Спросить Лену:** «Ты ждёшь гостей?»
+2. **Осмотреть дверь:** проверить замок, не открывая.
+3. **Позвать гостя:** «Кто там?»
+4. **Подождать:** остаться у стола.
+
+**Свободный ввод:** свой вариант.
+
+---
+
+### Текущая сцена
+
+**Время:** 9 октября, точное время не установлено.
+
+**Место:** комната у маяка.
+
+**Рядом:** Лена, чашка, закрытая дверь; за окном дождь.
+'''
 
 def authoring_stream(**kwargs):
     global chat_cancel_next
+    if kwargs.get('model') == 'chat-markdown-fixture':
+        # Hold the external stream after Markdown has arrived, so the browser can
+        # assert formatting before the job completes and /markdown is requested.
+        chat_markdown_release.clear()
+        kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
+        for offset in range(0,len(CHAT_MARKDOWN),37):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield CHAT_MARKDOWN[offset:offset+37]
+            time.sleep(.025)
+        if not chat_markdown_release.wait(30): raise RuntimeError('fixture: expected Markdown stream release')
+        kwargs['on_finish']('stop')
+        return
     if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture'):
         # Chat production service/context/API/SQLite; substitute external provider IO only.
         from backend.chat.context import TEMPLATE
@@ -615,8 +652,8 @@ def authoring_stream(**kwargs):
     yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
-llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192)]]}
+llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture']
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536)]]}
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
@@ -1145,6 +1182,11 @@ if __name__ == '__main__':
         global chat_cancel_next
         chat_cancel_next = True
         return {'armed':True}
+
+    @app.post('/test/chat-markdown-release')
+    def release_chat_markdown():
+        chat_markdown_release.set()
+        return {'released':True}
 
     @app.post('/test/chat-history')
     def chat_history():
