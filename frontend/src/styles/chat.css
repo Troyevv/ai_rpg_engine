@@ -13,3 +13,5 @@
 .chat-creation{display:flex;flex-direction:column;gap:16px;min-width:0}.chat-creation>.actions{display:flex;flex-wrap:wrap;gap:8px}.chat-creation>button{align-self:flex-start;max-width:100%;white-space:normal;height:auto;min-height:44px}.chat-creation select{min-height:44px;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}.chat-creation .chat-import input{max-width:100%}.chat-creation details>button{margin:6px;white-space:normal;height:auto;min-height:44px}
 
 .chat-settings-editor .chat-tokenizer-install{white-space:normal;height:auto;min-height:44px;max-width:100%}
+
+.chat-creation-settings{border:0;padding:0;margin:0;min-width:0}
