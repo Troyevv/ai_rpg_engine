@@ -286,3 +286,19 @@ def test_warning_reserves_next_reply_before_summary_overflow(env):
             found=b;break
     assert found and found['summary']['fits'] and found['reply']['fits']
     assert found['summary']['next_reply_reserve']==c['settings']['reply']['max_tokens']+64
+
+
+def test_cancel_between_reservation_and_worker_start_never_calls_provider(env):
+    import threading
+    from test_chat_mode import create
+    client,app=env
+    d,_=draft(client)
+    initial_id,_=app.state.chat.creations.reserve(d['id'],body(d,kind='initial'))
+    c=create(client)
+    opening_id,_=app.state.chat.reserve(c['id'],body(c,kind='start',text=''))
+    for owner,jid in ((d['id'],initial_id),(c['id'],opening_id)):
+        app.state.chat.stop(owner,jid)  # Another request cancels before launch registers its Event.
+        with patch('llm.chat_stream',side_effect=provider(TEMPLATE)) as io:
+            app.state.chat.run(owner,jid,threading.Event())
+            assert io.call_count==0
+        assert app.state.chat.job(owner,jid)['status']=='stopped'

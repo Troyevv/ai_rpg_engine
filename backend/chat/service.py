@@ -149,6 +149,7 @@ class ChatService:
         try:
             initial = cid.startswith('creation_')
             with self.repo.connect() as db: j = row(db, 'chat_creation_jobs' if initial else 'chat_jobs', jid, None if initial else cid)
+            if j['status'] != 'running': return
             if initial and j['kind']=='continue': text = j['response']
             config = json.loads(j['config_json'])
             with model_lease(config['provider']):
@@ -158,6 +159,12 @@ class ChatService:
                 known = capabilities.discover(config['provider'],config['model'],self.credentials)
                 if known.get('context_length'):
                     require_fit(json.loads(j['context_json']),dict(config,context_length=min(config['context_length'],known['context_length'])))
+                # Cancellation may precede worker registration, or arrive while
+                # waiting for metadata/lease (including from another process).
+                if event.is_set(): return
+                with self.repo.connect() as db:
+                    current = row(db,'chat_creation_jobs' if initial else 'chat_jobs',jid)
+                if current['status'] != 'running': return
                 key = self.credentials.resolve(config['provider'])
                 for chunk in tracked_stream(self.repo.storage, llm.chat_stream, jid, 'chat_'+j['kind'], config,
                     json.loads(j['context_json']), model=config['model'], provider=config['provider'], api_key=key,
