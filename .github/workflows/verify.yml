@@ -49,9 +49,9 @@ jobs:
           retention-days: 7
   backend:
     runs-on: ubuntu-latest
-    # #382: 77s setup + 1125s pytest exhausted the 20m job deadline at exit.
-    # Also covers the measured 1286s local full suite, report upload and 2m reserve.
-    timeout-minutes: 25
+    # PR #261: hosted run 44276921181 reached only 93% at the 25m deadline.
+    # Allow the measured ~27m suite/setup plus report upload and a 3m reserve.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
