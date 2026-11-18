@@ -287,7 +287,17 @@ def birth(r,c,event):
     if not r.before['meta']['world_time']<=now<=s['meta']['world_time']: raise ValueError('birth minute outside accepted interval')
     if now<p['due_minute']: raise ValueError('pregnancy is not due under configured game policy')
     if c['location_id'] is not None and c['location_id'] not in s['locations']: raise ValueError('unknown birth location')
-    parents=p['parent_ids'];date=current_time(s,now)['date'];fids=[]
+    parents=p['parent_ids']
+    if r.scene_version >= 10 and not parents:
+        # Older encounters can lack the optional parent list. Delivery
+        # establishes the gestational parent. A separately disclosed parent
+        # must belong to the recorded conception before gaining an edge.
+        encounter=s['reproductive_events'].get(p['event_id'], {})
+        participants=set(encounter.get('participants', []))
+        if set(c['disclosed_parent_ids']) <= participants:
+            parents=list(dict.fromkeys([mother, *c['disclosed_parent_ids']]))
+            p['parent_ids']=parents
+    date=current_time(s,now)['date'];fids=[]
     if set(c['disclosed_parent_ids'])-set(parents): raise ValueError('unestablished disclosed parent')
     for ch in p['children']:
         cid=ch['id']

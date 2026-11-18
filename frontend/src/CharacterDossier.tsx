@@ -33,8 +33,8 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
  const knowledge=Object.values(state.world?.knowledge||{}).filter(k=>k.actor_id===card.id&&k.status!=='unknown');
  const sex=card.dossier?.sex;
  const personal=personalRelationships(card.id,state.dossier_personal_relations,state.characters);
- const knownLife=card.dossier?.life_status;
- const deceased=knownLife==='dead'||state.genealogy?.nodes.some(c=>c.id===card.id&&c.life_status==='dead');
+ const knownLife=card.dossier?.life_status??state.genealogy?.nodes.find(c=>c.id===card.id)?.life_status;
+ const deceased=knownLife==='dead';
  const statusLine=knownLife==='dead'||knownLife==='missing'?lifeLabel(knownLife):card.fields['Статус'];
  const partners=new Map(state.characters.map(c=>[c.id,c]));
  const age=c?.age??card.fields['Возраст'];

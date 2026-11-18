@@ -416,9 +416,11 @@ def test_consent_uses_one_player_quote_and_does_not_infer_it_from_the_scene():
     before=state()
     action='Мы оба решаем провести ночь вместе без предохранения.'
     row=service(player_evidence=action)
-    for key in ('source_event_id','player_assertion','evidence'):
+    for key in ('source_event_id','player_assertion','evidence','parent_ids'):
         row.pop(key)
     for quote,accepted in ((action,True),('Ничего такого игрок не говорил.',False),('',False)):
         proposal=dict(reproductive_events=[dict(row,player_evidence=quote)])
         result=StateResolver(before,action,action,**resolver_options(before,action,contract_version=10)).resolve(proposal)
         assert bool(result.state['pregnancies'])==accepted
+        if accepted:
+            assert set(next(iter(result.state['pregnancies'].values()))['parent_ids'])=={'a','b'}
