@@ -74,7 +74,19 @@ class CanonKnowledge(DTO):
     status: Literal['known','suspected','refuted'] = 'known'
 
 
+class CanonSocial(DTO):
+    action: Literal['engaged','spouse','divorce','parent','move','hire','leave_job']
+    actor_id: str = Field(min_length=1)
+    other_id: str | None = None
+    phase_id: str | None = None
+    location_id: str | None = None
+    title: str = Field(default='',max_length=200)
+    description: str = Field(min_length=1,max_length=1000)
+    known_by: list[str] = Field(max_length=100)
+
+
 class Scene(DTO):
+    social: CanonSocial | None = None
     position: CanonPosition | None = None
     knowledge: CanonKnowledge | None = None
     time: str = Field(max_length=120)

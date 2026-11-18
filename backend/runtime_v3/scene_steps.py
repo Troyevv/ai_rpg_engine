@@ -527,8 +527,6 @@ def bind_domain_sources(records, state, turn_id, namespace, order):
     for section in ('reproductive_events','births','development_evidence'):
         for item in records[section]:
             if section == 'reproductive_events':
-                if item.get('player_evidence'):
-                    item.setdefault('player_assertion','explicit_choice')
                 item.setdefault('parent_ids',[item['gestational_actor_id'],item['impregnating_actor_id']])
             if section == 'births':
                 item.setdefault('sex_observations', [])

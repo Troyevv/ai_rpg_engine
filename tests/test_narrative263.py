@@ -424,3 +424,37 @@ def test_consent_uses_one_player_quote_and_does_not_infer_it_from_the_scene():
         assert bool(result.state['pregnancies'])==accepted
         if accepted:
             assert set(next(iter(result.state['pregnancies'].values()))['parent_ids'])=={'a','b'}
+
+
+def test_manual_social_phases_share_revision_history_visibility_and_reload(tmp_path):
+    from devtools.narrative_test_world import load_fixture
+    from backend.runtime_v3.kinship import visible_relations
+    from backend.runtime_v3.residence import visible_social_state
+    repo=Repository(tmp_path/'social.sqlite')
+    sid=load_fixture(repo,'residence-roles')['save']
+    actor, other, observer='qa_timur','qa_marina','qa_kirill'
+    original=repo.get_snapshot(sid)
+    def apply(action, **fields):
+        s=repo.get_snapshot(sid)['world_state']
+        repo.update_scene_meta(sid,dict(time='',location='',present_ids=s['camera']['present_character_ids'],
+            social=dict(action=action,actor_id=actor,description='Сообщено лично.',known_by=[observer],**fields)),
+            repo.get_save(sid)['revision'])
+        return Repository(repo.path).get_snapshot(sid)['world_state']
+    apply('engaged',other_id=other)
+    w=apply('spouse',other_id=other)
+    assert {r['kind']:r['status'] for r in visible_relations(w,observer)}=={'engaged':'closed','spouse':'active'}
+    assert not visible_relations(w,'qa_zoya')
+    w=apply('divorce',other_id=other)
+    assert {r['outcome'] for r in visible_relations(w,observer)}=={'superseded','divorced'}
+    before=repo.get_save(sid)['revision']
+    with pytest.raises(ValueError, match='действующий брак'):
+        apply('divorce',other_id=other)
+    assert repo.get_save(sid)['revision']==before
+    w=apply('move',location_id='qa_room')
+    assert w['characters'][actor]['location_id']==original['world_state']['characters'][actor]['location_id']
+    w=apply('hire',title='Хранитель фонда')
+    job=next(r for r in visible_social_state(w,observer)['roles'] if r['actor_id']==actor)
+    w=apply('leave_job',phase_id=job['id'])
+    assert w['roles'][job['id']]['outcome']=='resigned'
+    assert w['meta']['turn_id']==original['world_state']['meta']['turn_id']
+    assert repo.get_snapshot(sid)['history_head']!=original['history_head']

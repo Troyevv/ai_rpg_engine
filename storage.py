@@ -311,6 +311,9 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
                     world['knowledge'][key] = updated.model_dump()
                     batch.state_changes.append(dict(kind='manual_knowledge',source='player_edit',
                         turn_id=world['meta']['turn_id'], actor_id=actor, fact_id=fid, status=updated.status))
+            if metadata.get('social'):
+                from backend.runtime_v3.manual_social import correct
+                world = state['world_state'] = correct(world,batch,metadata['social'],row['revision'])
             assert_world_state_v3_invariants(world,before)
             state['history_head'] = append_history(db,state.get('history_head'),batch.to_dict(),before=before,after=world)
             project(db,save_id,state)

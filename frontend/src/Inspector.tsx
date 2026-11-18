@@ -1,3 +1,4 @@
+import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
   useEffect,
   useLayoutEffect,
@@ -650,6 +651,7 @@ function SceneEditor({
   );
   const [fact, setFact] = useState("");
   const [factId, setFactId] = useState("");
+  const [social,setSocial]=useState<SocialEdit|null>(null);
   const [movedActor, setMovedActor] = useState("");
   const [destination, setDestination] = useState("");
   const [holders, setHolders] = useState<string[]>([]);
@@ -659,6 +661,10 @@ function SceneEditor({
   useEffect(() => {
     if (!edit) setScene(meta ?? { time: "", location: "", present_ids: [] });
   }, [meta, edit]);
+  const revision=useRef(save.revision);
+  useEffect(()=>{
+    if (!edit) { revision.current=save.revision;setSocial(null); }
+  },[edit,save.revision]);
   const blocked = busy || active(save.job);
   if (!edit) return null;
   return (
@@ -678,9 +684,10 @@ function SceneEditor({
                 time: scene.time === meta?.time ? "" : scene.time,
                 location: scene.location,
                 present_ids: scene.present_ids,
+                social: social ?? undefined,
                 position: movedActor ? {actor_id:movedActor,location:destination.trim()} : undefined,
                 knowledge: factId || fact.trim() ? {fact_id:factId || null,text:factId ? "" : fact.trim(), actor_ids:holders, status} : undefined,
-                revision: save.revision,
+                revision: revision.current,
               },
               "PATCH",
             );
@@ -688,6 +695,7 @@ function SceneEditor({
             setFact("");
             setFactId("");
             setMovedActor("");
+            setSocial(null);
             setDestination("");
             setHolders([]);
             setEdit(false);
@@ -745,6 +753,7 @@ function SceneEditor({
           {movedActor && <label>Местонахождение персонажа
             <Input value={destination} maxLength={200} onChange={e=>setDestination(e.target.value)}/>
           </label>}
+          <SocialCorrection state={save.state} value={social} onChange={setSocial}/>
           <label>Исправить знание
             <select value={factId} onChange={e=>setFactId(e.target.value)}>
               <option value="">Новое сведение</option>

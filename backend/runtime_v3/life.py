@@ -100,7 +100,8 @@ def validate_life_state(state):
 def _proof(resolver, item):
     from backend.runtime_v3.resolver import normalized
     proof = item.get('player_evidence')
-    return (item.get('player_assertion') == 'explicit_choice' and isinstance(proof,str)
+    return ((item.get('player_assertion') == 'explicit_choice' or
+             resolver.scene_version >= 10 and item.get('player_assertion') is None) and isinstance(proof,str)
             and bool(normalized(proof)) and normalized(proof) in normalized(resolver.player_input))
 
 
