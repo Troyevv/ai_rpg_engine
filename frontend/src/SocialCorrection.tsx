@@ -16,7 +16,7 @@ export function SocialCorrection({state,value,onChange}:{state:State;value:Socia
     <label>Исправить сведения о жизни персонажей
       <select value={value?.action||''} onChange={e=>onChange(e.target.value?{
         action:e.target.value as Action, actor_id:state.controlled_actor_id||'',other_id:'',location_id:'',phase_id:'',
-        title:'',description:'',known_by:state.controlled_actor_id?[state.controlled_actor_id]:[],
+        title:'',description:e.target.value==='death_notice'?'Известие о смерти':'',known_by:state.controlled_actor_id?[state.controlled_actor_id]:[],
       }:null)}>
         <option value="">Без изменения</option>
         {(Object.entries(actions) as [Action,string][]).map(([id,name])=><option key={id} value={id}>{name}</option>)}
@@ -45,7 +45,7 @@ export function SocialCorrection({state,value,onChange}:{state:State;value:Socia
           {phases.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </label>}
-      <label>Что произошло<Input required value={value.description} maxLength={1000} onChange={e=>onChange({...value,description:e.target.value})}/></label>
+      {value.action!=='death_notice'&&<label>Что произошло<Input required value={value.description} maxLength={1000} onChange={e=>onChange({...value,description:e.target.value})}/></label>}
       <fieldset><legend>Кому известно это изменение?</legend>
         {state.characters.map(c=><label key={c.id}><input type="checkbox" checked={value.known_by.includes(c.id)}
           onChange={e=>onChange({...value,known_by:e.target.checked?[...value.known_by,c.id]:value.known_by.filter(id=>id!==c.id)})}/>{c.name||'Без имени'}</label>)}

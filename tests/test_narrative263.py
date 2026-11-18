@@ -501,3 +501,22 @@ def test_life_status_with_direct_observers_survives_an_unknown_recipient():
     fid = result.state['characters']['b']['life_fact_id']
     assert 'a:'+fid in result.state['knowledge'] and 'c:'+fid not in result.state['knowledge']
     assert any(w['code']=='invalid_status_recipient' for w in result.warnings)
+
+def test_repeated_death_notice_keeps_prior_knowledge_and_private_circumstances():
+    from backend.runtime_v3.dossier import details
+    from backend.runtime_v3.kinship import death_notice_fact
+    from backend.runtime_v3.manual_social import correct
+    from backend.runtime_v3.models import WorldHistoryV3
+    from test_life_social import state, inform
+    before = state()
+    before['characters']['b'].update(life_status='dead', life_fact_id='private')
+    before['camera']['present_character_ids'] = ['a']
+    inform(before, 'private', ['b'], {'c':'known'})
+    args = dict(action='death_notice', actor_id='b', known_by=['a'], description='Известие')
+    first = correct(before, WorldHistoryV3(), args, 7)
+    assert first['characters']['b']['life_fact_id'] == 'private'
+    assert 'a:private' not in first['knowledge'] and details(first,'b')['life_status'] == 'dead'
+    record = first['knowledge']['a:'+death_notice_fact('b')]
+    batch = WorldHistoryV3()
+    second = correct(first, batch, args, 8)
+    assert second['knowledge']['a:'+death_notice_fact('b')] == record and not batch.state_changes

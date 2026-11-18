@@ -1,5 +1,7 @@
 """Player corrections reuse the ordinary social transitions and their phase history."""
-from backend.runtime_v3.models import Fact, Knowledge, identity
+from backend.runtime_v3.models import Fact, identity
+from backend.runtime_v3.knowledge import correct_knowledge
+from backend.runtime_v3.kinship import death_notice_fact
 from backend.runtime_v3.life import apply_life
 from backend.runtime_v3.residence import apply_residence
 from backend.runtime_v3.resolver import StateResolver
@@ -26,8 +28,9 @@ def correct(world, batch, change, revision):
         character = world['characters'][actor]
         if character['life_status'] != 'dead' or not observers:
             raise ValueError('Выбери умершего персонажа и тех, кому известно о его смерти.')
-        # Keep every previous recipient when the death already has a canonical fact.
-        fid = character.get('life_fact_id') or fid
+        # Knowing of a death never discloses its circumstances to a new observer.
+        fid = death_notice_fact(actor)
+        text = 'Смерть персонажа подтверждена.'
     elif action in ('engaged','spouse','parent','divorce'):
         section, apply = 'social_relation_changes', apply_life
         if action == 'divorce':
@@ -68,11 +71,10 @@ def correct(world, batch, change, revision):
     if fid not in state['facts']:
         state['facts'][fid] = Fact(id=fid,text=text,visibility='secret',character_ids=participants).model_dump()
     for cid in observers:
-        state['knowledge'][cid+':'+fid] = Knowledge(actor_id=cid,fact_id=fid,status='known',
-            confirmed_once=True,source_turn=turn).model_dump()
-        batch.state_changes.append(dict(kind='manual_knowledge',source='player_edit',turn_id=turn,actor_id=cid,fact_id=fid,status='known'))
+        correct_knowledge(state, batch, cid, fid, 'known')
     if action == 'death_notice':
-        state['characters'][actor]['life_fact_id'] = fid
+        if not state['characters'][actor].get('life_fact_id'):
+            state['characters'][actor]['life_fact_id'] = fid
         return state
     apply(resolver, RawTurnResult.parse(dict(final_scene={}, **{section:items})))
     for record in resolver.history.state_changes:

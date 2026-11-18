@@ -545,12 +545,14 @@ def bind_life_status_observers(records, state, turn_id, namespace, order, warnin
         actor = state['characters'].get(cid, {})
         text = (actor.get('display_name') or cid) + ' — ' + labels[status]
         fid = row.get('fact_id')
-        if not fid and actor.get('life_status') == status:
-            fid = actor.get('life_fact_id')
         if not fid:
-            fid = identity('life-status', turn_id, namespace, cid, status)
-            records['facts'].append(dict(id=fid, text=text, character_ids=[cid], visibility='secret'))
-        row['fact_id'] = fid
+            from backend.runtime_v3.kinship import death_notice_fact
+            fid = (death_notice_fact(cid) if status == 'dead' else
+                   identity('life-status', turn_id, namespace, cid, status))
+            if fid not in state['facts']:
+                records['facts'].append(dict(id=fid, text=text, character_ids=[cid], visibility='secret'))
+            # A previous, more detailed death report retains its original audience.
+            row['fact_id'] = (actor.get('life_fact_id') if status == actor.get('life_status') == 'dead' else None) or fid
         records['information_events'].append(dict(id=identity('status-notice', turn_id, namespace, cid),
             text=text, source_actor_id=None, medium='discovery', order=order+1,
             claims=[dict(fact_id=fid, perceived_by=recipients, assertion='observation', status='known')]))

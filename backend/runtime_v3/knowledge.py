@@ -14,6 +14,20 @@ CURRENT = frozenset(('known', 'suspected'))
 RETIRED = frozenset(('outdated', 'refuted', 'superseded'))
 
 
+def correct_knowledge(state, batch, actor_id, fact_id, status):
+    key = actor_id + ':' + fact_id
+    prior = state['knowledge'].get(key, {})
+    if prior.get('status') == status:
+        return
+    turn = state['meta']['turn_id']
+    updated = Knowledge(actor_id=actor_id, fact_id=fact_id, status=status,
+        revision=prior.get('revision', 0) + 1, source_turn=turn,
+        confirmed_once=prior.get('confirmed_once', False) or status == 'known')
+    state['knowledge'][key] = updated.model_dump()
+    batch.state_changes.append(dict(kind='manual_knowledge', source='player_edit', turn_id=turn,
+                                    actor_id=actor_id, fact_id=fact_id, status=status))
+
+
 def acquire_communication(state, actor_id, fact_id, interaction, batch):
     """Runtime-proven perception, sharing Knowledge/History with extraction.
 

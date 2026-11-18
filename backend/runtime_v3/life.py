@@ -170,7 +170,8 @@ def apply_life(resolver, raw):
                     if 'life_status' in item:
                         if old['life_status'] == 'dead' and item['life_status'] != 'dead':
                             raise ValueError('death cannot be undone by ordinary extraction; use rollback')
-                        actor['life_fact_id'] = item.get('fact_id')
+                        if 'fact_id' in item or old['life_status'] != item['life_status']:
+                            actor['life_fact_id'] = item.get('fact_id')
                     if is_game_birth(s,key) and any(k in item for k in ('identity_components','display_name')):
                         raise ValueError('birth identity changes require the structured naming lifecycle')
                     if 'identity_components' in item and key == controlled and not _proof(resolver,item):

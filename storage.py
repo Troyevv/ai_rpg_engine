@@ -262,7 +262,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
                 world['characters'][cid]['location_id']=lid
             minute=parse_time(metadata['time'],world['meta']['world_time'])
             if minute is not None:world['meta']['world_time']=minute
-            from backend.runtime_v3.models import Fact, Knowledge, WorldHistoryV3
+            from backend.runtime_v3.models import Fact, WorldHistoryV3
+            from backend.runtime_v3.knowledge import correct_knowledge
             from backend.runtime_v3.repository import append_history
             batch = WorldHistoryV3()
             position = metadata.get('position')
@@ -301,16 +302,7 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
                     fid = identity('manual-fact', text)
                     world['facts'].setdefault(fid, Fact(id=fid,text=text,visibility='secret').model_dump())
                 for actor in actors:
-                    key = actor + ':' + fid
-                    prior = world['knowledge'].get(key, {})
-                    if prior.get('status') == knowledge['status']:
-                        continue
-                    updated = Knowledge(actor_id=actor, fact_id=fid, status=knowledge['status'],
-                        revision=prior.get('revision',0)+1,source_turn=world['meta']['turn_id'],
-                        confirmed_once=prior.get('confirmed_once',False) or knowledge['status']=='known')
-                    world['knowledge'][key] = updated.model_dump()
-                    batch.state_changes.append(dict(kind='manual_knowledge',source='player_edit',
-                        turn_id=world['meta']['turn_id'], actor_id=actor, fact_id=fid, status=updated.status))
+                    correct_knowledge(world, batch, actor, fid, knowledge['status'])
             if metadata.get('social'):
                 from backend.runtime_v3.manual_social import correct
                 world = state['world_state'] = correct(world,batch,metadata['social'],row['revision'])
