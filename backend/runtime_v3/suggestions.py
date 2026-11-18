@@ -14,6 +14,10 @@ def split_suggestions(text, *, complete=False, verbatim=False):
     if verbatim and text.startswith(MARKER):
         prose, found, trailer = '', MARKER, text[len(MARKER):]
     if found:
+        if complete and verbatim:
+            # The provider may close the reserved block as XML. Strip only
+            # that terminal delimiter from metadata, never from literary text.
+            trailer = trailer.rstrip().removesuffix('</action_suggestions>')
         try:
             items = json.loads(trailer) if complete else None
         except ValueError:

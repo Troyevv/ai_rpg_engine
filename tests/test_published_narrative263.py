@@ -287,3 +287,14 @@ def test_bad_suggestion_cannot_discard_its_new_fact():
     assert result.state['knowledge']['a:'+fact_id]['status'] == 'known'
     assert not result.choices
     assert [warning['section'] for warning in result.warnings] == ['choices']
+
+
+def test_closed_live_menu_keeps_authored_choices_and_original_prose():
+    from backend.runtime_v3.suggestions import split_suggestions
+    scene = 'Галина снимает куртку.  \n'
+    actions = ['Поставить стулья', 'Спросить Тамару про бумаги', 'Поблагодарить за чай', 'Сесть у окна']
+    live = scene + '\n<action_suggestions>\n' + json.dumps(actions, ensure_ascii=False) + '\n</action_suggestions>\n'
+    for end in range(len(scene) + 1, len(live)):
+        assert split_suggestions(live[:end], verbatim=True)[0] == scene
+    assert split_suggestions(live, complete=True, verbatim=True) == (scene, actions)
+    assert split_suggestions(live + 'вне блока', complete=True, verbatim=True) == (scene, [])
