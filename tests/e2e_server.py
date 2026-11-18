@@ -668,15 +668,13 @@ def stream(**kwargs):
     global scene255_attempts
     if kwargs.get('model') == 'scene263-test':
         conflict = 'Кирилл отказывается от чая.'
-        corrected = 'Кирилл разглядывает фотографию.'
-        if 'Исправь только указанные фрагменты' in str(kwargs['messages']):
-            yield json.dumps(dict(edits=[dict(original=conflict,replacement=corrected)]))
-        elif kwargs.get('response_format'):
+        if kwargs.get('response_format'):
             prose = next(json.loads(m['content'].split('\n',1)[1]) for m in kwargs['messages'] if m['content'].startswith('completed_narrative\n'))
             result = dict(scene=dict(elapsed_minutes=1),scene_steps=[],choices=[
                 dict(index=i,grounding=dict(fact_ids=[],from_scene=True)) for i in range(4)])
             result['choices'].append(dict(index=4,grounding=dict(fact_ids=['private-missing'],from_scene=False)))
             if conflict in prose:
+                result['scene_steps'] = [dict(kind='movement', actor_ids=['missing-actor'], endpoint='missing-place')]
                 result['agency_findings'] = [dict(classification='unauthorized_choice',narrative_evidence=conflict)]
             yield json.dumps(result)
         else:

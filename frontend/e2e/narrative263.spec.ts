@@ -4,7 +4,7 @@ import {defaults} from '../src/types';
 test.afterEach(async({request})=>{await request.post('/test/scene255-reset')});
 
 for (const width of [360,393,1280]) {
-  test(`current contract: agency correction and editable suggestions at ${width}px`,async({page,request},info)=>{
+  test(`published prose, partial Extraction and editable suggestions at ${width}px`,async({page,request},info)=>{
     test.skip((width===1280)!==(info.project.name==='desktop'));
     await page.setViewportSize({width,height:width===1280?900:612});
     const selection=await (await request.post('/test/scene263-seed')).json();
@@ -23,14 +23,21 @@ for (const width of [360,393,1280]) {
     await send.click();
     await input.fill('Спрошу о погоде.');
     const correction=page.getByRole('button',{name:'Исправить противоречие в сцене'});
-    await expect(correction).toBeEnabled();
-    expect((await view()).revision).toBe(before.revision);
-    await expect(send).toBeDisabled();
+    await expect.poll(async()=>(await view()).revision).toBe(before.revision+2);
+    const after=await view();
+    expect(after.revision).toBe(before.revision+2);
+    expect(after.turns).toHaveLength(before.turns.length+1);
+    const scene=after.turns.at(-1);
+    expect(scene.assistant_text).toContain('Кирилл отказывается от чая.');
+    expect(scene.assistant_text).not.toContain('<action_suggestions>');
+    expect(scene.changes.interpretation).toBe('partial');
+    expect(after.job.repairs).toHaveLength(0);
+    await expect(correction).toHaveCount(0);
+    await expect(send).toBeEnabled();
     await expect(page.getByText('Чужой секрет')).toHaveCount(0);
     await page.reload();
     await expect(input).toHaveValue('Спрошу о погоде.');
-    await correction.click();
-    await expect.poll(async()=>(await view()).revision).toBe(before.revision+1);
+    await expect(page.locator('.turn').last().getByText('Сцена сохранена. Есть замечания к состоянию мира.')).toBeVisible();
     const choice=page.locator('.choices button').filter({hasText:'Налить воды'});
     await expect(choice).toBeEnabled();
     await expect(page.locator('.turn').last().locator('strong').filter({hasText:'В альбоме'})).toBeVisible();
@@ -56,7 +63,7 @@ for (const width of [360,393,1280]) {
     await expect(input).toBeInViewport();
     await page.reload();
     await expect(input).toHaveValue('Налить воды');
-    expect((await view()).revision).toBe(before.revision+1);
+    expect((await view()).revision).toBe(after.revision);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   });
 }
