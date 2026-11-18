@@ -247,3 +247,28 @@ def test_first_remote_provider_failure_commits_only_foreground(tmp_path):
         past,_ = read_history(db,after['history_head'])
     assert any(row.get('kind')=='remote_deferred' for row in past['state_changes'])
     assert fresh.list_turns(sid)[-1]['assistant_text'] == 'За окном идёт дождь.'
+
+
+@pytest.mark.parametrize('mode',['ordinary','observer','background','blocked'])
+def test_current_menu_owner_and_actor_availability(mode):
+    from test_narrative_choices import initial, CHOICE_EXAMPLES
+    from backend.runtime_v3.camera import observe
+    from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    snapshot = initial()
+    if mode == 'observer':
+        snapshot = observe(snapshot,'b',allow_protagonist=True)
+    state = snapshot['world_state']
+    if mode == 'blocked':
+        state['characters']['a']['capabilities']['can_act'] = False
+    kind = 'background' if mode == 'background' else 'turn'
+    messages = build_context(snapshot,[],'Осматриваюсь.',kind,65536,4096)
+    assert (NARRATIVE_INSTRUCTION in messages[0]['content']) == (mode=='ordinary')
+    choices = [c['action'] for c in CHOICE_EXAMPLES]
+    raw = compile_scene(dict(scene=dict(elapsed_minutes=1),scene_steps=[],
+        choices=[dict(index=0,grounding=dict(fact_ids=[],from_scene=True))]),
+        state,'Тихо.',1,version=9,suggestions=choices)
+    resolved = StateResolver(state,'Тихо.','Осматриваюсь.',mode=kind,
+        **resolver_options(state,'Осматриваюсь.',kind,contract_version=9)).resolve(raw)
+    assert bool(resolved.choices) == (mode=='ordinary')

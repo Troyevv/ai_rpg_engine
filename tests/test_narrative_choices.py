@@ -45,8 +45,9 @@ def initial():
 
 
 def build(snap, turns=(), **kwargs):
+    # These fixtures exercise the recorded Extraction-authored menu.
     return build_context(snap,list(turns),kwargs.pop('text','Рассмотреть карту.'),kwargs.pop('kind','turn'),
-                         kwargs.pop('context_length',32768),2000,extraction_text='Разговор о карте продолжается.',**kwargs)
+                         kwargs.pop('context_length',32768),2000,extraction_contract=8,extraction_text='Разговор о карте продолжается.',**kwargs)
 
 
 def turn(actor='a', text='PLAYER_a', **kwargs):

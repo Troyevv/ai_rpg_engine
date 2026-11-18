@@ -832,9 +832,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     del actor[key]
     builder = ExtractionContextBuilder(extraction_contract) if extraction_text is not None else NarrativeContextBuilder(extraction_contract)
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
-    if extraction_contract >= 9 and not builder.extraction and kind != 'background' and scope.controlled_actor_id:
+    if (extraction_contract >= 9 and not builder.extraction and kind != 'background'
+            and camera['mode'] == 'actor' and scope.controlled_actor_id):
+        from backend.runtime_v3.life import capabilities
         from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
-        rules += NARRATIVE_INSTRUCTION
+        if capabilities(state, scope.controlled_actor_id)['can_act']:
+            rules += NARRATIVE_INSTRUCTION
     if builder.extraction and suggestions and extraction_contract >= 9:
         messages.append(block('Предложения Narrative / ещё не выбраны', suggestions))
     from backend.runtime_v3.context_contract import CONTROL_CONTRACT
