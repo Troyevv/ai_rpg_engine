@@ -86,6 +86,24 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     resize();window.visualViewport?.addEventListener('resize',resize);window.addEventListener('resize',resize);
     return()=>{window.visualViewport?.removeEventListener('resize',resize);window.removeEventListener('resize',resize)};
   },[draft,!!campaign,archive]);
+  useEffect(()=>{
+    if(!panel)return;
+    let frame=0;
+    const reveal=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
+      if(innerWidth>=768)return;
+      const field=document.activeElement as HTMLElement|null;
+      const body=dialogRef.current?.querySelector<HTMLElement>('.chat-dialog-body');
+      if(!field||!body?.contains(field)||!field.matches('textarea,input:not([type=checkbox])'))return;
+      const bounds=body.getBoundingClientRect(),rect=field.getBoundingClientRect();
+      const tabs=body.querySelector<HTMLElement>('.chat-journal-tabs,.chat-memory-tabs');
+      const top=bounds.top+(tabs?.getBoundingClientRect().height||0)+12;
+      if(rect.top<top||rect.bottom>bounds.bottom-12)body.scrollTop+=rect.top-top;
+    })};
+    // Scroll only this dialog's body after viewport CSS has settled. Native
+    // scrollIntoView can move the fixed shell; ordinary reading scroll stays free.
+    window.visualViewport?.addEventListener('resize',reveal);window.addEventListener('resize',reveal);document.addEventListener('focusin',reveal);
+    return()=>{cancelAnimationFrame(frame);window.visualViewport?.removeEventListener('resize',reveal);window.removeEventListener('resize',reveal);document.removeEventListener('focusin',reveal)};
+  },[!!panel]);
   const run=async(fn:()=>Promise<void>)=>{
     if(busyRef.current)return;
     busyRef.current=true;setBusy(true);setError('');
