@@ -190,6 +190,9 @@ def project_schema(schema, *, version=6, camera_mode=None):
                 item['required'] = ['actor_id', 'meaning']
             if section in ('births','development_evidence'):
                 item['properties']['perceived_by'] = {'type':'array','items':{'type':'string'},'maxItems':64}
+        props['life_changes']['items']['properties']['perceived_by'] = {
+            'type':'array', 'items':{'type':'string'}, 'maxItems':16,
+            'description':'Кому стало известно об указанном жизненном статусе.'}
         props.pop('agency_findings', None)
         props.pop('chronology_claims', None)
         for step in schema['$defs'].values():
@@ -523,6 +526,36 @@ def scene_minute_origin(steps, start, elapsed):
     return 0
 
 
+def bind_life_status_observers(records, state, turn_id, namespace, order, warnings):
+    labels = {'dead':'смерть подтверждена', 'alive':'жизнь подтверждена',
+              'missing':'пропажа без вести', 'unknown':'жизненный статус неизвестен'}
+    actors = set(state['characters']) | {row['id'] for row in records['promotions']}
+    for index, row in enumerate(records['life_changes']):
+        observers = row.pop('perceived_by', [])
+        if not observers:
+            continue
+        status = row.get('life_status')
+        recipients = [cid for cid in dict.fromkeys(observers) if cid in actors]
+        if len(recipients) < len(set(observers)) or status is None:
+            warnings.append(dict(section='life_changes', index=index, field='perceived_by',
+                                 code='invalid_status_recipient', action='omit_invalid_recipients'))
+        if not recipients or status is None:
+            continue
+        cid = row['id']
+        actor = state['characters'].get(cid, {})
+        text = (actor.get('display_name') or cid) + ' — ' + labels[status]
+        fid = row.get('fact_id')
+        if not fid and actor.get('life_status') == status:
+            fid = actor.get('life_fact_id')
+        if not fid:
+            fid = identity('life-status', turn_id, namespace, cid, status)
+            records['facts'].append(dict(id=fid, text=text, character_ids=[cid], visibility='secret'))
+        row['fact_id'] = fid
+        records['information_events'].append(dict(id=identity('status-notice', turn_id, namespace, cid),
+            text=text, source_actor_id=None, medium='discovery', order=order+1,
+            claims=[dict(fact_id=fid, perceived_by=recipients, assertion='observation', status='known')]))
+
+
 def bind_domain_sources(records, state, turn_id, namespace, order):
     # Domain rows already identify the occurrence. Supply ledger provenance
     # when Extraction did not link a more precise scene step.
@@ -717,6 +750,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             if provenance and provenance['meaning']=='preserved' and source.get('outcome','completed') in ('completed','partial'):
                 item.update(player_evidence=provenance['quote'],player_assertion=assertion)
     if version >= 10:
+        bind_life_status_observers(records, state, turn_id, namespace, order, warnings)
         bind_domain_sources(records, state, turn_id, namespace, order)
     raw = RawTurnResult(scene, refs(records), deepcopy(choices), warnings,
         dict(status='violated' if any(f['classification']=='unauthorized_choice' for f in p.get('agency_findings',[])) else 'preserved',

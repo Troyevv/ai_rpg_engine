@@ -486,3 +486,18 @@ def test_repeated_sections_preserve_independent_records_without_last_write_wins(
     assert next(row['index'] for row in warnings if 'index' in row) == 1
     steps = '{"scene_steps":[{"id":"x","id":"y"}],"scene_steps":[{"kind":"movement"}]}'
     assert consequence_payload(steps, ('scene_steps',))[0]['scene_steps'] == [None, {'kind':'movement'}]
+
+def test_life_status_with_direct_observers_survives_an_unknown_recipient():
+    from backend.runtime_v3.dossier import details
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    from test_life_social import state
+    before = state()
+    resolver = StateResolver(before, 'Павел умер.', 'Остаюсь рядом.',
+        **resolver_options(before, 'Остаюсь рядом.', contract_version=10))
+    result = resolver.resolve(dict(life_changes=[dict(id='b', life_status='dead',
+        perceived_by=['a','absent'], assertion='established')]))
+    assert details(result.state,'b')['life_status'] == 'dead'
+    fid = result.state['characters']['b']['life_fact_id']
+    assert 'a:'+fid in result.state['knowledge'] and 'c:'+fid not in result.state['knowledge']
+    assert any(w['code']=='invalid_status_recipient' for w in result.warnings)
