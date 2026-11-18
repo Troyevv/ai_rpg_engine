@@ -47,7 +47,7 @@ def slot(fact):
 
 
 def salvage(state):
-    """Only optional metadata; never reconstruct beliefs from objective truth."""
+    """Normalize a copy of saved metadata without adding or changing beliefs."""
     state = deepcopy(state)
     for fact in state.get('facts', {}).values():
         if not isinstance(fact, dict) or fact.get('claim') is None: continue
@@ -60,6 +60,16 @@ def salvage(state):
             try: Knowledge(actor_id='_', fact_id='_', **{key:row.get(key, defaults[key])})
             except ValidationError: row[key] = defaults[key]
         if row.get('replaced_by') not in state.get('facts', {}): row['replaced_by'] = None
+        # Older compilers used the general Fact default for inline perceptions.
+        # Only a sourced acquisition of a compiler-shaped ID identifies that
+        # legacy case. Leave authored public facts and stored snapshots intact.
+        fid = row.get('fact_id')
+        if isinstance(fid, str) and fid.startswith('information-fact_') and row.get('source_event_id'):
+            digest = fid.removeprefix('information-fact_')
+            fact = state.get('facts', {}).get(fid)
+            if (isinstance(fact, dict) and fact.get('visibility', 'public') == 'public'
+                    and len(digest) == 20 and all(c in '0123456789abcdef' for c in digest)):
+                fact['visibility'] = 'secret'
     return state
 
 

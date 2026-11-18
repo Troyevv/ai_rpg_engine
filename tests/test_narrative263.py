@@ -123,7 +123,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         dict(kind='movement',id='route',actor_ids=[a,b],assertion='completed_arrival',
              endpoint='loc_cafe',text='Они дошли до кафе.',input_source=dict(quote='Направляюсь от берега к «Берёзке»',meaning='preserved')),
         dict(kind='information',during_step_id='route',source_actor_id=b,target_ids=[a],medium='conversation',
-             claims=[dict(fact=dict(id='tamara-work',text=statement),assertion='testimony',status='known',perceived_by=[a])])],
+             claims=[dict(fact=dict(id='tamara-work',text=statement,visibility='public'),assertion='testimony',status='known',perceived_by=[a])])],
         choices=[dict(index=i,grounding=dict(fact_ids=[fid],from_scene=False)) for i,fid in enumerate(('tamara-work','secret-unknown'))])
     class Stream(list):
         def close(self): pass
@@ -155,6 +155,24 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
     assert all(state['characters'][cid]['location_id']=='loc_cafe' for cid in (a,b))
     fact, = [k for k,row in state['facts'].items() if row['text']==statement]
     assert [k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==fact]==[a]
+    from backend.runtime_v3.camera import transition
+    from backend.runtime_v3.selectors import ui_view
+    from backend.runtime_v3.models import assert_world_state_v3_invariants
+    with fresh.connect() as db:
+        stored = json.loads(db.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0])
+    assert stored['world_state']['facts'][fact]['visibility'] == 'secret'
+    # A historical reply could explicitly mark exactly the same claim public.
+    legacy = deepcopy(after)
+    legacy['world_state']['facts'][fact]['visibility'] = 'public'
+    restored = assert_world_state_v3_invariants(legacy['world_state'])
+    assert legacy['world_state']['facts'][fact]['visibility'] == 'public'
+    assert restored['facts'][fact]['visibility'] == 'secret'
+    assert all(restored['facts'][fid] == row for fid,row in state['facts'].items() if fid != fact)
+    assert fact in ui_view(legacy)['world']['facts']
+    absent = transition(legacy, 'char_olga')
+    assert statement not in json.dumps(ui_view(absent), ensure_ascii=False)
+    absent_context = build_context(absent, [], 'Вспоминаю Тамару.', 'turn', 65536, 2400)
+    assert statement not in str(absent_context)
     assert [c['action'] for c in json.loads(fresh.list_turns(sid)[-1]['choices_json'])]==[proposal]
     next_job=fresh.begin_job(sid,'Говорю с Тамарой о работе.','turn',cfg)
     with patch('llm.OpenAI') as sdk:

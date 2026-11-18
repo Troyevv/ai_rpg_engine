@@ -101,7 +101,7 @@ class RawTurnResult:
 
 
 
-def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
+def compile_semantic(raw, state, narrative, turn_id, *, namespace=None, private_inline_facts=False):
     """Expand explicit perceptions once, never infer them from prose or delivery.
 
     The caller owns the trusted contract version. Input and original provider
@@ -144,6 +144,10 @@ def compile_semantic(raw, state, narrative, turn_id, *, namespace=None):
                 fid = identity('information-fact', turn_id, namespace, narrative, eid, j)
                 if local:
                     aliases[local] = fid
+                # An inline claim records a perception. Its audience comes from
+                # Knowledge. Top-level world facts retain independent visibility.
+                if private_inline_facts and fact.get('visibility', 'public') == 'public':
+                    fact['visibility'] = 'secret'
                 fact.update(id=fid, evidence=info.evidence)
                 result.records['facts'].append(fact)
                 fact_ids.add(fid)

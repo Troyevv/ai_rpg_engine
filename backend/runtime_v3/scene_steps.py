@@ -591,7 +591,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
     # Map compiler failures too: they happen before a Resolver can own the raw.
     from backend.services.world_delta_errors import StructuralDeltaError
     try:
-        raw = compile_semantic(raw,state,narrative,turn_id,namespace=namespace)
+        raw = compile_semantic(raw, state, narrative, turn_id, namespace=namespace,
+                               private_inline_facts=version >= 9)
     except StructuralDeltaError as exc:
         compiled_errors=[]
         for row in exc.diagnostics('compilation'):
