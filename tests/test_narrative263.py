@@ -458,3 +458,17 @@ def test_manual_social_phases_share_revision_history_visibility_and_reload(tmp_p
     assert w['roles'][job['id']]['outcome']=='resigned'
     assert w['meta']['turn_id']==original['world_state']['meta']['turn_id']
     assert repo.get_snapshot(sid)['history_head']!=original['history_head']
+
+
+def test_objective_employment_does_not_require_a_second_player_decision():
+    from test_residence_roles import state
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    before=state()
+    record=dict(id='contract',kind='employment',actor_id='a',organization_id='guild',title='Хранитель')
+    def apply(row):
+        return StateResolver(before,'Назначение оформлено.','Читаю приказ.',
+            **resolver_options(before,'Читаю приказ.',contract_version=10)).resolve(dict(role_changes=[row]))
+    assert apply(record).state['roles']['contract']['status']=='active'
+    with pytest.raises(StructuralDeltaError):
+        apply(dict(record,transition='voluntary',decision_actor_id='a'))

@@ -168,6 +168,11 @@ def _agency(resolver, actor, item):
     if actor != resolver.protected_actor_id: return
     if resolver.mode == 'background': raise ValueError('protected background actor')
     decision = item.get('decision_actor_id')
+    if resolver.scene_version >= 10 and 'transition' not in item and decision is None:
+        # An objective address or employment status neither chooses an action
+        # for the protagonist nor adds a goal. Explicit decisions retain their
+        # owner. Background cannot write either kind of record for the player.
+        return
     if _proof(resolver,item): return
     if (item.get('transition') == 'external' and isinstance(decision,str)
             and decision in resolver.state['characters'] and decision != actor): return
