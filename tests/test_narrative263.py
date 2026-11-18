@@ -213,3 +213,37 @@ def test_bounded_history_honors_jump_and_regeneration_cutoff(tmp_path):
     assert [row['id'] for row in rows] == [ids[0],*ids[7:10]]
     assert rows[0]['_temporal_only'] and rows[0]['_refreshed_situations'] == {actor}
     assert all(not r['_temporal_only'] for r in rows[1:])
+
+
+def test_first_remote_provider_failure_commits_only_foreground(tmp_path):
+    from llm import ProviderGenerationError
+    from backend.runtime_v3.repository import read_history
+    snapshot, _ = group()
+    repo = Repository(tmp_path/'remote.sqlite')
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION',5):
+        sid = seed(repo,dict(before=snapshot['world_state']))['save']
+    snapshot['history_head'] = repo.get_snapshot(sid)['history_head']
+    with repo.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),sid))
+    config = dict(model='authored',provider='local',context_length=131072,max_tokens=1200,update_tokens=8192)
+    jid = repo.begin_job(sid,'Смотрю в окно.','turn',config)
+    def provider(*,messages,**kwargs):
+        if any(m['content'].startswith('completed_narrative\n') for m in messages):
+            yield '{"scene":{"elapsed_minutes":1},"scene_steps":[]}'
+        elif kwargs.get('response_format'):
+            raise ProviderGenerationError('Remote planner unavailable')
+        else:
+            yield 'За окном идёт дождь.'
+    with patch('engine.find_loaded_model',return_value={'config':{'context_length':131072}}), patch('engine.chat_stream',provider):
+        engine.run_job(repo.path,jid,engine.Worker())
+    fresh = Repository(repo.path)
+    assert fresh.get_job(jid)['status'] == 'saved', fresh.get_job(jid)['error']
+    attempts = fresh.request_log(job_id=jid)
+    assert [(a['stage'],a['status']) for a in reversed(attempts)] == [
+        ('remote_initiative','error'),('narrative','complete'),('extraction','complete')]
+    after = fresh.get_snapshot(sid)
+    assert after['world_state']['remote_events'] == snapshot['world_state']['remote_events']
+    with fresh.connect() as db:
+        past,_ = read_history(db,after['history_head'])
+    assert any(row.get('kind')=='remote_deferred' for row in past['state_changes'])
+    assert fresh.list_turns(sid)[-1]['assistant_text'] == 'За окном идёт дождь.'
