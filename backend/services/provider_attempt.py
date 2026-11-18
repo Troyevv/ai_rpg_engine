@@ -14,13 +14,20 @@ def identifier(value):
     return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,160}', value) else None
 
 
+class RequestJournalError(Exception):
+    """Request accounting could not be persisted; dispatch cannot safely continue."""
+
+
 def emit(**fields):
     current = CURRENT.get()
     if current is not None:
         current['data'].update(fields)
         persist = current.get('persist')
         if persist is not None:
-            persist(current['data'])
+            try:
+                persist(current['data'])
+            except Exception as exc:
+                raise RequestJournalError('Не удалось записать состояние запроса модели.') from exc
 
 
 def identity():

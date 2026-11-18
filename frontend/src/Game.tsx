@@ -39,6 +39,7 @@ import {
   type Job,
   type Preferences,
 } from "./types";
+import {Dialog, DialogContent, DialogTitle, DialogDescription} from "./components/ui/dialog";
 import { Markdown } from "./Markdown";
 import { Diagnostics } from "./Diagnostics";
 
@@ -117,7 +118,20 @@ export function Game({
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
   const initialChoice=useRef(choiceKey);
   const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
-  useEffect(()=>{setSelectedChoice(null)},[choiceKey]);
+  const [pendingChoice,setPendingChoice]=useState<string|null>(null);
+  useEffect(()=>{setSelectedChoice(null);setPendingChoice(null)},[choiceKey]);
+  const writeChoice=(text:string)=>{
+    setDraft(text);
+    sessionStorage.setItem(draftKey,text);
+    input.current?.focus({preventScroll:true});
+  };
+  useEffect(()=>{
+    if(pendingChoice===null)return;
+    const back=(event:PopStateEvent)=>{event.stopImmediatePropagation();setPendingChoice(null)};
+    window.addEventListener('popstate',back,true);
+    return ()=>window.removeEventListener('popstate',back,true);
+  },[pendingChoice]);
+  const closeChoice=()=>{if(history.state?.choiceDraft)history.back();else setPendingChoice(null)};
   useEffect(() => {
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
@@ -215,12 +229,12 @@ export function Game({
           setSubmitted(null);
         }
       })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
-      {job.chronology_correction_available && <div className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">Исправление хронологии создаст новую редакцию и заново проверит состояние. Запросы к модели могут быть платными.</p>
+      {(job.prose_correction_available || job.chronology_correction_available) && <div className="flex flex-col gap-2">
+        <p className="text-sm text-muted-foreground">Адресная правка создаст новую редакцию и заново проверит состояние. Запросы к модели могут быть платными.</p>
         <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
           setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey,
-            correct_chronology:true, revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
-        })}>Исправить хронологию сцены</Button>
+            correct_prose:true, revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
+        })}>{job.chronology_correction_available?'Исправить хронологию сцены':'Исправить противоречие в сцене'}</Button>
       </div>}
       {retryable && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
         setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey}));
@@ -366,8 +380,7 @@ export function Game({
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
-                    Всё готово. Ведущий разыграет первую сцену и предложит шесть
-                    действий.
+                    Всё готово. Ведущий разыграет первую сцену и предложит возможные действия.
                   </p>
                 </div>
               )}
@@ -396,10 +409,13 @@ export function Game({
                         key={i}
                         disabled={!canSubmit}
                         onClick={() => {
-                          setSelectedChoice(i); void turn(
-                            "turn",
-                            c.action + (c.speech ? `: «${c.speech}»` : ""),
-                          );}
+                          setSelectedChoice(i);
+                          const text=c.action + (c.speech ? `: «${c.speech}»` : "");
+                          if(draftRef.current.trim()&&draftRef.current!==text){
+                            history.pushState({...history.state,choiceDraft:true},'');
+                            setPendingChoice(text);
+                          }
+                          else writeChoice(text);}
                         }
                       >
                         <span className="choice-index">0{i + 1}</span>
@@ -451,6 +467,17 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
+          <Dialog open={pendingChoice!==null} onOpenChange={open=>{if(!open)closeChoice()}}>
+            <DialogContent onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
+              <DialogTitle>В поле уже есть черновик</DialogTitle>
+              <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
+              <div className="actions">
+                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice);closeChoice()}}>Добавить к черновику</Button>
+                <Button variant="outline" onClick={()=>{writeChoice(pendingChoice!);closeChoice()}}>Заменить черновик</Button>
+                <Button variant="ghost" onClick={closeChoice}>Отмена</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Phone recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea

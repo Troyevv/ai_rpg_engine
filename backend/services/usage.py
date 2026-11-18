@@ -60,7 +60,10 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
             effective.update(extraction_contract=config['_extraction_contract'], extraction_transport=selected, extraction_schema=schema)
             if selected=='responses_json_schema':
                 effective.pop('response_format',None)
-                effective['text_format']={'type':'json_schema','name':'extraction_v6'}
+                name = 'extraction_v9' if config['_extraction_contract'] >= 9 else 'extraction_v6'
+                effective['text_format']={'type':'json_schema','name':name}
+                if config['_extraction_contract'] >= 9:
+                    kwargs['structured_name'] = name
                 kwargs.update(structured_schema=schema, extraction_transport=selected)
             elif selected!='chat_json_object':
                 raise ValueError('Неизвестный записанный transport Extraction.')

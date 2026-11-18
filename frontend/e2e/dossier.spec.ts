@@ -72,7 +72,9 @@ test('start, ordinary turn, dossier name link, persistent reload, next turn',asy
  const s=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(1);
- await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);
+ await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(2);
  // A provisional .turn appears before commit replaces choices and action controls.
  await expect(page.getByRole('button',{name:'Перегенерировать последний ход',exact:true})).toBeEnabled();
  const composer=page.getByLabel('Своё действие или реплика');await composer.fill('Несохранённый черновик');
@@ -87,7 +89,9 @@ test('start, ordinary turn, dossier name link, persistent reload, next turn',asy
  await expect(composer).toHaveValue('Несохранённый черновик');
  await expect.poll(async()=>Math.abs(before!.y-(await link.boundingBox())!.y)).toBeLessThan(2);
  const stored=await(await request.get(`/api/saves/${s.save}`)).json();expect(stored.turns).toHaveLength(2);
- await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(3);
+ await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(3);
  const last=await(await request.get(`/api/saves/${s.save}`)).json();expect(last.turns).toHaveLength(3);expect(last.revision).toBeGreaterThan(stored.revision);
  if(capture)await page.screenshot({path:`${evidence}/smoke-${info.project.name}.png`,animations:'disabled'});
 });

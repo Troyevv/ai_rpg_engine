@@ -35,8 +35,9 @@ def record_key(item):
 
 
 class SceneCandidate:
-    def __init__(self, before, narrative, player_input, turn_id, *, namespace=None, on_record=None, version=6):
+    def __init__(self, before, narrative, player_input, turn_id, *, namespace=None, on_record=None, version=6, suggestions=()):
         self.before,self.narrative,self.player_input,self.turn_id=before,narrative,player_input,turn_id
+        self.suggestions=suggestions
         self.version=version
         self.namespace=namespace
         self.on_record=on_record
@@ -69,9 +70,9 @@ class SceneCandidate:
         if self.scope is not None:
             candidate=self.apply(payload)
         else:
-            candidate=decode(payload)
+            candidate=decode(payload, version=self.version)
         self.base=deepcopy(candidate) if all(isinstance(s,dict) and isinstance(s.get('id'),str) and s['id'] for s in candidate['scene_steps']) and len({s['id'] for s in candidate['scene_steps']})==len(candidate['scene_steps']) else None
-        self.raw=compile_scene(candidate,self.before,self.narrative,self.turn_id,namespace=self.namespace, version=self.version, defer_errors=defer_errors)
+        self.raw=compile_scene(candidate,self.before,self.narrative,self.turn_id,namespace=self.namespace, version=self.version, defer_errors=defer_errors, suggestions=self.suggestions)
         self.raw.warnings.extend(self.revisions)
         return self.raw
 
@@ -166,6 +167,10 @@ class SceneCandidate:
         # Route/presence dependencies share explicit actors. ID references bind
         # other domains. This deliberately errs toward rechecking dependencies,
         # while unconnected proposals remain byte-for-byte unchanged.
+        spatial = self.version < 9 or any(row.get('code') in {
+            'movement_endpoint_invalid', 'scene_route_invalid', 'event_presence_invalid',
+            'camera_invalid', 'camera_actor_missing', 'movement_agency'
+        } for row in rows)
         changed=True
         while changed:
             old=(set(selected),set(sections))
@@ -176,28 +181,33 @@ class SceneCandidate:
                         actors.update(strings(s.get(key)))
             for s in steps:
                 roles=set().union(*(strings(s.get(k)) for k in ('actor_id','source_actor_id','actor_ids','target_ids','claims')))
-                if not claim_only and (roles & actors or strings(s)&selected): selected.add(s['id'])
+                if not claim_only and (spatial and roles & actors or references(s) & selected): selected.add(s['id'])
             dependencies=set(selected)
             for step in steps:
                 if step['id'] in selected:dependencies.update(references(step))
             for section,indexes in selected_records.items():
                 for index in indexes:dependencies.update(references(self.base[section][index]))
             for step in steps:
-                if not claim_only and references(step)&dependencies:selected.add(step['id'])
+                if not claim_only and (spatial or step['id'] in dependencies) and references(step)&dependencies:selected.add(step['id'])
             record_count=sum(map(len,selected_records.values()))
             for section,values in self.base.items():
                 if section in ('scene_steps','scene','choices','agency_findings','chronology_claims') or not isinstance(values,list):continue
                 for index,item in enumerate(values):
                     if claim_only and (not isinstance(item,dict) or item.get('id') not in dependencies):continue
-                    role_dependent=section in ('promotions','character_changes') and isinstance(item,dict) and item.get('id') in actors
+                    role_dependent=spatial and section in ('promotions','character_changes') and isinstance(item,dict) and item.get('id') in actors
                     if references(item)&dependencies or role_dependent:
                         sections.add(section);selected_records.setdefault(section,set()).add(index)
             changed=(selected,sections)!=old or record_count!=sum(map(len,selected_records.values()))
         # Missing declarations are repairable dependencies, not a reason to ban
         # new places/people. Added records must be referenced by the repaired group.
         if selected:
-            sections.update(('scene','locations','promotions','facts'))
-        sections.update(('agency_findings','chronology_claims'))
+            sections.update(('locations','promotions','facts'))
+            if spatial:
+                sections.add('scene')
+        if self.version < 9:
+            sections.update(('agency_findings','chronology_claims'))
+        elif any(row.get('code','').startswith(('player_action','movement_agency','agency_')) for row in rows):
+            sections.add('agency_findings')
         self.hash=digest([self.binding,self.base])
         self.scope=dict(step_ids=sorted(selected),sections=sorted(sections),
             record_keys={section:[record_key(self.base[section][i]) for i in sorted(indexes)]

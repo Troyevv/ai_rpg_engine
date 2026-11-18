@@ -64,7 +64,9 @@ test('world themes persist across reload and devices; portals inherit theme; all
  await p.goto('/');await expect(p.locator('html')).toHaveAttribute('data-theme','neon');await other.close();
  await page.getByRole('textbox',{name:'Своё действие или реплика'}).fill('Подхожу к окну');
  await page.getByRole('button',{name:'Отправить действие'}).click();await expect(page.locator('.turn')).toHaveCount(2);
- await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(3);
+ await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(3);
  await page.reload();await expect(page.locator('.turn').first()).toHaveCSS('opacity','1');
 });
 

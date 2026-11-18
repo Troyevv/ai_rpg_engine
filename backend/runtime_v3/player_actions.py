@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 8
+EXTRACTION_VERSION = 9
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -302,7 +302,7 @@ def validate_targets(resolver, actions):
 
 def narrative_conflict(**path):
     fatal('Повествование изменило или не подтвердило выбранное действие игрока. '
-          'Ход не сохранён. Отмените его и отправьте исходное действие заново.',
+          'Ход не сохранён. Исходный выбор игрока сохранён для восстановления сцены.',
           'narrative_agency_conflict', repairable=False, action='reauthor_narrative', **path)
 
 

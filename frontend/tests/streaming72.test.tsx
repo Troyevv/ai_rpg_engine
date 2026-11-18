@@ -31,7 +31,7 @@ it('bursty snapshots reveal intermediate exact prefixes without HTTP; drain surv
  await advance(64);
  const partial=node.textContent!;
  expect(partial.length).toBeGreaterThan(0);expect(partial.length).toBeLessThan(text.length);
- expect(text.replace(/\n\n/g,'').startsWith(partial)).toBe(true);
+ expect(text.replace(/\n/g,'').startsWith(partial.replace(/\n/g,''))).toBe(true);
  // Only the player's static action may render; narrative must not.
  expect(vi.mocked(fetch).mock.calls.every(c=>!JSON.parse(c[1]!.body as string).text.includes('Первый абзац'))).toBe(true);
  for(const status of ['extracting','validating'])await render(<Journal job={{...initialJob,narrative:text,narrative_complete:true,status}}/>);
@@ -71,15 +71,16 @@ it('navigation remount resumes the shown prefix instead of replaying it',async()
 it('Markdown failure retains readable text and link_names survives final render',async()=>{
  vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
  await render(<Markdown text="Текст **не теряется**" links={false}/>);await advance(100);
- expect(host.textContent).toBe('Текст **не теряется**');
+ expect(host.querySelector('strong')?.textContent).toBe('не теряется');
+ expect(host.textContent?.trim()).toBe('Текст не теряется');
  const clicked=vi.fn();await render(<Markdown text="NPC" links onCharacter={clicked}/>);await advance(100);
  await act(()=>host.querySelector('button')!.click());expect(clicked).toHaveBeenCalledWith('npc');
  expect(JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).link_names).toBe(true);
 });
 it('a new attempt replaces stale HTML instead of displaying the previous response',async()=>{
  await render(<Markdown text="old"/>);await advance(100);
- await render(<Markdown text="new" streaming/>);expect(host.textContent).toBe('new');
- await render(<Markdown text="new"/>);expect(host.textContent).toBe('new');
+ await render(<Markdown text="new" streaming/>);expect(host.textContent?.trim()).toBe('new');
+ await render(<Markdown text="new"/>);expect(host.textContent?.trim()).toBe('new');
 });
 it('regeneration commit keeps identity; old/stale job does not duplicate a variant',()=>{
  const turn={id:7,active_variant_id:'v0',variants:[{id:'v0',job_id:'old'}],sequence:4,kind:'turn',user_text:'original'} as Turn;
@@ -202,7 +203,7 @@ it('letter streams as literal prose while ordinary code fences remain ordinary',
  }
  await render(<Markdown text={'```python\nx = 1\n```'} streaming/>);
  expect(host.querySelector('blockquote')).toBeNull();
- expect(host.textContent).toContain('```python');
+ expect(host.querySelector('pre code.language-python')?.textContent?.trim()).toBe('x = 1');
  expect(fetch).not.toHaveBeenCalled();
 });
 

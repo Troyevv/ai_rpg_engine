@@ -1,26 +1,16 @@
 import { memo, useEffect, useRef, useState } from "react";
 import MarkdownIt from "markdown-it";
 import { api } from "./api";
-const sourceParser = new MarkdownIt("commonmark");
-
-// Presentation only: canonical binding is exclusively performed by Runtime.
-// CommonMark knows which fences are letters, including an unfinished stream.
-function streamingProse(text: string) {
-  const lines = text.split("\n");
-  const parts: React.ReactNode[] = [];
-  const plain = (value: string, key: string) => value.split(/\n\n+/).map((p, i) =>
-    <p className="plain-markdown" key={`${key}-${i}`}>{p}</p>);
-  let end = 0;
-  for (const token of sourceParser.parse(text, {})) {
-    if (token.type !== "fence" || token.level !== 0 || token.info.trim() !== "letter" || !token.map) continue;
-    const [start, next] = token.map;
-    parts.push(...plain(lines.slice(end, start).join("\n"), `before-${start}`));
-    parts.push(<blockquote className="narrative-letter" style={{whiteSpace: "pre-wrap"}} key={`letter-${start}`}>{token.content}</blockquote>);
-    end = next;
+const sourceParser = new MarkdownIt("commonmark", {html:false, breaks:true}).enable("table");
+const renderFence = sourceParser.renderer.rules.fence!;
+sourceParser.renderer.rules.fence = (tokens, index, options, env, renderer) => {
+  const token = tokens[index];
+  if (token.level === 0 && token.info.trim() === "letter") {
+    return '<blockquote class="narrative-letter" style="white-space:pre-wrap">' +
+      sourceParser.utils.escapeHtml(token.content) + '</blockquote>';
   }
-  parts.push(...plain(lines.slice(end).join("\n"), "after"));
-  return parts;
-}
+  return renderFence(tokens, index, options, env, renderer);
+};
 
 export const Markdown = memo(function Markdown({
   text,
@@ -74,7 +64,7 @@ export const Markdown = memo(function Markdown({
       {!streaming && html?.text===text && html.html ? (
         <div dangerouslySetInnerHTML={{ __html: html.html }} />
       ) : (
-        <div>{streamingProse(text)}</div>
+        <div dangerouslySetInnerHTML={{ __html: sourceParser.render(text) }} />
       )}
     </div>
   );

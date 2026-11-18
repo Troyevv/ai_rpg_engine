@@ -55,10 +55,12 @@ test('original export identities and rejected opening recover through real API t
   await expect(page.locator('.turn')).toHaveCount(1,{timeout:30000});
   expect((await view()).state.scene_meta.present_ids).toEqual(['ilya','viktoria_solovyova']);
   await page.locator('.choices button').filter({hasText:'Ждать ответа'}).click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.turn')).toHaveCount(2);
   await page.locator('.choices button').filter({hasText:'Ждать ответа'}).click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(3);
   const last=await view();expect(last.state.characters).toHaveLength(19);
   expect(last.state.world_clock.minute).toBe(first.state.world_clock.minute+3);

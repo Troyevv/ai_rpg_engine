@@ -142,7 +142,29 @@ def project_schema(schema, *, version=6, camera_mode=None):
         observer_location_id={'type':['string','null']})
     if version >= 7 and camera_mode == 'actor':
         scene['properties'].pop('observer_location_id')
+    if version >= 9:
+        for record in (props['value_deltas']['items'],
+                       props['personality_deltas']['items']['properties']['operations']['items']):
+            for field in ('expected_revision', 'expected_text'):
+                record['properties'].pop(field)
+                record['required'].remove(field)
+        choice = props['choices']['items']
+        for field in ('action', 'speech'):
+            choice['properties'].pop(field, None)
+        choice['properties']['index'] = dict(type='integer', minimum=0, maximum=5)
+        choice['required'] = ['index', 'grounding']
     steps = step_adapter(version).json_schema()
+    if version >= 9:
+        for definition in steps['$defs'].values():
+            if 'timing' in definition.get('properties', {}):
+                definition['required'].remove('id')
+        info = steps['$defs']['TravellingInformation']
+        info['required'].remove('text')
+        inline_claim = {'required':['fact'], 'properties':{'fact':{'type':'object', 'required':['text']}}}
+        info['anyOf'] = [{'required':['text']}, {'properties':{'claims':{
+            'minItems':1, 'maxItems':1, 'items':inline_claim}}}]
+
+
     schema.setdefault('$defs', {}).update(steps.pop('$defs', {}))
     props.update(scene=scene, scene_steps={'type':'array', 'maxItems':64, 'items':steps},
         agency_findings={'type':'array','items':{'type':'object','additionalProperties':False,
@@ -162,7 +184,7 @@ def input_schema(version=6, camera_mode=None):
                          explicit_departures=True, grounded_choices=True, player_agency_required=True)
 
 
-def decode(payload):
+def decode(payload, *, version=6):
     if isinstance(payload, str):
         try:
             from backend.runtime_v3.structured_payload import object_payload
@@ -171,13 +193,44 @@ def decode(payload):
             fatal('Некорректный JSON Extraction/6.', 'raw_root_invalid', repairable=True)
     if not isinstance(payload, dict) or not isinstance(payload.get('scene_steps'), list) or not isinstance(payload.get('scene'), dict):
         fatal('Ожидается Extraction/6: scene_steps и scene.', 'raw_root_invalid', repairable=True)
-    return deepcopy(payload)
+    result = deepcopy(payload)
+    if version >= 9:
+        ids = {s['id'] for s in result['scene_steps'] if isinstance(s, dict) and isinstance(s.get('id'), str)}
+        for index, step in enumerate(result['scene_steps']):
+            if isinstance(step, dict) and 'id' not in step:
+                label = f'step-{index+1}'
+                while label in ids:
+                    label += '_'
+                step['id'] = label
+                ids.add(label)
+    return result
 
 
-def validate(payload, state=None, *, version=6, collect=False):
+def validate(payload, state=None, *, version=6, collect=False, warnings=None):
     from jsonschema import Draft202012Validator
     from backend.services.world_delta_errors import StructuralDeltaError
-    p = decode(payload)
+    p = decode(payload, version=version)
+    if version >= 9:
+        warnings = warnings if warnings is not None else []
+        for field in ('diagnostic', 'diagnostics'):
+            if field in p:
+                del p[field]
+                warnings.append(dict(section=field, code='raw_feedback_ignored', action='ignore_field'))
+        for index, step in enumerate(p['scene_steps']):
+            if not isinstance(step, dict):
+                continue
+            claims = step.get('claims')
+            if step.get('kind') == 'information' and 'text' not in step and isinstance(claims,list) and len(claims)==1:
+                fact = claims[0].get('fact') if isinstance(claims[0],dict) else None
+                if isinstance(fact,dict) and isinstance(fact.get('text'),str):
+                    step['text'] = fact['text']
+            for field in ('evidence', 'timing'):
+                no_order = (field == 'timing' and len(p['scene_steps']) == 1
+                            and step.get('timing') in ('uncertain', 'simultaneous'))
+                if field in step and (field == 'evidence' and step[field] is None or no_order):
+                    del step[field]
+                    warnings.append(dict(section='scene_steps', index=index, field=field,
+                                         code='optional_annotation_ignored', action='use_default'))
     errors = []
     for error in Draft202012Validator(input_schema(version, state['camera']['mode'] if state else None)).iter_errors(p):
         path = list(error.absolute_path)
@@ -360,9 +413,30 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
     return errors
 
 
-def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version=6, defer_errors=False):
+def bind_profile_baselines(records, state):
+    # Domain owners retain stale/conflicting edit checks. Compare against the
+    # immutable pre-turn state bound to this candidate and job revision.
+    for domain in ('value_deltas', 'personality_deltas'):
+        for row in records[domain]:
+            if not isinstance(row, dict) or not isinstance(row.get('actor_id'), str):
+                continue
+            actor = state['characters'].get(row['actor_id'], {})
+            if domain == 'value_deltas':
+                items, operations = actor.get('values') or {}, [row]
+            else:
+                items = (actor.get('personality') or {}).get('items', {})
+                operations = row.get('operations')
+            for op in operations if isinstance(operations, list) else []:
+                if isinstance(op, dict) and isinstance(op.get('item_id'), str):
+                    old = items.get(op['item_id'], {})
+                    op['expected_text'] = old.get('text')
+                    op['expected_revision'] = old.get('revision', 0)
+
+
+def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version=6, defer_errors=False, suggestions=()):
     from backend.services.world_delta_errors import StructuralDeltaError
-    p, errors = validate(payload, state, version=version, collect=True)
+    warnings = []
+    p, errors = validate(payload, state, version=version, collect=True, warnings=warnings)
     # Typed declarations remain usable as proposals for independent diagnostics.
     # They confer no authority and pending errors make publication impossible.
     deferred = {'camera_invalid', 'camera_actor_missing', 'movement_agency', 'player_action_source_invalid', 'movement_endpoint_invalid'}
@@ -377,11 +451,12 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             raise StructuralDeltaError.combine(errors)
     original=deepcopy(p)
     records = {name:deepcopy(p.get(name, [])) for name in SECTIONS}
-    warnings=[]
     for name in OPTIONAL_SECTIONS:
         if not isinstance(records[name],list):
             records[name]=[]
             warnings.append(dict(section=name,code='optional_section_invalid',action='drop_section'))
+    if version >= 9:
+        bind_profile_baselines(records, state)
     normalize_facts(records, p, state)
     scene, camera = deepcopy(p['scene']), state['camera']
     positions = {cid:c['location_id'] for cid,c in state['characters'].items()}
@@ -488,6 +563,9 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             return (action_aliases if key=='player_action_id' else aliases).get(value,value)
         return value
     choices=p.get('choices',[])
+    if version >= 9:
+        from backend.runtime_v3.suggestions import bind_suggestions
+        choices = bind_suggestions(choices, suggestions, warnings)
     choices=[c for c in choices if isinstance(c,dict) and isinstance(c.get('action'),str) and isinstance(c.get('speech',''),str)][:6] if isinstance(choices,list) else []
     # Narrow legacy metadata adaptation; domain handlers still validate the
     # accepted Event, Fact, actors, outcome, ownership and current input.
@@ -620,10 +698,14 @@ def source_diagnostic(raw, row):
                 i,step=candidates[n]
                 source=dict(section='scene_steps',index=i,local_id=step['id'])
             except (ValueError,IndexError):pass
+    if row.get('code')=='narrative_agency_conflict' and source and source.get('section')=='scene_steps':
+        step = raw.semantic_candidate['scene_steps'][source['index']]
+        row['correction_ground'] = dict(kind='agency', evidence=step.get('evidence') or step.get('text'))
     if row.get('code')=='narrative_agency_conflict' and source is None:
         findings=raw.semantic_candidate.get('agency_findings',[])
         indexes=[i for i,f in enumerate(findings) if f['classification']=='unauthorized_choice']
         if indexes:
+            row['correction_grounds'] = [dict(kind='agency', evidence=findings[i].get('narrative_evidence')) for i in indexes]
             row.update(compiled_path=row.get('path'),section='agency_findings',domain='agency_findings',
                 index=indexes[0],path=f'agency_findings[{indexes[0]}]',source_ids=[])
     if source and source.get('section')=='scene_steps':

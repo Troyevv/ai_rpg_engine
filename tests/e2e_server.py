@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
 import backend.runtime_v3.player_actions as extraction_versions
+CURRENT_SCENE_VERSION = extraction_versions.EXTRACTION_VERSION
 extraction_versions.EXTRACTION_VERSION = 5  # Historical browser replies are v5.
 scene255_mode = False
 scene255_attempts = 0
@@ -665,6 +666,27 @@ def scripted_stream(**kwargs):
 
 def stream(**kwargs):
     global scene255_attempts
+    if kwargs.get('model') == 'scene263-test':
+        conflict = 'Кирилл отказывается от чая.'
+        corrected = 'Кирилл разглядывает фотографию.'
+        if 'Исправь только указанные фрагменты' in str(kwargs['messages']):
+            yield json.dumps(dict(edits=[dict(original=conflict,replacement=corrected)]))
+        elif kwargs.get('response_format'):
+            prose = next(json.loads(m['content'].split('\n',1)[1]) for m in kwargs['messages'] if m['content'].startswith('completed_narrative\n'))
+            result = dict(scene=dict(elapsed_minutes=1),scene_steps=[],choices=[
+                dict(index=i,grounding=dict(fact_ids=[],from_scene=True)) for i in range(4)])
+            result['choices'].append(dict(index=4,grounding=dict(fact_ids=['private-missing'],from_scene=False)))
+            if conflict in prose:
+                result['agency_findings'] = [dict(classification='unauthorized_choice',narrative_evidence=conflict)]
+            yield json.dumps(result)
+        else:
+            body = '**В альбоме** лежат старые снимки.\n\n---\n\n' + ('За окном шумит дождь. ' * 65) + conflict
+            yield body
+            time.sleep(.35)
+            yield '\n<action_sug'
+            time.sleep(.25)
+            yield 'gestions>["Рассмотреть альбом","Спросить о дожде","Налить воды","Подойти к окну","Чужой секрет"]'
+        return
     if scene255_mode and kwargs.get('model')=='scene255-test':
         if not kwargs.get('response_format'):
             yield 'Кирилл попрощался и дошёл до парка.'
@@ -787,6 +809,12 @@ if __name__ == '__main__':
     def scene256_seed():
         result=scene255_seed()
         extraction_versions.EXTRACTION_VERSION=7
+        return result
+
+    @app.post('/test/scene263-seed')
+    def scene263_seed():
+        result = scene255_seed()
+        extraction_versions.EXTRACTION_VERSION = CURRENT_SCENE_VERSION
         return result
 
     @app.post('/test/scene258-seed')

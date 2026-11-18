@@ -43,6 +43,9 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             ''')
 
         self.init_engine()
+        with self.connect() as db:
+            db.execute("""CREATE INDEX IF NOT EXISTS turns_time_jumps ON turns(save_id,sequence)
+                WHERE kind='long_term' OR json_type(changes_json,'$.time_skip')='object'""")
         self.init_runtime()
         self.init_documents()
         from backend.repositories.living_world import migrate
@@ -137,7 +140,52 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             result['history_warnings']=warnings
             return result
 
-    def list_turns(self, save_id, *, context=False):
+    def context_history(self, save_id, before_id, limit, actor, main):
+        """Choose IDs before projecting snapshot JSON. Sequence bounds bind regeneration."""
+        with self.connect() as db:
+            stop = (db.execute('SELECT sequence FROM turns WHERE id=? AND save_id=?', (before_id,save_id)).fetchone()[0]
+                    if before_id is not None else 2**63-1)
+            params = dict(save=save_id, stop=stop, actor=actor, main=main, limit=max(3,min(20,limit)))
+            sequence = db.execute('SELECT max(sequence) FROM turns WHERE save_id=:save AND sequence<:stop', params).fetchone()[0]
+            ids = {r[0] for r in db.execute("""
+                SELECT id FROM turns WHERE save_id=:save AND sequence<:stop AND kind!='communication'
+                AND (:actor IS NULL OR EXISTS(SELECT 1 FROM json_each(audience_json) WHERE value=:actor)
+                     OR (coalesce(json_array_length(audience_json),0)=0 AND kind!='background'
+                         AND coalesce(pov_actor_id,:main)=:actor))
+                ORDER BY sequence DESC LIMIT :limit""",params)}
+            # Preserve elapsed-time provenance across a long interval even when the jump
+            # is outside the literary tail. Later situation edits can refresh old prose.
+            jump = db.execute("""SELECT id,sequence FROM turns WHERE save_id=:save AND sequence<:stop
+                AND (kind='long_term' OR json_type(changes_json,'$.time_skip')='object')
+                ORDER BY sequence DESC LIMIT 1""",params).fetchone()
+            refreshed = set()
+            legacy_temporal = set()
+            if jump:
+                bounds = dict(params, start=jump['sequence']+1)
+                refreshed.update(r[0] for r in db.execute("""
+                    SELECT DISTINCT change.value FROM turns, json_each(changes_json,'$.context_situation_changes') change
+                    WHERE save_id=:save AND sequence BETWEEN :start AND :stop-1""", bounds))
+                # Older active variants have no receipt. Read their own snapshot
+                # projections only where the original situation may have changed.
+                legacy_temporal.update(r[0] for r in db.execute("""
+                    SELECT id FROM turns WHERE save_id=:save AND sequence BETWEEN :start AND :stop-1
+                    AND json_type(changes_json,'$.context_situation_changes') IS NULL
+                    AND (json_type(changes_json,'$.state_patch') IS NULL
+                         OR json_extract(before_json,'$.world_state.camera.situation')
+                            IS NOT json_extract(after_json,'$.world_state.camera.situation')
+                         OR EXISTS (SELECT 1 FROM json_each(changes_json,'$.state_patch.upserts.characters') c
+                             WHERE json_extract(c.value,'$.situation')
+                               IS NOT json_extract(before_json,'$.world_state.characters.' || json_quote(c.key) || '.situation')))
+                    """, bounds))
+                legacy_temporal.add(jump['id'])
+        rows = self.list_turns(save_id, context=True, ids=ids|legacy_temporal)
+        for row in rows:
+            row['_temporal_only'] = row['id'] not in ids
+            if jump and row['id'] == jump['id']:
+                row['_refreshed_situations'] = refreshed
+        return rows, 0 if sequence is None else sequence+1
+
+    def list_turns(self, save_id, *, context=False, ids=None, sequences=None):
         with self.connect() as db:
             # Internal context metadata comes from the active turn snapshots.
             # Public history neither exposes GM situations nor ships snapshots.
@@ -150,9 +198,14 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
                         'camera',json_object('situation',json_extract({column},'$.world_state.camera.situation')),
                         'characters',json((SELECT json_group_object(c.key,json_object('situation',json_extract(c.value,'$.situation')))
                             FROM json_each(turns.{column},'$.world_state.characters') c))) AS {name}"""
+            clause, params = ' WHERE save_id=?', [save_id]
+            for key, items in (('id', ids), ('sequence', sequences)):
+                if items is not None:
+                    clause += f' AND {key} IN (SELECT value FROM json_each(?))'
+                    params.append(json.dumps(sorted(items)))
             rows = [dict(row) for row in db.execute(
                 'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json'
-                + temporal + ' FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                + temporal + ' FROM turns' + clause + ' ORDER BY sequence', params)]
             from backend.runtime_v3.surfaces import route
             for row in rows:
                 before = json.loads(row.pop('before_json'))

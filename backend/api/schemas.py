@@ -12,8 +12,9 @@ class ModelConfig(DTO):
     temperature: float = Field(default=0.8, ge=0, le=1.5)
     max_tokens: int = Field(default=2000, ge=256, le=32000)
     thinking: Literal['off','low','high'] = 'off'
+    auto_context: bool = False
     recent_turns: int = Field(default=6, ge=2, le=20)
-    memory_batch: int = Field(default=4, ge=2, le=20)
+    memory_batch: int = Field(default=4, ge=2, le=20, exclude=True)  # Accept old client preferences.
     update_tokens: int = Field(default=4096, ge=1024, le=16000)
 
 class Credential(DTO):
@@ -44,6 +45,7 @@ class Turn(Credential):
 
 class Retry(Credential):
     config: ModelConfig
+    correct_prose: bool = False
     correct_chronology: bool = False
     revision: int | None = Field(default=None, ge=0)
     attempt_epoch: int | None = Field(default=None, ge=0)

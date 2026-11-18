@@ -138,13 +138,13 @@ def run_job(path, job_id, handle):
                 from backend.services.long_term_advance import execute
                 execute(storage, job, handle, chat_stream)
                 return
-            context = config['context_length']
+            from llm import game_context_limit
+            model = None
             if config.get('provider', 'local') == 'local':
                 model = find_loaded_model(config['model'])
                 if model is None:
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
-                actual_context = model.get('config', {}).get('context_length') or config['context_length']
-                context = min(int(actual_context), config['context_length'])
+            context = game_context_limit(config, model)
             before = json.loads(job['memory_before_json'] or job['before_json'])
             from backend.runtime_v3.repository import restore_biographical_secrets
             with storage.connect() as db:
@@ -171,11 +171,22 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.repository import continuity_reader, relationship_reader
             world_history['_relationship_query'] = relationship_reader(storage, before.get('history_head'))
             world_history['_continuity_query'] = continuity_reader(storage, before.get('history_head'))
-            history = storage.list_turns(job['save_id'], context=True)
-            if job['replaces_id'] is not None:
-                target = next(t for t in history if t['id'] == job['replaces_id'])
-                history = [t for t in history if t['sequence'] < target['sequence']]
-            sequence = history[-1]['sequence'] + 1 if history else 0
+            version = config.get('_extraction_contract', 1)
+            if version >= 9:
+                camera = before['world_state']['camera']
+                history, sequence = storage.context_history(job['save_id'], job['replaces_id'],
+                    config.get('recent_turns',6), camera.get('pov_actor_id') or camera.get('controlled_actor_id'),
+                    before.get('campaign',{}).get('protagonist_id'))
+                def literary_sources(sequences):
+                    return storage.list_turns(job['save_id'], context=True,
+                                              sequences={n for n in sequences if 0 <= n < sequence})
+                world_history['_literary_sources'] = literary_sources
+            else:
+                history = storage.list_turns(job['save_id'], context=True)
+                if job['replaces_id'] is not None:
+                    target = next(t for t in history if t['id'] == job['replaces_id'])
+                    history = [t for t in history if t['sequence'] < target['sequence']]
+                sequence = history[-1]['sequence'] + 1 if history else 0
             before['_resolver_turn_id']=sequence+1
             from backend.runtime_v3.time_skip import TimeSkipRequest, parse_skip, plan_skip
             skip_request = None
@@ -186,6 +197,8 @@ def run_job(path, job_id, handle):
             skip_result = plan_skip(before['world_state'], skip_request) if skip_request else None
             if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
+            suggestions = config.get('_narrative_suggestions', []) if version >= 9 else []
+            from backend.runtime_v3.suggestions import split_suggestions
             legacy_letter_sources = json.loads(job.get('private_artifacts_json') or '[]')
             letter_sources = legacy_letter_sources
 
@@ -240,8 +253,9 @@ def run_job(path, job_id, handle):
                     if job['kind'] not in ('background', 'pov') and not skip_result:
                         from backend.runtime_v3.remote_initiative import stage as stage_remote
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
-                        before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, history_events=world_history.get('events', []))
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                        from llm import ProviderGenerationError
+                        before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, cancelled=handle.cancelled, provider_errors=(ProviderGenerationError,), history_events=world_history.get('events', []))
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], extraction_contract=version, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
                 if agency_required(before['world_state'], job['user_text'], job['kind']) and not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
                     from copy import copy
@@ -264,8 +278,11 @@ def run_job(path, job_id, handle):
                 storage.save_context(job_id,messages,before)
                 correction = config.get('_narrative_correction')
                 if correction:
+                    chronology_only = all(g.get('kind') not in ('agency','birth','birth_boundary') for g in correction['grounds'])
+                    instruction = ('Исправь только хронологические утверждения отклонённого кандидата по каноническим основаниям. '
+                                   if chronology_only else 'Исправь только указанные фрагменты отклонённой сцены по исходному выбору игрока и канону. ')
                     correction_messages = list(messages) + [{'role':'system', 'content':
-                        'Исправь только хронологические утверждения отклонённого кандидата по каноническим основаниям. '
+                        instruction +
                         'Сохрани события, стиль и смысл остальных фрагментов. Верни JSON {"edits":[{"original":"точный evidence",'
                         '"replacement":"исправленный фрагмент"}]}. Не создавай новую сцену.\n' +
                         json.dumps(correction, ensure_ascii=False)}]
@@ -279,21 +296,25 @@ def run_job(path, job_id, handle):
                     chunks = []
                 else:
                     chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8))
+                authored = narrative
                 for chunk in chunks:
                     if handle.cancelled.is_set():
                         return
-                    narrative += chunk
+                    authored += chunk
+                    narrative = split_suggestions(authored)[0] if version >= 9 else authored
                     if time.monotonic() - last_write > 0.2:
                         storage.job_progress(job_id, 'generating', narrative=narrative)
                         last_write = time.monotonic()
+                if version >= 9 and not correction:
+                    narrative, suggestions = split_suggestions(authored, complete=True)
                 timings['narrative']=time.perf_counter()-stage_started
                 if not narrative.strip():
                     raise ValueError('Модель вернула пустую сцену.')
                 # New letters are recovered directly from the recorded Narrative.
                 # Keep the old column only for pre-change completed job recovery.
                 with storage.connect() as db:
-                    db.execute("UPDATE game_jobs SET status='extracting', narrative=?, narrative_complete=1 WHERE id=? AND status='generating' AND attempt_epoch=?",
-                        (narrative, job_id, job['attempt_epoch']))
+                    db.execute("UPDATE game_jobs SET status='extracting', narrative=?, narrative_complete=1, config_json=json_patch(config_json,?) WHERE id=? AND status='generating' AND attempt_epoch=?",
+                        (narrative, json.dumps({'_narrative_suggestions': suggestions} if version >= 9 else {}, ensure_ascii=False), job_id, job['attempt_epoch']))
             if not letter_sources:
                 from backend.services.letter_sources import parse, enabled
                 letter_sources = parse(narrative) if enabled(before['world_state']) else []
@@ -303,7 +324,7 @@ def run_job(path, job_id, handle):
                 # A new, explicitly linked candidate uses corrected current canon.
                 # No Narrative request; old context/hash belongs to the old branch.
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
-                    config['max_tokens'], recent_turns=config.get('recent_turns',6),
+                    config['max_tokens'], extraction_contract=version, recent_turns=config.get('recent_turns',6),
                     prompts=config.get('_prompts'), world_history=world_history)
                 storage.save_context(job_id, messages, before)
             # Use exactly the policy supplied to this narrative, including retry /
@@ -315,7 +336,9 @@ def run_job(path, job_id, handle):
             initiative_plan = recorded_plan(recorded_messages)
             from backend.runtime_v3.continuity import recorded as recorded_continuity, due_birth_repair_required
             continuity_plan = recorded_continuity(recorded_messages)
-            require_due_birth_assessment = due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'), before['world_state'])
+            corrected_boundary = any(g.get('kind') == 'birth_boundary'
+                                     for g in config.get('_narrative_correction', {}).get('grounds', []))
+            require_due_birth_assessment = corrected_boundary or due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'), before['world_state'])
             feedback = None
             previous_extraction = None
             if job['attempt_epoch'] and config.get('_extraction_contract', 1) < 6:
@@ -341,17 +364,19 @@ def run_job(path, job_id, handle):
                     feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], latest_payload, before['world_state'], previous_complete=complete_payload)
             from backend.runtime_v3.scene_repair import SceneCandidate
             semantic_candidate = SceneCandidate(before['world_state'], narrative, job['user_text'], sequence+1,
-                version=config.get('_extraction_contract', 1), on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if config.get('_extraction_contract', 1) >= 6 else None
+                version=version, suggestions=suggestions, on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if config.get('_extraction_contract', 1) >= 6 else None
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
-                                         validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
-                if config.get('_narrative_correction'):
+                                         suggestions=suggestions, validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                correction_grounds = config.get('_narrative_correction', {}).get('grounds', [])
+                calendar_grounds = [g for g in correction_grounds if g.get('kind') not in ('agency','birth','birth_boundary')]
+                if calendar_grounds:
                     ids = [dict(kind=g.get('kind', 'event_elapsed'), event_id=g.get('event_id'),
-                                reference_minute=g.get('current_minute')) for g in config['_narrative_correction']['grounds']]
+                                reference_minute=g.get('current_minute')) for g in calendar_grounds]
                     messages.append({'role':'system', 'content':'Corrected candidate: recheck objective assertions for '
                         + json.dumps(ids) + ' in chronology_claims against the NEW prose; never omit or downgrade them.'})
                     if estimate(messages)>context-config['update_tokens']-256:
@@ -375,9 +400,15 @@ def run_job(path, job_id, handle):
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_revision_warnings
                     raw=semantic_candidate.parse(result, defer_errors=True) if semantic_candidate else RawTurnResult.parse(result)
-                    if config.get('_narrative_correction'):
+                    for ground in correction_grounds:
+                        if ground.get('kind') == 'birth' and not any(
+                            isinstance(b,dict) and b.get('pregnancy_id') == ground['pregnancy_id'] for b in raw.records['births']
+                        ):
+                            raise StructuralDeltaError('Повторно проверьте рождение по исправленному тексту.',
+                                                       'birth_recheck_missing', section='births')
+                    if calendar_grounds:
                         from backend.runtime_v3.continuity import require_chronology_recheck
-                        require_chronology_recheck(raw, config['_narrative_correction']['grounds'])
+                        require_chronology_recheck(raw, calendar_grounds)
                     raw.warnings.extend(repair_revision_warnings(previous_extraction, raw))
                     previous_extraction = raw
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']

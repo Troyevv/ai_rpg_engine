@@ -50,3 +50,17 @@ def chronology_correction(diagnostics):
     if not hard or any(row.get('code') != 'narrative_chronology_conflict' or not row.get('chronology') for row in hard):
         return None
     return [row['chronology'] for row in hard]
+
+
+def prose_correction(diagnostics, narrative):
+    """Safe replacement needs an exact, unique authored span for every hard conflict."""
+    grounds = []
+    for row in diagnostics:
+        if row.get('scope') == 'independent_background' or not requires_narrative_reauthor([row]) and row.get('severity') != 'hard_conflict':
+            continue
+        items = row.get('correction_grounds') or [row.get('chronology') or row.get('correction_ground')]
+        for ground in items:
+            if not ground or not isinstance(ground.get('evidence'), str) or not ground['evidence'] or narrative.count(ground['evidence']) != 1:
+                return None
+            grounds.append(ground)
+    return grounds or None

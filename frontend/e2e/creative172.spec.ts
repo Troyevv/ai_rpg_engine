@@ -93,6 +93,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
   for(const turnCount of [2,3]){
    await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
    // Choices from the preceding turn can remain mounted while a job starts.
    await expect(page.locator('.turn')).toHaveCount(turnCount);
    await expect.poll(async()=>(await view()).job.status).toBe('saved');

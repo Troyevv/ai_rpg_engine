@@ -278,8 +278,9 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     # Provider capability is distinct from the app's intentionally smaller context.
     # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
     capabilities=config.get('_model_capabilities',{})
-    if config.get('provider')=='deepseek' and config.get('model') in ('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro'):
-        capabilities=dict(context_window=1048576,max_output_tokens=393216)
+    from llm import DEEPSEEK_WINDOWS
+    if config.get('provider')=='deepseek' and config.get('model') in DEEPSEEK_WINDOWS:
+        capabilities=dict(context_window=DEEPSEEK_WINDOWS[config['model']],max_output_tokens=393216)
     context=min(context,capabilities.get('context_window',context))
     output_limit=min(stage_output_limit(logical_slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})

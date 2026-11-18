@@ -393,7 +393,27 @@ def _identify_endpoint(snapshot, proposal, operation_id):
     return result, batch.to_dict()
 
 
-def stage(snapshot, generate, operation_id, *, context_limit=32768, history_events=()):
+class _RequestFailure(Exception):
+    pass
+
+
+class _ProviderUnavailable(Exception):
+    pass
+
+
+def stage(snapshot, generate, operation_id, *, context_limit=32768, history_events=(), cancelled=None,
+          provider_errors=(RuntimeError,)):
+    def request(stage_name, messages, limit, temperature):
+        try:
+            return ''.join(generate(stage_name, messages, limit, temperature, response_format={'type':'json_object'}))
+        except provider_errors as exc:
+            if cancelled is not None and cancelled.is_set():
+                raise _RequestFailure() from exc
+            raise _ProviderUnavailable() from exc
+        except Exception as exc:
+            # Journal/revision/budget failures belong to the job, never the optional candidate.
+            raise _RequestFailure() from exc
+
     if "_remote_batch" in snapshot:
         return snapshot
     from backend.runtime_v3.group_planning import opportunities as group_options, context as group_context
@@ -425,19 +445,20 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
                     controlled_actor_name=snapshot['world_state']['characters'].get(snapshot['world_state']['camera']['controlled_actor_id'], {}).get('display_name'))
         messages[1]['content'] = json.dumps(data, ensure_ascii=False)
     from context_builder import estimate
-    if groups and estimate(messages) + 2400 + 512 > context_limit:
+    limit = 2400 if groups else 1200
+    if estimate(messages) + limit + 512 > context_limit:
         result = deepcopy(snapshot)
         batch = {'state_changes':[dict(kind='remote_deferred', code='group_context_budget')]}
-        record_attempt(result, groups[0]['conversation_id'], operation_id, batch,
-            event_ids=[e['id'] for e in groups[0].get('event_cues', [])])
+        if groups:
+            record_attempt(result, groups[0]['conversation_id'], operation_id, batch,
+                event_ids=[e['id'] for e in groups[0].get('event_cues', [])])
         result['_remote_batch'] = batch
         return result
-    answer = ''.join(generate('remote_initiative', messages, 2400 if groups else 1200, 0.2,
-                              response_format={'type':'json_object'}))
     result = deepcopy(snapshot)
     batch = {'state_changes': []}
     attempted = groups[0]['conversation_id'] if groups else None
     try:
+        answer = request('remote_initiative', messages, limit, 0.2)
         value = decode(answer)
         if groups and isinstance(value, dict) and 'group_series' in value:
             decision = RemoteStageDecision.model_validate(value)
@@ -467,8 +488,7 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
                     current_time=current_time(snapshot['world_state'])), ensure_ascii=False))]
             if estimate(semantic_messages) + 1200 + 512 > context_limit:
                 raise ValueError('group_semantic_context_budget')
-            semantics = GroupSemantics.model_validate_json(''.join(generate('remote_group_semantics', semantic_messages,
-                1200, 0.1, response_format={'type':'json_object'})))
+            semantics = GroupSemantics.model_validate_json(request('remote_group_semantics', semantic_messages, 1200, 0.1))
             result, batch = accept_series(snapshot, series, semantics, groups, operation_id)
         elif proposed is not None:
             result, batch = accept(snapshot, proposed, options, operation_id)
@@ -478,11 +498,15 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
         else:
             batch = {'state_changes':[dict(kind='remote_no_action')]}
         batch.setdefault('state_changes', []).append(dict(kind='remote_decision_parser', **diagnostic))
-    except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+    except _RequestFailure as exc:
+        raise exc.__cause__
+    except (ValueError, KeyError, TypeError, _ProviderUnavailable) as exc:
+        if cancelled is not None and cancelled.is_set():
+            raise
         result = deepcopy(snapshot)
-        batch = {'state_changes':[dict(kind='remote_rejected',
-            code='group_provider_failed' if isinstance(exc, RuntimeError) else 'decision_runtime',
-            error_type=type(exc).__name__)]}
+        batch = {'state_changes':[dict(kind='remote_deferred' if isinstance(exc, _ProviderUnavailable) else 'remote_rejected',
+            code='group_provider_failed' if isinstance(exc, _ProviderUnavailable) else 'decision_runtime',
+            error_type=type(exc.__cause__ if isinstance(exc, _ProviderUnavailable) else exc).__name__)]}
     if attempted:
         record_attempt(result, attempted, operation_id, batch,
             event_ids=[e['id'] for g in groups if g['conversation_id']==attempted for e in g.get('event_cues', [])])

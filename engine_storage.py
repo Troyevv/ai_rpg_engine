@@ -85,7 +85,7 @@ class EngineStorage:
                     source_revision=recovery['revision'], source_contract=json.loads(recovery['config_json']).get('_extraction_contract',1),
                     narrative_sha256=sha256(recovery['narrative'].encode()).hexdigest())
                 source_config = json.loads(recovery['config_json'])
-                for key in ('interaction_channel','time_skip'):
+                for key in ('interaction_channel','time_skip','_narrative_suggestions'):
                     config.pop(key, None)
                     if key in source_config: config[key] = source_config[key]
                 user_text = recovery['user_text']
@@ -219,7 +219,11 @@ class EngineStorage:
                 call = active_call(validated_state, validated_state['camera']['controlled_actor_id'])
                 if not call or call['status'] != 'answered':
                     raise ValueError('Нет соединённого звонка для телефонной реплики.')
-            config.setdefault('_prompts',self.prompt_snapshot(db))
+            if '_prompts' not in config:
+                config['_prompts'] = self.prompt_snapshot(db)
+            if config['_extraction_contract'] >= 9 and '_scene_rules' not in config['_prompts']:
+                from backend.repositories.documents import ROOT
+                config['_prompts']['_scene_rules'] = {'content':(ROOT/'state_update_prompt.md').read_text(encoding='utf-8')}
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
                           VALUES(?,?,?,?,?,?,?,'generating',?)''',
@@ -268,7 +272,7 @@ class EngineStorage:
 
     def correct_chronology_job(self, job_id, revision, attempt_epoch):
         """New candidate/lineage; the rejected job and accepted History stay intact."""
-        from backend.services.world_delta_errors import chronology_correction
+        from backend.services.world_delta_errors import prose_correction
         from hashlib import sha256
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -276,7 +280,7 @@ class EngineStorage:
             if row is None:
                 raise ValueError('Ход не найден.')
             job = dict(row)
-            grounds = chronology_correction(json.loads(job.get('repair_diagnostics_json') or '[]'))
+            grounds = prose_correction(json.loads(job.get('repair_diagnostics_json') or '[]'), job['narrative'])
             if (job['status'] not in ('error', 'stopped') or not job['narrative_complete'] or
                     job['kind'] not in ('start', 'turn', 'regenerate', 'background', 'pov') or
                     not grounds or job['attempt_epoch'] != attempt_epoch or job['revision'] != revision):
@@ -349,6 +353,14 @@ class EngineStorage:
                 state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch, before=json.loads(job['before_json'])['world_state'], after=state['world_state']))
             from backend.runtime_v3.surfaces import committed_route
             changes = dict(changes, presentation=committed_route(dict(job), history_batch))
+            if json.loads(job['config_json']).get('_extraction_contract', 1) >= 9:
+                before_world = json.loads(job['before_json'])['world_state']
+                after_world = state['world_state']
+                changed = [cid for cid in before_world['characters'].keys() & after_world['characters'].keys()
+                           if before_world['characters'][cid].get('situation') != after_world['characters'][cid].get('situation')]
+                if before_world['camera'].get('situation') != after_world['camera'].get('situation'):
+                    changed.append('camera')
+                changes['context_situation_changes'] = sorted(changed)
             after = json.dumps(state, ensure_ascii=False)
             values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
                       json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))

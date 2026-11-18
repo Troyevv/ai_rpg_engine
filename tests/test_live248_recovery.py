@@ -163,7 +163,7 @@ def test_saved_default_is_not_duplicated_on_retry_but_custom_prompt_survives(tmp
     for text,included in [(old,False),(custom,True)]:
         settings={'state_update_prompt.md':{'id':1,'content':text}}
         messages=context.build_context(snap,[],'Смотрю.','turn',49152,4096,
-            extraction_text='Тишина.',prompts=settings)
+            extraction_text='Тишина.',prompts=settings,extraction_contract=8)
         assert (text in '\n'.join(m['content'] for m in messages))==included
         assert settings['state_update_prompt.md']['content']==text
 

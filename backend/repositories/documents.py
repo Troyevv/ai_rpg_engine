@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-PROMPT_NAMES = ('game_system_prompt.md','state_update_prompt.md','idea_prompt.md','summary_prompt.md',
+PROMPT_NAMES = ('game_system_prompt.md','state_update_prompt.md','extraction_author.md','idea_prompt.md','summary_prompt.md',
                 'draft_world_prompt.md','summary_template.md','background_prompt.md','memory_prompt.md','world_state_prompt.md')
 ROOT = Path(__file__).resolve().parents[2] / 'prompts'
 
@@ -78,7 +78,8 @@ class DocumentStorage:
             raise ValueError('Неизвестный документ.')
         with self.connect() as db:
             head=db.execute('SELECT version_id FROM document_heads WHERE kind=? AND owner=?',(kind,owner)).fetchone()
-            return {'active_id':head[0] if head else None,'versions':[dict(r) for r in db.execute('SELECT * FROM document_versions WHERE kind=? AND owner=? ORDER BY id DESC',(kind,owner))]}
+            template = (ROOT/owner).read_text(encoding='utf-8') if kind=='prompt' and owner=='state_update_prompt.md' else None
+            return {'template':template,'active_id':head[0] if head else None,'versions':[dict(r) for r in db.execute('SELECT * FROM document_versions WHERE kind=? AND owner=? ORDER BY id DESC',(kind,owner))]}
 
     def change_document(self,kind,owner,content,expected_head,source_id=None):
         if kind not in ('idea','summary','prompt') or (kind=='prompt' and owner not in PROMPT_NAMES):

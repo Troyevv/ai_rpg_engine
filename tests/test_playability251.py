@@ -320,12 +320,13 @@ def test_custom_weekdays_unknown_date_and_input_schema():
 
 
 @pytest.mark.parametrize('case', ['016','017'])
-def test_actual_context_dates_old_scenes_and_projects_stale_situations(case):
+@pytest.mark.parametrize('version', [8,9])
+def test_actual_context_dates_old_scenes_and_projects_stale_situations(case, version):
     d = deepcopy(DATA[case]); before = deepcopy(d)
     original = d['original_messages'][0]
     assert any('2026-04-16' in m['content'] for m in original)
     assert not any(m['content'].startswith('Прошлая сцена / canonical time') for m in original)
-    messages = build_context(d['snapshot'],d['views'],d['player_input'],'turn',131072,8192)
+    messages = build_context(d['snapshot'],d['views'],d['player_input'],'turn',131072,8192,extraction_contract=version)
     current = next(json.loads(m['content'].split('\n',1)[1]) for m in messages if m['content'].startswith('Текущее состояние / GM-only\n'))
     assert current['current_time']['date'] == '2026-04-16'
     assert current['last_time_advance']['start']['date'] == '2026-04-11'
@@ -334,7 +335,11 @@ def test_actual_context_dates_old_scenes_and_projects_stale_situations(case):
     assert not current['camera'].get('situation')
     assert not current['characters']['char_alexey'].get('situation')
     wrappers = [m for m in messages if m['content'].startswith('Прошлая сцена / canonical time')]
-    assert len(wrappers) == 6 and any('2026-04-11' in m['content'] for m in wrappers)
+    if version == 8:
+        assert len(wrappers) == 6
+    else:
+        assert 1 <= len(wrappers) <= 6
+    assert any('2026-04-11' in m['content'] for m in wrappers)
     # Assistant prose is byte-for-byte the stored scene (POV projection unchanged).
     for m in messages:
         if m['role'] == 'assistant': assert m['content'] in [v['assistant_text'] for v in d['views']]

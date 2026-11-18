@@ -77,7 +77,9 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await page.reload();await nav(page,'Создать');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
- await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);
+ await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.choices button')).toHaveCount(6);
  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
  const canonical=await(await request.post(`/test/creative172/saves/${selected.save}/canonical`)).json();

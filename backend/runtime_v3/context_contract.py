@@ -81,7 +81,7 @@ COMPACT_REFERENCED — обсуждаемый человек, а не участ
 Не назначай controlled_actor действия, слова, решения и эмоции. Situation — объективная ситуация.
 Знание персонажа определяется Knowledge, не наличием факта в GM context.
 Не превращай засыпание в произвольный скачок времени.
-Варианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.
+Предложения дальнейших действий не являются выбором игрока.
 '''
 
 
@@ -358,10 +358,10 @@ stay sparse: no mature goals/values/habits/speech or inherited personality/Knowl
 appearance accepts only explicitly quoted text by child ID, never genetic inference.
 """
 
-DUE_BIRTH_CONTRACT = """
+_DUE_BIRTH_RULES = """
 At the due birth boundary use elapsed_minutes=0 for observation, help, waiting
 or ongoing labor. A player's assumption is not evidence of delivery. Include
-final_scene.due_birth_assessments for each pregnancy at the current scene-clock
+{scene}.due_birth_assessments for each pregnancy at the current scene-clock
 boundary: pregnancy_id, narrative_outcome, evidence from completed_narrative.
 narrative_outcome=ongoing means delivery has not completed: no BirthClaim.
 completed requires an explicitly completed delivery and its births/current Event.
@@ -373,6 +373,9 @@ delta. Repair reinterprets that same prose and must include these assessments.
 Labor may continue for any number of turns; waiting does not require completion.
 Record newly perceived facts only for actual witnesses via knowledge_gained.
 """
+
+DUE_BIRTH_CONTRACT = _DUE_BIRTH_RULES.format(scene='final_scene')
+CURRENT_DUE_BIRTH_CONTRACT = _DUE_BIRTH_RULES.format(scene='scene')
 
 BIRTH_SEX_CONTRACT = """
 Every BirthClaim MUST include sex_observations: exactly one assessment per canonical

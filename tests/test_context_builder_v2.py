@@ -196,4 +196,4 @@ def test_completed_narrative_resolves_inflected_existing_location_before_extract
     messages=build(snapshot,text='Продолжить.',extraction_text='На кухне пахнет свежим кофе.')
     current=section(messages,'Текущее состояние / GM-only')
     assert 'kitchen' in current['locations']
-    assert current['locations']['kitchen']==state['locations']['kitchen']
+    assert dict(id='kitchen', **current['locations']['kitchen'])==state['locations']['kitchen']

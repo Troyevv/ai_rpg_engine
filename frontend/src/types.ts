@@ -13,7 +13,7 @@ export interface ModelConfig {
   update_tokens: number;
   thinking: "off" | "low" | "high";
   recent_turns: number;
-  memory_batch: number;
+  auto_context?: boolean;
 }
 export interface LocalConfig {
   model: string;
@@ -176,6 +176,7 @@ export interface Job {
   narrative_complete?: boolean;
   retry_allowed?: boolean;
   narrative_reauthor_required?: boolean;
+  prose_correction_available?: boolean;
   chronology_correction_available?: boolean;
   kind: string;
   revision: number;
@@ -211,12 +212,11 @@ const config: ModelConfig = {
   update_tokens: 4096,
   thinking: "off",
   recent_turns: 6,
-  memory_batch: 4,
 };
 export const defaults: Preferences = {
   idea: { ...config, temperature: 1, max_tokens: 6000 },
   summary: { ...config, max_tokens: 12000 },
-  game: { ...config },
+  game: { ...config, auto_context:true },
   local: {
     model: "local-model",
     context_length: 16384,

@@ -345,8 +345,10 @@ def validate_birth_sex(r, claim, event, pregnancy):
         # The diagnostic survives retry/reload; only a new authored scene is safe.
         if row['narrative_sex'] is not None and row['narrative_sex'] != children[cid]['sex']:
             fatal('Повествование противоречит установленным данным ребёнка. '
-                  'Ход не сохранён. Отмените неудачный ход и создайте новую сцену.',
+                  'Состояние до этого хода сохранено.',
                   'birth_narrative_sex_conflict', repairable=False, **path,
+                  correction_ground=dict(kind='birth', child_id=cid, pregnancy_id=pregnancy['id'],
+                                         established_sex=children[cid]['sex'], evidence=row.get('evidence') or event.get('evidence')),
                   action='reauthor_narrative')
         if row['event_sex'] != row['narrative_sex']:
             fatal('Описание пола в Event не соответствует интерпретации Narrative. '

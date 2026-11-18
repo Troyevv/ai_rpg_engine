@@ -198,7 +198,9 @@ def validate_due_birth_assessments(resolver, raw, *, require=False):
             if claim.narrative_outcome == 'unresolved_time_advance':
                 fatal('Narrative требует продвижения времени через неразрешённые роды; Extraction не может переписать сцену.',
                       'narrative_temporal_conflict', repairable=False, action='reauthor_narrative',
-                      entity=claim.pregnancy_id, **path)
+                      entity=claim.pregnancy_id, correction_ground=dict(kind='birth_boundary',
+                          pregnancy_id=claim.pregnancy_id, evidence=claim.evidence,
+                          constraint='Время не может пройти через неразрешённую границу родов.'), **path)
             if (claim.narrative_outcome == 'completed') != (claim.pregnancy_id in births):
                 raise ValueError('BirthClaim must agree with the Narrative assessment; ongoing labor is not birth_completed.')
     except (ValueError, TypeError) as exc:

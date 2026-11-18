@@ -20,7 +20,9 @@ test('V1 turn survives manual edit, AI package, portrait replacement and V2 laun
  };
  await openMaxim();await portrait('#41665a');await page.getByRole('button',{name:'Готово',exact:true}).click();
  await page.locator('.ww-topbar .ww-primary').click();await confirmWorkshopStart(page);
- await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(1);await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(1);
+ await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(1);await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(1);
  const v1=(await(await request.get(url+'?author=true')).json()).games[0];
  const canonical=async(sid:number)=>({...((await(await request.get(`/api/saves/${sid}/author-state`)).json()).snapshot),history:(await(await request.post(`/test/creative172/saves/${sid}/canonical`)).json()).events});
  const old=await canonical(v1.save),oldPortrait=old.world_state.characters.maxim.portraits.at(-1);
