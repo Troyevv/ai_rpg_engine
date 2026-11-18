@@ -24,9 +24,9 @@ async function journal(page:Page,tab='Закладки'){
   await page.getByRole('tab',{name:tab,exact:true}).click();
 }
 async function closeJournal(page:Page){await page.getByRole('button',{name:'Вернуться в игру',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0)}
-async function create(page:Page){
+async function create(page:Page,name='Маяк — журнал долгой истории'){
   await page.goto('/');await page.getByRole('button',{name:'RP-чат',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Новая RP-кампания',exact:true}).click();
-  const d=page.getByRole('dialog');await d.getByLabel('Название кампании',{exact:true}).fill('Маяк — журнал долгой истории');await d.getByLabel('Идея игры',{exact:true}).fill('Лена и Илья у осеннего маяка. Дата 9 октября. Тайну ключа знает только Лена.');
+  const d=page.getByRole('dialog');await d.getByLabel('Название кампании',{exact:true}).fill(name);await d.getByLabel('Идея игры',{exact:true}).fill('Лена и Илья у осеннего маяка. Дата 9 октября. Тайну ключа знает только Лена.');
   await d.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-tools-fixture');await d.getByText('Дополнительные настройки',{exact:true}).click();await d.getByRole('group',{name:'Обновление выжимки — отдельный вызов'}).getByLabel('Модель',{exact:true}).fill('chat-tools-summary-fixture');
   await d.getByRole('button',{name:'Сгенерировать первоначальную выжимку',exact:true}).click();await expect(d.getByRole('button',{name:'Остановить генерацию выжимки',exact:true})).toHaveCount(0);
   await expect(d.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/👤 Лена/);await d.getByLabel('Подтверждаю первоначальную выжимку',{exact:true}).check();await d.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(d).toHaveCount(0);
@@ -112,4 +112,23 @@ test('Chat tools: delayed and lost acknowledgements preserve a newer draft witho
   await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
   await input.fill('Черновик после сетевой ошибки.');await page.unroute('**/api/chat/campaigns/*/generate');await page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true}).click();await expect(page.locator('.chat-assistant')).toHaveCount(3);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Черновик после сетевой ошибки.');
   const c=await campaign(page,request);expect(c.branch.head).toBe(5);await page.reload();await expect(input).toHaveValue('Черновик после сетевой ошибки.');expect((await campaign(page,request)).job.id).toBe(c.job.id);
+});
+
+
+for(const phase of ['save','review'])test(`Chat tools: late character ${phase} response cannot cross campaign or reopen a closed journal`,async({page,request})=>{
+  test.setTimeout(90000);const name=`Изоляция ${phase} ${crypto.randomUUID().slice(0,8)}`;await create(page,name);const c=await campaign(page,request);
+  const otherName=`Другая ${name}`;const other=await(await request.post('/api/chat/campaigns',{data:{token:crypto.randomUUID(),name:otherName,memory:'Только другая история.',settings:c.settings}})).json();
+  await journal(page,'Персонажи');await page.locator('.chat-character-card').filter({hasText:'Лена'}).click();await page.getByRole('button',{name:'Редактировать раздел персонажа',exact:true}).click();const editor=page.getByLabel('Markdown раздела персонажа',{exact:true});await editor.fill((await editor.inputValue())+'\nЗаметка только первой кампании.');
+  let arrived!:()=>void,release!:()=>void,delivered!:()=>void;const ready=new Promise<void>(r=>arrived=r),gate=new Promise<void>(r=>release=r),finished=new Promise<void>(r=>delivered=r);
+  const pattern=phase==='save'?'**/characters/*/draft':'**/drafts/*';
+  await page.route(pattern,async route=>{const response=await route.fetch();arrived();await gate;await route.fulfill({response});delivered()});
+  try{
+    await page.getByRole('button',{name:'Проверить новую выжимку',exact:true}).click();await ready;await expect(editor).toBeDisabled();await page.getByRole('button',{name:'Закрыть',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Кампании RP-чата',exact:true}).click();await page.locator('.chat-campaign-card').filter({has:page.getByText(otherName,{exact:true})}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByLabel('Твоё сообщение',{exact:true}).fill('Черновик другой кампании.');release();await finished;
+    // Give the delivered response both React frames and the modal transition;
+    // checking absence before fetch completion would hide this race.
+    await page.waitForTimeout(350);await expect(page.getByRole('dialog')).toHaveCount(0);expect((await campaign(page,request)).id).toBe(other.id);await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('Черновик другой кампании.');expect((await campaign(page,request)).memory.text).toBe('Только другая история.');
+    await page.unroute(pattern);await page.getByRole('button',{name:'Кампании RP-чата',exact:true}).click();await page.locator('.chat-campaign-card').filter({has:page.getByText(name,{exact:true})}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await page.locator('.chat-draft-links button').click();await expect(page.getByLabel('Текст выжимки',{exact:true})).toHaveValue(/Заметка только первой кампании/);expect((await campaign(page,request)).memory.id).toBe(c.memory.id);
+  }finally{release()}
 });
