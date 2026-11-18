@@ -6,7 +6,7 @@ NARRATIVE_INSTRUCTION = ("\nAfter prose append <action_suggestions> on its own l
                          "4–6 short action strings in the game's language, grounded in the player's POV. No device controls.")
 
 
-def split_suggestions(text, *, complete=False):
+def split_suggestions(text, *, complete=False, verbatim=False):
     prose, found, trailer = text.partition(MARKER)
     if found:
         try:
@@ -16,7 +16,9 @@ def split_suggestions(text, *, complete=False):
         # Preserve indexes even if an individual entry is unusable.
         choices = [item if isinstance(item, str) and 0 < len(item.strip()) <= 800 else None
                    for item in items[:6]] if isinstance(items, list) else []
-        return prose.rstrip(), choices
+        return (prose.removesuffix('\n') if verbatim else prose.rstrip()), choices
+    if verbatim and complete:
+        return text, []
     # A delimiter can span provider chunks. Never stream its prefix.
     for size in range(min(len(text), len(MARKER)-1), 0, -1):
         if text.endswith(MARKER[:size]):

@@ -178,6 +178,10 @@ class EngineStorage:
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
+                if EXTRACTION_VERSION >= 10 and last['kind'] in ('start','turn','pov','background'):
+                    config['_extraction_contract'] = EXTRACTION_VERSION
+                    config['_extraction_transport'] = transport(config)
+                    config.get('_prompts',{}).pop('_scene_rules',None)
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before_snapshot=json.loads(before)
@@ -223,7 +227,8 @@ class EngineStorage:
                 config['_prompts'] = self.prompt_snapshot(db)
             if config['_extraction_contract'] >= 9 and '_scene_rules' not in config['_prompts']:
                 from backend.repositories.documents import ROOT
-                config['_prompts']['_scene_rules'] = {'content':(ROOT/'state_update_prompt.md').read_text(encoding='utf-8')}
+                template = 'state_update_prompt.md' if config['_extraction_contract'] >= 10 else 'state_update_v9.md'
+                config['_prompts']['_scene_rules'] = {'content':(ROOT/template).read_text(encoding='utf-8')}
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
                           VALUES(?,?,?,?,?,?,?,'generating',?)''',
@@ -317,9 +322,9 @@ class EngineStorage:
                                  'Отмените неудачный ход и создайте новую сцену.')
             self._assert_idle(db, job['save_id'])
             revision = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()[0]
-            if revision != job['revision']:
-                raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
+            if revision != settings.get('_published_scene', {}).get('revision', job['revision']):
+                raise ValueError('Сейв изменился. Этот черновик устарел.')
             previous_provider = (settings.get('provider','local'), settings.get('model'))
             if config:
                 settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','_extraction_contract','_extraction_transport','actor_id','source_turn_id','source_node_id','communication','remote_command')})
@@ -329,23 +334,112 @@ class EngineStorage:
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
-    def commit_job(self, job_id, state, choices, changes, timing=None, history_batch=None):
+    def publish_scene(self, job_id, before, sequence, narrative, user_text, timing, *, recovery=None):
+        """Publish the original text at its branch position before starting Extraction."""
+        from copy import deepcopy
+        from backend.runtime_v3.models import identity
+        state = deepcopy(before)
+        history = state.pop('_remote_batch', {})
+        for key in ('_resolver_turn_id', '_time_skip', '_interaction_input_channel', 'last_time_skip'):
+            state.pop(key, None)
+        world = state['world_state']
+        world['meta']['turn_id'] = sequence + 1
+        minute = world['meta']['world_time']
+        history.setdefault('turns', []).append(dict(id=identity('record',sequence+1,narrative,True),
+            sequence=sequence, turn_id=sequence+1, narrative=narrative, player_input=user_text,
+            camera_before=world['camera'], camera=world['camera'], game_time_before=minute,
+            world_time=minute, player_observed=True))
+        changes = {'interpretation':'pending' if recovery is None else 'deferred'}
+        if recovery is not None:
+            changes['interpretation_warnings'] = [dict(section='extraction',code='player_saved_prose',action='preserve_scene')]
+        self.commit_job(job_id, state, [], changes, timing, history, publish=True, recovery=recovery)
+
+    def save_completed_scene(self, job_id, revision, attempt_epoch):
+        job = self.get_job(job_id)
+        public = json.loads(job['config_json']).get('_published_scene')
+        if (job['kind'] not in ('start','turn','pov','background') or not job['narrative_complete']
+                or job['attempt_epoch'] != attempt_epoch or not job['narrative'].strip()):
+            raise ValueError('Нет законченного текста этой попытки.')
+        if public:
+            if revision != public['revision'] and not (job['status']=='saved' and revision==job['revision']):
+                raise ValueError('Опубликованный вариант изменился.')
+            self.finish_interpretation(job_id,'player_saved_prose', recovery=(revision, attempt_epoch))
+            return
+        before = json.loads(job['memory_before_json'] or job['before_json'])
+        camera = before['world_state']['camera']
+        _, sequence = self.context_history(job['save_id'], job['replaces_id'], 1,
+            camera.get('pov_actor_id') or camera.get('controlled_actor_id'), before.get('campaign',{}).get('protagonist_id'))
+        self.publish_scene(job_id,before,sequence,job['narrative'],job['user_text'],None,
+                           recovery=(revision,attempt_epoch))
+
+    def finish_interpretation(self, job_id, reason, *, recovery=None):
+        """Close interrupted optional work on the exact published variant, under the save fence."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job = db.execute('SELECT * FROM game_jobs WHERE id=?',(job_id,)).fetchone()
+            if recovery is None and (not job or job['status'] not in ACTIVE):
+                return False
+            if recovery is not None and job['status'] not in ('error','stopped','saved'):
+                raise ValueError('Дождись завершения обработки.')
+            if recovery is not None:
+                self._assert_idle(db,job['save_id'])
+                if job['attempt_epoch'] != recovery[1]:
+                    raise ValueError('Попытка обработки изменилась.')
+            publication = json.loads(job['config_json']).get('_published_scene')
+            if not publication:
+                return False
+            self._published_turn(db, job, publication)
+            if job['status'] == 'saved':
+                return True
+            warning = dict(section='extraction', code=reason, action='preserve_scene')
+            turn = dict(db.execute('SELECT * FROM turns WHERE id=?',(publication['turn_id'],)).fetchone())
+            changes = json.loads(turn['changes_json'])
+            changes.update(interpretation='deferred', interpretation_warnings=[warning])
+            turn['changes_json'] = json.dumps(changes, ensure_ascii=False)
+            db.execute('UPDATE turns SET changes_json=? WHERE id=?',(turn['changes_json'],turn['id']))
+            db.execute('UPDATE response_variants SET payload=? WHERE id=?',
+                       (json.dumps(turn,ensure_ascii=False),publication['variant_id']))
+            warnings = json.loads(job['warnings_json'] or '[]') + [warning]
+            db.execute("UPDATE game_jobs SET status='saved', error='', warnings_json=? WHERE id=?",
+                       (json.dumps(warnings,ensure_ascii=False),job_id))
+            return True
+
+    def _published_turn(self, db, job, publication):
+        active = db.execute('SELECT active_variant_id FROM turns WHERE id=? AND save_id=?',
+                            (publication['turn_id'],job['save_id'])).fetchone()
+        revision = db.execute('SELECT revision FROM saves WHERE id=?',(job['save_id'],)).fetchone()[0]
+        epoch = getattr(self,'worker_epoch',None)
+        if (not active or active[0] != publication['variant_id'] or revision != publication['revision']
+                or epoch is not None and epoch != job['attempt_epoch']):
+            raise ValueError('Опубликованный вариант изменился. Обнови игру.')
+
+    def commit_job(self, job_id, state, choices, changes, timing=None, history_batch=None, *, publish=False, recovery=None, audience=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
-            if job is None or job['status'] != 'validating' or (getattr(self,'worker_epoch',None) is not None and self.worker_epoch!=job['attempt_epoch']):
+            expected = ('error','stopped') if recovery is not None else ('extracting' if publish else 'validating',)
+            if recovery is not None:
+                self._assert_idle(db, job['save_id'])
+                if (job['revision'],job['attempt_epoch']) != recovery:
+                    raise ValueError('Сейв или попытка обработки изменились.')
+            if job is None or job['status'] not in expected or (getattr(self,'worker_epoch',None) is not None and self.worker_epoch!=job['attempt_epoch']):
                 raise ValueError('Ход остановлен или уже сохранён.')
             save = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()
-            if save['revision'] != job['revision']:
+            publication = json.loads(job['config_json']).get('_published_scene')
+            if publication:
+                self._published_turn(db, job, publication)
+                if publish:
+                    return
+            elif save['revision'] != job['revision']:
                 raise ValueError('Состояние сейва изменилось во время генерации.')
-            if job['replaces_id'] is not None:
+            if job['replaces_id'] is not None and not publication:
                 old = db.execute('SELECT * FROM turns WHERE id=? AND save_id=?', (job['replaces_id'], job['save_id'])).fetchone()
                 if old is None:
                     raise ValueError('Исходный ход уже изменён.')
                 db.execute('INSERT INTO archived_turns(save_id,reason,payload) VALUES(?,?,?)',
                            (job['save_id'], 'regenerate', json.dumps(dict(old), ensure_ascii=False)))
                 self._rollback_after(db, job['save_id'], old['sequence'], json.loads(job['config_json']).get('rollback_following',False))
-            sequence = old['sequence'] if job['replaces_id'] is not None else db.execute('SELECT COALESCE(MAX(sequence),-1)+1 FROM turns WHERE save_id=?', (job['save_id'],)).fetchone()[0]
+            sequence = publication['sequence'] if publication else old['sequence'] if job['replaces_id'] is not None else db.execute('SELECT COALESCE(MAX(sequence),-1)+1 FROM turns WHERE save_id=?', (job['save_id'],)).fetchone()[0]
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             from backend.runtime_v3.repository import append_history
             assert_world_state_v3_invariants(state['world_state'],json.loads(job['before_json'])['world_state'])
@@ -361,20 +455,25 @@ class EngineStorage:
                 if before_world['camera'].get('situation') != after_world['camera'].get('situation'):
                     changed.append('camera')
                 changes['context_situation_changes'] = sorted(changed)
+            if publish:
+                audience = state['world_state']['camera']['present_character_ids']
+            if audience is not None:
+                db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
+                job = db.execute('SELECT * FROM game_jobs WHERE id=?',(job_id,)).fetchone()
             after = json.dumps(state, ensure_ascii=False)
             values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
                       json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))
-            if job['replaces_id'] is not None:
-                tid = old['id']
+            if publication or job['replaces_id'] is not None:
+                tid = publication['turn_id'] if publication else old['id']
                 db.execute('UPDATE turns SET user_text=?,assistant_text=?,before_json=?,after_json=?,kind=?,choices_json=?,changes_json=? WHERE id=?', (*values,tid))
             else:
                 tid = db.execute('INSERT INTO turns(user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json,save_id,sequence) VALUES(?,?,?,?,?,?,?,?,?)', (*values,job['save_id'],sequence)).lastrowid
             db.execute('UPDATE turns SET pov_actor_id=?,audience_json=?,timing_json=? WHERE id=?',(job['pov_actor_id'],job['audience_json'],json.dumps(timing) if timing else None,tid))
             record = dict(db.execute('SELECT * FROM turns WHERE id=?', (tid,)).fetchone())
-            recovery = json.loads(job['config_json']).get('_narrative_recovery')
-            if recovery and job['replaces_id'] is None:
+            recovery_source = json.loads(job['config_json']).get('_narrative_recovery')
+            if recovery_source and job['replaces_id'] is None:
                 source = db.execute('SELECT * FROM response_variants WHERE job_id=? ORDER BY rowid DESC LIMIT 1',
-                                    (recovery['source_job_id'],)).fetchone()
+                                    (recovery_source['source_job_id'],)).fetchone()
                 parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? AND sequence<? ORDER BY sequence DESC LIMIT 1',
                                     (job['save_id'], sequence)).fetchone()
                 # A sibling may share a node only with the identical before and
@@ -383,10 +482,22 @@ class EngineStorage:
                 if (source and source['parent_variant_id'] == (parent[0] if parent else None)
                         and json.loads(source['payload'])['before_json'] == job['before_json']):
                     record['node_id'] = source['node_id']
-            self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
+            if publication:
+                db.execute('UPDATE response_variants SET payload=?,context_json=?,memory_before_json=? WHERE id=?',
+                    (json.dumps(record, ensure_ascii=False), job['context_json'],job['memory_before_json'],publication['variant_id']))
+            else:
+                variant = self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
+            if changes.get('interpretation_warnings'):
+                warnings = json.loads(job['warnings_json'] or '[]') + changes['interpretation_warnings']
+                db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(warnings,ensure_ascii=False),job_id))
+            if publish:
+                marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1)
+                db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._published_scene',json(?)) WHERE id=?",
+                           (json.dumps(marker), job_id))
             self._archive_memory(db, job['save_id'], state)
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (after, job['save_id']))
-            db.execute("UPDATE game_jobs SET status='saved',timing_json=? WHERE id=?", (json.dumps(timing) if timing else None,job_id))
+            db.execute("UPDATE game_jobs SET status=?,error='',timing_json=? WHERE id=?",
+                       ('extracting' if publish and recovery is None else 'saved', json.dumps(timing) if timing else None,job_id))
 
     def finalize_job_timing(self, job_id, total):
         """Persist elapsed wall-clock time after the save and variant are committed."""

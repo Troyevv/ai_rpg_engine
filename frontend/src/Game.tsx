@@ -139,7 +139,7 @@ export function Game({
   const { job: snapshot, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const rejected = !!job && ['error','stopped'].includes(job.status) && job.revision === save?.revision;
+  const rejected = !!job && ['error','stopped'].includes(job.status) && (job.published_revision ?? job.revision) === save?.revision;
   const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
@@ -213,7 +213,11 @@ export function Game({
   const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
     <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
-      <Button disabled={busy || running} onClick={() => void run(async () => {
+      {!!job.narrative_complete && ['start','turn','background','pov'].includes(job.kind) && <Button disabled={busy || running} onClick={()=>void run(async()=>{
+        setSubmitted(await api<Job>(`/jobs/${job.id}/save-scene`, {revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
+        await refresh();
+      })}>Сохранить исходную сцену без запроса к модели</Button>}
+      {!job.published_revision && <Button disabled={busy || running} onClick={() => void run(async () => {
         try {
           const discarded = await api<Job>(`/saves/${save.id}/jobs/${job.id}/abandon`, {
             revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
@@ -228,7 +232,7 @@ export function Game({
           await refresh();
           setSubmitted(null);
         }
-      })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
+      })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>}
       {(job.prose_correction_available || job.chronology_correction_available) && <div className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground">Адресная правка создаст новую редакцию и заново проверит состояние. Запросы к модели могут быть платными.</p>
         <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
@@ -290,6 +294,7 @@ export function Game({
                     }}/>
                     <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||turnLocked||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
 </>}
+      {job?.published_revision && active(job) && <Button size="sm" variant="ghost" disabled={busy} onClick={stopJob}>Продолжить с сохранённой сценой</Button>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}

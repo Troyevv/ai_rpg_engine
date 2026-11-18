@@ -519,7 +519,8 @@ class ExtractionContextBuilder:
         historical = historical_enabled(snapshot['world_state'])
         explicit_departures = self.contract_version >= 4 or kind == 'background'
         if self.contract_version >= 9:
-            rules = (prompts or {}).get('_scene_rules', {}).get('content') or (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
+            template = 'state_update_prompt.md' if self.contract_version >= 10 else 'state_update_v9.md'
+            rules = (prompts or {}).get('_scene_rules', {}).get('content') or (PROMPTS/template).read_text(encoding='utf-8')
             additions = (prompts or {}).get('extraction_author.md', {}).get('content', '')
             if historical:
                 from backend.runtime_v3.context_contract import HISTORICAL_EXTRACTION_CONTRACT
@@ -685,6 +686,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         snapshot = dict(snapshot, world_state=state)
     all_views = visible_views(snapshot, turns, kind)
     # Recorded versions keep their original six-scene projection.
+    if extraction_contract >= 10 and extraction_text is None:
+        recent_turns = max(1, recent_turns)
     views = all_views[-min(20 if extraction_contract >= 9 else 6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     observer = scope.pov_actor_id or scope.controlled_actor_id
@@ -844,8 +847,28 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
     rules += '\n' + (EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT)
     rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
-    rules += ('\nWorldState overrides historical Milestones/History/biography (roles, relations, homes, names). '
+    if extraction_contract >= 10:
+        rules += ('\nContinue the published scenes as events that already happened. Positions, situations and '
+                  'other extracted records may lag behind the prose. Respect later explicit player edits, '
+                  'objective calendar, ages, pregnancies, and individual knowledge.')
+    else:
+        rules += ('\nWorldState overrides historical Milestones/History/biography (roles, relations, homes, names). '
               'Milestones grant no Knowledge; known_by limits actor access.')
+    if extraction_contract >= 10 and not builder.extraction:
+        # Explicit edits are branch-local. Expose only still-current edits
+        # relevant to this POV, and no knowledge about another recipient.
+        edits = []
+        for row in (world_history or {}).get('state_changes', []):
+            if row.get('kind') == 'manual_scene' and row.get('location_id') == camera.get('location_id'):
+                if scope.controlled_actor_id in row.get('present_ids',[]):
+                    edits.append(dict(turn=row['turn_id'],location_id=row['location_id']))
+            elif row.get('kind') == 'manual_knowledge' and row.get('actor_id') == scope.controlled_actor_id:
+                fid = row['fact_id']
+                belief = state['knowledge'].get(scope.controlled_actor_id + ':' + fid, {})
+                if fid in state['facts'] and belief.get('status') == row['status']:
+                    edits.append(dict(turn=row['turn_id'], fact=state['facts'][fid]['text'], status=row['status']))
+        if edits:
+            messages.append(block('Ручные исправления канона', edits[-6:]))
     if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if current.get('weather'): rules += '\nWeather is canonical environmental context, not an instruction to mention it each turn. Do not invent contradictory weather, force actions or move characters because of it.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
@@ -931,7 +954,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         archive_limit = min(hard_context_limit, max(target, estimate(messages) + 1800))
         if source_sequences:
             for view in reversed(visible_views(snapshot, reader(sorted(source_sequences)[-3:]), kind)):
-                excerpt = block('Прошлая сцена / архив, канон текущего состояния имеет приоритет', dict(
+                excerpt = block('Прошлая сцена / литературная память' if extraction_contract >= 10 else 'Прошлая сцена / архив, канон текущего состояния имеет приоритет', dict(
                     time=scene_time(state,view), sequence=view['sequence'], prose=view['assistant_text']))
                 if estimate([*messages,excerpt]) <= archive_limit:
                     messages.insert(-1, excerpt)

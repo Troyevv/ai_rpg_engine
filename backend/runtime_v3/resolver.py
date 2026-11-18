@@ -253,23 +253,26 @@ class StateResolver:
             from backend.runtime_v3.raw import compile_semantic
             raw = compile_semantic(raw, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
             from backend.runtime_v3.continuity import validate_chronology
-            validate_chronology(self, raw)
+            if self.scene_version < 10:
+                validate_chronology(self, raw)
         elif raw.records['information_events'] or raw.records['chronology_claims']:
             fatal('Семантический срез недоступен в записанной версии запроса.', 'contract_version_mismatch', repairable=True)
         self.source_raw = raw
         self.warnings.extend(raw.warnings)
         from backend.runtime_v3.continuity import validate_due_birth_assessments
-        validate_due_birth_assessments(self, raw)
+        if self.scene_version < 10:
+            validate_due_birth_assessments(self, raw)
         from backend.runtime_v3.player_actions import review
         preflight_errors = []
         for row in raw.preflight_errors:
             path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
             preflight_errors.append(StructuralDeltaError(row['repair_reason'], row['code'], **path))
         self.preflight_errors = preflight_errors
-        player_actions = review(self, raw, errors=preflight_errors if self.scene_sequence else None)
+        player_actions = {} if self.scene_version >= 10 else review(self, raw, errors=preflight_errors if self.scene_sequence else None)
         s = self.state
         from backend.runtime_v3.pacing import validate_risk
-        validate_risk(self, raw)
+        if self.scene_version < 10:
+            validate_risk(self, raw)
         from backend.runtime_v3.residence import apply_locations
         apply_locations(self, raw)
         for i, item in self.records(raw,'promotions'):
@@ -347,7 +350,8 @@ class StateResolver:
             self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
             elapsed = 0
         from backend.runtime_v3.continuity import validate_compression, validate_temporal_boundaries
-        validate_compression(self, scene, elapsed)
+        if self.scene_version < 10:
+            validate_compression(self, scene, elapsed)
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
@@ -580,9 +584,11 @@ class StateResolver:
                               'event_author_invalid')
                     self.warnings[-1]['path'] = f'events[{i}].author_id'
             from backend.runtime_v3.player_actions import event_provenance, movement_component
-            item = movement_component(self, raw, item, player_actions, i)
+            if self.scene_version < 10:
+                item = movement_component(self, raw, item, player_actions, i)
             try:
-                event_provenance(self, item, event, i, player_actions)
+                if self.scene_version < 10:
+                    event_provenance(self, item, event, i, player_actions)
                 if self.semantic_slice and item.get('actor_id') is not None and not event.get('player_action'):
                     actor, targets = item['actor_id'], item.get('target_ids', [])
                     if (not isinstance(actor, str) or actor not in event['participants'] or
@@ -609,7 +615,8 @@ class StateResolver:
         from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
         from backend.runtime_v3.event_presence import validate_movement_sources
         try:
-            validate_movement_sources(self, raw, events, rejected_events, invalid_moves)
+            if self.scene_version < 10:
+                validate_movement_sources(self, raw, events, rejected_events, invalid_moves)
         except StructuralDeltaError as exc:
             event_errors.append(exc)
         situation_actors = {}
@@ -619,7 +626,7 @@ class StateResolver:
                 del events[eid]
                 continue  # Provenance was checked; presence depends on the rejected route.
             try:
-                situation_actors[eid] = validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+                situation_actors[eid] = set(event['participants'] + event['witnesses']) if self.scene_version >= 10 else validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
             except StructuralDeltaError as exc:
                 event_errors.append(exc)
                 rejected_events.add(eid)
@@ -638,7 +645,8 @@ class StateResolver:
             # action. Coverage is inconclusive until that source is repaired.
             rejected_actions.update(player_actions)
         try:
-            validate_completions(self, player_actions,
+            if self.scene_version < 10:
+                validate_completions(self, player_actions,
                                  {eid: event for eid, event in events.items()
                                   if event.get('player_action', {}).get('id') not in rejected_actions},
                                  event_indices, written_sources, rejected_actions=rejected_actions)
@@ -650,7 +658,7 @@ class StateResolver:
                 continue
             initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
                                  and self.before['characters'][self.protected_actor_id]['location_id'] is None)
-            if not initial_placement and not self.movement_authorized(item, events, player_actions):
+            if self.scene_version < 10 and not initial_placement and not self.movement_authorized(item, events, player_actions):
                 event_errors.append(StructuralDeltaError(
                     'Перемещение требует explicit_choice с цитатой ввода, involuntary с принятым источником '
                     'или проверенного player_action_id (напрямую либо через принятый source_event_id). '
@@ -732,7 +740,7 @@ class StateResolver:
                 if key == 'situation' and self.mode == 'background' and cid == self.protected_actor_id and value != actor[key]:
                     fatal('Фон меняет ситуацию управляемого персонажа.', 'background_agency_invalid', repairable=True,
                           section='character_changes', index=i, field=key, entity=cid)
-                if key == 'situation' and not situation_supported(self, item, situation_actors):
+                if key == 'situation' and self.scene_version < 10 and not situation_supported(self, item, situation_actors):
                     self.warn('character_changes', i, 'Ситуация не подтверждена сценой, перемещением или принятым Event.',
                               key, cid, 'situation_source_unconfirmed')
                     continue
@@ -807,8 +815,10 @@ class StateResolver:
         from backend.runtime_v3.protagonist import reconcile
         reconcile(s)
         from backend.runtime_v3.pacing import validate_developments, validate_threads, validate_resolved_consequences
-        validate_resolved_consequences(self, raw)
-        validate_threads(self, raw)
+        if self.scene_version < 10:
+            validate_resolved_consequences(self, raw)
+        if self.scene_version < 10:
+            validate_threads(self, raw)
         accepted = validate_developments(self, raw)
         if accepted:
             s['meta']['pacing_recent'] = (s['meta']['pacing_recent'] + accepted)[-12:]
@@ -827,7 +837,8 @@ class StateResolver:
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
         from backend.runtime_v3.player_actions import validate_targets
-        validate_targets(self, player_actions)
+        if self.scene_version < 10:
+            validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

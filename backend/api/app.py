@@ -38,8 +38,11 @@ def create_app(db_path=None, recover=True):
         if recover:
             with repo.connect() as db:
                 stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
-                db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE status IN ('generating','extracting','validating')")
+                interrupted = [r[0] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
+                db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE json_extract(config_json,'$._published_scene') IS NULL AND status IN ('generating','extracting','validating')")
                 db.execute("UPDATE llm_requests SET status='interrupted' WHERE status='running'")
+            for jid in interrupted:
+                repo.finish_interpretation(jid, 'interpretation_interrupted')
             for jid in stale:
                 preparation.stop(jid)
         yield
@@ -273,6 +276,11 @@ def create_app(db_path=None, recover=True):
         if engine.live(jid):
             raise ValueError('Дождись завершения обработки хода.')
         repo.abandon_job(sid, jid, body.revision, body.attempt_epoch)
+        return job(jid)
+
+    @app.post('/api/jobs/{jid}/save-scene')
+    def save_completed_scene(jid: str, body: AbandonJob):
+        repo.save_completed_scene(jid,body.revision,body.attempt_epoch)
         return job(jid)
 
     @app.post('/api/jobs/{jid}/retry')

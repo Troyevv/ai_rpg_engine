@@ -171,7 +171,7 @@ def apply_possessions(r, raw, events):
                 required.add(decision)
                 if r.protected_actor_id in required:
                     quote = normalized(c['player_evidence'])
-                    if r.mode == 'background' or c['player_assertion'] != 'explicit_choice' or not quote or quote not in normalized(r.player_input):
+                    if r.mode == 'background' or r.scene_version < 10 and (c['player_assertion'] != 'explicit_choice' or not quote or quote not in normalized(r.player_input)):
                         raise ValueError('Добровольное распоряжение EXTERNAL требует явного действия пользователя.')
             elif c['transition'] == 'involuntary' and event['medium'] not in ('action', 'observation', 'discovery'):
                 raise ValueError('Недобровольное изменение требует принятого последствия, не слуха/плана.')

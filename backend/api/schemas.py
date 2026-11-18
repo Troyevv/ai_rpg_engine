@@ -62,7 +62,14 @@ class Revision(DTO):
 class AbandonJob(Revision):
     attempt_epoch: int = Field(ge=0)
 
+class CanonKnowledge(DTO):
+    text: str = Field(min_length=1, max_length=2000)
+    actor_ids: list[str] = Field(min_length=1, max_length=100)
+    status: Literal['known','suspected','refuted'] = 'known'
+
+
 class Scene(DTO):
+    knowledge: CanonKnowledge | None = None
     time: str = Field(max_length=120)
     location: str = Field(max_length=200)
     present_ids: list[str] = Field(max_length=100)

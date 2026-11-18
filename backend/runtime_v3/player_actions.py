@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 9
+EXTRACTION_VERSION = 10
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -124,7 +124,7 @@ def resolver_options(state, player_input, kind='turn', contract_version=1, *, ti
     needed = required(state, player_input, kind)
     return dict(require_player_agency=needed, agency_audit_required=needed and contract_version >= 2,
                 **contract_options(contract_version),
-                require_elapsed=kind == 'turn' and not time_skip)
+                require_elapsed=kind == 'turn' and not time_skip and contract_version < 10)
 
 
 def contract_options(version):

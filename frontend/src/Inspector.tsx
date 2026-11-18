@@ -648,6 +648,9 @@ function SceneEditor({
   const [scene, setScene] = useState<Scene>(
     meta ?? { time: "", location: "", present_ids: [] },
   );
+  const [fact, setFact] = useState("");
+  const [holders, setHolders] = useState<string[]>([]);
+  const [status, setStatus] = useState("known");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -672,11 +675,14 @@ function SceneEditor({
                 time: scene.time === meta?.time ? "" : scene.time,
                 location: scene.location,
                 present_ids: scene.present_ids,
+                knowledge: fact.trim() ? {text:fact.trim(), actor_ids:holders, status} : undefined,
                 revision: save.revision,
               },
               "PATCH",
             );
             refresh();
+            setFact("");
+            setHolders([]);
             setEdit(false);
             toast.success(it("sceneSaved"));
           } catch (e) {
@@ -723,6 +729,18 @@ function SceneEditor({
               {c.name}
             </label>
           ))}
+          <label>Сведение персонажа
+            <Input value={fact} maxLength={2000} placeholder="Что именно известно?" onChange={e=>setFact(e.target.value)}/>
+          </label>
+          {fact.trim() && <fieldset>
+            <legend>Кому известно это сведение?</legend>
+            {save.state.characters.map(c=><label className="check" key={c.id}>
+              <input type="checkbox" checked={holders.includes(c.id)} onChange={e=>setHolders(e.target.checked?[...holders,c.id]:holders.filter(id=>id!==c.id))}/>{c.name}
+            </label>)}
+            <label>Статус знания <select value={status} onChange={e=>setStatus(e.target.value)}>
+              <option value="known">Знает</option><option value="suspected">Предполагает</option><option value="refuted">Опровергнуто</option>
+            </select></label>
+          </fieldset>}
           {error && <p role="alert">{error}</p>}
           <div className="actions">
             <Button
@@ -732,7 +750,7 @@ function SceneEditor({
             >
               {it("cancel")}
             </Button>
-            <Button type="submit">{it("saveScene")}</Button>
+            <Button type="submit" disabled={!!fact.trim() && !holders.length}>{it("saveScene")}</Button>
           </div>
         </fieldset>
       </form>

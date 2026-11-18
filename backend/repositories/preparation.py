@@ -77,6 +77,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         job = dict(job, presentation=job_route(job), retry_allowed=not reauthor,
                    narrative_reauthor_required=reauthor, prose_correction_available=editable,
                    chronology_correction_available=editable and bool(chronology_correction(diagnostics)))
+        publication = json.loads(job.get('config_json') or '{}').get('_published_scene')
+        if publication:
+            job['published_revision'] = publication['revision']
         journal = json.loads(job.get('response_journal') or '{}')
         world=journal.get('responses',{}).get('world',{})
         assembly_error=world.get('assembly_error','')

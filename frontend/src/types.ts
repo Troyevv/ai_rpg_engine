@@ -143,7 +143,7 @@ export interface PresentationRoute {physical_reconciliation?:boolean;surface:"ph
 export interface Turn {
   read_only_projection?: boolean;
   presentation?: PresentationRoute;
-  changes?: {communication?: {rejected?: string[]}};
+  changes?: {interpretation?:'pending'|'partial'|'deferred'|'applied';communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
   node_id: string;
@@ -182,6 +182,7 @@ export interface Job {
   revision: number;
   live?: boolean;
   user_text?: string;
+  published_revision?: number;
   warnings?: {section: string; reason: string; rejected: unknown}[];
 }
 export interface Save extends SaveItem {

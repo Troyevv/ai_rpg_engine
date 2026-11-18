@@ -102,6 +102,9 @@ def project_card(card, actor, *, state=None, observer=None):
 
 def _player_owned(resolver, claim, event):
     from backend.runtime_v3.resolver import normalized
+    if resolver.scene_version >= 10:
+        return (resolver.mode != 'background' and claim['actor_id'] == resolver.protected_actor_id
+                and claim['kind'] in ('behavior','turning_point') and claim['actor_id'] in event['participants'])
     quote = normalized(claim.get('player_evidence', ''))
     return (resolver.mode != 'background' and claim['actor_id'] == resolver.protected_actor_id
             and claim.get('player_assertion') == 'completed_voluntary_behavior'

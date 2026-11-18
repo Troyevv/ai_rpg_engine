@@ -237,15 +237,55 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.services.timeline import parse_time
             from backend.repositories.living_world import project
             world=state['world_state'];before=json.loads(row['state_json'])['world_state']
-            lid=identity('location',metadata['location'].strip().casefold())
-            world['locations'].setdefault(lid,Location(id=lid,name=metadata['location']).model_dump())
-            present=metadata['present_ids']
-            if any(cid not in world['characters'] for cid in present):raise ValueError('Неизвестный персонаж.')
+            name = metadata['location'].strip()
+            current_id = world['camera']['location_id']
+            matches = [lid for lid, loc in world['locations'].items() if loc['name'].casefold() == name.casefold()]
+            if not name:
+                lid = current_id
+            elif current_id in matches:
+                lid = current_id
+            elif len(matches) <= 1:
+                lid = matches[0] if matches else identity('location',name.casefold())
+                world['locations'].setdefault(lid, Location(id=lid,name=name).model_dump())
+            else:
+                raise ValueError('Имя места неоднозначно. Уточни название.')
+            present = metadata['present_ids']
+            if len(set(present)) != len(present) or any(cid not in world['characters'] for cid in present):
+                raise ValueError('Проверь список участников сцены.')
             world['camera'].update(location_id=lid,present_character_ids=present)
-            for cid in present:world['characters'][cid]['location_id']=lid
+            for cid in present:
+                world['characters'][cid]['location_id']=lid
             minute=parse_time(metadata['time'],world['meta']['world_time'])
             if minute is not None:world['meta']['world_time']=minute
+            from backend.runtime_v3.models import Fact, Knowledge, WorldHistoryV3
+            from backend.runtime_v3.repository import append_history
+            batch = WorldHistoryV3()
+            if before['camera'] != world['camera']:
+                batch.state_changes.append(dict(kind='manual_scene',source='player_edit',
+                    turn_id=world['meta']['turn_id'], location_id=lid, present_ids=present))
+            knowledge = metadata.get('knowledge')
+            if knowledge:
+                text = knowledge['text'].strip()
+                actors = knowledge['actor_ids']
+                if not text or len(set(actors)) != len(actors) or any(cid not in world['characters'] for cid in actors):
+                    raise ValueError('Укажи точное сведение и его получателей.')
+                # An author's own proposition has stable identity, independent
+                # of other assertions with the same words from different sources.
+                fid = identity('manual-fact', text)
+                world['facts'].setdefault(fid, Fact(id=fid,text=text,visibility='secret').model_dump())
+                for actor in actors:
+                    key = actor + ':' + fid
+                    prior = world['knowledge'].get(key, {})
+                    if prior.get('status') == knowledge['status']:
+                        continue
+                    updated = Knowledge(actor_id=actor, fact_id=fid, status=knowledge['status'],
+                        revision=prior.get('revision',0)+1,source_turn=world['meta']['turn_id'],
+                        confirmed_once=prior.get('confirmed_once',False) or knowledge['status']=='known')
+                    world['knowledge'][key] = updated.model_dump()
+                    batch.state_changes.append(dict(kind='manual_knowledge',source='player_edit',
+                        turn_id=world['meta']['turn_id'], actor_id=actor, fact_id=fid, status=updated.status))
             assert_world_state_v3_invariants(world,before)
+            state['history_head'] = append_history(db,state.get('history_head'),batch.to_dict(),before=before,after=world)
             project(db,save_id,state)
             db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))

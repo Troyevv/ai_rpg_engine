@@ -121,8 +121,8 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
     hidden = 'Спросить о чужом секрете.'
     payload = dict(scene=dict(elapsed_minutes=3),scene_steps=[
         dict(kind='movement',id='route',actor_ids=[a,b],assertion='completed_arrival',
-             endpoint='loc_cafe',text='Они дошли до кафе.',input_source=dict(quote='Направляюсь от берега к «Берёзке»',meaning='preserved')),
-        dict(kind='information',during_step_id='route',source_actor_id=b,target_ids=[a],medium='conversation',
+             endpoint='loc_cafe'),
+        dict(kind='information',source_actor_id=b,target_ids=[a],medium='conversation',
              claims=[dict(fact=dict(id='tamara-work',text=statement,visibility='public'),assertion='testimony',status='known',perceived_by=[a])])],
         choices=[dict(index=i,grounding=dict(fact_ids=[fid],from_scene=False)) for i,fid in enumerate(('tamara-work','secret-unknown'))])
     class Stream(list):
@@ -131,7 +131,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         return Stream([SimpleNamespace(usage=None,choices=[SimpleNamespace(finish_reason='stop',delta=SimpleNamespace(content=text))])])
     cfg = dict(provider='deepseek',model='deepseek-flash',context_length=131072,max_tokens=2400,update_tokens=8192)
     jid = repo.begin_job(sid,player,'turn',cfg)
-    assert json.loads(repo.get_job(jid)['config_json'])['_extraction_contract']==9
+    assert json.loads(repo.get_job(jid)['config_json'])['_extraction_contract']==10
     with patch('llm.OpenAI') as sdk:
         def chat(**kwargs):
             if kwargs.get('response_format'):
@@ -145,7 +145,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         requests=sdk.return_value.responses.create.call_args_list
         assert len(requests)==1
         wire=requests[0].kwargs
-        assert wire['text']['format']['name'] == 'extraction_v9'
+        assert wire['text']['format']['name'] == 'extraction_v10'
         Draft202012Validator(wire['text']['format']['schema']).validate(payload)
         assert MARKER not in job['narrative'] and job['narrative']==recorded['narrative']
         assert not any(m['content'].startswith('JSON Schema\n') for m in wire['input'])

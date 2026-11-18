@@ -174,6 +174,25 @@ def project_schema(schema, *, version=6, camera_mode=None):
     schema['required'] = ['scene', 'scene_steps']
     from backend.runtime_v3.scene_schema import project_structure
     project_structure(schema, movement_type='MovementV8' if version >= 8 else 'GroupMovementStep' if version >= 7 else 'MovementStep', interaction_type='TravellingInteraction' if version >= 7 else 'InteractionStep')
+    if version >= 10:
+        # The same compiler owns Events and Knowledge. The wire asks only for
+        # the actual new positions, propositions and their recipients.
+        schema['required'] = []
+        scene['required'] = []
+        props.pop('agency_findings', None)
+        props.pop('chronology_claims', None)
+        for step in schema['$defs'].values():
+            fields = step.get('properties', {})
+            if 'timing' in fields:
+                for key in ('during_step_id','input_source','involuntary_source_id'):
+                    fields.pop(key,None)
+                if fields.get('kind',{}).get('const') in ('movement','information'):
+                    step['required'] = [k for k in step['required'] if k not in ('text','assertion','source_actor_id','medium')]
+                    step.pop('anyOf',None)
+        for condition in schema['$defs']['MovementV8']['allOf']:
+            condition['if']['required'] = ['assertion']
+        claim = schema['$defs']['PerceivedClaim']
+        claim['required'] = [k for k in claim['required'] if k not in ('assertion','status')]
     return schema
 
 
@@ -191,12 +210,33 @@ def decode(payload, *, version=6):
             payload, _ = object_payload(payload)
         except (ValueError, TypeError):
             fatal('Некорректный JSON Extraction/6.', 'raw_root_invalid', repairable=True)
+    if version >= 10 and isinstance(payload, dict):
+        payload = {'scene': {}, 'scene_steps': [], **payload}
+        for field in ('agency_findings','chronology_claims'):
+            payload.pop(field, None)
     if not isinstance(payload, dict) or not isinstance(payload.get('scene_steps'), list) or not isinstance(payload.get('scene'), dict):
         fatal('Ожидается Extraction/6: scene_steps и scene.', 'raw_root_invalid', repairable=True)
     result = deepcopy(payload)
     if version >= 9:
         ids = {s['id'] for s in result['scene_steps'] if isinstance(s, dict) and isinstance(s.get('id'), str)}
         for index, step in enumerate(result['scene_steps']):
+            if version >= 10 and isinstance(step,dict):
+                # Accept prior annotations on reprocessing; they grant no
+                # authority over the published prose or over another actor.
+                for field in ('input_source','during_step_id','involuntary_source_id'):
+                    step.pop(field,None)
+                if step.get('kind')=='movement':
+                    step.setdefault('assertion','completed_arrival')
+                    step.setdefault('text','Изменение местоположения')
+                if step.get('kind')=='information':
+                    step.setdefault('source_actor_id',None)
+                    step.setdefault('medium','discovery')
+                    step.setdefault('text','Полученные сведения')
+                    for claim in step['claims'] if isinstance(step.get('claims'),list) else []:
+                        if isinstance(claim,dict):
+                            claim.setdefault('assertion','testimony')
+                            claim.setdefault('status','suspected' if claim['assertion']=='rumor' else 'known')
+
             if isinstance(step, dict) and 'id' not in step:
                 label = f'step-{index+1}'
                 while label in ids:
@@ -234,7 +274,7 @@ def validate(payload, state=None, *, version=6, collect=False, warnings=None):
     errors = []
     for error in Draft202012Validator(input_schema(version, state['camera']['mode'] if state else None)).iter_errors(p):
         path = list(error.absolute_path)
-        if path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
+        if version < 10 and path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
             continue  # Existing optional-domain owners still isolate annotation errors.
         errors.extend(schema_diagnostics(error, p))
     ids = [s['id'] for s in p['scene_steps']
@@ -358,12 +398,12 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
                     continue
                 field = ''.join(f'[{v}]' if isinstance(v, int) else ('.' if n else '') + v
                                 for n, v in enumerate(loc))
-                detail = dict(path, field=field, step_id=value.get('id'),
-                              source_ids=[value['id']] if value.get('id') else [])
+                detail = dict(path, field=field, step_id=value.get('id') if isinstance(value,dict) else None,
+                              source_ids=[value['id']] if isinstance(value,dict) and value.get('id') else [])
                 if claim_index is not None: detail['claim_index'] = claim_index
                 reject(error['msg'], 'scene_step_invalid', **detail)
             continue
-        if step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous':
+        if version < 10 and (step.timing == 'uncertain' or index == 0 and step.timing == 'simultaneous'):
             reject('Не установлен относительный порядок значимых шагов.',
                    'scene_order_ambiguous', **path)
         during = getattr(step, 'during_step_id', None)
@@ -407,7 +447,7 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
             if step.input_source and (actor is None or actor != camera['controlled_actor_id']):
                 reject('Источник ввода принадлежит только управляемому автору.',
                        'player_action_source_invalid', **path)
-        if (camera is not None and isinstance(step, MovementFields)
+        if (version < 10 and camera is not None and isinstance(step, MovementFields)
                 and actor is not None and actor == camera['controlled_actor_id']
                 and step.assertion in ('departure', 'completed_arrival', 'local_exit')
                 and step.input_source is None and step.involuntary_source_id is None):

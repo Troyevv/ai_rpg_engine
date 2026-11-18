@@ -60,7 +60,7 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
             effective.update(extraction_contract=config['_extraction_contract'], extraction_transport=selected, extraction_schema=schema)
             if selected=='responses_json_schema':
                 effective.pop('response_format',None)
-                name = 'extraction_v9' if config['_extraction_contract'] >= 9 else 'extraction_v6'
+                name = f"extraction_v{config['_extraction_contract']}" if config['_extraction_contract'] >= 9 else 'extraction_v6'
                 effective['text_format']={'type':'json_schema','name':name}
                 if config['_extraction_contract'] >= 9:
                     kwargs['structured_name'] = name
