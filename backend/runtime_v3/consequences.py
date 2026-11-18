@@ -19,7 +19,7 @@ def identifiers(value, key=''):
         yield key, value
 
 
-def components(proposal):
+def components(proposal, before):
     """Union declarations with their local consumers, regardless of submission order."""
     units = []
     for section, value in proposal.items():
@@ -29,6 +29,10 @@ def components(proposal):
             units.extend((section, i, item) for i, item in enumerate(value))
         else:
             units.append((section, None, value))
+    # Menu annotations consume committed facts. A bad annotation cannot
+    # invalidate its source. Evaluate them after all world changes.
+    choices = [unit for unit in units if unit[0] == 'choices']
+    units = [unit for unit in units if unit[0] != 'choices']
     parents = list(range(len(units)))
 
     def root(i):
@@ -37,10 +41,14 @@ def components(proposal):
             i = parents[i]
         return i
 
+    # Updating an existing actor/fact does not redeclare its identity. Other
+    # records can already refer to it even if the proposed update is invalid.
+    existing_ids = {identifier for section in before.values() if isinstance(section, dict)
+                    for identifier, entry in section.items() if isinstance(entry, dict)}
     declarations = defaultdict(list)
     for i, (_, _, item) in enumerate(units):
         for key, value in identifiers(item):
-            if key == 'id':
+            if key == 'id' and value not in existing_ids:
                 declarations[value].append(i)
     for i, (_, _, item) in enumerate(units):
         for _, value in identifiers(item):
@@ -49,7 +57,9 @@ def components(proposal):
     groups = defaultdict(list)
     for i, unit in enumerate(units):
         groups[root(i)].append(unit)
-    return groups.values()
+    yield from groups.values()
+    for choice in choices:
+        yield [choice]
 
 
 def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None):
@@ -63,6 +73,10 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         raw, result = evaluate({})
         result.warnings.append(dict(section='extraction', code='raw_root_invalid', action='preserve_scene'))
         return raw, result
+    if not suggestions and 'choices' in proposal:
+        # No author-provided menu exists to annotate. Ignore unsolicited
+        # indexes, including malformed ones, before grouping consequences.
+        proposal = {k:v for k,v in proposal.items() if k != 'choices'}
     # Stabilize server-owned step IDs before isolating any rejected records.
     valid_shape = isinstance(proposal.get('scene_steps', []), list) and isinstance(proposal.get('scene', {}), dict)
     if valid_shape:
@@ -94,7 +108,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
                        if isinstance(proposal[section], list) else rows for section, rows in candidate.items()}
             return candidate, *evaluate(ordered)
 
-        for group in components(bounded):
+        for group in components(bounded, before):
             try:
                 accepted, raw, result = include(group)
             except StructuralDeltaError as exc:

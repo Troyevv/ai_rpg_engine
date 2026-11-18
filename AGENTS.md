@@ -83,4 +83,5 @@
 ## Extraction/10 policy for #263
 - For new Narrative turns, #263 Extraction/10 publishes the author's original prose as a playable variant before optional interpretation. Literary history records events. Structured canon supplies mechanics, with explicit player edits and individual knowledge respected on the selected branch.
 - Extraction/10 applies independent valid changes. Diagnose rejected records without forcing an Extraction repair or a new Narrative. Ordinary movement and perceptions need actor, destination or proposition and recipient IDs. The older semantic rejection, proof and repair requirements below describe recorded contracts through Extraction/9.
+- On Extraction/10, physical scene membership records a position. Bounded NPC relationship changes can refer to the published turn. Explicit event references must resolve, and controlled-actor protections continue to apply. Narrative authors optional actions after the prose. Extraction only binds suggestions actually received.
 - A SQLite failure or stale revision must remain visible. Recover completed text through the same job/variant lineage and fence every canonical write.

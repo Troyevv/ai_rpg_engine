@@ -271,7 +271,6 @@ def test_first_remote_provider_failure_commits_only_foreground(tmp_path):
 def test_current_menu_owner_and_actor_availability(mode):
     from test_narrative_choices import initial, CHOICE_EXAMPLES
     from backend.runtime_v3.camera import observe
-    from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
     from backend.runtime_v3.player_actions import resolver_options
     from backend.runtime_v3.resolver import StateResolver
     snapshot = initial()
@@ -282,7 +281,15 @@ def test_current_menu_owner_and_actor_availability(mode):
         state['characters']['a']['capabilities']['can_act'] = False
     kind = 'background' if mode == 'background' else 'turn'
     messages = build_context(snapshot,[],'Осматриваюсь.',kind,65536,4096)
-    assert (NARRATIVE_INSTRUCTION in messages[0]['content']) == (mode=='ordinary')
+    last_input = json.loads(messages[-1]['content'].split('\n', 1)[1])
+    assert ('<action_suggestions>' in last_input.get('response_format', '')) == (mode=='ordinary')
+    if mode == 'ordinary':
+        assert 'output only literary prose' not in messages[0]['content']
+        from backend.services.structured_extraction import request_schema
+        def schema(proposals):
+            msgs = build_context(snapshot, [], '', 'turn', 65536, 4096, extraction_text='Светало.', suggestions=proposals)
+            return request_schema(msgs)['properties']
+        assert 'choices' not in schema([]) and 'choices' in schema(['Открыть окно'])
     choices = [c['action'] for c in CHOICE_EXAMPLES]
     raw = compile_scene(dict(scene=dict(elapsed_minutes=1),scene_steps=[],
         choices=[dict(index=0,grounding=dict(fact_ids=[],from_scene=True))]),

@@ -463,7 +463,8 @@ class StateResolver:
             initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
                                  and self.before['characters'].get(cid, {}).get('location_id') is None)
             if origin != lid:
-                if not initial_placement and cid in self.before['characters']:
+                if (not initial_placement and cid in self.before['characters'] and
+                        (self.scene_version < 10 or self.mode == 'background' and cid in self.protected_knowledge_actor_ids)):
                     scene_errors.append(StructuralDeltaError(
                         f'final_scene не подтверждает прибытие {cid} из {origin} в {lid}. '
                         'Если неизменный Narrative действительно описывает приход, добавьте Movement '

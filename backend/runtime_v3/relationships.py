@@ -72,9 +72,11 @@ def apply_relationships(resolver, raw, current_events=None):
         owned = player_owned(item)
         ids = item.get('source_event_ids', [])
         events = []
+        narrative_npc = resolver.scene_version >= 10 and source != resolver.protected_actor_id
         if not owned:
-            if (not isinstance(ids, list) or not 1 <= len(ids) <= 8 or
-                    any(not isinstance(e, str) or not e for e in ids) or len(set(ids)) != len(ids) or
+            if not isinstance(ids, list) or len(ids) > 8 or any(not isinstance(e, str) or not e for e in ids) or len(set(ids)) != len(ids):
+                reject('relationship_source_invalid', 'Некорректные идентификаторы событий.'); continue
+            if not narrative_npc and (not ids or
                     item.get('assertion') != 'grounded_feelings' or
                     not isinstance(item.get('rationale'), str) or not item['rationale'].strip() or
                     not (resolver.relationship_query or resolver.semantic_slice)):
@@ -87,7 +89,7 @@ def apply_relationships(resolver, raw, current_events=None):
             # Receipts always store canonical IDs, never transient response aliases.
             ids = [current[eid]['id'] if eid in current else eid for eid in ids]
             receipts = resolver.relationship_receipts + resolver.history.relationship_changes
-            if (len(events) != len(ids) or {e.get('id') for e in events} != set(ids) or any(not interaction_event(e, source, target) or
+            if (len(events) != len(ids) or {e.get('id') for e in events} != set(ids) or any((not narrative_npc and not interaction_event(e, source, target)) or
                     blocked(e, key, receipts) for e in events)):
                 reject('relationship_source_invalid', 'Основание отсутствует, уже использовано, предшествует правке или не является взаимодействием.'); continue
         prior = resolver.state['relationships'].get(key)
@@ -121,6 +123,6 @@ def apply_relationships(resolver, raw, current_events=None):
         resolver.state['relationships'][key] = entry
         resolver.history.relationship_changes.append(dict(entity=key, before=deepcopy(prior), after=deepcopy(entry),
             turn_id=resolver.turn_id, player_observed=resolver.observed,
-            source='player_input' if owned else 'canonical_interaction',
+            source='player_input' if owned else 'canonical_interaction' if ids else 'narrative',
             source_event_ids=[] if owned else list(ids), evidence=quote if owned else item.get('evidence', ''),
-            rationale='' if owned else item['rationale']))
+            rationale='' if owned else item.get('rationale', '')))

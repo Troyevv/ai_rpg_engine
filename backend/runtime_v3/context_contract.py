@@ -619,10 +619,11 @@ stock metaphors or metaphor on every line. Quiet scenes may breathe; urgent acti
 be concise. No mandatory detail/dialogue quotas, purple prose or manufactured conflict.
 Style never supplies EXTERNAL actions, speech, thoughts, feelings, consent or sensory
 experiences absent player input; involuntary consequences remain under CONTROL_CONTRACT.
-DeepSeek authors the scene within supplied constraints; output only literary prose,
+"""
+PROSE_ONLY_OUTPUT = """DeepSeek authors the scene within supplied constraints; output only literary prose,
 without runtime labels, status reports, JSON or choice lists.
 """
-NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT
+NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT + PROSE_ONLY_OUTPUT
 
 
 SEMANTIC_SLICE_CONTRACT = """

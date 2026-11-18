@@ -462,7 +462,7 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
                    'в адресном repair; положение героя определяется маршрутом.',
                    'camera_invalid', section='scene', field='observer_location_id')
         visible = scene.get('visible_character_ids')
-        if camera['mode'] == 'actor' and isinstance(visible, list) and all(isinstance(cid, str) for cid in visible) and camera['controlled_actor_id'] not in visible:
+        if version < 10 and camera['mode'] == 'actor' and isinstance(visible, list) and all(isinstance(cid, str) for cid in visible) and camera['controlled_actor_id'] not in visible:
             reject('Явная композиция исключает управляемого персонажа.',
                    'camera_actor_missing', section='scene', field='visible_character_ids')
     return errors
@@ -624,6 +624,13 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
                    [cid for cid in camera['present_character_ids'] if positions.get(cid)==location and cid not in local_exits])
         if subject in positions and subject not in visible:
             visible.append(subject)
+    if version >= 10:
+        if camera['mode'] == 'actor' and subject in positions and subject not in visible:
+            visible = [subject, *visible]
+        if 'observed_character_ids' in scene:
+            # Physical presence already includes observation. Keep the camera
+            # collections disjoint without dropping a valid participant.
+            scene['observed_character_ids'] = [cid for cid in scene['observed_character_ids'] if cid not in visible]
     scene.update(location_id=location,present_character_ids=visible)
     scene.setdefault('observed_character_ids', [])
     # Exact local references only, including unchanged domain consumers.

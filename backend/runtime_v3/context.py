@@ -835,13 +835,32 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     del actor[key]
     builder = ExtractionContextBuilder(extraction_contract) if extraction_text is not None else NarrativeContextBuilder(extraction_contract)
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
+    reply_format = None
     if (extraction_contract >= 9 and not builder.extraction and kind != 'background'
             and camera['mode'] == 'actor' and scope.controlled_actor_id):
         from backend.runtime_v3.life import capabilities
         from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
         if capabilities(state, scope.controlled_actor_id)['can_act']:
-            rules += NARRATIVE_INSTRUCTION
+            if extraction_contract >= 10:
+                from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
+                rules = rules.replace(PROSE_ONLY_OUTPUT, '')
+                reply_format = ('После сцены добавь отдельной строкой <action_suggestions>, '
+                                'затем JSON-массив из 4–6 коротких действий от лица героя. '
+                                'Используй только известное ему.')
+            else:
+                rules += NARRATIVE_INSTRUCTION
+    if builder.extraction and extraction_contract >= 10 and not suggestions:
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                schema['properties'].pop('choices', None)
+                from backend.runtime_v3.raw import prune_schema_definitions
+                prune_schema_definitions(schema)
+                message['content'] = block('JSON Schema', schema)['content']
+                break
     if builder.extraction and suggestions and extraction_contract >= 9:
+        if extraction_contract >= 10:
+            rules += '\nУкажи в choices индексы готовых предложений и доступные герою источники grounding.'
         messages.append(block('Предложения Narrative / ещё не выбраны', suggestions))
     from backend.runtime_v3.context_contract import CONTROL_CONTRACT
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
@@ -913,7 +932,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
-    messages.append(block('Текущий ввод', dict(kind=kind, player_input=user_text)))
+    current_input = dict(kind=kind, player_input=user_text)
+    if reply_format:
+        current_input['response_format'] = reply_format
+    messages.append(block('Текущий ввод', current_input))
     if extraction_text is not None: messages.append(block('completed_narrative', extraction_text))
     # Authoring support participates in the same token budget as every other
     # Narrative source. It must never be appended after context selection.

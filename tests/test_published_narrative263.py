@@ -231,3 +231,59 @@ def test_inline_marker_and_trailing_whitespace_remain_literary_text():
     assert split_suggestions(wire,complete=True,verbatim=True)==(prose,['Осмотреть листок'])
     for i in range(len(prose)+1,len(prose)+1+len(MARKER)):
         assert split_suggestions(wire[:i],verbatim=True)[0]==prose
+
+
+def test_named_participant_and_independent_records_from_live_river():
+    state, _ = fixture()
+    state['characters']['b']['location_id'] = 'park'
+    state['camera']['present_character_ids'] = ['a']
+    report = {
+        'scene': {'visible_character_ids': ['b'], 'observed_character_ids': ['b']},
+        'character_changes': [{'id': 'b', 'unknown_field': 'bad record'}],
+        'scene_steps': [{'kind': 'information', 'source_actor_id': 'b', 'claims': [
+            {'fact': {'text': 'Вода поднялась ночью.'}, 'perceived_by': ['a']}]}],
+        'choices': [{'index': 'made-up'}],
+        'relationship_changes': [{'source_id': 'b', 'target_id': 'a', 'context': 'Разговор у воды'}],
+    }
+    def apply(raw):
+        return StateResolver(state, 'Виктор уже стоял у перил.', 'Здороваюсь.', turn_id=1,
+                             **resolver_options(state, 'Здороваюсь.', 'turn', 10)).resolve(raw)
+    _, result = resolve_consequences(report, state, 'Виктор уже стоял у перил.', 1, [], apply)
+    assert result.state['camera']['present_character_ids'] == ['a', 'b']
+    assert result.state['camera']['observed_character_ids'] == []
+    assert result.state['characters']['b']['location_id'] == result.state['camera']['location_id']
+    assert result.state['relationships']['b:a']['context'] == 'Разговор у воды'
+    assert {row['actor_id'] for row in result.state['knowledge'].values()} == {'a'}
+    assert {w['section'] for w in result.warnings} == {'character_changes'}
+
+
+def test_manual_presence_moves_observed_actor_into_scene(game):
+    repo, sid = game
+    world = repo.get_snapshot(sid)['world_state']
+    present = world['camera']['present_character_ids']
+    actor = next(cid for cid in world['characters'] if cid not in present)
+    job = play(repo, sid, 'У окна виден прохожий.', json.dumps({'scene': {'observed_character_ids': [actor]}}))
+    assert job['status'] == 'saved'
+    assert actor in repo.get_snapshot(sid)['world_state']['camera']['observed_character_ids']
+    repo.update_scene_meta(sid, dict(location='Набережная', present_ids=[*present, actor], time=''),
+                           repo.get_save(sid)['revision'])
+    result = Repository(repo.path).get_snapshot(sid)['world_state']
+    assert result['characters'][actor]['location_id'] == result['camera']['location_id']
+    assert actor in result['camera']['present_character_ids'] and actor not in result['camera']['observed_character_ids']
+
+
+def test_bad_suggestion_cannot_discard_its_new_fact():
+    state, _ = fixture()
+    def apply(raw):
+        return StateResolver(state, 'Вода спала.', '', turn_id=1,
+                             **resolver_options(state, '', 'turn', 10)).resolve(raw)
+    report = {
+        'choices': [{'index': 0, 'kind': 'invalid', 'grounding': {'fact_ids': ['water'], 'from_scene': True}}],
+        'scene_steps': [{'kind': 'information', 'claims': [
+            {'fact': {'id': 'water', 'text': 'Вода спала.'}, 'perceived_by': ['a']}]}],
+    }
+    _, result = resolve_consequences(report, state, 'Вода спала.', 1, ['Осмотреть берег'], apply)
+    fact_id, = [fid for fid, fact in result.state['facts'].items() if fact['text'] == 'Вода спала.']
+    assert result.state['knowledge']['a:'+fact_id]['status'] == 'known'
+    assert not result.choices
+    assert [warning['section'] for warning in result.warnings] == ['choices']

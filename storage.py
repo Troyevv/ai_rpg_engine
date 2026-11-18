@@ -254,7 +254,10 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             present = metadata['present_ids']
             if len(set(present)) != len(present) or any(cid not in world['characters'] for cid in present):
                 raise ValueError('Проверь список участников сцены.')
-            world['camera'].update(location_id=lid,present_character_ids=present)
+            camera = world['camera']
+            camera.update(location_id=lid, present_character_ids=present,
+                          observed_character_ids=[cid for cid in camera['observed_character_ids'] if cid not in present],
+                          remote_interactions=[row for row in camera['remote_interactions'] if row['actor_id'] not in present])
             for cid in present:
                 world['characters'][cid]['location_id']=lid
             minute=parse_time(metadata['time'],world['meta']['world_time'])
