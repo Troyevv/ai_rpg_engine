@@ -22,6 +22,11 @@
 - Do not implement future modes or features unless requested by the task.
 
 ## Product philosophy: DeepSeek leads, Runtime supports
+
+- For new Narrative turns, #263 Extraction/10 publishes the author's original prose as a playable variant before optional interpretation. Literary history records events. Structured canon supplies mechanics, with explicit player edits and individual knowledge respected on the selected branch.
+- Extraction/10 applies independent valid changes. Diagnose rejected records without forcing an Extraction repair or a new Narrative. Ordinary movement and perceptions need actor, destination or proposition and recipient IDs. The older semantic rejection, proof and repair requirements below describe recorded contracts through Extraction/9.
+- A SQLite failure or stale revision must remain visible. Recover completed text through the same job/variant lineage and fence every canonical write.
+
 - The primary product goal is a compelling, coherent, uninterrupted role-playing story over many turns. Judge changes by playability and narrative continuity, not merely by the number of Runtime validations passed.
 - DeepSeek is the creative director and author: it develops plot, dialogue, NPC initiative, relationships, new characters, locations, and consequential events without requiring advance permission from Runtime for ordinary creative decisions.
 - Runtime is DeepSeek's assistant, not its gatekeeper. It provides durable world memory, relevant canonical context, deterministic simulation and calculations (calendar, chronology, ages, pregnancy stages and due dates, lifecycle progression, and other objective processes), and reliable persistence of consequences.

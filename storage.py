@@ -237,18 +237,20 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.services.timeline import parse_time
             from backend.repositories.living_world import project
             world=state['world_state'];before=json.loads(row['state_json'])['world_state']
-            name = metadata['location'].strip()
-            current_id = world['camera']['location_id']
-            matches = [lid for lid, loc in world['locations'].items() if loc['name'].casefold() == name.casefold()]
-            if not name:
-                lid = current_id
-            elif current_id in matches:
-                lid = current_id
-            elif len(matches) <= 1:
+            def location_id(name, current_id):
+                name = name.strip()
+                if not name:
+                    return current_id
+                matches = [lid for lid, loc in world['locations'].items() if loc['name'].casefold() == name.casefold()]
+                if current_id in matches:
+                    return current_id
+                if len(matches)>1:
+                    raise ValueError('Имя места неоднозначно. Уточни название.')
                 lid = matches[0] if matches else identity('location',name.casefold())
                 world['locations'].setdefault(lid, Location(id=lid,name=name).model_dump())
-            else:
-                raise ValueError('Имя места неоднозначно. Уточни название.')
+                return lid
+
+            lid = location_id(metadata['location'],world['camera']['location_id'])
             present = metadata['present_ids']
             if len(set(present)) != len(present) or any(cid not in world['characters'] for cid in present):
                 raise ValueError('Проверь список участников сцены.')
@@ -260,19 +262,41 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.runtime_v3.models import Fact, Knowledge, WorldHistoryV3
             from backend.runtime_v3.repository import append_history
             batch = WorldHistoryV3()
+            position = metadata.get('position')
+            if position:
+                actor = position['actor_id']
+                if actor not in world['characters']:
+                    raise ValueError('Неизвестный персонаж.')
+                dest = location_id(position['location'],world['characters'][actor]['location_id'])
+                world['characters'][actor]['location_id'] = dest
+                camera = world['camera']
+                if camera.get('controlled_actor_id') == actor and dest != lid:
+                    camera.update(location_id=dest,present_character_ids=[actor],observed_character_ids=[])
+                elif dest != lid:
+                    camera['present_character_ids'] = [cid for cid in present if cid != actor]
+                batch.state_changes.append(dict(kind='manual_position',source='player_edit',actor_id=actor,
+                    location_id=dest,turn_id=world['meta']['turn_id']))
             if before['camera'] != world['camera']:
                 batch.state_changes.append(dict(kind='manual_scene',source='player_edit',
-                    turn_id=world['meta']['turn_id'], location_id=lid, present_ids=present))
+                    turn_id=world['meta']['turn_id'], location_id=world['camera']['location_id'], present_ids=world['camera']['present_character_ids']))
             knowledge = metadata.get('knowledge')
             if knowledge:
                 text = knowledge['text'].strip()
                 actors = knowledge['actor_ids']
-                if not text or len(set(actors)) != len(actors) or any(cid not in world['characters'] for cid in actors):
+                if len(set(actors)) != len(actors) or any(cid not in world['characters'] for cid in actors):
                     raise ValueError('Укажи точное сведение и его получателей.')
                 # An author's own proposition has stable identity, independent
                 # of other assertions with the same words from different sources.
-                fid = identity('manual-fact', text)
-                world['facts'].setdefault(fid, Fact(id=fid,text=text,visibility='secret').model_dump())
+                fid = knowledge.get('fact_id')
+                if fid:
+                    from backend.runtime_v3.secrets import visible_fact_ids
+                    if text or fid not in visible_fact_ids(before):
+                        raise ValueError('Выбери доступное утверждение или введи новое.')
+                else:
+                    if not text:
+                        raise ValueError('Введи текст нового сведения.')
+                    fid = identity('manual-fact', text)
+                    world['facts'].setdefault(fid, Fact(id=fid,text=text,visibility='secret').model_dump())
                 for actor in actors:
                     key = actor + ':' + fid
                     prior = world['knowledge'].get(key, {})

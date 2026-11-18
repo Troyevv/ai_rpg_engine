@@ -62,13 +62,20 @@ class Revision(DTO):
 class AbandonJob(Revision):
     attempt_epoch: int = Field(ge=0)
 
+class CanonPosition(DTO):
+    actor_id: str = Field(min_length=1, max_length=200)
+    location: str = Field(min_length=1, max_length=200)
+
+
 class CanonKnowledge(DTO):
-    text: str = Field(min_length=1, max_length=2000)
+    fact_id: str | None = Field(default=None, min_length=1, max_length=200)
+    text: str = Field(default='', max_length=2000)
     actor_ids: list[str] = Field(min_length=1, max_length=100)
     status: Literal['known','suspected','refuted'] = 'known'
 
 
 class Scene(DTO):
+    position: CanonPosition | None = None
     knowledge: CanonKnowledge | None = None
     time: str = Field(max_length=120)
     location: str = Field(max_length=200)

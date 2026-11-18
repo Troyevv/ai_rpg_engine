@@ -139,8 +139,9 @@ export function Game({
   const { job: snapshot, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const rejected = !!job && ['error','stopped'].includes(job.status) && (job.published_revision ?? job.revision) === save?.revision;
-  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
+  const publishedHere = !!job?.published_revision && !!save?.turns.some(t=>t.variants?.some(v=>v.id===t.active_variant_id && v.job_id===job.id));
+  const rejected = !!job && ['error','stopped'].includes(job.status) && (publishedHere || job.revision === save?.revision);
+  const retryable = rejected && (job.published_revision ?? job.revision)===save?.revision && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const streamedJob=useRef<string|null>(null);

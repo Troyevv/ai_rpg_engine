@@ -649,6 +649,9 @@ function SceneEditor({
     meta ?? { time: "", location: "", present_ids: [] },
   );
   const [fact, setFact] = useState("");
+  const [factId, setFactId] = useState("");
+  const [movedActor, setMovedActor] = useState("");
+  const [destination, setDestination] = useState("");
   const [holders, setHolders] = useState<string[]>([]);
   const [status, setStatus] = useState("known");
   const [busy, setBusy] = useState(false);
@@ -675,13 +678,17 @@ function SceneEditor({
                 time: scene.time === meta?.time ? "" : scene.time,
                 location: scene.location,
                 present_ids: scene.present_ids,
-                knowledge: fact.trim() ? {text:fact.trim(), actor_ids:holders, status} : undefined,
+                position: movedActor ? {actor_id:movedActor,location:destination.trim()} : undefined,
+                knowledge: factId || fact.trim() ? {fact_id:factId || null,text:factId ? "" : fact.trim(), actor_ids:holders, status} : undefined,
                 revision: save.revision,
               },
               "PATCH",
             );
             refresh();
             setFact("");
+            setFactId("");
+            setMovedActor("");
+            setDestination("");
             setHolders([]);
             setEdit(false);
             toast.success(it("sceneSaved"));
@@ -729,10 +736,25 @@ function SceneEditor({
               {c.name}
             </label>
           ))}
-          <label>Сведение персонажа
-            <Input value={fact} maxLength={2000} placeholder="Что именно известно?" onChange={e=>setFact(e.target.value)}/>
+          <label>Исправить место отдельного персонажа
+            <select value={movedActor} onChange={e=>setMovedActor(e.target.value)}>
+              <option value="">Выбрать персонажа</option>
+              {save.state.characters.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
+            </select>
           </label>
-          {fact.trim() && <fieldset>
+          {movedActor && <label>Местонахождение персонажа
+            <Input value={destination} maxLength={200} onChange={e=>setDestination(e.target.value)}/>
+          </label>}
+          <label>Исправить знание
+            <select value={factId} onChange={e=>setFactId(e.target.value)}>
+              <option value="">Новое сведение</option>
+              {Object.entries(save.state.world?.facts || {}).map(([id,f])=><option value={id} key={id}>{f.text}</option>)}
+            </select>
+          </label>
+          {!factId && <label>Сведение персонажа
+            <Input value={fact} maxLength={2000} placeholder="Что именно известно?" onChange={e=>setFact(e.target.value)}/>
+          </label>}
+          {(factId || fact.trim()) && <fieldset>
             <legend>Кому известно это сведение?</legend>
             {save.state.characters.map(c=><label className="check" key={c.id}>
               <input type="checkbox" checked={holders.includes(c.id)} onChange={e=>setHolders(e.target.checked?[...holders,c.id]:holders.filter(id=>id!==c.id))}/>{c.name}
@@ -750,7 +772,7 @@ function SceneEditor({
             >
               {it("cancel")}
             </Button>
-            <Button type="submit" disabled={!!fact.trim() && !holders.length}>{it("saveScene")}</Button>
+            <Button type="submit" disabled={!!(factId || fact.trim()) && !holders.length || !!movedActor && !destination.trim()}>{it("saveScene")}</Button>
           </div>
         </fieldset>
       </form>

@@ -124,7 +124,13 @@ def execute(storage, job, handle, chat_stream):
             return after
         semantic = next((f for f in journal if f.get('stage') == stage), None)
         semantic_limit = min(1200, config['update_tokens']) if stage=='remote_response_semantics' else config['update_tokens']
+        current_policy = config.get('_extraction_contract',1) >= 10
         if estimate(prompts) > config['context_length'] - semantic_limit - 512:
+            if current_policy:
+                warning = dict(section=stage,code='extraction_context_limit',action='preserve_exchange')
+                captured.append(dict(stage=stage,accepted=False,deferred=True,warnings=[warning]))
+                storage.save_communication_context(job['id'],captured,before,[warning])
+                return after
             raise ValueError('Контекст телефонных последствий не помещается в окно модели; сообщения сохранены.')
         frame = dict(stage=stage, messages=prompts, accepted=False)
         if semantic:
@@ -162,8 +168,14 @@ def execute(storage, job, handle, chat_stream):
                     raise ValueError('Извлечение ответа содержит последствия вне текущей фазы.')
             warnings=[]
             try:
-                resolved, consequences = semantic_resolve(after, source_id, response, warnings, **resolver_options)
+                if current_policy:
+                    from backend.runtime_v3.remote_semantics import resolve_optional
+                    resolved, consequences = resolve_optional(after, source_id, response, warnings, **resolver_options)
+                else:
+                    resolved, consequences = semantic_resolve(after, source_id, response, warnings, **resolver_options)
             except SemanticValidationError as rejection:
+                if current_policy:
+                    raise
                 # Exactly one source-bound correction per attempt, never an HTTP
                 # retry and never a fresh communication decision or time advance.
                 repair_data=json.loads(prompts[1]['content'])
@@ -217,8 +229,14 @@ def execute(storage, job, handle, chat_stream):
             frame['warnings']=warnings
             frame['accepted'] = True
         except Exception as exc:
-            frame['error'] = str(exc)
-            raise
+            from llm import ProviderGenerationError
+            from backend.services.provider_attempt import ResponseStreamError
+            if current_policy and isinstance(exc,(ValueError, ProviderGenerationError, ResponseStreamError)):
+                frame.update(deferred=True,warnings=[dict(section=stage,code='remote_extraction_deferred',
+                    reason=type(exc).__name__,action='preserve_exchange')])
+            else:
+                frame['error'] = str(exc)
+                raise
         finally:
             storage.save_communication_context(job['id'], captured, before, frame.get('warnings'))
         return after

@@ -42,7 +42,7 @@ def create_app(db_path=None, recover=True):
                 db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE json_extract(config_json,'$._published_scene') IS NULL AND status IN ('generating','extracting','validating')")
                 db.execute("UPDATE llm_requests SET status='interrupted' WHERE status='running'")
             for jid in interrupted:
-                repo.finish_interpretation(jid, 'interpretation_interrupted')
+                repo.recover_interrupted_scene(jid)
             for jid in stale:
                 preparation.stop(jid)
         yield

@@ -52,9 +52,9 @@ def components(proposal):
     return groups.values()
 
 
-def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve):
+def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None):
     def evaluate(candidate):
-        raw = compile_scene(candidate, before, narrative, turn_id, version=10, suggestions=suggestions)
+        raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=10, suggestions=suggestions)
         return raw, resolve(raw)
 
     try:

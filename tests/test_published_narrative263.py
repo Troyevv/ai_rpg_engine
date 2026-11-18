@@ -151,5 +151,73 @@ def test_server_restart_after_publication_and_manual_edit(game):
         hist=read_history(db,snap['history_head'])[0]
         assert {'manual_scene','manual_knowledge'} <= {v.get('kind') for v in hist['state_changes']}
         assert db.execute('pragma integrity_check').fetchone()[0]=='ok'
+    fid=next(fid for fid,fact in world['facts'].items() if fact['text']=='Концерт в четверг')
+    with TestClient(create_app(repo.path)) as client:
+        edit.update(revision=fresh.get_save(sid)['revision'],
+                    position=dict(actor_id='char_galina',location='Книжная лавка'),
+                    knowledge=dict(fact_id=fid,actor_ids=['char_alexey'],status='refuted'))
+        assert client.patch(f'/api/saves/{sid}/scene',json=edit).status_code==200
+    corrected=fresh.get_snapshot(sid)['world_state']
+    assert corrected['knowledge']['char_alexey:'+fid]['status']=='refuted'
+    assert corrected['locations'][corrected['characters']['char_galina']['location_id']]['name']=='Книжная лавка'
+    assert corrected['camera']['location_id']==world['camera']['location_id']
     later=play(fresh,sid,'Я запомнил дату концерта.','{}')
     assert any(m['content'].startswith('Ручные исправления канона') for m in json.loads(later['context_json']))
+
+
+def test_restart_recovers_acknowledged_provider_text_before_publication(game):
+    repo,sid=game
+    jid=repo.begin_job(sid,'Смотрю в окно.','turn',CONFIG)
+    completed='За окном качалась берёза.  '
+    worker=Repository(repo.path)
+    worker.worker_epoch=0
+    rid=worker.begin_request(jid,'narrative',CONFIG,[],{})
+    worker.finish_request(rid,'complete',None,finish_reason='stop',
+                          response_text=completed+'\n<action_suggestions>["Подойти ближе"]')
+    worker.job_progress(jid,'generating',narrative='За окном')
+    with TestClient(create_app(repo.path)):
+        pass
+    job=repo.get_job(jid)
+    assert job['status']=='saved',job['error']
+    assert job['narrative']==repo.list_turns(sid)[-1]['assistant_text']==completed
+    assert [r['stage'] for r in repo.request_log(job_id=jid)]==['narrative']
+
+
+def test_revision_change_cannot_enrich_or_report_success(game):
+    repo,sid=game
+    def concurrent_revision(jid):
+        with repo.connect() as db:
+            db.execute('UPDATE saves SET revision=revision+1 WHERE id=?',(sid,))
+        return '{"scene":{"elapsed_minutes":10}}'
+    job=play(repo,sid,'Галина закрыла окно.',concurrent_revision)
+    assert job['status']=='error' and job['narrative_complete']
+    assert repo.list_turns(sid)[-1]['assistant_text']==job['narrative']
+    with pytest.raises(ValueError):
+        repo.save_completed_scene(job['id'],job['revision'],0)
+    # A fresh explicit request can keep the already published active variant.
+    # It only closes its warning and never reapplies consequences to the edited state.
+    current=repo.get_save(sid)['revision']
+    repo.save_completed_scene(job['id'],current,0)
+    assert repo.get_job(job['id'])['status']=='saved' and repo.get_save(sid)['revision']==current
+    assert repo.get_snapshot(sid)['world_state']['meta']['world_time']==json.loads(job['before_json'])['world_state']['meta']['world_time']
+
+
+def test_current_long_term_keeps_offstage_prose_on_extraction_outage():
+    from test_long_term_advance import fixture as interval
+    from backend.runtime_v3.long_term import run
+    from backend.runtime_v3.models import Thread
+    before=interval()
+    before['world_state']['threads']['work']=Thread(id='work',description='Новая работа', character_ids=['c'],relevance=1).model_dump()
+    prose='На другом берегу открылась мастерская.'
+    stages=[]
+    def generate(stage,*args,**kwargs):
+        stages.append(stage)
+        if stage=='long_term_narrative':
+            yield prose
+        else:
+            raise RuntimeError('provider offline')
+    result,history,report=run(before,dict(amount=1,unit='years',max_llm_calls=4),generate=generate,
+                              config={**CONFIG,'_extraction_contract':10})
+    assert 'long_term_repair' not in stages and report['unresolved']
+    assert any(r['narrative']==prose and not r['player_observed'] for r in history['turns'])
+    assert result['world_state']['meta']['world_time']>before['world_state']['meta']['world_time']

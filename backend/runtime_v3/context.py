@@ -865,7 +865,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             elif row.get('kind') == 'manual_knowledge' and row.get('actor_id') == scope.controlled_actor_id:
                 fid = row['fact_id']
                 belief = state['knowledge'].get(scope.controlled_actor_id + ':' + fid, {})
-                if fid in state['facts'] and belief.get('status') == row['status']:
+                if fid in current['facts'] and belief.get('status') == row['status']:
                     edits.append(dict(turn=row['turn_id'], fact=state['facts'][fid]['text'], status=row['status']))
         if edits:
             messages.append(block('Ручные исправления канона', edits[-6:]))

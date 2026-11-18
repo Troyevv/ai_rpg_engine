@@ -334,6 +334,41 @@ class EngineStorage:
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
+    def recover_interrupted_scene(self, job_id):
+        try:
+            if self.finish_interpretation(job_id, 'interpretation_interrupted'):
+                return
+        except ValueError as conflict:
+            self.job_progress(job_id, 'error', error=str(conflict))
+            return
+        job = self.get_job(job_id)
+        config = json.loads(job['config_json'])
+        if (job['status'] != 'stopped' or config.get('_extraction_contract',1) < 10
+                or job['kind'] not in ('start','turn','background','pov')):
+            return
+        if not job['narrative_complete']:
+            # The provider journal commits before the worker checkpoints its
+            # final chunk. Only a complete receipt from this attempt can close
+            # that gap. Interrupted streams stay drafts.
+            with self.connect() as db:
+                row = db.execute("""SELECT response_text FROM llm_requests WHERE job_id=? AND stage='narrative'
+                    AND status='complete' AND json_extract(diagnostics_json,'$.provider_attempt.attempt_epoch')=?
+                    ORDER BY rowid DESC LIMIT 1""",(job_id, job['attempt_epoch'])).fetchone()
+                if not row or not row[0]:
+                    return
+                from backend.runtime_v3.suggestions import split_suggestions
+                prose, choices = split_suggestions(row[0], complete=True, verbatim=True)
+                if not prose.strip():
+                    return
+                db.execute("UPDATE game_jobs SET narrative=?,narrative_complete=1,config_json=json_set(config_json,'$._narrative_suggestions',json(?)) WHERE id=? AND status='stopped' AND attempt_epoch=?",
+                           (prose,json.dumps(choices),job_id,job['attempt_epoch']))
+        try:
+            self.save_completed_scene(job_id, job['revision'], job['attempt_epoch'])
+        except ValueError as conflict:
+            with self.connect() as db:
+                db.execute("UPDATE game_jobs SET error=? WHERE id=? AND status='stopped' AND attempt_epoch=?",
+                           (str(conflict),job_id,job['attempt_epoch']))
+
     def publish_scene(self, job_id, before, sequence, narrative, user_text, timing, *, recovery=None):
         """Publish the original text at its branch position before starting Extraction."""
         from copy import deepcopy
@@ -361,8 +396,6 @@ class EngineStorage:
                 or job['attempt_epoch'] != attempt_epoch or not job['narrative'].strip()):
             raise ValueError('Нет законченного текста этой попытки.')
         if public:
-            if revision != public['revision'] and not (job['status']=='saved' and revision==job['revision']):
-                raise ValueError('Опубликованный вариант изменился.')
             self.finish_interpretation(job_id,'player_saved_prose', recovery=(revision, attempt_epoch))
             return
         before = json.loads(job['memory_before_json'] or job['before_json'])
@@ -388,7 +421,10 @@ class EngineStorage:
             publication = json.loads(job['config_json']).get('_published_scene')
             if not publication:
                 return False
-            self._published_turn(db, job, publication)
+            expected_revision = publication['revision'] if recovery is None else recovery[0]
+            if recovery and job['status']=='saved' and expected_revision==job['revision']:
+                expected_revision = publication['revision']
+            self._published_turn(db, job, dict(publication, revision=expected_revision))
             if job['status'] == 'saved':
                 return True
             warning = dict(section='extraction', code=reason, action='preserve_scene')

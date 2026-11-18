@@ -597,7 +597,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             semantic_candidate = SceneCandidate(resolution_state, narrative, '', turn,
                 namespace=identity('advance-group', sorted(c.id for c in group)),
                 version=config.get('_extraction_contract', 1), on_record=(lambda audit:on_candidate(messages,audit)) if on_candidate else None) if config.get('_extraction_contract', 1) >= 6 else None
-            for attempt in range(2):
+            current_policy = config.get('_extraction_contract',1) >= 10
+            for attempt in range(1 if current_policy else 2):
                 payload = None
                 try:
                     messages = build_context(
@@ -626,105 +627,122 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             response_format={"type": "json_object"},
                         )
                     )
-                    raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else RawTurnResult.parse(payload)
-                    if config.get('_extraction_contract', 1) >= 5:
-                        from backend.runtime_v3.raw import compile_semantic
-                        raw = compile_semantic(raw, resolution_state, narrative, turn,
-                            namespace=identity('advance-group', sorted(c.id for c in group)))
-                    if raw.final_scene.get("elapsed_minutes", 0) != 0:
-                        raise ValueError("Время группы задаётся Runtime, а не Extraction.")
-                    from backend.runtime_v3.long_term_promotions import prepare
+                    def apply_group(raw):
+                        if raw.final_scene.get("elapsed_minutes", 0) != 0:
+                            raise ValueError("Время группы задаётся Runtime, а не Extraction.")
+                        from backend.runtime_v3.long_term_promotions import prepare
 
-                    birth_sources = [c.source_id for c in group if c.kind == "birth"]
-                    if any(not isinstance(row, dict) or row.get("pregnancy_id") not in birth_sources
-                           for row in raw.records["births"]):
-                        raise ValueError("Рождение не входит в причины выбранной фоновой группы.")
-                    promotions = prepare(raw, result, [c.id for c in group])
-                    allowed = {cid for c in group for cid in c.actor_ids if cid != protected}
-                    # Prevent arbitrary remote facets and unscheduled player choices from
-                    # hitchhiking on an accepted NPC group. Knowledge still needs #76 proof.
-                    if len(raw.records["events"]) > 8:
-                        raise ValueError("Лимит событий группы превышен.")
-                    validate_event_causes(raw, [c.id for c in group])
-                    for event in raw.records["events"]:
-                        if not isinstance(event, dict):
-                            continue
-                        if any(
-                            not isinstance(event.get(key, []), list)
-                            or any(not isinstance(cid, str) for cid in event.get(key, []))
-                            for key in ("participants", "witnesses")
-                        ):
-                            raise ValueError("Повреждены участники события.")
+                        birth_sources = [c.source_id for c in group if c.kind == "birth"]
+                        if any(not isinstance(row, dict) or row.get("pregnancy_id") not in birth_sources
+                               for row in raw.records["births"]):
+                            raise ValueError("Рождение не входит в причины выбранной фоновой группы.")
+                        promotions = prepare(raw, result, [c.id for c in group])
+                        allowed = {cid for c in group for cid in c.actor_ids if cid != protected}
+                        # Prevent arbitrary remote facets and unscheduled player choices from
+                        # hitchhiking on an accepted NPC group. Knowledge still needs #76 proof.
+                        if len(raw.records["events"]) > 8:
+                            raise ValueError("Лимит событий группы превышен.")
+                        if not current_policy:
+                            validate_event_causes(raw, [c.id for c in group])
+                        for event in raw.records["events"]:
+                            if not isinstance(event, dict):
+                                continue
+                            if any(
+                                not isinstance(event.get(key, []), list)
+                                or any(not isinstance(cid, str) for cid in event.get(key, []))
+                                for key in ("participants", "witnesses")
+                            ):
+                                raise ValueError("Повреждены участники события.")
+                            if (
+                                len(set(event.get("participants", []) + event.get("witnesses", [])))
+                                > 16
+                            ):
+                                raise ValueError("Лимит участников события превышен.")
+                            if protected and protected in event.get("participants", []) + event.get(
+                                "witnesses", []
+                            ):
+                                raise ValueError(
+                                    "Фоновое событие использует управляемого персонажа."
+                                )
+                            if not set(event.get("participants", [])) & allowed:
+                                raise ValueError("Событие не связано с выбранной причиной.")
+                            # The group occurs at a known instant. StateResolver checks explicit claims.
+                            event.setdefault("minute", minute)
+                        from backend.runtime_v3.player_actions import contract_options
+                        resolved = StateResolver(
+                            resolution_state,
+                            narrative,
+                            "",
+                            chronology_events=(history or {}).get("events", []),
+                            letter_sources=artifacts,
+                            turn_id=turn,
+                            **contract_options(config.get("_extraction_contract", 1)),
+                            observed=False,
+                            mode="background",
+                            protected_actor_id=protected,
+                            protected_knowledge_actor_ids=[protected] if protected else [],
+                            pacing_decision=messages.selection["pacing"],
+                            initiative_decision=messages.selection["initiative"],
+                            milestone_query=(history or {}).get("_milestone_query"),
+                            development_query=(history or {}).get("_development_query"),
+                            relationship_query=(history or {}).get("_relationship_query"),
+                            relationship_receipts=batch["relationship_changes"],
+                            actor_names={c["id"]: c["name"] for c in result["character_cards"]},
+                            minimal_promotion_ids=promotions,
+                            event_namespace=identity("advance-group", sorted(c.id for c in group)),
+                        ).resolve(raw)
+                        if resolved.state["meta"]["world_time"] != minute:
+                            raise ValueError("Исход изменяет установленную временную границу.")
                         if (
-                            len(set(event.get("participants", []) + event.get("witnesses", [])))
-                            > 16
+                            protected
+                            and resolved.state["characters"][protected]
+                            != result["world_state"]["characters"][protected]
                         ):
-                            raise ValueError("Лимит участников события превышен.")
-                        if protected and protected in event.get("participants", []) + event.get(
-                            "witnesses", []
-                        ):
-                            raise ValueError(
-                                "Фоновое событие использует управляемого персонажа."
+                            raise ValueError("Фоновый исход изменяет управляемого персонажа.")
+                        for cid in promotions:
+                            continued = any(
+                                r.get("actor_id") == cid
+                                for section in ("roles", "residences")
+                                for r in resolved.state[section].values()
+                            ) or any(
+                                cid in (r["source_id"], r["target_id"])
+                                for r in resolved.state["objective_relations"].values()
                             )
-                        if not set(event.get("participants", [])) & allowed:
-                            raise ValueError("Событие не связано с выбранной причиной.")
-                        # The group occurs at a known instant. StateResolver checks explicit claims.
-                        event.setdefault("minute", minute)
-                    from backend.runtime_v3.player_actions import contract_options
-                    resolved = StateResolver(
-                        resolution_state,
-                        narrative,
-                        "",
-                        chronology_events=(history or {}).get("events", []),
-                        letter_sources=artifacts,
-                        turn_id=turn,
-                        **contract_options(config.get("_extraction_contract", 1)),
-                        observed=False,
-                        mode="background",
-                        protected_actor_id=protected,
-                        protected_knowledge_actor_ids=[protected] if protected else [],
-                        pacing_decision=messages.selection["pacing"],
-                        initiative_decision=messages.selection["initiative"],
-                        milestone_query=(history or {}).get("_milestone_query"),
-                        development_query=(history or {}).get("_development_query"),
-                        relationship_query=(history or {}).get("_relationship_query"),
-                        relationship_receipts=batch["relationship_changes"],
-                        actor_names={c["id"]: c["name"] for c in result["character_cards"]},
-                        minimal_promotion_ids=promotions,
-                        event_namespace=identity("advance-group", sorted(c.id for c in group)),
-                    ).resolve(raw)
-                    if resolved.state["meta"]["world_time"] != minute:
-                        raise ValueError("Исход изменяет установленную временную границу.")
-                    if (
-                        protected
-                        and resolved.state["characters"][protected]
-                        != result["world_state"]["characters"][protected]
-                    ):
-                        raise ValueError("Фоновый исход изменяет управляемого персонажа.")
-                    for cid in promotions:
-                        continued = any(
-                            r.get("actor_id") == cid
-                            for section in ("roles", "residences")
-                            for r in resolved.state[section].values()
-                        ) or any(
-                            cid in (r["source_id"], r["target_id"])
-                            for r in resolved.state["objective_relations"].values()
-                        )
-                        if cid not in resolved.state["characters"] or not continued:
-                            raise ValueError(
-                                "Создание персонажа не подтверждено принятой ролью или связью."
-                            )
-                    if not resolved.history["events"]:
-                        if raw.records["events"]:
-                            raise ValueError("Заявленные события группы не приняты Runtime.")
-                        # A calm outcome is valid only when no domain change was lost.
-                        if any(resolved.state[k] != resolution_state[k] for k in resolution_state if k not in ('meta', 'camera')):
-                            raise ValueError("Изменение мира без принятого события исхода.")
+                            if cid not in resolved.state["characters"] or not continued:
+                                raise ValueError(
+                                    "Создание персонажа не подтверждено принятой ролью или связью."
+                                )
+                        if not current_policy and not resolved.history["events"]:
+                            if raw.records["events"]:
+                                raise ValueError("Заявленные события группы не приняты Runtime.")
+                            # A calm outcome is valid only when no domain change was lost.
+                            if any(resolved.state[k] != resolution_state[k] for k in resolution_state if k not in ('meta', 'camera')):
+                                raise ValueError("Изменение мира без принятого события исхода.")
+                        return resolved
+
+                    if current_policy:
+                        from backend.runtime_v3.consequences import resolve_consequences
+                        def resolve_group(raw):
+                            try:
+                                return apply_group(raw)
+                            except StructuralDeltaError:
+                                raise
+                            except ValueError as exc:
+                                raise StructuralDeltaError(str(exc), 'long_term_outcome_invalid') from exc
+                        raw, resolved = resolve_consequences(payload,resolution_state,narrative,turn,[],resolve_group,
+                            namespace=identity('advance-group', sorted(c.id for c in group)))
+                    else:
+                        raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else RawTurnResult.parse(payload)
+                        if config.get('_extraction_contract', 1) >= 5:
+                            from backend.runtime_v3.raw import compile_semantic
+                            raw = compile_semantic(raw, resolution_state, narrative, turn,
+                                namespace=identity('advance-group', sorted(c.id for c in group)))
+                        resolved = apply_group(raw)
                     break
                 except (StructuralDeltaError, ValueError) as exc:
                     if not isinstance(exc, StructuralDeltaError):
                         exc = StructuralDeltaError(str(exc), 'long_term_outcome_invalid', repairable=True)
-                    can_repair = (payload is not None and attempt == 0 and exc.repairable
+                    can_repair = (not current_policy and payload is not None and attempt == 0 and exc.repairable
                                   and report['llm_calls'] < request.max_llm_calls)
                     report['diagnostics'].extend(exc.diagnostics('long_term_repair' if can_repair else 'unresolved_group'))
                     if not can_repair:
@@ -753,7 +771,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 # additional literary claims with local Extraction IDs.
                 if event.get('remote_interaction_id'):
                     continue
-                links = claims[event["local_id"]]["advance_candidate_ids"]
+                links = [key for key in claims[event["local_id"]].get("advance_candidate_ids", []) if key in {c.id for c in group}]
                 event["advance_source_ids"] = [
                     c.source_id for c in group if c.id in links
                 ]
@@ -796,6 +814,11 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 )
                 break
         except (ValueError, StructuralDeltaError, BackgroundGenerationError) as exc:
+            if config.get('_extraction_contract',1) >= 10 and narrative.strip():
+                batch['turns'].append(dict(id=identity('advance-prose',turn,[c.id for c in group],narrative),
+                    turn_id=turn, sequence=turn-1, narrative=narrative, player_input='',
+                    player_observed=False, camera_before=deepcopy(resolution_state['camera']),
+                    camera=deepcopy(resolution_state['camera']), game_time_before=minute,world_time=minute))
             report["diagnostics"].append(
                 dict(
                     kind="unresolved_group",
