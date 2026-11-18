@@ -290,3 +290,72 @@ def test_current_menu_owner_and_actor_availability(mode):
     resolved = StateResolver(state,'Тихо.','Осматриваюсь.',mode=kind,
         **resolver_options(state,'Осматриваюсь.',kind,contract_version=9)).resolve(raw)
     assert bool(resolved.choices) == (mode=='ordinary')
+
+
+@pytest.mark.parametrize('break_trip', [None, 'nontraveller', 'arrival', 'local_exit', 'different_origin'])
+def test_conversation_after_shared_departure(break_trip):
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    state, _ = fixture()
+    state['meta']['world_time'] = 100
+    action = 'Иду с мамой в парк.'
+    proof = dict(quote=action, meaning='preserved')
+    listener = 'c' if break_trip == 'nontraveller' else 'a'
+    steps = [
+        dict(id='out', kind='movement', actor_ids=['a','b'], assertion='departure',
+             input_source=proof, text='Они вышли.', minute=0),
+        dict(id='talk', kind='information', text='О книге.', source_actor_id='b', target_ids=[listener], during_step_id='out',
+             medium='conversation', claims=[dict(fact=dict(text='Она вернула книгу.'),
+             assertion='testimony', perceived_by=[listener], status='known')]),
+        dict(id='arrive', kind='movement', actor_ids=['a','b'], assertion='completed_arrival',
+             endpoint='park', input_source=proof, text='Они пришли.', minute=12),
+    ]
+    if break_trip in ('arrival','local_exit'):
+        steps.insert(1,dict(id='apart', kind='movement', actor_ids=['b'], text='Она ушла отдельно.',
+                            assertion='completed_arrival' if break_trip=='arrival' else 'local_exit',
+                            endpoint='park' if break_trip=='arrival' else None))
+    if break_trip == 'different_origin':
+        state['characters']['b']['location_id'] = 'park'
+        state['camera']['present_character_ids'] = ['a']
+    payload = dict(scene=dict(elapsed_minutes=12),scene_steps=steps)
+    def resolve(version):
+        return StateResolver(state, 'Разговор в пути.', action, turn_id=1,
+                             **resolver_options(state,action,contract_version=version)).resolve(payload)
+    with pytest.raises(StructuralDeltaError) as legacy:
+        resolve(8)
+    assert 'scene_route_invalid' in {r['code'] for r in legacy.value.diagnostics('test')}
+    if break_trip:
+        with pytest.raises(StructuralDeltaError) as err:
+            resolve(9)
+        assert {row['code'] for row in err.value.diagnostics('test')} & {'event_presence_invalid','scene_route_invalid'}
+        return
+    result = resolve(9)
+    assert [result.state['characters'][a]['location_id'] for a in ('a','b')]==['park','park']
+    assert [k['actor_id'] for k in result.history['knowledge_acquisitions']]==['a']
+    assert [e['minute'] for e in (result.history['events'][0],result.history['events'][-1])]==[100,112]
+    assert result.state['meta']['world_time']==112
+    assert steps[0]['minute']==0 and steps[-1]['minute']==12
+
+
+@pytest.mark.parametrize('minutes,kind,valid', [
+    ([102,110],'interaction',True), ([0,7],'interaction',False),
+    ([2,12],'interaction',False), ([0,13,12],'interaction',False),
+    ([0,105,12],'interaction',False), ([0,12],'occurrence',False),
+])
+def test_preserve_absolute_clock_and_reject_ambiguous_offsets(minutes,kind,valid):
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    state,_=fixture()
+    state['meta']['world_time']=100
+    event = (dict(kind=kind,actor_ids=['b']) if kind=='occurrence' else
+             dict(kind=kind,actor_id='b',target_ids=['a'],outcome='completed'))
+    payload=dict(scene=dict(elapsed_minutes=12),scene_steps=[
+        dict(event,text='Событие.',minute=m) for m in minutes])
+    resolver=StateResolver(state,'Прошла сцена.','Жду.',turn_id=1,
+                           **resolver_options(state,'Жду.',contract_version=9))
+    if valid:
+        assert [e['minute'] for e in resolver.resolve(payload).history['events']]==minutes
+    else:
+        with pytest.raises(StructuralDeltaError) as err:
+            resolver.resolve(payload)
+        assert 'event_minute_invalid' in {r['code'] for r in err.value.diagnostics('test')}

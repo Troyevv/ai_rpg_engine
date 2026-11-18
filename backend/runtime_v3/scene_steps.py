@@ -339,6 +339,7 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
     def reject(message, code, **path):
         errors.append(StructuralDeltaError('Runtime v3: ' + message, code, **path))
 
+    active_departures = {}
     for index, value in enumerate(payload['scene_steps']):
         path = dict(section='scene_steps', index=index)
         try:
@@ -368,12 +369,26 @@ def independent_scene_errors(payload, state, schema_errors, *, version=6):
         during = getattr(step, 'during_step_id', None)
         if during:
             source = next((s for s in payload['scene_steps'][:index] if isinstance(s, dict) and s.get('id')==during), None)
-            if not source or source.get('kind')!='movement' or source.get('assertion')!='completed_arrival':
+            if version >= 9 and source and source.get('kind') == 'movement' and source.get('assertion') == 'departure':
+                # A split trip can carry conversation between its departure and
+                # arrival. Every speaker/listener must still be on that trip.
+                involved = set(step.target_ids)
+                involved.add(getattr(step, 'source_actor_id', getattr(step, 'actor_id', None)))
+                if isinstance(step, InformationStep):
+                    involved.update(actor for claim in step.claims for actor in claim.perceived_by)
+                involved.discard(None)
+                if any(active_departures.get(actor) != during for actor in involved):
+                    reject('Участник разговора не находится на указанном совместном пути.',
+                           'scene_route_invalid', field='during_step_id', **path)
+            elif not source or source.get('kind')!='movement' or source.get('assertion')!='completed_arrival':
                 reject('Разговор в пути требует предшествующий фактический совместный маршрут.',
                        'scene_route_invalid', field='during_step_id', **path)
         actor = getattr(step, 'actor_id', getattr(step, 'source_actor_id', None))
         targets = getattr(step, 'target_ids', [])
         if isinstance(step, GroupMovementStep):
+            if version >= 9 and step.assertion in ('departure', 'completed_arrival', 'local_exit'):
+                for traveller in step.actor_ids:
+                    active_departures[traveller] = step.id if step.assertion == 'departure' else None
             actor = camera['controlled_actor_id'] if camera and camera['controlled_actor_id'] in step.actor_ids else step.actor_ids[0]
         if camera is not None:
             roles = set(([actor] if actor else []) + targets)
@@ -433,6 +448,19 @@ def bind_profile_baselines(records, state):
                     op['expected_revision'] = old.get('revision', 0)
 
 
+def scene_minute_origin(steps, start, elapsed):
+    """Recognize an explicitly bounded scene-relative clock without shifting absolute dates."""
+    if type(elapsed) is not int or not 0 < elapsed < start:
+        return 0
+    timed = [step for step in steps if step.get('minute') is not None]
+    if any(step['kind'] == 'occurrence' for step in timed):
+        return 0  # A domain event may establish an objective date.
+    minutes = [step['minute'] for step in timed]
+    if minutes and minutes[0] == 0 and minutes[-1] == elapsed and minutes == sorted(minutes):
+        return start
+    return 0
+
+
 def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version=6, defer_errors=False, suggestions=()):
     from backend.services.world_delta_errors import StructuralDeltaError
     warnings = []
@@ -459,6 +487,11 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         bind_profile_baselines(records, state)
     normalize_facts(records, p, state)
     scene, camera = deepcopy(p['scene']), state['camera']
+    minute_origin = scene_minute_origin(p['scene_steps'], state['meta']['world_time'],
+                                        scene.get('elapsed_minutes')) if version >= 9 else 0
+    if minute_origin:
+        warnings.append(dict(section='scene_steps', field='minute', code='scene_relative_minutes',
+                             action='anchor_to_scene_start', minute=minute_origin))
     positions = {cid:c['location_id'] for cid,c in state['characters'].items()}
     positions.update({c['id']:None for c in records['promotions']})
     aliases = {s['id']:identity('scene-step', turn_id, namespace, s['id']) for s in p['scene_steps']}
@@ -489,7 +522,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
                 target_mode='interaction' if targets else 'reference'))
         common = dict(id=eid, text=step.text, evidence=step.evidence, order=order,
                       advance_candidate_ids=step.advance_candidate_ids)
-        if step.minute is not None: common['minute'] = step.minute
+        if step.minute is not None: common['minute'] = minute_origin + step.minute
         during = getattr(step, 'during_step_id', None)
         if during:
             event_routes[eid] = aliases[during]

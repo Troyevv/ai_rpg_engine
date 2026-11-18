@@ -101,7 +101,8 @@ def validate_event_presence(resolver, event, index, written):
         travellers = {m['actor_id'] for m in legs}
         origins = {m['from_location_id'] for m in legs}
         endpoints = {m['to_location_id'] for m in legs}
-        if not legs or len(origins)!=1 or None in origins or len(endpoints)!=1 or None in endpoints:
+        departed = all(m.get('assertion') == 'departure' for m in legs)
+        if not legs or len(origins)!=1 or None in origins or len(endpoints)!=1 or (None in endpoints and not departed):
             reject('participants', 'Не установлен общий фактический путь для разговора.')
         for role in ('participants','witnesses'):
             for n, actor in enumerate(event[role]):
@@ -111,7 +112,7 @@ def validate_event_presence(resolver, event, index, written):
         # A later departure/return must not leave an earlier conversation as
         # the source for the actor's current location-dependent situation.
         return {actor for actor in event['participants'] + event['witnesses']
-                if state['characters'][actor]['location_id'] in endpoints}
+                if not departed and state['characters'][actor]['location_id'] in endpoints}
 
     allowed_places = {location} if location is not None else None
     if medium == 'message' and location is None:
