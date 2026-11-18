@@ -618,6 +618,20 @@ CHAT_MARKDOWN = '''Лена ставит чашку на стол. За окно
 
 def authoring_stream(**kwargs):
     global chat_cancel_next
+    if kwargs.get('model') in ('chat-tools-fixture','chat-tools-summary-fixture'):
+        from chat_tools_fixture import memory
+        if 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content']:
+            text=memory()
+        elif kwargs['model']=='chat-tools-summary-fixture':
+            text=kwargs['messages'][1]['content'].split('\n',1)[1].replace('· Обязательства / обещания: вернуть книгу.','· Обязательства / обещания: книга возвращена.')
+            text+='\nАвторская запись: Лена закрыла дверь. Причина не установлена.\n'
+        else:
+            text=NARRATIVE*2+'\n\n'+CHAT_MARKDOWN
+        kwargs['on_usage']({'prompt_tokens':420,'completion_tokens':180,'prompt_cache_hit_tokens':80})
+        for offset in range(0,len(text),90):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield text[offset:offset+90];time.sleep(.02)
+        kwargs['on_finish']('stop');return
     if kwargs.get('model') == 'chat-markdown-fixture':
         # Hold the external stream after Markdown has arrived, so the browser can
         # assert formatting before the job completes and /markdown is requested.
@@ -654,8 +668,8 @@ def authoring_stream(**kwargs):
     yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
-llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536)]]}
+llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture','chat-tools-fixture','chat-tools-summary-fixture']
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
@@ -1218,6 +1232,27 @@ if __name__ == '__main__':
             c=r.state(cid)
             r.confirm(cid,job['output_id'],Confirm(revision=c['revision'],token=uuid4().hex,text=job['response'],next_chapter=True).model_dump())
         return r.state(cid)
+
+    @app.post('/test/chat-tools-history')
+    def chat_tools_history():
+        from chat_tools_fixture import memory
+        from uuid import uuid4
+        r=app.state.chat.repo;c=chat_history();cid=c['id']
+        settings=c['settings']
+        for stage,model in [('reply','chat-tools-fixture'),('summary','chat-tools-summary-fixture')]:
+            settings[stage].update(model=model,context_length=524288)
+        r.configure(cid,dict(revision=c['revision'],token=uuid4().hex,settings=settings))
+        c=r.state(cid)
+        d=r.manual_memory(cid,dict(revision=c['revision'],token=uuid4().hex,text=memory(95)))
+        c=r.state(cid)
+        r.confirm(cid,d['draft'],dict(revision=c['revision'],token=uuid4().hex,text=memory(95),next_chapter=False,accept_partial=False))
+        with r.transaction() as db:
+            b=r.branch(db,cid);messages=r.messages(db,b['id'])
+            for index in range(0,1000,11):
+                db.execute('INSERT INTO chat_bookmarks(campaign_id,message_id,note,priority) VALUES(?,?,?,?)',
+                           (cid,messages[index]['id'],f'Закладка {index:04d} — важный разговор у маяка',1))
+            for i in range(50):r.add_message(db,cid,b,'assistant',f'Продолжение в главе 5, сообщение {i+1}.\n\n'+CHAT_MARKDOWN)
+        return dict(campaign=r.state(cid),target=messages[11]['id'])
 
     @app.post('/test/seed')
     def seed():

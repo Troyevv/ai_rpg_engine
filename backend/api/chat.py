@@ -99,14 +99,29 @@ def install(app, storage, credentials):
 
     @app.get('/api/chat/campaigns/{cid}/messages')
     def messages(cid: str, branch: str | None = None, chapter: str | None = None,
-                 before: int = Query(2147483647, ge=1), limit: int = Query(40,ge=1,le=100)):
-        return repo.page(cid,branch,chapter,before,limit)
+                 before: int = Query(2147483647, ge=1), limit: int = Query(40,ge=1,le=100),
+                 after: int | None = Query(None,ge=0)):
+        return repo.page(cid,branch,chapter,before,limit,after=after)
 
     @app.post('/api/chat/campaigns/{cid}/budget')
     def budget(cid: str, body: models.Memory):
         with repo.connect() as db:
             repo.campaign(db,cid)
             return repo.budgets(db,cid,body.text)
+
+    @app.get('/api/chat/campaigns/{cid}/bookmarks')
+    def bookmarks(cid: str, branch: str | None = None, before: int = Query(2147483647,ge=1),
+                  q: str = Query('',max_length=200)):
+        return repo.bookmarks(cid,branch,before,q)
+
+    @app.put('/api/chat/campaigns/{cid}/bookmarks')
+    def bookmark(cid: str, body: models.Bookmark):
+        repo.bookmark(cid,body.model_dump())
+        return repo.state(cid)
+
+    @app.get('/api/chat/campaigns/{cid}/messages/{message}/locate')
+    def locate(cid: str,message: str,branch: str | None = None):
+        return repo.locate(cid,message,branch)
 
     @app.put('/api/chat/campaigns/{cid}/settings')
     def configure(cid: str, body: models.Configure):
@@ -164,6 +179,27 @@ def install(app, storage, credentials):
     @app.get('/api/chat/campaigns/{cid}/versions')
     def versions(cid: str,before: int = Query(2147483647,ge=1)):
         return repo.versions(cid,before)
+
+    @app.get('/api/chat/campaigns/{cid}/characters')
+    def characters(cid: str,branch: str | None = None,memory: str | None = None,
+                   q: str = Query('',max_length=200),offset: int = Query(0,ge=0)):
+        return repo.library(cid,branch,memory,q,offset)
+
+    @app.get('/api/chat/campaigns/{cid}/characters/{key}')
+    def character(cid: str,key: str,branch: str | None = None,memory: str | None = None):
+        return repo.character(cid,key,branch,memory)
+
+    @app.post('/api/chat/campaigns/{cid}/characters/{key}/draft')
+    def character_draft(cid: str,key: str,body: models.CharacterEdit):
+        return repo.edit_character(cid,key,body.model_dump())
+
+    @app.get('/api/chat/campaigns/{cid}/history')
+    def history(cid: str,branch: str | None = None,before: int = Query(2147483647,ge=1)):
+        return repo.history(cid,branch,before)
+
+    @app.get('/api/chat/campaigns/{cid}/history/{mid}')
+    def history_detail(cid: str,mid: str,branch: str | None = None):
+        return repo.history_detail(cid,mid,branch)
 
     @app.get('/api/chat/campaigns/{cid}/drafts/{did}')
     def draft(cid: str,did: str):

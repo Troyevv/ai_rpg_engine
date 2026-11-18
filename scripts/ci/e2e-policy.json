@@ -13,7 +13,8 @@
     "idea190.spec.ts",
     "genre-policy.spec.ts",
     "genre-catalog.spec.ts",
-    "chat-mode.spec.ts"
+    "chat-mode.spec.ts",
+    "chat-tools.spec.ts"
   ],
   "domains": {
     "phone": {
@@ -89,11 +90,13 @@
         "frontend/src/styles/chat.css",
         "backend/chat/*",
         "backend/api/chat.py",
-        "prompts/chat_*"
+        "prompts/chat_*",
+        "frontend/src/chatMarkdown.ts"
       ],
       "suites": [
         "chat-mode.spec.ts",
-        "chat-mobile.spec.ts"
+        "chat-mobile.spec.ts",
+        "chat-tools.spec.ts"
       ]
     }
   },
@@ -116,6 +119,7 @@
     "idea190.spec.ts": "idea190: real generation, reload, HTTP502 review recovery and author revision",
     "genre-policy.spec.ts": "genre settings persist, limit selection and preserve history · graphite",
     "genre-catalog.spec.ts": "new genres generate, hand off, edit and reload with a controlled provider",
-    "chat-mode.spec.ts": "Chat: campaign, stream, memory, chapters, edit and reload (graphite)"
+    "chat-mode.spec.ts": "Chat: campaign, stream, memory, chapters, edit and reload (graphite)",
+    "chat-tools.spec.ts": "Chat tools: idea, choices, bookmarks, character edit, memory history and branch isolation"
   }
 }

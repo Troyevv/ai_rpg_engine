@@ -45,7 +45,7 @@ for(const skin of ['graphite','parchment'])test(`Chat: campaign, stream, memory,
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toContainText('Ошибочно считает:');
   const value=await dialog.getByLabel('Текст выжимки',{exact:true}).inputValue();
   await dialog.getByLabel('Текст выжимки',{exact:true}).fill(value+'\nАвторская проверка: дата и тайна сохранены.');
-  await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();
+  await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Журнал кампании',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Вернуться в игру',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.locator('.chat-heading')).toContainText('Глава 2');
   await page.getByLabel('Твоё сообщение',{exact:true}).fill('Продолжай незавершённый разговор.');
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
@@ -125,7 +125,7 @@ test('Chat: persisted draft review, settings, request receipts and browser Back'
   await page.reload();
   await page.getByRole('button',{name:'Черновик выжимки',exact:true}).click();
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toHaveValue('Проверенный серверный черновик. Тайна остаётся у Лены.');
-  await dialog.getByRole('button',{name:'Утвердить в этой главе',exact:true}).click();
+  await dialog.getByRole('button',{name:'Утвердить в этой главе',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Журнал кампании',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Вернуться в игру',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.locator('.chat-heading')).toContainText('Глава 1');
   await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();
   await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByText('Дополнительные параметры модели',{exact:true}).click();
@@ -249,7 +249,7 @@ test('Chat: idea review, automatic opening, variants and reload without duplicat
   await expect(page.locator('.chat-assistant')).toHaveCount(2);await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
   await updateMemory(page);
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toBeVisible();
-  await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();
+  await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();await expect(dialog.getByRole('heading',{name:'Журнал кампании',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'Вернуться в игру',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.locator('.chat-heading')).toContainText('Глава 2');
   await page.getByLabel('Твоё сообщение',{exact:true}).fill('Продолжаю разговор.');await page.getByRole('button',{name:'Отправить',exact:true}).click();
   await expect(page.locator('.chat-assistant')).toHaveCount(3);await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
@@ -323,6 +323,7 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
   const opening=page.locator('.chat-assistant').first();
   await formatted(opening);
   await expect(opening.locator('header')).toContainText('Ответ поступает');
+  await expect(opening.locator('.chat-action')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
   expect(renders).toHaveLength(0); // Local formatting, no server render per chunk.
   if(process.env.CHAT_QA_SCREENSHOTS){
@@ -330,7 +331,8 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
     await page.screenshot({path:`/tmp/chat261-markdown-stream-${info.project.name}.png`});
   }
   await release();await expect(opening.locator('header')).toContainText('Сохранено');
-  await expect.poll(()=>renders.length).toBeGreaterThan(0);
+  expect(renders).toHaveLength(0); // Completed Chat actions use the same local AST renderer.
+  await expect(opening.locator('.chat-action')).toHaveCount(4);
   await formatted(opening);
   const id=await page.evaluate(()=>localStorage.getItem('chat-selection'));
   const original=await (await request.get(`/api/chat/campaigns/${id}`)).json();
@@ -339,7 +341,7 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
   await expect(page.locator('.chat-assistant')).toHaveCount(2);
   const reply=page.locator('.chat-assistant').last();
-  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');
+  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');await expect(reply.locator('.chat-action')).toHaveCount(0);await expect(opening.locator('.chat-action').first()).toBeDisabled();
   await release();await expect(reply.locator('header')).toContainText('Сохранено');
   const before=await (await request.get(`/api/chat/campaigns/${id}`)).json();
   const saved=await (await request.get(`/api/chat/campaigns/${id}/messages`)).json();
@@ -358,7 +360,7 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
     const c=await (await request.get(`/api/chat/campaigns/${id}`)).json();
     return {changed:c.job.id!==before.job.id,status:c.job.status};
   }).toEqual({changed:true,status:'running'});
-  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');
+  await formatted(reply);await expect(reply.locator('header')).toContainText('Ответ поступает');await expect(reply.locator('.chat-action')).toHaveCount(0);await expect(opening.locator('.chat-action').first()).toBeDisabled();
   await release();await expect(reply.locator('header')).toContainText('Сохранено');
   const after=await (await request.get(`/api/chat/campaigns/${id}`)).json();
   expect(after.branches).toHaveLength(2);

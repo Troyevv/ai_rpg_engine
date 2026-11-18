@@ -119,6 +119,18 @@ class ChatRepository:
                 db.execute("CREATE TABLE chat_creation_operations (creation_id TEXT NOT NULL, token TEXT NOT NULL, fingerprint TEXT NOT NULL, result TEXT NOT NULL, PRIMARY KEY(creation_id,token))")
                 db.execute("INSERT INTO schema_migrations(name) VALUES('chat_creation_v2')")
 
+        with self.transaction() as db:
+            # A bookmark belongs to the immutable message. Shared prefixes reuse
+            # it; replacement messages and abandoned suffixes never inherit it.
+            db.execute('''CREATE TABLE IF NOT EXISTS chat_bookmarks (
+                campaign_id TEXT NOT NULL REFERENCES chat_campaigns(id),
+                message_id TEXT NOT NULL REFERENCES chat_messages(id),
+                note TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL DEFAULT 1 CHECK(priority BETWEEN 0 AND 2),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(campaign_id,message_id))''')
+            db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('chat_bookmarks_v3')")
+
     @contextmanager
     def transaction(self):
         with self.connect() as db:
@@ -198,7 +210,11 @@ class ChatRepository:
     def budgets(self, db, cid, extra=''):
         b, m, s, tail, messages = self.inputs(db, cid, extra=extra)
         reply = budget(assemble(s, m['text'], tail, messages), s['reply'])
-        summary = budget(assemble(s, m['text'], [], messages, summary=True), s['summary'])
+        bookmarks = self.summary_bookmarks(db,cid,b['id'])
+        summary = budget(assemble(s, m['text'], [], messages, summary=True,bookmarks=bookmarks), s['summary'])
+        summary['bookmarks_included'] = len(bookmarks)
+        summary['bookmarks_excluded'] = db.execute('''SELECT COUNT(*) FROM chat_bookmarks k JOIN chat_path p
+            ON p.message_id=k.message_id WHERE k.campaign_id=? AND p.branch_id=? AND k.priority=0''',(cid,b['id'])).fetchone()[0]
         # Warn before the pending reply consumes the space needed for the next
         # summary. This is a reserve, not an invented measurement of future prose.
         summary['next_reply_reserve'] = s['reply']['max_tokens'] + 64
@@ -225,20 +241,74 @@ class ChatRepository:
                 WHERE d.campaign_id=? AND d.branch_id=? AND d.status NOT IN ('applied','cancelled') ORDER BY d.rowid DESC LIMIT 30''', (cid,b['id']))]
             return c
 
-    def page(self, cid, bid=None, chapter=None, before=2147483647, limit=40):
+    def page(self, cid, bid=None, chapter=None, before=2147483647, limit=40, *, after=None):
         with self.connect() as db:
             b = self.branch(db, cid, bid)
             if chapter and row(db, 'chat_chapters', chapter, cid)['branch_id'] != b['id']:
                 raise ValueError('Глава не принадлежит ветке.')
-            rows = [dict(r) for r in db.execute('''SELECT m.*,p.seq,p.chapter_id FROM chat_path p JOIN chat_messages m ON m.id=p.message_id
-                WHERE p.branch_id=? AND p.seq<? AND (? IS NULL OR p.chapter_id=?) ORDER BY p.seq DESC LIMIT ?''',
-                (b['id'], before, chapter, chapter, limit+1))]
+            direction = 'DESC' if after is None else 'ASC'
+            rows = [dict(r) for r in db.execute(f'''SELECT m.*,p.seq,p.chapter_id,k.note AS bookmark_note,k.priority AS bookmark_priority
+                FROM chat_path p JOIN chat_messages m ON m.id=p.message_id
+                LEFT JOIN chat_bookmarks k ON k.campaign_id=m.campaign_id AND k.message_id=m.id
+                WHERE p.branch_id=? AND p.seq<? AND p.seq>? AND (? IS NULL OR p.chapter_id=?) ORDER BY p.seq {direction} LIMIT ?''',
+                (b['id'], before, after or 0, chapter, chapter, limit))]
             for message in rows:
+                priority=message.pop('bookmark_priority');note=message.pop('bookmark_note')
+                message['bookmark'] = dict(note=note,priority=priority) if priority is not None else None
                 if message['status']=='running' and message['job_id']:
                     journal=row(db,'chat_jobs',message['job_id'],cid)
                     if journal['status']!='running':
                         message.update(content=journal['response'],status=journal['status'])
-            return dict(messages=list(reversed(rows[:limit])), more=len(rows)>limit)
+            if after is None: rows.reverse()
+            def exists(operator, seq):
+                return bool(db.execute(f'''SELECT 1 FROM chat_path WHERE branch_id=? AND seq{operator}?
+                    AND (? IS NULL OR chapter_id=?) LIMIT 1''',(b['id'],seq,chapter,chapter)).fetchone())
+            return dict(messages=rows,more=bool(rows) and exists('<',rows[0]['seq']),
+                        more_after=bool(rows) and exists('>',rows[-1]['seq']))
+
+    def summary_bookmarks(self, db, cid, bid):
+        return [dict(r) for r in db.execute('''SELECT k.*,p.seq,m.role,m.content FROM chat_bookmarks k
+            JOIN chat_path p ON p.message_id=k.message_id JOIN chat_messages m ON m.id=k.message_id
+            WHERE k.campaign_id=? AND p.branch_id=? AND k.priority>0 ORDER BY k.priority DESC,p.seq''',(cid,bid))]
+
+    def bookmark(self, cid, body):
+        with self.transaction() as db:
+            fp, previous = self.operation(db,cid,body['token'],dict(body,operation='bookmark'))
+            if previous: return previous
+            self.guard(db,cid,body['revision'])
+            b = self.branch(db,cid,body['branch'])
+            m = db.execute('''SELECT m.* FROM chat_path p JOIN chat_messages m ON m.id=p.message_id
+                WHERE p.branch_id=? AND p.message_id=?''',(b['id'],body['message'])).fetchone()
+            if not m or m['campaign_id']!=cid: raise ValueError('Сообщение не принадлежит этой ветке.')
+            if m['status']=='running': raise ValueError('Дождитесь сохранения сообщения.')
+            if body['enabled']:
+                db.execute('''INSERT INTO chat_bookmarks(campaign_id,message_id,note,priority) VALUES(?,?,?,?)
+                    ON CONFLICT(campaign_id,message_id) DO UPDATE SET note=excluded.note,
+                    priority=excluded.priority,updated_at=CURRENT_TIMESTAMP''',(cid,m['id'],body['note'],body['priority']))
+            else:
+                db.execute('DELETE FROM chat_bookmarks WHERE campaign_id=? AND message_id=?',(cid,m['id']))
+            return self.record(db,cid,body['token'],fp,{'message':m['id'],'enabled':body['enabled']})
+
+    def bookmarks(self, cid, bid=None, before=2147483647, query='', limit=30):
+        with self.connect() as db:
+            b = self.branch(db,cid,bid)
+            db.create_function('chat_casefold',1,lambda value:value.casefold(),deterministic=True)
+            # instr treats %, _ and Unicode as text, not LIKE wildcards.
+            rows = [dict(r) for r in db.execute('''SELECT k.*,p.seq,p.chapter_id,m.role,m.status,
+                substr(m.content,1,400) AS excerpt,c.name AS chapter_name FROM chat_bookmarks k
+                JOIN chat_path p ON p.message_id=k.message_id JOIN chat_messages m ON m.id=k.message_id
+                JOIN chat_chapters c ON c.id=p.chapter_id
+                WHERE k.campaign_id=? AND p.branch_id=? AND p.seq<?
+                AND (?='' OR instr(chat_casefold(k.note||' '||m.content),chat_casefold(?))>0)
+                ORDER BY p.seq DESC LIMIT ?''',(cid,b['id'],before,query,query,limit+1))]
+            return dict(items=rows[:limit],more=len(rows)>limit,branch=b['id'])
+
+    def locate(self, cid, message, bid=None):
+        with self.connect() as db:
+            b = self.branch(db,cid,bid)
+            p = db.execute('SELECT * FROM chat_path WHERE branch_id=? AND message_id=?',(b['id'],message)).fetchone()
+            if not p: raise ValueError('Сообщение отсутствует в выбранной ветке.')
+            return dict(branch=b['id'],chapter=p['chapter_id'],seq=p['seq'])
 
     def job(self, cid, jid, db=None):
         if db is None:
@@ -331,8 +401,8 @@ class ChatRepository:
             d['previous'] = row(db, 'chat_memories', d['parent_id'], cid)['text']
             return d
 
-    def manual_memory(self, cid, body):
-        with self.transaction() as db:
+    def manual_memory(self, cid, body, db=None):
+        with self.transaction() if db is None else nullcontext(db) as db:
             fp, previous = self.operation(db, cid, body['token'], body)
             if previous: return previous
             self.guard(db, cid, body['revision'])
@@ -412,3 +482,66 @@ class ChatRepository:
         with self.connect() as db:
             self.campaign(db, cid)
             return [dict(r) for r in db.execute('SELECT rowid AS cursor,* FROM chat_memories WHERE campaign_id=? AND rowid<? ORDER BY rowid DESC LIMIT 30', (cid,before))]
+
+    @staticmethod
+    def lineage_sql():
+        return '''WITH RECURSIVE lineage(id) AS (
+            SELECT ? UNION SELECT m.parent_id FROM chat_memories m JOIN lineage l ON m.id=l.id
+            WHERE m.parent_id IS NOT NULL) '''
+
+    def memory_version(self, db, cid, bid=None, mid=None):
+        b=self.branch(db,cid,bid)
+        mid=mid or b['memory_id']
+        if not db.execute(self.lineage_sql()+'SELECT 1 FROM lineage WHERE id=?',(b['memory_id'],mid)).fetchone():
+            raise ValueError('Версия не входит в историю памяти выбранной ветки.')
+        return b,row(db,'chat_memories',mid,cid)
+
+    def library(self, cid, bid=None, mid=None, query='', offset=0, limit=40):
+        from backend.chat.documents import characters
+        with self.connect() as db: b,m=self.memory_version(db,cid,bid,mid)
+        view=characters(m['text']);q=query.casefold().strip()
+        matches=[c for c in view['cards'] if not q or q in (c['name']+' '+c['text']).casefold()]
+        def brief(c): return {k:c[k] for k in ('key','name','kind')}
+        return dict(memory_id=m['id'],branch=b['id'],items=[brief(c) for c in matches[offset:offset+limit]],
+                    total=len(matches),more=offset+limit<len(matches),sources=[brief(s) for s in view['sources']])
+
+    def character(self, cid, key, bid=None, mid=None):
+        from backend.chat.documents import character
+        with self.connect() as db: b,m=self.memory_version(db,cid,bid,mid)
+        return dict(character(m['text'],key),memory_id=m['id'],branch=b['id'],source=m['source'],created_at=m['created_at'])
+
+    def edit_character(self, cid, key, body):
+        from backend.chat.documents import patch_character
+        with self.transaction() as db:
+            payload=dict(body,operation='character',character=key)
+            fp,previous=self.operation(db,cid,body['token'],payload)
+            if previous: return previous
+            c=self.guard(db,cid,body['revision']);b=self.branch(db,cid)
+            if c['active_branch']!=body['branch'] or b['memory_id']!=body['memory_id']:
+                raise ValueError('Утверждённая память изменилась. Сравните правку с актуальной версией; автоматической перезаписи нет.')
+            m=row(db,'chat_memories',b['memory_id'],cid)
+            text=patch_character(m['text'],key,body['text'])
+            # Same author-draft mechanism, one transaction; preserve the stronger
+            # card/source fingerprint for retries instead of fingerprinting just text.
+            result=self.manual_memory(cid,dict(token=body['token'],revision=body['revision'],text=text),db)
+            db.execute('UPDATE chat_operations SET fingerprint=? WHERE campaign_id=? AND token=?',(fp,cid,body['token']))
+            return result
+
+    def history(self, cid, bid=None, before=2147483647):
+        with self.connect() as db:
+            b=self.branch(db,cid,bid)
+            rows=[dict(r) for r in db.execute(self.lineage_sql()+'''SELECT m.rowid AS cursor,m.id,m.parent_id,m.branch_id,
+                m.cutoff,m.applies_after,m.source,m.created_at,b.name AS branch_name,
+                length(m.text) AS characters FROM chat_memories m JOIN lineage l ON l.id=m.id
+                JOIN chat_branches b ON b.id=m.branch_id WHERE m.campaign_id=? AND m.rowid<? ORDER BY m.rowid DESC LIMIT 31''',
+                (b['memory_id'],cid,before))]
+            return dict(items=rows[:30],more=len(rows)>30,branch=b['id'],current=b['memory_id'])
+
+    def history_detail(self, cid, mid, bid=None):
+        from backend.chat.documents import changes
+        with self.connect() as db:
+            b,m=self.memory_version(db,cid,bid,mid)
+            parent=row(db,'chat_memories',m['parent_id'],cid) if m['parent_id'] else None
+            provenance=db.execute('SELECT id,job_id,source_revision FROM chat_drafts WHERE campaign_id=? AND applied_memory=?',(cid,mid)).fetchone()
+            return dict(memory=m,previous=parent,branch=b['id'],provenance=dict(provenance) if provenance else None,
+                        changes=changes(parent['text'] if parent else '',m['text']))

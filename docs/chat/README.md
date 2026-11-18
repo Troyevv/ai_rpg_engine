@@ -48,12 +48,12 @@ bold concrete action titles, `**Свободный ввод:** свой вари
 blocks, in every game response including the opening. These
 are suggestions, never completed player actions. Initial and updated memory keep the original
 Issue #260 template without this footer; summary instructions preserve only established history
-and exclude unchosen suggestions. Formatting belongs to the model, with no response parser,
-semantic validator or extra inference. Saved campaign prompts and recorded retry contexts are
+and exclude unchosen suggestions. Formatting belongs to the model, with no semantic validator or extra inference.
+The optional action controls below use only a bounded Markdown AST presentation transform. Saved campaign prompts and recorded retry contexts are
 not rewritten: existing campaigns can adopt the new RP text through advanced prompt settings;
 regeneration of an old response deliberately uses its original recorded instructions.
-Chat messages render safe CommonMark locally while streaming (no per-chunk HTTP), then
-use the existing server Markdown renderer after completion. Both disable raw HTML; letter
+Assistant Chat messages render safe CommonMark locally during and after streaming
+(no per-chunk HTTP); other documents retain the existing server renderer. Both disable raw HTML; letter
 fences remain literal. This opt-in presentation does not change Narrative streaming.
 
 The additive v2 migration preserves old campaigns with `opening_required=0`; an established
@@ -155,7 +155,8 @@ Schema creation is additive, transactional and idempotent. Existing Narrative ta
 snapshots and saves are not converted or rewritten. Back up the whole SQLite database
 and the existing `.credential-key`; disk capacity still bounds retained history.
 
-Summary input = previous approved document + only uncovered active-branch messages.
+Summary input = previous approved document + uncovered active-branch messages + explicitly
+selected active-branch bookmarks (older sources quoted once; uncovered ones referenced).
 Confirmation checks the captured revision/branch and new context size before a single
 transaction creates the approved version, optional next chapter, tail and new head.
 No provider call holds a transaction open. Repeating confirm cannot create another chapter.
@@ -249,3 +250,57 @@ A draft additionally has its own edit revision: competing tabs cannot overwrite 
 other or confirm an older edited document. The requested rollover/checkpoint choice
 survives reload. Read-only `/jobs/{id}/requests` exposes the existing sanitized request
 ledger through the same campaign scope for author diagnostics and cost comparisons.
+
+
+## Long-campaign journal (#262)
+
+The compact campaign menu opens one journal: bookmarks, characters and memory changes.
+Message bookmark controls use the existing accessible 44 px icon buttons. The additive
+`chat_bookmarks_v3` migration stores a note and explicit priority against the immutable
+campaign/message pair. Forks share a prefix reference; replacement messages and excluded
+suffixes do not inherit bookmarks. Editing/removing a shared-prefix bookmark affects that
+same source in every branch, as explained in the editor. Nothing copies message bodies.
+Search is Unicode casefolded and paginated; source navigation fetches a bounded page around
+the target and supports earlier/later pages across archived chapters.
+
+Only an explicitly initiated summary receives bookmarked evidence. High/normal priority
+sources are all budgeted; navigation-only sources are explicitly excluded by the author.
+Overflow blocks provider IO and offers priority controls, never silently drops evidence.
+Notes are author explanations, not proof that suggested actions occurred; approved author
+corrections remain authoritative over old quotes. Ordinary RP requests are unchanged.
+
+`chatMarkdown.ts` transforms only a complete top-level action heading followed immediately
+by 4–6 simple ordered items. Quotes, fences, nested lists, links and unknown shapes remain
+ordinary Markdown. Streaming/partial responses have no action buttons. Selecting a completed
+action fills the branch-scoped draft; existing input gets explicit append/replace/cancel.
+Archive choices explain their destination. No choice sends a request or changes saved text.
+
+`documents.py` projects exact source spans from approved Markdown. Explicit template names,
+character markers and direct child headings identify cards; ambiguous documents retain a
+full-source fallback. Detail groups use explicit headings and retain unknown/multiline text,
+not inferred field values. Relationships/secrets also remain available as their full source
+sections, without assigning author knowledge to characters. There is no character table.
+An edit replaces one server-resolved source span in a transaction and creates the existing
+author draft. Revision and memory identity guard it. A stale edit remains local; comparison
+and explicit transfer to a uniquely identified current section precede a new review. Nothing
+merges competing text automatically. Other sections remain byte-for-byte intact.
+
+Approved-memory history follows the selected branch's parent lineage; a fork cannot show
+future memory from an excluded suffix. Every approval opens the exact before/after view,
+grouped only by unique template section labels. Line diffs account for order/repetition,
+retain provenance and expose both complete versions. They make no semantic claims about
+world events. Restoring a version opens the ordinary author editor for explicit confirmation.
+There are no background provider calls, semantic services or Narrative Runtime dependencies.
+
+Additional APIs: `GET|PUT /bookmarks`, `GET /messages/{id}/locate`, `GET /messages?after=`,
+`GET /characters?memory=&q=&offset=`, `GET /characters/{key}`,
+`POST /characters/{key}/draft`, `GET /history?before=`, `GET /history/{version}` beneath
+`/api/chat/campaigns/{id}`. Reads accept an explicitly scoped branch; writes use the existing
+revision/idempotency system. Saved notes/versions survive restart; unsaved editor drafts are
+browser-local recovery aids. Clearing browser storage removes those unsaved drafts only.
+
+Focused regression suites: `tests/test_chat_tools.py`, `frontend/tests/chatActions.test.tsx`,
+`frontend/e2e/chat-tools.spec.ts`, plus the existing Chat/Narrative suites. The free browser
+fixture replaces external provider IO; the long-history endpoint deliberately seeds 1050
+messages, 91 bookmarks and 97 character cards for pagination/stress testing, not played-turn
+quality evidence. `CHAT_TOOLS_SCREENSHOTS` captures temporary visual evidence outside git.

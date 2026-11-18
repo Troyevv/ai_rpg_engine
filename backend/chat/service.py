@@ -59,7 +59,8 @@ class ChatService:
                 if kind == 'reply':
                     if not body['text'].strip(): raise ValueError('Введите сообщение.')
                     messages.append({'role':'user','content':body['text']})
-                context = assemble(settings, m['text'], tail, messages, summary=kind=='summary')
+                bookmarks = r.summary_bookmarks(db,cid,b['id']) if kind=='summary' else ()
+                context = assemble(settings, m['text'], tail, messages, summary=kind=='summary',bookmarks=bookmarks)
                 if kind=='start': context[0]['content'] += '\n\n'+OPENING_PROMPT
                 config = settings['summary' if kind=='summary' else 'reply']
             if not config['model'].strip(): raise ValueError('Выберите модель в настройках RP-чата.')

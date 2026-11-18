@@ -81,6 +81,18 @@ class Select(Revision):
     branch: str
 
 
+class Bookmark(Select):
+    message: str
+    enabled: bool = True
+    note: str = Field(default='', max_length=2000)
+    priority: int = Field(default=1, ge=0, le=2)
+
+
+class CharacterEdit(Select):
+    memory_id: str
+    text: str = Field(min_length=1, max_length=500000)
+
+
 class Source(Strict):
     world_id: int | None = None
     save_id: int | None = None
