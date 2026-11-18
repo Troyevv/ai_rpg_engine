@@ -90,6 +90,7 @@ test('start, ordinary turn, dossier name link, persistent reload, next turn',asy
  await expect.poll(async()=>Math.abs(before!.y-(await link.boundingBox())!.y)).toBeLessThan(2);
  const stored=await(await request.get(`/api/saves/${s.save}`)).json();expect(stored.turns).toHaveLength(2);
  await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await page.locator('.choices button').first().click();
+  await page.getByRole('dialog').getByRole('button',{name:'Заменить черновик',exact:true}).click();
   await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(3);
  const last=await(await request.get(`/api/saves/${s.save}`)).json();expect(last.turns).toHaveLength(3);expect(last.revision).toBeGreaterThan(stored.revision);

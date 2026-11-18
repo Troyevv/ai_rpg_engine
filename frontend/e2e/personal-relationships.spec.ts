@@ -118,6 +118,7 @@ test('genealogy and narrative entry, partner return, draft and persisted next tu
  await page.keyboard.press('Escape');await expect(family).toBeVisible();await page.keyboard.press('Escape');
  await expect(composer).toHaveValue('Сохранить мой черновик');
  const turns=await page.locator('.turn').count();await page.locator('.choices button').first().click();
+  await page.getByRole('dialog').getByRole('button',{name:'Заменить черновик',exact:true}).click();
   await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(turns+1);
  // The seeded ordinary narrative references Kirill or Vera, both linked spouses.
