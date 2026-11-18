@@ -313,9 +313,9 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
     await expect(article.locator('.prose h3')).toHaveText(['Варианты действий','Текущая сцена']);
     await expect(article.locator('.prose ol li strong')).toHaveText(['Спросить Лену:','Осмотреть дверь:','Позвать гостя:','Подождать:']);
     await expect(article.locator('.prose p>strong')).toHaveText(['Свободный ввод:','Время:','Место:','Рядом:']);
-    expect(await article.locator('.prose ol').evaluate(el=>getComputedStyle(el).listStyleType)).toBe('decimal');
-    expect(await article.locator('.prose hr').first().evaluate(el=>parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0);
-    expect(await article.locator('.prose ol strong').first().evaluate(el=>Number(getComputedStyle(el).fontWeight))).toBeGreaterThanOrEqual(600);
+    await expect.poll(()=>article.locator('.prose ol').evaluate(el=>getComputedStyle(el).listStyleType)).toBe('decimal');
+    await expect.poll(()=>article.locator('.prose hr').first().evaluate(el=>parseFloat(getComputedStyle(el).borderTopWidth))).toBeGreaterThan(0);
+    await expect.poll(()=>article.locator('.prose ol strong').first().evaluate(el=>Number(getComputedStyle(el).fontWeight))).toBeGreaterThanOrEqual(600);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   };
   const release=async()=>expect((await request.post('/test/chat-markdown-release')).ok()).toBeTruthy();
@@ -365,4 +365,10 @@ test('Chat: Markdown blocks render during streaming, persist and reopen without 
   const after=await (await request.get(`/api/chat/campaigns/${id}`)).json();
   expect(after.branches).toHaveLength(2);
   expect(after.job.kind).toBe('regenerate');
+});
+
+// A failed visual assertion must not leave the deliberately held external stream
+// occupying the shared model lease and cause unrelated following tests to fail.
+test.afterEach(async({request},info)=>{
+  if(info.title.includes('Markdown blocks render during streaming'))await request.post('/test/chat-markdown-release');
 });

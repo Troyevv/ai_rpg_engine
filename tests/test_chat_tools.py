@@ -237,3 +237,40 @@ def test_character_groups_keep_multiline_and_unknown_fields_without_inference():
     duplicate=text.replace('## ОТНОШЕНИЯ','### 👤 Лена\n\n- **Внешность:** другой человек.\n\n## ОТНОШЕНИЯ')
     cards=[c for c in characters(duplicate)['cards'] if c['name']=='Лена']
     assert len(cards)==2 and cards[0]['key']!=cards[1]['key']
+
+
+def test_concurrent_bookmark_cas_has_one_winner(env):
+    from concurrent.futures import ThreadPoolExecutor
+    client,app=env;c=create(client)
+    with patch('llm.chat_stream',side_effect=provider()): generate(client,c)
+    c=state(client,c);r=app.state.chat.repo;message=client.get(url(c,'/messages')).json()['messages'][-1]
+    def write(note):
+        try:
+            r.bookmark(c['id'],body(c,branch=c['active_branch'],message=message['id'],enabled=True,note=note,priority=1))
+            return True
+        except ValueError:
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool: results=list(pool.map(write,['Первая вкладка','Вторая вкладка']))
+    assert sorted(results)==[False,True]
+    assert state(client,c)['revision']==c['revision']+1
+    assert len(r.bookmarks(c['id'])['items'])==1
+
+
+def test_legacy_schema_upgrade_and_regeneration_preserve_original_sources(env):
+    client,app=env;c=create(client,memory=MEMORY);r=app.state.chat.repo
+    with patch('llm.chat_stream',side_effect=provider()): generate(client,c)
+    c=state(client,c);original=c['active_branch'];before=r.page(c['id'])
+    # Explicitly reconstruct the pre-v3 schema in this disposable fixture DB.
+    with r.transaction() as db:
+        db.execute('DROP TABLE chat_bookmarks')
+        db.execute("DELETE FROM schema_migrations WHERE name='chat_bookmarks_v3'")
+    r.migrate();r.migrate()
+    assert r.page(c['id'])==before
+    for message in before['messages']: c=mark(client,c,message['id'],note=message['role'])
+    with patch('llm.chat_stream',side_effect=provider('Другой ответ.')) as io:
+        generate(client,c,'regenerate','',target=before['messages'][-1]['id'])
+    c=state(client,c)
+    assert io.call_count==1
+    assert [b['role'] for b in r.bookmarks(c['id'])['items']]==['user']
+    assert len(r.bookmarks(c['id'],original)['items'])==2
+    assert r.page(c['id'])['messages'][-1]['bookmark'] is None

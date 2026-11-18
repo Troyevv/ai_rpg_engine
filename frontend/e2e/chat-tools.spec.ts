@@ -99,3 +99,17 @@ test('Chat tools: journal skins, errors, retry and untouched input',async({page,
   }
   const c=await campaign(page,request);expect(c.branch.head).toBe(1); // Selecting/replacing and browsing never sends a turn.
 });
+
+
+test('Chat tools: delayed and lost acknowledgements preserve a newer draft without duplicate turns',async({page,request})=>{
+  test.setTimeout(90000);await create(page);const input=page.getByLabel('Твоё сообщение',{exact:true});
+  let arrived!:()=>void,release!:()=>void;const responseReady=new Promise<void>(r=>arrived=r),gate=new Promise<void>(r=>release=r);
+  await page.route('**/api/chat/campaigns/*/generate',async route=>{const response=await route.fetch();arrived();await gate;await route.fulfill({response})});
+  await input.fill('Первый отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();await responseReady;
+  await input.fill('Новый черновик до подтверждения отправки.');release();await expect(page.locator('.chat-assistant')).toHaveCount(2);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Новый черновик до подтверждения отправки.');
+  await page.unroute('**/api/chat/campaigns/*/generate');
+  await page.route('**/api/chat/campaigns/*/generate',async route=>{await route.fetch();await route.abort('failed')});
+  await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
+  await input.fill('Черновик после сетевой ошибки.');await page.unroute('**/api/chat/campaigns/*/generate');await page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true}).click();await expect(page.locator('.chat-assistant')).toHaveCount(3);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Черновик после сетевой ошибки.');
+  const c=await campaign(page,request);expect(c.branch.head).toBe(5);await page.reload();await expect(input).toHaveValue('Черновик после сетевой ошибки.');expect((await campaign(page,request)).job.id).toBe(c.job.id);
+});
