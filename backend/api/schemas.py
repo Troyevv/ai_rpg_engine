@@ -75,7 +75,7 @@ class CanonKnowledge(DTO):
 
 
 class CanonSocial(DTO):
-    action: Literal['engaged','spouse','divorce','parent','move','hire','leave_job']
+    action: Literal['engaged','spouse','divorce','parent','move','hire','leave_job','death_notice']
     actor_id: str = Field(min_length=1)
     other_id: str | None = None
     phase_id: str | None = None

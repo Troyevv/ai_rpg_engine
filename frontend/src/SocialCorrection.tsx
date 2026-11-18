@@ -2,7 +2,7 @@ import type {State} from './types';
 import {Input} from './components/ui/input';
 
 const actions = {engaged:'Помолвка',spouse:'Заключение брака',divorce:'Развод',parent:'Родство с ребёнком',
-  move:'Постоянный переезд',hire:'Новая работа',leave_job:'Увольнение'} as const;
+  move:'Постоянный переезд',hire:'Новая работа',leave_job:'Увольнение',death_notice:'Известие о смерти'} as const;
 type Action = keyof typeof actions;
 export type SocialEdit = {action:Action; actor_id:string; other_id:string; location_id:string; phase_id:string;
   title:string; description:string; known_by:string[]};
@@ -13,7 +13,7 @@ export function SocialCorrection({state,value,onChange}:{state:State;value:Socia
   const phases=(value?.action==='move'?state.residence_roles?.residences:state.residence_roles?.roles)?.filter(
     r=>r.actor_id===value?.actor_id&&r.status==='active'&&(value?.action==='move'||r.kind==='employment'))||[];
   return <fieldset>
-    <label>Исправить семейное положение, адрес или работу
+    <label>Исправить сведения о жизни персонажей
       <select value={value?.action||''} onChange={e=>onChange(e.target.value?{
         action:e.target.value as Action, actor_id:state.controlled_actor_id||'',other_id:'',location_id:'',phase_id:'',
         title:'',description:'',known_by:state.controlled_actor_id?[state.controlled_actor_id]:[],
@@ -39,7 +39,7 @@ export function SocialCorrection({state,value,onChange}:{state:State;value:Socia
         </select>
       </label>}
       {value.action==='hire'&&<label>Новая должность<Input required maxLength={200} value={value.title} onChange={e=>onChange({...value,title:e.target.value})}/></label>}
-      {!relationship&&(phases.length>0||value.action==='leave_job')&&<label>Какую запись закрыть
+      {!relationship&&value.action!=='death_notice'&&(phases.length>0||value.action==='leave_job')&&<label>Какую запись закрыть
         <select required={value.action==='leave_job'} value={value.phase_id} onChange={e=>onChange({...value,phase_id:e.target.value})}>
           <option value="">{value.action==='leave_job'?'Выберите место работы':'Сохранить прежние записи'}</option>
           {phases.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}

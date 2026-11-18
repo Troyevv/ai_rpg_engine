@@ -395,8 +395,7 @@ def test_birth_and_experience_need_no_duplicate_scene_step_or_sex_assessment():
     child = pregnancy['children'][0]['id']
     payload = dict(scene=dict(elapsed_minutes=pregnancy['due_minute']-state['meta']['world_time']),
                    births=[dict(pregnancy_id=pregnancy['id'],assertion='birth_completed',perceived_by=['a'],location_id='home')],
-                   development_evidence=[dict(id='choice', actor_id='b', meaning='Умеет выслушать',
-                                              kind='behavior', assertion='completed', perceived_by=['a'])])
+                   development_evidence=[dict(actor_id='b', meaning='Умеет выслушать', perceived_by=['a'])])
     result = StateResolver(state, 'Ребёнок родился.', 'Остаюсь рядом.',
                            **resolver_options(state,'Остаюсь рядом.',contract_version=10)).resolve(payload)
     assert result.state['characters'][child]['birth_date']=='2026-01-02'
@@ -472,3 +471,18 @@ def test_objective_employment_does_not_require_a_second_player_decision():
     assert apply(record).state['roles']['contract']['status']=='active'
     with pytest.raises(StructuralDeltaError):
         apply(dict(record,transition='voluntary',decision_actor_id='a'))
+
+
+def test_repeated_sections_preserve_independent_records_without_last_write_wins():
+    from backend.runtime_v3.structured_payload import consequence_payload, object_payload
+    wire='{"facts":[{"id":"one"}],"facts":[{"id":"a","id":"b"},{"id":"two"}],"scene":{"elapsed_minutes":4}}'
+    with pytest.raises(ValueError):
+        object_payload(wire)
+    parsed, _, warnings=consequence_payload(wire, ('facts',))
+    assert parsed=={'facts':[{'id':'one'},{'id':'two'}],'scene':{'elapsed_minutes':4}}
+    assert {row['code'] for row in warnings}=={'repeated_section','duplicate_record_key'}
+    ambiguous='{"scene":{"elapsed_minutes":4,"elapsed_minutes":8},"facts":[{"id":"safe"}]}'
+    assert consequence_payload(ambiguous, ('facts',))[0]=={'facts':[{'id':'safe'}]}
+    assert next(row['index'] for row in warnings if 'index' in row) == 1
+    steps = '{"scene_steps":[{"id":"x","id":"y"}],"scene_steps":[{"kind":"movement"}]}'
+    assert consequence_payload(steps, ('scene_steps',))[0]['scene_steps'] == [None, {'kind':'movement'}]

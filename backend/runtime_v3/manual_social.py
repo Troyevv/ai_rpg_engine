@@ -22,7 +22,13 @@ def correct(world, batch, change, revision):
     fid = identity('manual-social-fact', revision, action, *participants, text)
     rid = identity('manual-phase', revision, action, *participants)
     params = dict(evidence=source, player_evidence=source, player_assertion='explicit_choice')
-    if action in ('engaged','spouse','parent','divorce'):
+    if action == 'death_notice':
+        character = world['characters'][actor]
+        if character['life_status'] != 'dead' or not observers:
+            raise ValueError('Выбери умершего персонажа и тех, кому известно о его смерти.')
+        # Keep every previous recipient when the death already has a canonical fact.
+        fid = character.get('life_fact_id') or fid
+    elif action in ('engaged','spouse','parent','divorce'):
         section, apply = 'social_relation_changes', apply_life
         if action == 'divorce':
             active = [r['id'] for r in world['objective_relations'].values() if r['status']=='active'
@@ -59,11 +65,15 @@ def correct(world, batch, change, revision):
                 items.insert(0,dict(params,id=prior,status='closed',outcome='replaced',closure_fact_id=fid))
     resolver = StateResolver(world, '', source, turn_id=turn, scene_version=10)
     state = resolver.state
-    state['facts'][fid] = Fact(id=fid,text=text,visibility='secret',character_ids=participants).model_dump()
+    if fid not in state['facts']:
+        state['facts'][fid] = Fact(id=fid,text=text,visibility='secret',character_ids=participants).model_dump()
     for cid in observers:
         state['knowledge'][cid+':'+fid] = Knowledge(actor_id=cid,fact_id=fid,status='known',
             confirmed_once=True,source_turn=turn).model_dump()
         batch.state_changes.append(dict(kind='manual_knowledge',source='player_edit',turn_id=turn,actor_id=cid,fact_id=fid,status='known'))
+    if action == 'death_notice':
+        state['characters'][actor]['life_fact_id'] = fid
+        return state
     apply(resolver, RawTurnResult.parse(dict(final_scene={}, **{section:items})))
     for record in resolver.history.state_changes:
         batch.state_changes.append(dict(record,source='player_edit'))

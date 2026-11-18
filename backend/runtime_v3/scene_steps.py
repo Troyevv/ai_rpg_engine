@@ -186,6 +186,8 @@ def project_schema(schema, *, version=6, camera_mode=None):
                 continue
             item = props[section]['items']
             item['required'] = [key for key in item['required'] if key not in ('source_event_id', 'sex_observations')]
+            if section == 'development_evidence':
+                item['required'] = ['actor_id', 'meaning']
             if section in ('births','development_evidence'):
                 item['properties']['perceived_by'] = {'type':'array','items':{'type':'string'},'maxItems':64}
         props.pop('agency_findings', None)
@@ -530,6 +532,10 @@ def bind_domain_sources(records, state, turn_id, namespace, order):
                 item.setdefault('parent_ids',[item['gestational_actor_id'],item['impregnating_actor_id']])
             if section == 'births':
                 item.setdefault('sex_observations', [])
+            if section == 'development_evidence':
+                item.setdefault('id', identity('experience', namespace, turn_id, item['actor_id'], item['meaning']))
+                item.setdefault('kind', 'experience')
+                item.setdefault('assertion', 'completed')
             if 'source_event_id' in item:
                 continue
             if section == 'births':

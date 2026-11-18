@@ -240,7 +240,9 @@ def apply_life(resolver, raw):
                         raise ValueError('voluntary relation needs explicit player choice')
                     if old and fields.get('status') == 'closed' and controlled in ids:
                         decision = item.get('decision_actor_id')
-                        if decision not in ids or decision == controlled:
+                        legal_divorce = (resolver.scene_version >= 10 and decision is None and
+                                         old['kind']=='spouse' and fields['outcome']=='divorced')
+                        if not legal_divorce and (decision not in ids or decision == controlled):
                             if not _proof(resolver,item): raise ValueError('closure needs NPC decision or player choice')
                     fields.update(evidence=item['evidence'],source_turn=resolver.turn_id)
                     after = ObjectiveRelation.model_validate(fields).model_dump()

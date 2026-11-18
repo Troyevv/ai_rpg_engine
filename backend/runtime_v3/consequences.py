@@ -3,7 +3,8 @@ from collections import defaultdict
 from copy import deepcopy
 
 from backend.runtime_v3.scene_steps import compile_scene, decode, input_schema
-from backend.runtime_v3.structured_payload import object_payload
+from backend.runtime_v3.structured_payload import consequence_payload
+from backend.runtime_v3.raw import SECTIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 
 
@@ -68,7 +69,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         return raw, resolve(raw)
 
     try:
-        proposal, normalization = object_payload(payload)
+        proposal, normalization, decoding_warnings = consequence_payload(payload, (*SECTIONS,'scene_steps','choices'))
     except (TypeError, ValueError):
         raw, result = evaluate({})
         result.warnings.append(dict(section='extraction', code='raw_root_invalid', action='preserve_scene'))
@@ -130,6 +131,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
                     warnings.append(dict(section=section, code=exc.code, action='skip_group',
                         records=[dict(section=s, key=k) for s,k,_ in group]))
         result.warnings.extend(warnings)
+    result.warnings.extend(decoding_warnings)
     if normalization:
         result.warnings.append(dict(section='extraction',code='structured_payload_normalized',action=normalization))
     return raw, result
