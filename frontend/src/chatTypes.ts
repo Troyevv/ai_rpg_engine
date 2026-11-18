@@ -6,7 +6,7 @@ export type ChatMessage = {id:string;role:'user'|'assistant';content:string;stat
 export type ChatJob = {id:string;kind:string;status:string;response:string;error:string;output_id:string;usage:{stage:string;provider:string;model:string;input_tokens:number|null;output_tokens:number|null;cost_usd:string|null;finish_reason:string|null}[]};
 export type ChatMemory = {id:string;text:string;cutoff:number;source:string;branch_id:string;created_at:string;cursor?:number};
 export type ChatCampaign = {id:string;name:string;revision:number;mode:'chat';opening_required?:number;source:unknown;active_branch:string;
-  branch:{id:string;head:number;chapter_id:string};memory:ChatMemory;settings:ChatSettings;
+  branch:{id:string;head:number;chapter_id:string;config_id?:string};memory:ChatMemory;settings:ChatSettings;
   chapters:{id:string;name:string;ordinal:number}[];branches:{id:string;name:string;head:number}[];
   job:ChatJob|null;budgets:Budgets;drafts:{id:string;status:string;source_revision:number;branch_id:string}[]};
 export type ChatDraft = {id:string;edit_revision:number;next_chapter:number;text:string;original:string;previous:string;status:string;stale:boolean;cutoff:number};

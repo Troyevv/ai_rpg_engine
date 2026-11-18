@@ -85,13 +85,15 @@
         "frontend/src/Chat*.tsx",
         "frontend/src/chatTypes.ts",
         "frontend/src/useChatScroll.ts",
+        "frontend/src/useChatNavigation.ts",
         "frontend/src/styles/chat.css",
         "backend/chat/*",
         "backend/api/chat.py",
         "prompts/chat_*"
       ],
       "suites": [
-        "chat-mode.spec.ts"
+        "chat-mode.spec.ts",
+        "chat-mobile.spec.ts"
       ]
     }
   },

@@ -7,6 +7,26 @@ import type {ChatCampaign} from '../src/chatTypes';
 vi.mock('../src/api',()=>({api:vi.fn(),download:vi.fn()}));
 vi.mock('../src/useChatScroll',()=>({useChatScroll:()=>({viewport:{current:null},content:{current:null},sticky:{current:true}})}));
 
+it('does not open creation before defaults finish loading',async()=>{
+  localStorage.clear();history.replaceState({},'');
+  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+  let ready:(v:unknown)=>void=()=>{};
+  vi.mocked(api).mockImplementation(async(path)=>{
+    if(path==='/chat/defaults')return new Promise(resolve=>{ready=resolve});
+    if(path==='/chat/campaigns'||path==='/chat/creations'||path==='/worlds')return [];
+    throw new Error('Unexpected API '+path);
+  });
+  try{
+    await act(()=>root.render(<ChatMode onBack={()=>{}} onConnections={()=>{}}/>));
+    const button=()=>[...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')].find(b=>b.textContent==='Новая RP-кампания')!;
+    expect(button().disabled).toBe(true);
+    await act(()=>ready({template:'Memory',settings:{reply:{model:''},summary:{model:''},prompt:''}}));
+    expect(button().disabled).toBe(false);
+    await act(()=>button().click());
+    expect(document.querySelector('[role=dialog]')?.textContent).toContain('Идея игры');
+  }finally{await act(()=>root.unmount());host.remove();localStorage.clear();history.replaceState({},'');vi.restoreAllMocks()}
+});
+
 it('opening stays locked while budget is pending; completion and typing do not depend on a budget response',async()=>{
   const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
   let snapshot:(event:MessageEvent)=>void=()=>{};

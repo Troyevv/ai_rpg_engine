@@ -630,10 +630,12 @@ def authoring_stream(**kwargs):
         if not chat_markdown_release.wait(30): raise RuntimeError('fixture: expected Markdown stream release')
         kwargs['on_finish']('stop')
         return
-    if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture'):
+    if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture', 'chat-mobile-fixture'):
         # Chat production service/context/API/SQLite; substitute external provider IO only.
         from backend.chat.context import TEMPLATE
         text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' or 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content'] else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
+        if kwargs['model']=='chat-mobile-fixture' and 'первоначальную авторскую выжимку' not in kwargs['messages'][0]['content']:
+            text = NARRATIVE*6+'\n\n'+CHAT_MARKDOWN
         kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
         if chat_cancel_next:
             chat_cancel_next = False
@@ -652,8 +654,8 @@ def authoring_stream(**kwargs):
     yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
-llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536)]]}
+llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture']
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536)]]}
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}

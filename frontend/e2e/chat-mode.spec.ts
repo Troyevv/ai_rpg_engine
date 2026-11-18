@@ -1,5 +1,12 @@
 import {test,expect,type Page,type Locator} from '@playwright/test';
 
+async function updateMemory(page:Page,next=true){
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const action=page.getByRole('button',{name:next?'Обновить выжимку и продолжить':'Обновить выжимку',exact:true});
+  if(!await action.isVisible())await page.getByRole('button',{name:'Действия кампании',exact:true}).click();
+  await action.click();
+}
+
 async function createChat(page:Page, model='chat-fixture', waitComplete=true) {
   await page.goto('/');
   await page.getByRole('button',{name:'RP-чат',exact:true}).click();
@@ -32,7 +39,7 @@ for(const skin of ['graphite','parchment'])test(`Chat: campaign, stream, memory,
   await page.getByLabel('Твоё сообщение',{exact:true}).fill('Неотправленный ввод переживёт reload');
   await page.reload();
   await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('Неотправленный ввод переживёт reload');
-  await page.getByRole('button',{name:'Обновить выжимку и продолжить',exact:true}).click();
+  await updateMemory(page);
   const dialog=page.getByRole('dialog');
   await expect(dialog.getByRole('heading',{name:'Проверка новой выжимки'})).toBeVisible();
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toContainText('Ошибочно считает:');
@@ -63,6 +70,7 @@ for(const skin of ['graphite','parchment'])test(`Chat: campaign, stream, memory,
   await expect(page.locator('.chat-message')).toHaveCount(5);
   await expect(page.getByLabel('Твоё сообщение',{exact:true})).toHaveValue('Черновик основной ветки');
   await page.getByRole('button',{name:'Выжимка',exact:true}).click();
+  await dialog.getByRole('tab',{name:'Правка',exact:true}).click();
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toHaveValue(/Авторская проверка/);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
@@ -105,10 +113,11 @@ test('Chat: persisted draft review, settings, request receipts and browser Back'
   await expect(page.getByRole('button',{name:'Остановить',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
   await page.locator('.chat-assistant').last().getByRole('button',{name:'Запрос и расход',exact:true}).click();
+  await page.getByRole('dialog').getByText('Записанный контекст и диагностика',{exact:true}).click();
   await expect(page.getByRole('dialog')).toContainText('prompt_tokens');
   await page.goBack();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button',{name:'Обновить выжимку',exact:true}).click();
+  await updateMemory(page,false);
   const dialog=page.getByRole('dialog');
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toBeVisible();
   await dialog.getByLabel('Текст выжимки',{exact:true}).fill('Проверенный серверный черновик. Тайна остаётся у Лены.');
@@ -128,7 +137,7 @@ test('Chat: persisted draft review, settings, request receipts and browser Back'
   expect(campaign.settings.reply.temperature).toBe(.5);
   expect(campaign.memory.text).toContain('Тайна остаётся');
   if(info.project.name==='mobile'){
-    const main=await page.getByRole('button',{name:'Обновить выжимку и продолжить',exact:true}).boundingBox();
+    const main=await page.getByRole('button',{name:'Действия кампании',exact:true}).boundingBox();
     const nav=await page.locator('.chat-toolbar').boundingBox();
     expect(main!.y+main!.height).toBeLessThanOrEqual(nav!.y+nav!.height);
   }
@@ -204,8 +213,7 @@ test('Chat: idea review, automatic opening, variants and reload without duplicat
   await dialog.getByLabel('Стартовая выжимка',{exact:true}).fill(original+'\nАвторская дата: 9 октября.');
   await dialog.getByRole('button',{name:'Сохранить черновик создания',exact:true}).click();
   await page.reload();await page.getByRole('button',{name:'Новая RP-кампания',exact:true}).last().click();
-  await dialog.getByText('Сохранённые черновики создания',{exact:true}).click();
-  await dialog.getByRole('button',{name:/Идея маяка · complete/}).click();
+  // The latest draft resumes without another generation or a search through the list.
   await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/Авторская дата: 9 октября/);
   await dialog.getByLabel('Подтверждаю первоначальную выжимку',{exact:true}).check();
   await dialog.getByRole('button',{name:'Начать игру',exact:true}).dblclick();
@@ -239,7 +247,7 @@ test('Chat: idea review, automatic opening, variants and reload without duplicat
   await page.getByRole('button',{name:'Позже',exact:true}).click();
   await page.getByRole('button',{name:'Отправить',exact:true}).click();
   await expect(page.locator('.chat-assistant')).toHaveCount(2);await expect(page.getByRole('button',{name:'Остановить',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Обновить выжимку и продолжить',exact:true}).click();
+  await updateMemory(page);
   await expect(dialog.getByLabel('Текст выжимки',{exact:true})).toBeVisible();
   await dialog.getByRole('button',{name:'Утвердить и продолжить',exact:true}).click();
   await expect(page.locator('.chat-heading')).toContainText('Глава 2');
@@ -265,6 +273,7 @@ test('Chat: cancel initial generation, restore draft and require manual unknown 
   await dialog.getByRole('button',{name:'Сгенерировать заново',exact:true}).click();
   await expect(dialog.getByRole('button',{name:'Остановить генерацию выжимки',exact:true})).toHaveCount(0);
   await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/ПРАВИЛА И НЕИЗМЕННЫЕ ФАКТЫ/);
+  await dialog.getByText('Идея и параметры кампании',{exact:true}).click();
   await model.getByLabel('Модель',{exact:true}).fill('chat-small-fixture');await expect(dialog.getByText(/Окно: 8/).first()).toBeVisible();
   await dialog.getByRole('button',{name:'Сгенерировать заново',exact:true}).click();
   await expect(dialog.getByRole('alert')).toContainText('не менее 8192');

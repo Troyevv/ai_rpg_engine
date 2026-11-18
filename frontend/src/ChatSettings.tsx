@@ -11,10 +11,11 @@ function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onCh
   const [available,setAvailable]=useState<string[]>([]);
   const [info,setInfo]=useState<Capability|null>(null);
   const [loading,setLoading]=useState(false);
+  const [capabilityError,setCapabilityError]=useState(false);
   useEffect(()=>{
-    setInfo(null);if(!v.model.trim())return;
+    setInfo(null);setCapabilityError(false);if(!v.model.trim())return;
     const controller=new AbortController();
-    const timer=setTimeout(()=>void api<Capability>('/chat/capabilities',v,'POST',controller.signal).then(setInfo).catch(()=>{}),400);
+    const timer=setTimeout(()=>void api<Capability>('/chat/capabilities',v,'POST',controller.signal).then(setInfo).catch(()=>{if(!controller.signal.aborted)setCapabilityError(true)}),400);
     return()=>{clearTimeout(timer);controller.abort()};
   },[v.provider,v.model]);
   return <fieldset><legend>{title}</legend><div className="chat-settings-grid">
@@ -22,7 +23,7 @@ function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onCh
     <label>Модель<Input list={`chat-models-${stage}`} value={v.model} placeholder="Имя модели на сервере" onChange={e=>change({model:e.target.value})}/></label>
     <label className="chat-check"><input type="checkbox" checked={!!v.auto_context} onChange={e=>change({auto_context:e.target.checked,...(!e.target.checked&&info?.context_length?{context_length:info.context_length}:{})})}/> Автоматический контекст</label>
   </div>
-  {v.auto_context&&v.model&&<p role="status" className="small">{!info?'Проверяем характеристики без генерации…':info.context_length?`Окно: ${info.context_length.toLocaleString()} токенов · ${info.source}`:'Окно неизвестно. Откройте дополнительные параметры, отключите автоматический контекст и укажите проверенный размер.'}</p>}
+  {v.auto_context&&v.model&&<p role="status" className="small">{capabilityError?'Не удалось получить характеристики. Проверьте подключение или отключите автоматический контекст и задайте проверенный размер в дополнительных параметрах.':!info?'Проверяем характеристики без генерации…':info.context_length?`Окно: ${info.context_length.toLocaleString()} токенов · ${info.source}`:'Окно неизвестно. Отключите автоматический контекст и укажите проверенный размер в дополнительных параметрах.'}</p>}
   <datalist id={`chat-models-${stage}`}>{available.map(name=><option key={name} value={name}/>)}</datalist>
   <Button variant="ghost" disabled={loading} onClick={async()=>{setLoading(true);try{const result=await api<{models:string[]}>('/models/list',{provider:v.provider});setAvailable(result.models)}catch(e){toast.error((e as Error).message)}finally{setLoading(false)}}}>{loading?'Загрузка…':'Обновить список моделей'}</Button>
   <details><summary>Дополнительные параметры модели</summary><div className="chat-settings-grid">

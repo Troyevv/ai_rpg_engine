@@ -61,6 +61,34 @@ conversation never acquires a retroactive opening. Creation edits use their own 
 idempotency records; approval and opening reservation roll back together on capacity failure.
 Keys, transport, workers, model lease and usage ledger remain shared infrastructure.
 
+## Mobile reading and editing
+
+Below 768 px, Chat uses the existing visual-viewport/safe-area variables. The compact
+navigation keeps chapters and memory one tap away; the campaign menu contains checkpoint
+and next-chapter actions plus the detailed context budget. Critical context/error notices
+remain visible. Message actions use Lucide icons with 44 px touch targets, keyboard focus
+and desktop tooltips; request usage is available through Info rather than repeated in prose.
+
+The composer grows within the available viewport and has a full editor for long actions.
+Manual scrolling suspends streaming follow; “latest message” resumes it. Full-screen mobile
+Chat dialogs have one document scroll region, a fixed heading/close control and memory tabs
+for reading, editing, text comparison and versions. Desktop keeps bounded dialogs and columns.
+Browser Back consumes the top dialog before leaving Chat; shared connection settings retain
+that behavior. Reduced-motion preferences disable Chat transitions.
+
+Unsent inputs remain scoped to campaign/branch. Message edits, memory edits, creation form
+fields and configuration edits are browser-local drafts until the existing explicit save/
+approve action succeeds. Reopening a creation resumes its saved server job without another
+provider call. A cleared editor stays cleared; fallback text does not resurrect it. These are
+local recovery aids, not cross-device synchronization. SQLite history, branching, revision
+checks and model request semantics are unchanged.
+
+`chat-mobile.spec.ts` exercises 320–430 px touch viewports, 768/1024 px tablets and 1440 px
+desktop with the built frontend, real HTTP/SSE/SQLite and a free external fixture provider.
+The optional `CHAT_MOBILE_SCREENSHOTS` directory captures key states outside the repository.
+Viewport shrink tests exercise keyboard-aware layout; they do not substitute for physical
+Android/iOS keyboard, browser chrome or hardware safe-area testing.
+
 ## Automatic context
 
 New settings default to automatic context and output limits. Old stored settings without those
