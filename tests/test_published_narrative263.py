@@ -221,3 +221,13 @@ def test_current_long_term_keeps_offstage_prose_on_extraction_outage():
     assert 'long_term_repair' not in stages and report['unresolved']
     assert any(r['narrative']==prose and not r['player_observed'] for r in history['turns'])
     assert result['world_state']['meta']['world_time']>before['world_state']['meta']['world_time']
+
+
+def test_inline_marker_and_trailing_whitespace_remain_literary_text():
+    from backend.runtime_v3.suggestions import MARKER, split_suggestions
+    prose = 'На листке написано '+MARKER+' карандашом.  \n'
+    wire = prose+'\n'+MARKER+'\n["Осмотреть листок"]'
+    assert split_suggestions(prose,complete=True,verbatim=True)==(prose,[])
+    assert split_suggestions(wire,complete=True,verbatim=True)==(prose,['Осмотреть листок'])
+    for i in range(len(prose)+1,len(prose)+1+len(MARKER)):
+        assert split_suggestions(wire[:i],verbatim=True)[0]==prose

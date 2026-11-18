@@ -7,7 +7,12 @@ NARRATIVE_INSTRUCTION = ("\nAfter prose append <action_suggestions> on its own l
 
 
 def split_suggestions(text, *, complete=False, verbatim=False):
-    prose, found, trailer = text.partition(MARKER)
+    # New prompts reserve a line boundary. An inline mention (e.g. text
+    # printed on a prop) is part of the scene, even if a real trailer follows.
+    separator = '\n' + MARKER if verbatim else MARKER
+    prose, found, trailer = text.partition(separator)
+    if verbatim and text.startswith(MARKER):
+        prose, found, trailer = '', MARKER, text[len(MARKER):]
     if found:
         try:
             items = json.loads(trailer) if complete else None
@@ -16,12 +21,13 @@ def split_suggestions(text, *, complete=False, verbatim=False):
         # Preserve indexes even if an individual entry is unusable.
         choices = [item if isinstance(item, str) and 0 < len(item.strip()) <= 800 else None
                    for item in items[:6]] if isinstance(items, list) else []
-        return (prose.removesuffix('\n') if verbatim else prose.rstrip()), choices
+        return (prose if verbatim else prose.rstrip()), choices
     if verbatim and complete:
         return text, []
     # A delimiter can span provider chunks. Never stream its prefix.
-    for size in range(min(len(text), len(MARKER)-1), 0, -1):
-        if text.endswith(MARKER[:size]):
+    prefix = separator if verbatim and not MARKER.startswith(text) else MARKER
+    for size in range(min(len(text), len(prefix)-1), 0, -1):
+        if text.endswith(prefix[:size]):
             return text[:-size], []
     return text, []
 
