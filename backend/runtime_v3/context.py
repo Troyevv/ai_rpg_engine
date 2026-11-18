@@ -848,9 +848,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     rules += '\n' + (EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT)
     rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
     if extraction_contract >= 10:
-        rules += ('\nContinue the published scenes as events that already happened. Positions, situations and '
-                  'other extracted records may lag behind the prose. Respect later explicit player edits, '
-                  'objective calendar, ages, pregnancies, and individual knowledge.')
+        rules += ('\nPublished scenes happened. Records may lag. Honor later player edits, calendar, '
+                  'ages, pregnancies and individual knowledge.')
     else:
         rules += ('\nWorldState overrides historical Milestones/History/biography (roles, relations, homes, names). '
               'Milestones grant no Knowledge; known_by limits actor access.')
