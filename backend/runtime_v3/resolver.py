@@ -595,7 +595,7 @@ class StateResolver:
                     if (not isinstance(actor, str) or actor not in event['participants'] or
                             not isinstance(targets, list) or any(not isinstance(t, str) for t in targets) or
                             not set(targets) <= set(event['participants'] + event['witnesses']) or actor in targets):
-                        if item.get('information_source'):
+                        if item.get('information_source') and self.scene_version < 10:
                             fatal('Автор/адресаты NPC-взаимодействия не согласованы с участниками.',
                                 'event_contact_invalid', repairable=True, section='events', index=i)
                         self.warn('events', i, 'Снята некорректная вспомогательная аннотация контакта.', code='event_contact_annotation_ignored')

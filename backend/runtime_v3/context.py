@@ -860,6 +860,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 schema = json.loads(message['content'].split('\n', 1)[1])
                 if not suggestions:
                     schema['properties'].pop('choices', None)
+                if 'reproductive_events' in schema['properties'] and scope.controlled_actor_id:
+                    encounter = schema['properties']['reproductive_events']['items']
+                    encounter['properties'].pop('player_assertion', None)
+                    encounter['properties']['player_evidence']['description'] = (
+                        f'Если участвует герой {scope.controlled_actor_id}, приведи его выбор из текущего ввода дословно.')
                 if 'births' in schema['properties']:
                     schema['properties']['births']['items']['properties'].pop('sex_observations', None)
                 from backend.runtime_v3.raw import prune_schema_definitions

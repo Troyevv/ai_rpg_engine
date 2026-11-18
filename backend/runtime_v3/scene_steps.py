@@ -526,6 +526,8 @@ def bind_domain_sources(records, state, turn_id, namespace, order):
     # when Extraction did not link a more precise scene step.
     for section in ('reproductive_events','births','development_evidence'):
         for item in records[section]:
+            if section == 'reproductive_events' and item.get('player_evidence'):
+                item.setdefault('player_assertion','explicit_choice')
             if section == 'births':
                 item.setdefault('sex_observations', [])
             if 'source_event_id' in item:

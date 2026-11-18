@@ -407,3 +407,18 @@ def test_birth_and_experience_need_no_duplicate_scene_step_or_sex_assessment():
     assert 'a:'+pregnancy['sex_fact_ids'][child] not in result.state['knowledge']
     evidence = next(iter(result.state['characters']['b']['personality']['evidence'].values()))
     assert evidence['meaning']=='Умеет выслушать' and evidence['witnesses']==['a']
+
+
+def test_consent_uses_one_player_quote_and_does_not_infer_it_from_the_scene():
+    from test_reproduction import state, service
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    before=state()
+    action='Мы оба решаем провести ночь вместе без предохранения.'
+    row=service(player_evidence=action)
+    for key in ('source_event_id','player_assertion','evidence'):
+        row.pop(key)
+    for quote,accepted in ((action,True),('Ничего такого игрок не говорил.',False),('',False)):
+        proposal=dict(reproductive_events=[dict(row,player_evidence=quote)])
+        result=StateResolver(before,action,action,**resolver_options(before,action,contract_version=10)).resolve(proposal)
+        assert bool(result.state['pregnancies'])==accepted
