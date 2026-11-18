@@ -366,3 +366,44 @@ def test_preserve_absolute_clock_and_reject_ambiguous_offsets(minutes,kind,valid
         with pytest.raises(StructuralDeltaError) as err:
             resolver.resolve(payload)
         assert 'event_minute_invalid' in {r['code'] for r in err.value.diagnostics('test')}
+
+
+def test_new_actor_card_and_presence_survive_unrelated_invalid_proposal():
+    from backend.runtime_v3.consequences import resolve_consequences
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    state, _ = fixture()
+    def resolve(raw):
+        return StateResolver(state, 'Лада вошла.', 'Здороваюсь.',
+                             **resolver_options(state, 'Здороваюсь.', contract_version=10)).resolve(raw)
+    for fields in ({'fields':{'Роль':'Соседка','Неверное поле':True}}, {}):
+        payload = dict(scene=dict(visible_character_ids=['a','lada']), life_changes=[dict(id='absent',life_status='dead')],
+                       promotions=[dict(id='lada',name='Лада',**fields)])
+        _, result = resolve_consequences(payload, state, 'Лада вошла.', 1, [], resolve)
+        assert 'lada' in result.state['camera']['present_character_ids']
+        assert result.cards[0]['id'] == 'lada'
+        assert 'absent' not in result.state['characters']
+        assert result.pending_reviews['lada']['card']['fields']['Роль'] == fields.get('fields', {}).get('Роль', '')
+
+
+def test_birth_and_experience_need_no_duplicate_scene_step_or_sex_assessment():
+    from backend.runtime_v3.player_actions import resolver_options
+    from backend.runtime_v3.resolver import StateResolver
+    from test_reproduction import conceive
+    state = conceive().state
+    pregnancy = next(iter(state['pregnancies'].values()))
+    child = pregnancy['children'][0]['id']
+    payload = dict(scene=dict(elapsed_minutes=pregnancy['due_minute']-state['meta']['world_time']),
+                   births=[dict(pregnancy_id=pregnancy['id'],assertion='birth_completed',perceived_by=['a'],location_id='home')],
+                   development_evidence=[dict(id='choice', actor_id='b', meaning='Умеет выслушать',
+                                              kind='behavior', assertion='completed', perceived_by=['a'])])
+    result = StateResolver(state, 'Ребёнок родился.', 'Остаюсь рядом.',
+                           **resolver_options(state,'Остаюсь рядом.',contract_version=10)).resolve(payload)
+    assert result.state['characters'][child]['birth_date']=='2026-01-02'
+    assert result.state['pregnancies'][pregnancy['id']]['status']=='born'
+    assert len(result.cards)==1
+    assert 'a:'+pregnancy['count_fact_id'] in result.state['knowledge']
+    assert 'b:'+pregnancy['count_fact_id'] not in result.state['knowledge']
+    assert 'a:'+pregnancy['sex_fact_ids'][child] not in result.state['knowledge']
+    evidence = next(iter(result.state['characters']['b']['personality']['evidence'].values()))
+    assert evidence['meaning']=='Умеет выслушать' and evidence['witnesses']==['a']

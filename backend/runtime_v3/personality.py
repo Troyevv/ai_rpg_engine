@@ -124,7 +124,9 @@ def _record(resolver, kind, cid, before, after, **extra):
 def apply_personality(resolver, raw, events):
     aliases = {}
     for i, row in resolver.records(raw, 'development_evidence'):
-        claim = resolver.typed(EvidenceClaim, row, 'development_evidence', i)
+        observers = row.get('perceived_by') if resolver.scene_version >= 10 else None
+        claim = resolver.typed(EvidenceClaim, {k:v for k,v in row.items() if k != 'perceived_by'}
+                               if observers is not None else row, 'development_evidence', i)
         if not claim:
             continue
         cid = claim['actor_id']; actor = resolver.state['characters'].get(cid)
@@ -158,7 +160,10 @@ def apply_personality(resolver, raw, events):
         profile['seen_sources'].append(eid)
         entry = DevelopmentEvidence(id=eid, source_event_id=event['id'], source_turn=resolver.turn_id,
             minute=resolver.state['meta']['world_time'], meaning=claim['meaning'], kind=claim['kind'],
-            player_owned=owned, evidence=claim['evidence'], witnesses=event['witnesses'], fact_ids=event['fact_ids']).model_dump()
+            player_owned=owned, evidence=claim['evidence'] or claim['meaning'],
+            witnesses=event['witnesses'] if observers is None else [a for a in dict.fromkeys(observers)
+                if a in resolver.state['characters'] and not (resolver.mode == 'background' and a in resolver.protected_knowledge_actor_ids)],
+            fact_ids=event['fact_ids']).model_dump()
         profile['evidence'][eid] = entry
         _record(resolver, 'development_evidence', cid, None, entry, source_ids=[event['id']])
         while len(profile['evidence']) > MAX_EVIDENCE:

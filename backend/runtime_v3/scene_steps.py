@@ -179,6 +179,15 @@ def project_schema(schema, *, version=6, camera_mode=None):
         # the actual new positions, propositions and their recipients.
         schema['required'] = []
         scene['required'] = []
+        promotion['required'] = ['id', 'name']
+        scene['properties'].pop('due_birth_assessments', None)
+        for section in ('births', 'reproductive_events', 'development_evidence'):
+            if section not in props:
+                continue
+            item = props[section]['items']
+            item['required'] = [key for key in item['required'] if key not in ('source_event_id', 'sex_observations')]
+            if section in ('births','development_evidence'):
+                item['properties']['perceived_by'] = {'type':'array','items':{'type':'string'},'maxItems':64}
         props.pop('agency_findings', None)
         props.pop('chronology_claims', None)
         for step in schema['$defs'].values():
@@ -271,6 +280,17 @@ def validate(payload, state=None, *, version=6, collect=False, warnings=None):
                     del step[field]
                     warnings.append(dict(section='scene_steps', index=index, field=field,
                                          code='optional_annotation_ignored', action='use_default'))
+    if version >= 10:
+        from backend.services.world import CARD_FIELDS
+        p['scene'].pop('due_birth_assessments', None)  # Recorded v10 response.
+        for index, row in enumerate(p.get('promotions', []) if isinstance(p.get('promotions'), list) else []):
+            if not isinstance(row, dict):
+                continue
+            fields = row.setdefault('fields', {})
+            kept = {k:v for k,v in fields.items() if k in CARD_FIELDS and isinstance(v,str)} if isinstance(fields,dict) else {}
+            if fields != kept:
+                row['fields'] = kept
+                warnings.append(dict(section='promotions',index=index,field='fields',code='optional_metadata_invalid',action='omit_invalid_fields'))
     errors = []
     for error in Draft202012Validator(input_schema(version, state['camera']['mode'] if state else None)).iter_errors(p):
         path = list(error.absolute_path)
@@ -501,6 +521,32 @@ def scene_minute_origin(steps, start, elapsed):
     return 0
 
 
+def bind_domain_sources(records, state, turn_id, namespace, order):
+    # Domain rows already identify the occurrence. Supply ledger provenance
+    # when Extraction did not link a more precise scene step.
+    for section in ('reproductive_events','births','development_evidence'):
+        for item in records[section]:
+            if section == 'births':
+                item.setdefault('sex_observations', [])
+            if 'source_event_id' in item:
+                continue
+            if section == 'births':
+                process = state['pregnancies'].get(item['pregnancy_id'], {})
+                actors = [process['gestational_actor_id']] if process else []
+                key, description = item['pregnancy_id'], 'Рождение ребёнка'
+            elif section == 'reproductive_events':
+                actors = [item['gestational_actor_id'],item['impregnating_actor_id']]
+                key, description = item['id'], 'Встреча взрослых'
+            else:
+                actors = [item['actor_id']]
+                key, description = item['actor_id'], item['meaning']
+            event_id = identity('domain-event', namespace, turn_id, section, key)
+            item['source_event_id'] = event_id
+            if not any(event['id'] == event_id for event in records['events']):
+                records['events'].append(dict(id=event_id,text=description,participants=actors,
+                    order=order+1,witnesses=[],fact_ids=[],medium='observation',evidence=item.get('evidence','')))
+
+
 def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version=6, defer_errors=False, suggestions=()):
     from backend.services.world_delta_errors import StructuralDeltaError
     warnings = []
@@ -662,6 +708,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             provenance=source.get('input_source') if source else None
             if provenance and provenance['meaning']=='preserved' and source.get('outcome','completed') in ('completed','partial'):
                 item.update(player_evidence=provenance['quote'],player_assertion=assertion)
+    if version >= 10:
+        bind_domain_sources(records, state, turn_id, namespace, order)
     raw = RawTurnResult(scene, refs(records), deepcopy(choices), warnings,
         dict(status='violated' if any(f['classification']=='unauthorized_choice' for f in p.get('agency_findings',[])) else 'preserved',
              actions=actions, narrative_audit=[dict(f,player_action_id=None) for f in p.get('agency_findings',[])]))

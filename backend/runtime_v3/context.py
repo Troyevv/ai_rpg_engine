@@ -532,7 +532,12 @@ class ExtractionContextBuilder:
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
-        if reproductive:
+        if reproductive and self.contract_version >= 10:
+            rules += ('\nДля завершившихся родов укажи pregnancy_id и фактических наблюдателей в perceived_by. '
+                      'Для известного пола используй information с существующим fact_id и получателями. '
+                      'Срок, дату рождения, идентичность ребёнка и родственные связи рассчитывает Runtime. '
+                      'Для встречи взрослых укажи участников, согласие и защиту. Выбор героя остаётся за игроком.')
+        elif reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
             rules += REPRODUCTION_CONTRACT
             if any(p['status'] != 'born' for p in current.get('pregnancies', [])):
@@ -849,11 +854,14 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                                 'Используй только известное ему.')
             else:
                 rules += NARRATIVE_INSTRUCTION
-    if builder.extraction and extraction_contract >= 10 and not suggestions:
+    if builder.extraction and extraction_contract >= 10:
         for message in messages:
             if message['content'].startswith('JSON Schema\n'):
                 schema = json.loads(message['content'].split('\n', 1)[1])
-                schema['properties'].pop('choices', None)
+                if not suggestions:
+                    schema['properties'].pop('choices', None)
+                if 'births' in schema['properties']:
+                    schema['properties']['births']['items']['properties'].pop('sex_observations', None)
                 from backend.runtime_v3.raw import prune_schema_definitions
                 prune_schema_definitions(schema)
                 message['content'] = block('JSON Schema', schema)['content']

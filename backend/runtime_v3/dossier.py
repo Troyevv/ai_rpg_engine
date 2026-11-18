@@ -19,7 +19,9 @@ def details(state, cid):
     # Only explicit base restrictions for the controlled actor. Never derive an
     # NPC capability from a concealed condition (including its mere existence).
     restrictions = [k for k, v in actor.get('capabilities', {}).items() if v is False] if cid == observer else []
-    return dict(sex=silhouette(state, cid), conditions=rows, restrictions=restrictions)
+    life_status = actor['life_status'] if (cid == observer or
+        knowledge_status(state, observer, actor.get('life_fact_id')) == 'known') else None
+    return dict(sex=silhouette(state, cid), conditions=rows, restrictions=restrictions, life_status=life_status)
 
 
 def personal_relations(state):

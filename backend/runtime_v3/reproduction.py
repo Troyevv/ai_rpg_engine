@@ -247,6 +247,7 @@ def apply_births(resolver, raw, events):
             # Parse the essential claim first. Optional appearance references
             # cannot invalidate an otherwise accepted birth of one or more children.
             fields = dict(row)
+            observers = fields.pop('perceived_by', None) if resolver.scene_version >= 10 else None
             appearance = fields.pop('appearance', {})
             claim = BirthClaim.model_validate(fields).model_dump()
             pregnancy = resolver.state['pregnancies'].get(claim['pregnancy_id'])
@@ -259,7 +260,13 @@ def apply_births(resolver, raw, events):
             if claim['appearance'] != appearance:
                 resolver.warn('births', index, 'Некорректные описания внешности опущены.',
                               field='appearance', code='birth_appearance_invalid')
-            birth(resolver, claim, source(resolver, claim, events))
+            event = source(resolver, claim, events)
+            if observers is not None:
+                known = [cid for cid in dict.fromkeys(observers) if cid in resolver.state['characters']]
+                if len(known) != len(set(observers)):
+                    resolver.warn('births', index, 'Неизвестный наблюдатель.', field='perceived_by', code='unknown_character')
+                event = dict(event, witnesses=known)
+            birth(resolver, claim, event)
             validate_life_state(resolver.state)
         except StructuralDeltaError:
             raise
@@ -333,6 +340,22 @@ def birth(r,c,event):
 def validate_birth_sex(r, claim, event, pregnancy):
     """Validate all disclosures before creating any child. No prose parsing."""
     rows = claim['sex_observations']
+    if r.scene_version >= 10:
+        # Previously recorded v10 observations may be present. Keep consistent
+        # disclosures only. A bad optional disclosure cannot invalidate delivery.
+        sex_by_child = {ch['id']:ch['sex'] for ch in pregnancy['children']}
+        accepted = []
+        for index, row in enumerate(rows):
+            if row['basis'] == 'not_disclosed':
+                continue
+            observers = row['perceived_by']
+            if (row['child_id'] in sex_by_child and row['narrative_sex'] == sex_by_child[row['child_id']]
+                    and all(cid in r.state['characters'] for cid in observers)):
+                accepted.append(row)
+            else:
+                r.warn('births', index, 'Некорректное раскрытие сведений о ребёнке.', field='sex_observations',
+                       code='birth_disclosure_invalid')
+        return accepted
     children = {ch['id']: ch for ch in pregnancy['children']}
     ids = [row['child_id'] for row in rows]
     if len(ids) != len(set(ids)) or set(ids) != set(children):
@@ -399,6 +422,8 @@ def validate_birth_sex(r, claim, event, pregnancy):
 
 def validate_birth_knowledge(r, raw, events, *, rejected_event_ids=()):
     """Prevent generic Knowledge from bypassing the typed birth disclosure."""
+    if r.scene_version >= 10:
+        return  # Ordinary individual Knowledge is owned by the current contract.
     guarded = {}
     errors = []
     unvalidated_facts = set()

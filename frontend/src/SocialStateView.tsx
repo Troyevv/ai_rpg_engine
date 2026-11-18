@@ -15,7 +15,7 @@ export function SocialStateView({state,actor,saveId,mode='all'}:{state:State;act
  api<Genealogy>(`/saves/${saveId}/genealogy?root_id=${encodeURIComponent(actor)}&depth=2&limit=24`).then(graph=>{if(live)setFamily({key,graph})}).catch(e=>{if(live)setError(e.message)});return()=>{live=false};
  },[key,mode,state.genealogy]);
  const graph=mode==='family'&&saveId?(family?.key===key?family.graph:null):state.genealogy;
- const names=new Map(graph?.nodes.map(n=>[n.id,n.name])||[]);
+ const names=new Map(graph?.nodes.map(n=>[n.id,n.name.trim()||'Без имени'])||[]);
  const links=(mode==='family'?graph?.edges||[]:state.objective_relations||[]).filter(r=>!actor||r.source_id===actor||r.target_id===actor);
  const derived=(graph?.kinship||[]).filter(r=>['sibling','half_sibling','ancestor'].includes(r.kind)&&(!actor||r.source_id===actor||r.target_id===actor));
  const life=(!actor||actor===state.controlled_actor_id)?state.life_state:null;
@@ -24,7 +24,7 @@ export function SocialStateView({state,actor,saveId,mode='all'}:{state:State;act
 
  if(mode==='family')return <section className="dossier-card dossier-family" aria-label={t('family')}><h3>{t('family')}</h3><p className="muted small">{t('publicFamily')}</p>{saveId&&<button className="dossier-family-open" onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'family',root:actor}}))}>{t('openFamily')}</button>}
  {error?<p role="alert">{error}</p>:saveId&&!graph?<p role="status">{t('loading')}</p>:<>
- {!links.length&&<p>{t('noFamily')}</p>}{links.map(r=>{const other=graph?.nodes.find(n=>n.id===(r.source_id===actor?r.target_id:r.source_id));return <div className="dossier-person" key={r.id}>{other&&<CharacterAvatar subject={other} saveId={saveId} size={44}/>}<div><strong>{other?.name}</strong><p>{names.get(r.source_id)} → {names.get(r.target_id)} · {socialLabel(r.kind)}{r.status==='closed'?` · ${socialLabel(r.outcome)}`:''}</p>{(r.since_date||r.until_date)&&<small>{r.since_date} — {r.until_date||'…'}</small>}</div></div>})}
+ {!links.length&&<p>{t('noFamily')}</p>}{links.map(r=>{const other=graph?.nodes.find(n=>n.id===(r.source_id===actor?r.target_id:r.source_id));return <div className="dossier-person" key={r.id}>{other&&<CharacterAvatar subject={other} saveId={saveId} size={44}/>}<div><strong>{other&&names.get(other.id)}</strong><p>{names.get(r.source_id)} → {names.get(r.target_id)} · {socialLabel(r.kind)}{r.status==='closed'?` · ${socialLabel(r.outcome)}`:''}</p>{(r.since_date||r.until_date)&&<small>{r.since_date} — {r.until_date||'…'}</small>}</div></div>})}
  {!!derived.length&&<details><summary>Родословная</summary>{derived.map((r,i)=><p key={i}>{names.get(r.source_id)} → {names.get(r.target_id)}: {socialLabel(r.kind)}{r.lineage==='adoptive_parent'?' · усыновление':''}{r.generations?` · поколений: ${r.generations}`:''}</p>)}</details>}
  {graph?.truncated&&<p className="muted small">Показана часть семьи. Открой родословную для продолжения.</p>}</>}
  </section>;

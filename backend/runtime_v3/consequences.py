@@ -50,8 +50,8 @@ def components(proposal, before):
         for key, value in identifiers(item):
             if key == 'id' and value not in existing_ids:
                 declarations[value].append(i)
-    for i, (_, _, item) in enumerate(units):
-        for _, value in identifiers(item):
+    for i, (section, field, item) in enumerate(units):
+        for _, value in identifiers(item, field if section == 'scene' else ''):
             for owner in declarations.get(value, ()):
                 parents[root(i)] = root(owner)
     groups = defaultdict(list)

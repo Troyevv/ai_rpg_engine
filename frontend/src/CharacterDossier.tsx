@@ -33,7 +33,9 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
  const knowledge=Object.values(state.world?.knowledge||{}).filter(k=>k.actor_id===card.id&&k.status!=='unknown');
  const sex=card.dossier?.sex;
  const personal=personalRelationships(card.id,state.dossier_personal_relations,state.characters);
- const deceased=state.genealogy?.nodes.some(c=>c.id===card.id&&c.life_status==='dead');
+ const knownLife=card.dossier?.life_status;
+ const deceased=knownLife==='dead'||state.genealogy?.nodes.some(c=>c.id===card.id&&c.life_status==='dead');
+ const statusLine=knownLife==='dead'||knownLife==='missing'?lifeLabel(knownLife):card.fields['Статус'];
  const partners=new Map(state.characters.map(c=>[c.id,c]));
  const age=c?.age??card.fields['Возраст'];
  const special=new Set(['Возраст','Пол','Статус','Место','Время','Сейчас','Чего хочет','Намерения','Обязательства','Физическое состояние']);
@@ -53,7 +55,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
       <span>{row.kind==='widowed'&&deceased?t('marriageEnded'):personalRelationshipLabel(row.kind,sex)}</span>{'partnerId' in row&&<button type="button" className="dossier-partner-link" data-partner-id={row.partnerId} aria-label={`${t('open')}: ${partners.get(row.partnerId)!.name}`} onClick={()=>onCharacter(row.partnerId)}>{partners.get(row.partnerId)!.name}</button>}
      </li>)}</ul>:<p className="dossier-personal-empty">{t('noPersonal')}</p>}
     </div>}
-    {card.fields['Статус']&&<p className="character-lead">{brief(card.fields['Статус'],150)}</p>}
+    {statusLine&&<p className="character-lead">{brief(statusLine,150)}</p>}
     <p className="dossier-location"><MapPin size={15} aria-hidden="true"/>{c?.location||card.fields['Место']||t('unknown')}</p>
    </div>
   </header>
