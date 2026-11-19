@@ -81,6 +81,32 @@ it('a new attempt replaces stale HTML instead of displaying the previous respons
  await render(<Markdown text="new" streaming/>);expect(host.textContent).toBe('new');
  await render(<Markdown text="new"/>);expect(host.textContent).toBe('new');
 });
+it('Chat renders safe Markdown snapshots locally and retains formatting if final HTTP rendering fails',async()=>{
+ const prose='Лена ждёт.\n\n---\n\n### Варианты действий\n\n';
+ await render(<Markdown text={prose+'1. **Спрос'} streaming liveMarkdown links={false}/>);
+ expect(host.querySelectorAll('hr')).toHaveLength(1);
+ expect(host.querySelector('h3')!.textContent).toBe('Варианты действий');
+ const complete=prose+'1. **Спросить Лену:** «Кто там?»\n2. **Осмотреть дверь:** проверить замок.\n3. **Позвать друга:** «Илья!»\n4. **Подождать:** остаться у стола.\n\n**Свободный ввод:** свой вариант.\n\n---\n\n### Текущая сцена\n\n**Время:** 18:40\n\n**Место:** лавка\n\n**Рядом:** Лена\n\n<script>bad()</script> [x](javascript:alert(1))';
+ await render(<Markdown text={complete} streaming liveMarkdown links={false}/>);
+ expect(host.querySelectorAll('hr')).toHaveLength(2);
+ expect([...host.querySelectorAll('h3')].map(h=>h.textContent)).toEqual(['Варианты действий','Текущая сцена']);
+ expect(host.querySelectorAll('ol li strong')).toHaveLength(4);
+ expect(host.querySelectorAll('strong')).toHaveLength(8);
+ expect(host.querySelector('script,a,img')).toBeNull();
+ expect(fetch).not.toHaveBeenCalled();
+ vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
+ await render(<Markdown text={complete} liveMarkdown links={false}/>);await advance(100);
+ expect(host.querySelectorAll('ol li strong')).toHaveLength(4);
+ expect(host.querySelectorAll('hr')).toHaveLength(2);
+ expect(fetch).toHaveBeenCalledTimes(1);
+ expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).link_names).toBe(false);
+});
+it('Chat Markdown keeps letter fences literal even in an unfinished stream',async()=>{
+ await render(<Markdown text={'```letter\n**буквально**\n<img src=x onerror=bad()>'} streaming liveMarkdown links={false}/>);
+ expect(host.querySelector('blockquote')!.textContent).toBe('**буквально**\n<img src=x onerror=bad()>');
+ expect(host.querySelector('img,strong')).toBeNull();
+ expect(fetch).not.toHaveBeenCalled();
+});
 it('regeneration commit keeps identity; old/stale job does not duplicate a variant',()=>{
  const turn={id:7,active_variant_id:'v0',variants:[{id:'v0',job_id:'old'}],sequence:4,kind:'turn',user_text:'original'} as Turn;
  const j={...initialJob,replaces_id:7,kind:'regenerate'};
