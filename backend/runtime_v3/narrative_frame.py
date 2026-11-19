@@ -58,8 +58,40 @@ def _complete_metadata(remainder):
     return frame
 
 
+_QUOTED_FRAME = re.compile(r'^\s*\{\s*«scene»\s*:\s*«')
+
+
+def _json_delimiters(text):
+    """Normalize a localized wire envelope, preserving quotation marks inside prose."""
+    out = []
+    depth = 0
+    escaped = False
+    ascii_string = False
+    for char in text:
+        if escaped:
+            escaped = False
+        elif char == '\\' and (depth or ascii_string):
+            escaped = True
+        elif char == '"' and not depth:
+            ascii_string = not ascii_string
+        elif char == '«' and not ascii_string:
+            depth += 1
+            if depth == 1:
+                char = '"'
+        elif char == '»' and depth:
+            depth -= 1
+            if depth == 0:
+                char = '"'
+        elif char == '"' and depth:
+            char = '\\"'
+        out.append(char)
+    return ''.join(out)
+
+
 def read(text, *, complete):
     """None means a recorded plain-text provider reply. Never stream JSON scaffolding."""
+    if _QUOTED_FRAME.match(text):
+        text = _json_delimiters(text)
     if complete:
         try:
             obj = json.loads(text)

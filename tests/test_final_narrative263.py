@@ -215,3 +215,13 @@ def test_misplaced_information_steps_keep_individual_recipients_and_budget():
     assert {k['actor_id'] for k in result.state['knowledge'].values() if k['fact_id']=='school'} == {'a'}
     assert 'information' in decode(dict(scene_steps=[step]*64,information=[step]),version=10)
     assert 'information' in decode(dict(information=[dict(kind='movement')]),version=10)
+
+
+def test_localized_json_delimiters_never_reach_the_literary_scene():
+    scene = '  Будильник звенит.\n— Ты сказал «в семь», верно?\nНа часах "07:00".  '
+    wire = '{«scene»: «' + json.dumps(scene, ensure_ascii=False)[1:-1] + '», «actions»: [{«text»: «Ответить «да»», «facts»: []}]}'
+    for i in range(1,len(wire)):
+        displayed, _ = narrative_frame.read(wire[:i],complete=False)
+        assert scene.startswith(displayed)
+    assert narrative_frame.read(wire, complete=True) == (scene, {'actions':[{'text':'Ответить «да»','facts':[]}]})
+    assert narrative_frame.read('«Утро», — говорит Галина.',complete=True) is None
