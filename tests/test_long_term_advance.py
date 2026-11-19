@@ -403,6 +403,44 @@ def assert_child_after_advance(years, stage, age):
     )
 
 
+def test_due_process_reference_survives_an_unrelated_invalid_lta_record():
+    from backend.runtime_v3.calendar import age_on, current_time
+    initial = state()
+    initial["reproduction_policy"]["gestation_days"] = 280
+    before = snap(conceive(initial).state)
+    world = before["world_state"]
+    world["camera"].update(controlled_actor_id="c", present_character_ids=["c"])
+    pregnancy = next(iter(world["pregnancies"].values()))
+    request = dict(amount=5, unit="years", max_llm_calls=2)
+    cause = next(c for c in plan(before, request).candidates if c.kind == "birth")
+    text = "Роды завершились."
+    claim = dict(pregnancy_id=pregnancy["id"], source_event_id=cause.id,
+                 assertion="birth_completed", location_id="home", evidence=text)
+    payload = dict(births=[claim], scene_steps=[dict(kind="occurrence", text=text,
+                   actor_ids=["a"], location_id="home", advance_candidate_ids=[cause.id])],
+                   unrelated_bad_section=True)
+
+    public = "Через пять лет в доме горит свет."
+    actions = [dict(text=f"Действие {i}") for i in range(6)]
+
+    def generate(stage, messages, *args, **kwargs):
+        if "extraction" in stage:
+            completed = next(m["content"] for m in messages if m["content"].startswith("completed_narrative"))
+            assert json.loads(completed.split("\n", 1)[1]) == text
+            return iter([json.dumps(payload)])
+        wire = dict(scene={"text":text}, arrival={"text":public, "time":"21:52"}, actions=actions)
+        return iter([json.dumps(wire)])
+
+    after, _, report = run(before, request, generate=generate, config={"_extraction_contract":10})
+    result = after["world_state"]
+    assert after["_public_arrival"] == (public, {"actions":actions})
+    assert report["llm_calls"] == 2
+    assert any(row["section"] == "unrelated_bad_section" for row in report["diagnostics"])
+    assert result["pregnancies"][pregnancy["id"]]["birth_minute"] == pregnancy["due_minute"]
+    child = result["characters"][pregnancy["children"][0]["id"]]
+    assert age_on(child["birth_date"], current_time(result)["date"]) == 4
+
+
 def test_incapacitated_controlled_actor_has_no_invented_actions():
     before = fixture()
     before["world_state"]["characters"]["a"]["capabilities"]["conscious"] = False

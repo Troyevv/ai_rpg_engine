@@ -10,6 +10,7 @@ FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open choices 
           'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
           'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
 _DECODER = json.JSONDecoder()
+_JSON_FENCE = re.compile(r'^\s*```json[ \t]*\r?\n', re.IGNORECASE)
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
 # A malformed single-line action can be isolated at a physical record boundary.
 # Never search inside nested objects or rewrite its text or knowledge references.
@@ -99,6 +100,23 @@ def _json_delimiters(text):
 
 def read(text, *, complete):
     """None means a recorded plain-text provider reply. Never stream JSON scaffolding."""
+    # Some providers wrap the requested scene object in a Markdown code block.
+    # Reserve the opening line while streaming. Keep other fenced prose verbatim.
+    fence = _JSON_FENCE.match(text)
+    if fence:
+        body = text[fence.end():]
+        if _START.match(body) or _QUOTED_FRAME.match(body):
+            if complete:
+                body, newline, closing = body.rstrip().rpartition('\n')
+                if not newline or closing.strip() != '```':
+                    return None
+            text = body
+        elif not complete and (not body.strip() or body.lstrip().startswith('{')):
+            return '', {}
+        else:
+            return None
+    elif not complete and '```json'.startswith(text.strip().lower()):
+        return '', {}
     if _QUOTED_FRAME.match(text):
         text = _json_delimiters(text)
     if complete:

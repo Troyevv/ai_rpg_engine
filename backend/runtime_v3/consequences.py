@@ -93,7 +93,7 @@ def scene_with_authored_ending(proposal, authored, before):
     return scene
 
 
-def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None, authored_scene=None):
+def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None, authored_scene=None, birth_causes=None):
     def evaluate(candidate):
         raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=10, suggestions=suggestions)
         return raw, resolve(raw)
@@ -114,6 +114,22 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
     valid_shape = isinstance(proposal.get('scene_steps', []), list) and isinstance(proposal.get('scene', {}), dict)
     if valid_shape:
         proposal = decode(proposal, version=10)
+        # LTA may receive its own due-process ID where a scene-local event ID
+        # would normally go. Bind before partitioning so unrelated failures
+        # cannot separate a birth from its occurrence.
+        if birth_causes and isinstance(proposal.get('births'), list):
+            for birth in proposal['births']:
+                cause = birth.get('source_event_id') if isinstance(birth, dict) else None
+                if not isinstance(cause, str) or cause not in birth_causes or birth_causes[cause] != birth.get('pregnancy_id'):
+                    continue
+                steps = [step['id'] for step in proposal['scene_steps']
+                         if isinstance(step, dict) and step.get('kind') == 'occurrence'
+                         and isinstance(step.get('advance_candidate_ids'), list) and cause in step['advance_candidate_ids']]
+                if len(steps) == 1:
+                    birth['source_event_id'] = steps[0]
+                else:
+                    # The compact birth operation already identifies this pregnancy.
+                    del birth['source_event_id']
     try:
         raw, result = evaluate(proposal)
     except StructuralDeltaError:

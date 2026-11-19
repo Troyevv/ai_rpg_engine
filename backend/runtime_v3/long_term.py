@@ -24,6 +24,11 @@ from backend.runtime_v3.long_term_calendar import target_minute, annual_occurren
 from backend.runtime_v3.scope import RelevanceResolver
 
 
+def _scene_text(value):
+    """DeepSeek can wrap either authored text in a JSON object with metadata."""
+    return value.get("text") if isinstance(value, dict) else value
+
+
 def validate_event_causes(raw, selected_ids):
     """All independent missing causes, addressed to the provider's source rows.
 
@@ -578,12 +583,14 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     wire = json.loads(narrative)
                 except ValueError:
                     wire = None
-                if isinstance(wire, dict) and isinstance(wire.get('scene'), str):
-                    narrative = wire['scene']
+                private = _scene_text(wire.get('scene')) if isinstance(wire, dict) else None
+                if isinstance(private, str):
+                    narrative = private
                     from backend.services.letter_sources import enabled, parse
                     artifacts = parse(narrative) if enabled(camera['world_state']) else []
-                    if isinstance(wire.get('arrival'), str) and wire['arrival'].strip():
-                        arrival = (report['actual_target'], wire['arrival'], {'actions':wire.get('actions')})
+                    public = _scene_text(wire.get('arrival'))
+                    if isinstance(public, str) and public.strip():
+                        arrival = (report['actual_target'], public, {'actions':wire.get('actions')})
             if cancelled is not None and cancelled.is_set():
                 return None
             if not narrative.strip():
@@ -726,7 +733,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             except ValueError as exc:
                                 raise StructuralDeltaError(str(exc), 'long_term_outcome_invalid') from exc
                         raw, resolved = resolve_consequences(payload,resolution_state,narrative,turn,[],resolve_group,
-                            namespace=identity('advance-group', sorted(c.id for c in group)))
+                            namespace=identity('advance-group', sorted(c.id for c in group)),
+                            birth_causes={c.id:c.source_id for c in group if c.kind == 'birth'})
                     else:
                         raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else RawTurnResult.parse(payload)
                         if config.get('_extraction_contract', 1) >= 5:

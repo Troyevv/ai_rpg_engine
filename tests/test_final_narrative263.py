@@ -58,6 +58,19 @@ def test_stream_chunks_prose_and_partial_menu():
     assert len(choices)==4 and warnings[0]['available']==4
 
 
+def test_streaming_fenced_scene_keeps_the_menu_and_literary_markdown():
+    scene = '  Она показывает надпись ```json и улыбается.\n'
+    frame = dict(actions=[dict(text=f'Вариант {n}') for n in range(6)],
+                 ending=dict(elapsed_minutes=3))
+    wire = '  ```json\r\n' + json.dumps(dict(scene=scene, **frame)) + '\n```'
+    for end in range(1, len(wire) + 1):
+        prose, _ = narrative_frame.read(wire[:end], complete=False)
+        assert scene.startswith(prose)
+    assert narrative_frame.read(wire, complete=True) == (scene, frame)
+    for literal in ('```json\n{"label":"надпись"}\n```', 'На доске:\n' + wire, wire + '\nОна отложила лист.'):
+        assert narrative_frame.read(literal, complete=True) is None
+
+
 def test_malformed_action_does_not_hide_independent_choices_or_ending():
     wire = ('{"scene":"Телефон звонит.","actions":[\n'
             '{"text":"Спросить о работе"},\n'
