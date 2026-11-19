@@ -181,7 +181,7 @@ test('idea190: approved reference at the same viewports and interaction states',
  await page.goto('/test/idea190/reference/workspace.html');
  await capture(page,info,'reference-01-empty');
  await page.locator('#draft-name').fill('Последняя вышка Валлора');await page.locator('#idea').fill(idea);
- await chooseOption(page.locator('#era'), 'letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
+ await page.locator('#era').selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
  await page.locator('.folio-scroll, #idea').evaluateAll(els=>els.forEach(el=>el.scrollTop=0));await capture(page,info,'reference-02-filled');
  for(const [key,title] of [['genre','Жанры истории'],['cast','Персонажи'],['world','Мир и география'],['calendar','Календарь и начало'],['narrative','Темп и последствия']]){
   await page.locator('.param').filter({hasText:title}).click();await capture(page,info,'reference-panel-'+key);await page.getByRole('button',{name:'Готово',exact:true}).click();
@@ -190,7 +190,7 @@ test('idea190: approved reference at the same viewports and interaction states',
  await page.getByRole('button',{name:'Развернуть редактор',exact:true}).click();await capture(page,info,'reference-expanded');await page.getByRole('button',{name:'К параметрам',exact:true}).click();
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'reference-communication');
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
- await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await chooseOption(page.getByLabel('Исход запуска'), 'error');
+ await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await page.getByLabel('Исход запуска').selectOption('error');
  await page.getByRole('button',{name:'Запустить демогенерацию'}).click();
  await expect(page.locator('.fl-stages li.current strong')).toHaveText('Смысловая проверка');await capture(page,info,'reference-running');
  await expect(page.getByRole('heading',{name:'Проверка не получила ответ'})).toBeVisible();await capture(page,info,'reference-error');
