@@ -124,7 +124,9 @@ def menu(frame, state):
             continue
         seen.add(key)
         choices.append(dict(action=text.strip(), speech=''))
-    warnings = [] if len(choices)==len(actions)==6 else [
-        dict(section='choices', code='narrative_menu_count', action='show_available',
-             received=len(actions), available=len(choices))]
-    return choices, warnings
+    return choices, menu_diagnostics(len(actions), len(choices))
+
+
+def menu_diagnostics(received, available):
+    return [] if received==available==6 else [dict(section='choices', code='narrative_menu_count',
+        action='show_available', received=received, available=available)]

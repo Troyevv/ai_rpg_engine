@@ -549,6 +549,14 @@ class Character(StrictModel):
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value
 
+    @model_serializer(mode='wrap')
+    def _recorded_death_time(self, handler):
+        result = handler(self)
+        for key in ('death_date','death_minute'):
+            if result.get(key) is None:
+                result.pop(key,None)
+        return result
+
 
 class Location(StrictModel):
     id: str

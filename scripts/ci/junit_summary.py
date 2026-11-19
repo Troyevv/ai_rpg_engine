@@ -17,7 +17,11 @@ else:
     lines.append(f'{len(cases)-len(failed)-skipped} passed / {len(failed)} failed / {skipped} skipped; '
                  f'{sum(float(c.get("time", 0)) for c in cases):.1f}s summed test time.')
     for case in failed:
-        lines.append(f'- {html.escape(case.get("classname", ""))}::{html.escape(case.get("name", ""))}')
+        node = f'{case.get("classname","")}::{case.get("name","")}'
+        lines.append(f'- {html.escape(node)}')
+        if os.environ.get('GITHUB_ACTIONS'):
+            message = node.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+            print(f'::error::{message}')
 text = '\n'.join(lines) + '\n'
 print(text)
 if os.environ.get('GITHUB_STEP_SUMMARY'):

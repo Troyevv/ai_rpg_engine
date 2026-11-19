@@ -497,14 +497,19 @@ def run_job(path, job_id, handle):
                     choices=resolved.choices if job['kind']!='background' else []
                     if frame is not None:
                         choices, menu_warnings = narrative_frame.menu(frame, state['world_state'])
-                        for warning in menu_warnings:
-                            if warning not in resolved.warnings: resolved.warnings.append(warning)
+                    elif version >= 10 and narrative_frame.requested(recorded_messages):
+                        menu_warnings = narrative_frame.menu_diagnostics(len(suggestions), len(choices))
+                    else:
+                        menu_warnings = []
                     changes={'time_skip':skip_result, 'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
                     audience=list(resolved.state['camera']['present_character_ids'])
                     warnings=resolved.warnings
                     if version >= 10:
                         changes.update(interpretation='partial' if warnings else 'applied',
                                        interpretation_warnings=warnings)
+                        if menu_warnings:
+                            changes['menu_available'] = len(choices)
+                            changes['interpretation_warnings'] = [*warnings,*menu_warnings]
                     history_batch=resolved.history
                     for section, records in state.pop('_remote_batch', {}).items():
                         history_batch.setdefault(section, [])[:0] = records

@@ -20,6 +20,11 @@ export default class CIReporter implements Reporter {
       const rows = this.rows as any[];
       const count = (status: string) => rows.filter(r => r.status === status).length;
       const failures = rows.filter(r => !['passed', 'skipped'].includes(r.status));
+      for (const failure of failures) {
+        const text = (failure.title + '\n' + failure.error.slice(0,1000))
+          .replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A');
+        console.log('::error::' + text);
+      }
       appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         `## Playwright ${process.env.E2E_SHARD || 'local'}\n\n` +
         `${result.status}: ${count('passed')} passed / ${failures.length} failed or interrupted / ${count('skipped')} skipped; ${((Date.now()-this.start)/1000).toFixed(1)} s\n\n` +

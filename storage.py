@@ -149,7 +149,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             sequence = db.execute('SELECT max(sequence) FROM turns WHERE save_id=:save AND sequence<:stop', params).fetchone()[0]
             ids = {r[0] for r in db.execute("""
                 SELECT id FROM turns WHERE save_id=:save AND sequence<:stop AND kind!='communication'
-                AND (:actor IS NULL OR EXISTS(SELECT 1 FROM json_each(audience_json) WHERE value=:actor)
+                AND (:actor IS NULL OR (pov_actor_id=:actor AND json_extract(changes_json,'$.presentation.observer_scene')=1)
+                     OR EXISTS(SELECT 1 FROM json_each(audience_json) WHERE value=:actor)
                      OR (coalesce(json_array_length(audience_json),0)=0 AND kind!='background'
                          AND coalesce(pov_actor_id,:main)=:actor))
                 ORDER BY sequence DESC LIMIT :limit""",params)}

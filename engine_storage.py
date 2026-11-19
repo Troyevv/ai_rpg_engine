@@ -421,9 +421,11 @@ class EngineStorage:
         if frame is not None:
             choices, issues = narrative_frame.menu(frame, state['world_state'])
             warnings.extend(issues)
-        elif not config.get('_narrative_suggestions') and narrative_frame.requested(json.loads(job.get('context_json') or '[]')):
-            warnings.extend(narrative_frame.menu({}, world)[1])
+        elif narrative_frame.requested(json.loads(job.get('context_json') or '[]')):
+            warnings.extend(narrative_frame.menu_diagnostics(len(config.get('_narrative_suggestions') or []), len(choices)))
         changes = {'interpretation':'pending' if recovery is None else 'deferred'}
+        if any(w.get('code')=='narrative_menu_count' for w in warnings):
+            changes['menu_available'] = len(choices)
         if skip:
             changes['time_skip'] = skip
         if recovery is not None:
@@ -526,7 +528,13 @@ class EngineStorage:
                 state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch, before=json.loads(job['before_json'])['world_state'], after=state['world_state']))
             from backend.runtime_v3.surfaces import committed_route
             changes = dict(changes, presentation=committed_route(dict(job), history_batch))
-            if json.loads(job['config_json']).get('_extraction_contract', 1) >= 9:
+            version = json.loads(job['config_json']).get('_extraction_contract', 1)
+            camera = state['world_state']['camera']
+            if version >= 10 and camera['mode']=='observer' and camera.get('pov_actor_id'):
+                db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(camera['pov_actor_id'],job_id))
+                job = db.execute('SELECT * FROM game_jobs WHERE id=?',(job_id,)).fetchone()
+                changes['presentation']['observer_scene'] = True
+            if version >= 9:
                 before_world = json.loads(job['before_json'])['world_state']
                 after_world = state['world_state']
                 changed = [cid for cid in before_world['characters'].keys() & after_world['characters'].keys()

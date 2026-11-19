@@ -152,3 +152,14 @@ def test_marriage_supersedes_engagement_and_divorce_keeps_both_phases():
         ('engaged','closed','superseded'),('spouse','active','')}
     s=apply(s,relation('divorce'),3).state
     assert any(r['kind']=='spouse' and r['outcome']=='divorced' for r in s['objective_relations'].values())
+
+
+def test_observer_reads_own_public_scene_and_other_actor_only_receives_known_facts():
+    from backend.services.pov import actor_view, visible
+    changes = dict(presentation=dict(observer_scene=True))
+    scene = dict(kind='background',pov_actor_id='b',audience_json='["a"]',assistant_text='Утро в мастерской.',
+                 changes_json=json.dumps(changes))
+    assert visible(scene,'b','a') and actor_view(scene,'b','a')['assistant_text']==scene['assistant_text']
+    assert scene['assistant_text'] not in actor_view(scene,'a','a')['assistant_text']
+    legacy = dict(scene,pov_actor_id=None,changes_json='{}')
+    assert scene['assistant_text'] not in actor_view(legacy,'b','a')['assistant_text']

@@ -50,6 +50,8 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                   {!committed&&showTools&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
                   </>}
                   {committed&&showTools&&!t.read_only_projection&&<>
+                  {t.changes?.menu_available!=null&&t.changes.interpretation!=='pending'&&
+                    <p className="muted small">Варианты продолжения · {t.changes.menu_available} из 6. Можно ввести своё действие.</p>}
                   {['partial','deferred'].includes(t.changes?.interpretation || '') &&
                     <details className="turn-timing"><summary>Сцена сохранена. Есть замечания к состоянию мира.</summary>
                       <p>Историю можно продолжить. Место, участников и знания можно поправить в инспекторе сцены.</p>

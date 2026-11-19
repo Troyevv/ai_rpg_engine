@@ -143,7 +143,7 @@ export interface PresentationRoute {physical_reconciliation?:boolean;surface:"ph
 export interface Turn {
   read_only_projection?: boolean;
   presentation?: PresentationRoute;
-  changes?: {interpretation?:'pending'|'partial'|'deferred'|'applied';communication?: {rejected?: string[]}};
+  changes?: {menu_available?:number;interpretation?:'pending'|'partial'|'deferred'|'applied';communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
   node_id: string;
