@@ -283,17 +283,23 @@ def test_signed_future_transfer_is_known_before_effective_replacement():
 def test_separate_actions_object_from_live_opening():
     from backend.runtime_v3.narrative_frame import read, menu
 
-    scene = json.dumps({'scene':'Вера касается конверта.'}, ensure_ascii=False)
-    rows = [{'text':'Открыть конверт вместе'}, {'text':'Спросить Веру о письме'},
-            {'text':'Вспомнить секрет', 'facts':['unknown']}]
-    second = json.dumps({'actions':rows}, ensure_ascii=False)
-    for end in range(len(scene),len(scene + '\n' + second)):
-        assert read((scene + '\n' + second)[:end],complete=False) == ('Вера касается конверта.',{})
-    prose, frame = read(scene + '\n' + second,complete=True)
-    assert prose == 'Вера касается конверта.'
-    choices, diagnostics = menu(frame,state())
-    assert [c['action'] for c in choices] == [x['text'] for x in rows[:2]]
-    assert diagnostics[0]['received'] == 3
+    from pathlib import Path
+    original = (Path(__file__).parent / 'fixtures/issue264/flash-opening.jsonl').read_text()
+    scene, second = original.splitlines()
+    expected = json.loads(scene)['scene']
+    rows = json.loads(second)['actions']
+    for end in (len(scene), len(scene)+1, len(original)-1):
+        assert read(original[:end], complete=False) == (expected, {})
+    prose, frame = read(original, complete=True)
+    assert prose == expected
+    choices, diagnostics = menu(frame, state())
+    assert len(rows) == 6 and [c['action'] for c in choices] == [x['text'] for x in rows]
+    assert diagnostics == []
+
+    restricted = dict(actions=[*rows[:2], dict(text='Вспомнить секрет', facts=['unknown'])])
+    _, frame = read(scene + '\n' + json.dumps(restricted), complete=True)
+    choices, diagnostics = menu(frame, state())
+    assert len(choices) == 2 and diagnostics[0]['received'] == 3
     for tail in (second + ' ещё текст', '{"ending":{"elapsed_minutes":100},"actions":[]}',
                  '1. Открыть письмо', '{"actions":"Открыть письмо"}'):
-        assert read(scene + '\n' + tail,complete=True) == (prose,{})
+        assert read(scene + '\n' + tail, complete=True) == (prose, {})
