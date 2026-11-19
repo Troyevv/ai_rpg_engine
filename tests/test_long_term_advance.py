@@ -230,11 +230,12 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     if misdated:
         raw["events"][0]["minute"] = candidate.minute + 1
 
+    from backend.runtime_v3.context_contract import RECORDED_CONTROL_CONTRACT
     from test_narrative_style import assert_style
     stages = []
     def generate(stage, messages, *args, **kwargs):
         stages.append(stage)
-        assert_style(messages, 0 if "extraction" in stage else 1)
+        assert_style(messages, 0 if "extraction" in stage else 1, control=RECORDED_CONTROL_CONTRACT)
         if custom_prompt and "extraction" not in stage:
             assert "CUSTOM LTA" in str(messages)
         return iter([json.dumps(raw) if "extraction" in stage else text])
