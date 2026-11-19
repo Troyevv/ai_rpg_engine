@@ -4,7 +4,7 @@ import {toast} from "sonner";
 import {api} from "./api";
 import {Button} from "./components/ui/button";
 import {Textarea} from "./components/ui/textarea";
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from "./components/ui/dialog";
+import {Dialog,DialogContent,DialogTrigger,DialogHeader,DialogTitle,DialogDescription} from "./components/ui/dialog";
 import {Markdown} from "./Markdown";
 interface Version {id:number;content:string;complete:boolean;created_at:string;reason:string;source_version_id:number|null}
 interface History {template?:string;prompt_origin?:string;active_id:number|null;versions:Version[]}
@@ -21,6 +21,16 @@ export function Versions({kind,owner,open,close,changed}:{kind:string;owner:stri
  <details><summary>Просмотр выбранной версии</summary><Markdown text={content||"Документ пуст"}/></details>
  {history.template && <div>{owner==="draft_world_prompt.md"?<p>{history.prompt_origin==="bundled"?"Активен актуальный встроенный промпт генерации.":history.prompt_origin==="historical_builtin"?"Активна историческая версия встроенного промпта.":"Активен авторский промпт. Его совместимость с текущим форматом мира не проверена."} Вы можете сравнить шаблон и сохранить новую версию.</p>:<p>Технический контракт новых ходов задаёт Runtime. Авторские дополнения редактируются в extraction_author.md. Старые версии доступны ниже.</p>}<details><summary>Актуальный шаблон {owner==="draft_world_prompt.md"?"генерации мира":"Extraction"}</summary><Markdown text={history.template}/></details>{content!==history.template&&<Button variant="outline" onClick={()=>setContent(history.template!)}>Подставить актуальный шаблон для сохранения</Button>}</div>}
  <Textarea readOnly={!!history.template&&owner==="state_update_prompt.md"} disabled={loading||busy} aria-label="Содержимое версии" value={content} onChange={e=>setContent(e.target.value)} style={{minHeight:260}}/>
- <div className="actions"><Button disabled={busy||loading} onClick={()=>void commit()}>Сохранить новую версию</Button><Button variant="outline" disabled={busy||loading||!selected||selected===history.active_id} onClick={()=>setRollback(true)}>Откатить к выбранной</Button></div>
+ <div className="actions">
+   <Button disabled={busy||loading} onClick={()=>void commit()}>Сохранить новую версию</Button>
+   <Dialog open={rollback} onOpenChange={setRollback}>
+     <DialogTrigger asChild><Button variant="outline" disabled={busy||loading||!selected||selected===history.active_id}>Откатить к выбранной</Button></DialogTrigger>
+     <DialogContent><DialogHeader><DialogTitle>Восстановить версию № {selected}?</DialogTitle>
+       <DialogDescription>Выбранная версия станет активной. Текущая сохранится в истории.</DialogDescription></DialogHeader>
+       <div className="actions"><Button variant="outline" onClick={()=>setRollback(false)}>Отмена</Button>
+         <Button disabled={busy} onClick={()=>{setRollback(false);void commit(selected)}}>Восстановить версию</Button></div>
+     </DialogContent>
+   </Dialog>
+ </div>
  </DialogContent></Dialog>
 }
