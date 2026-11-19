@@ -1,6 +1,6 @@
 import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
-import {MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,ChevronDown,Info,NotebookPen,Smartphone} from "lucide-react";
+import {MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,Info,NotebookPen,Smartphone} from "lucide-react";
 import {AtelierDisclosure} from "./workshop/AtelierDisclosure";
 import { api } from "./api";
 import { gameLocale } from "./gameDate";
@@ -117,7 +117,7 @@ export function CommunicationSettings({
     <fieldset disabled={disabled} className="comm-body"><div className="era"><label htmlFor="atelier-communication-preset">Набор технологий</label>
       <div className="select-wrap"><Choice id="atelier-communication-preset" aria-label="Набор технологий связи" value={v.preset||'none'} onValueChange={selectedValue => selectPreset(selectedValue)}>
         {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{id==='custom'&&!english?'Свой набор':label[index]}</option>)}
-      </Choice><ChevronDown size={15}/></div><p>Выберите основу. Эпоху мира задаёт замысел.</p></div>
+      </Choice></div><p>Выберите основу. Эпоху мира задаёт замысел.</p></div>
       <fieldset className="channel-set"><legend>Доступные каналы</legend><div className="chips">{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className="channel" data-selected={!!v[c]} title={names[i]+' · '+policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
         <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/><Icon size={14}/><span>{names[i]}</span>{v[c]?<Check className="on selection-mark" size={13}/>:<Plus className="off" size={12}/>}
       </label>})}</div></fieldset>

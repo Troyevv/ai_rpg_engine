@@ -36,9 +36,12 @@ async function verifyExit(page: Page, dialog: Locator, opener: Locator, close: (
   await info.attach(first.title + ' — кадры', {body: JSON.stringify(frames), contentType: 'application/json'});
   expect(frames.some(f => f.state === 'closed')).toBe(true);
   for (const frame of frames) {
+    expect(frame.width).toBeCloseTo(first.width, 0);
     expect(frame).toMatchObject({drawer: first.drawer, title: first.title, sameContent: true,
       sameNodes: true, scroll: first.scroll, menu: false, url: first.url});
   }
+  expect(page.url()).toBe(first.url);
+  await expect(page.locator('.ww-scroll')).toHaveJSProperty('scrollTop',first.scroll);
 }
 
 for (const width of [360, 393]) test('Мастерская — выбор и последовательное закрытие панелей · '+width, async ({page}, info) => {
@@ -47,6 +50,16 @@ for (const width of [360, 393]) test('Мастерская — выбор и п�
   await page.emulateMedia({reducedMotion:'no-preference'});
   await page.goto('/');
   await nav(page, 'Создать');
+
+  const preset = page.getByRole('combobox',{name:'Набор технологий связи'});
+  await preset.press('/');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await preset.tap();
+  await page.keyboard.press('/');
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(preset).toBeFocused();
 
   // Change the skin from the actual nested workshop menu.
   await page.getByRole('button', {name:'Разделы мастерской',exact:true}).click();
