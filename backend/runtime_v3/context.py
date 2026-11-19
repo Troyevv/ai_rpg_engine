@@ -944,7 +944,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         if extraction_contract >= 10:
             rules += '\nУкажи в choices индексы готовых предложений и доступные герою источники grounding.'
         messages.append(block('Предложения Narrative / ещё не выбраны', suggestions))
-    from backend.runtime_v3.context_contract import CONTROL_CONTRACT
+    from backend.runtime_v3.context_contract import CONTROL_CONTRACT, RECORDED_CONTROL_CONTRACT
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
     clock_rules = EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT
     if not builder.extraction and extraction_contract >= 11:
@@ -953,9 +953,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if builder.extraction and extraction_contract >= 11:
         clock_rules = clock_rules.replace(' End prose/choices at time_skip_target.', '')
     rules += '\n' + clock_rules
-    rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
+    control = CONTROL_CONTRACT if extraction_contract >= 11 else RECORDED_CONTROL_CONTRACT
+    rules += '\n' + (control if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
     if extraction_contract >= 11:
-        rules = rules.replace('; accepted Runtime involuntary consequences can be narrated.', '.')
         rules += ('\nPublished scenes happened. Use the last saved mechanics for calculations. '
                   'After partial or deferred interpretation the saved clock and positions may lag the prose. '
                   'Later explicit player corrections take precedence. Preserve individual Knowledge.')

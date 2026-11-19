@@ -4,17 +4,17 @@ import json
 
 import pytest
 
-from backend.runtime_v3.context_contract import CONTROL_CONTRACT, NARRATIVE_STYLE_CONTRACT
+from backend.runtime_v3.context_contract import CONTROL_CONTRACT, RECORDED_CONTROL_CONTRACT, NARRATIVE_STYLE_CONTRACT
 from context_builder import build_context, estimate
 from test_runtime_v3_storage import snapshot_fixture
 
 
-def assert_style(messages, count=1):
+def assert_style(messages, count=1, *, control=CONTROL_CONTRACT):
     text = '\n'.join(m['content'] for m in messages)
     assert text.count('NARRATIVE STYLE CONTRACT:') == count
     assert text.count(NARRATIVE_STYLE_CONTRACT.strip()) == count
     if count:
-        assert CONTROL_CONTRACT in text
+        assert control in text
         assert 'GM-only карточки и внутренние состояния не являются знанием POV.' in text
         assert 'Respect current canonical appearance.' in text
     return text
@@ -88,7 +88,7 @@ def test_start_turn_reload_regenerate_rollback_no_extra_calls(tmp_path, custom):
         repo.change_document('prompt', 'game_system_prompt.md', custom_text, head)
     for kind in ('start', 'turn'):
         ordinary_job(repo, sid, kind)  # asserts exactly narrative + extraction
-        wire = assert_style(json.loads(repo.latest_job(sid)['context_json']))
+        wire = assert_style(json.loads(repo.latest_job(sid)['context_json']), control=RECORDED_CONTROL_CONTRACT)
         assert (custom_text in wire) == custom
     original = repo.get_snapshot(sid)
     original_context = repo.latest_job(sid)['context_json']
@@ -98,10 +98,10 @@ def test_start_turn_reload_regenerate_rollback_no_extra_calls(tmp_path, custom):
         assert repo.prompt_snapshot()['game_system_prompt.md']['content'] == custom_text
     ordinary_job(repo, sid, 'regenerate')
     assert repo.latest_job(sid)['context_json'] == original_context
-    assert_style(json.loads(repo.latest_job(sid)['context_json']))
+    assert_style(json.loads(repo.latest_job(sid)['context_json']), control=RECORDED_CONTROL_CONTRACT)
     repo.rollback_last(sid)
     ordinary_job(repo, sid)
-    assert_style(json.loads(repo.latest_job(sid)['context_json']))
+    assert_style(json.loads(repo.latest_job(sid)['context_json']), control=RECORDED_CONTROL_CONTRACT)
 
 
 def test_legacy_regeneration_keeps_original_context(tmp_path):
@@ -121,4 +121,4 @@ def test_legacy_regeneration_keeps_original_context(tmp_path):
     ordinary_job(repo, sid, 'regenerate')
     assert repo.latest_job(sid)['context_json'] == original_context
     ordinary_job(repo, sid)
-    assert_style(json.loads(repo.latest_job(sid)['context_json']))
+    assert_style(json.loads(repo.latest_job(sid)['context_json']), control=RECORDED_CONTROL_CONTRACT)

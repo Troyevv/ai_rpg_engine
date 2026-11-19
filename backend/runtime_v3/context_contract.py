@@ -447,11 +447,15 @@ NPCs may causally use/dispose of their own things. No inventory/economy simulati
 CONTROL_CONTRACT = """EXTERNAL=controlled_actor_id; others AUTONOMOUS. Never invent EXTERNAL voluntary
 speech, actions, thoughts, decisions, intentions, consent or responses. NPCs can initiate
 contextually valid interactions, affection or conflict. Leave meaningful EXTERNAL responses
-unresolved; accepted Runtime involuntary consequences can be narrated. Camera, POV and
+unresolved. Camera, POV and
 control are independent; observation may have no EXTERNAL. Each character uses only their
 own knowledge. Never propose autonomous death for death_protected_actor_ids. Follow actual
 capabilities, including children's abilities, without inventing adult activities.
 """
+
+# Preserve the original control paragraph when replaying pre-11 jobs.
+RECORDED_CONTROL_CONTRACT = CONTROL_CONTRACT.replace(
+    'unresolved.', 'unresolved; accepted Runtime involuntary consequences can be narrated.')
 
 
 PACING_CONTRACT = """
