@@ -25,16 +25,18 @@ def test_job_covers_measured_full_suite_setup_and_finalization(pytest_seconds):
     # #475 is a LOWER bound, not a fabricated completed-suite duration:
     # pytest ran 20:25:46..20:49:41 before cancellation, with only 97% reported.
     required = 77 + pytest_seconds + 10 + 120  # setup, tests, finalization, reserve
-    timeout = int(re.search(r'^    timeout-minutes: (\d+)$', job('backend'), re.MULTILINE)[1])
+    timeout = int(re.search(r'^    timeout-minutes: (\d+)$', job('backend-tests'), re.MULTILINE)[1])
     assert 20 * 60 < required <= timeout * 60
 
 
 def test_backend_still_executes_the_entire_suite_and_keeps_failure_status():
-    backend = job('backend')
+    backend = job('backend-tests')
     command, = re.findall(r'^      - run: (python -m pytest[^\n]*)$', backend, re.MULTILINE)
     assert shlex.split(command) == [
         'python', '-m', 'pytest', '-q', '--junitxml=pytest-results.xml', '--durations=20',
     ]  # no selectors, excludes, retries, shell success override or fail-fast
+    assert 'shard: [1, 2, 3, 4]' in backend and 'PYTEST_CI_SHARD: ${{ matrix.shard }}/4' in backend
+    assert 'needs: backend-tests' in job('backend') and 'test "$SHARDS" = success' in job('backend')
     assert 'continue-on-error' not in backend and 'if:' not in backend.split(command)[0]
 
 

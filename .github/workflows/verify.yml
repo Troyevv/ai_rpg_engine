@@ -47,13 +47,16 @@ jobs:
           name: e2e-plan
           path: e2e-plan.json
           retention-days: 7
-  backend:
+  backend-tests:
     runs-on: ubuntu-latest
-    # #382: 77s setup + 1125s pytest exhausted the 20m job deadline at exit.
-    # #475 reached only 97% after 1435s pytest + 77s setup at the 25m deadline.
-    # #525: 4108 tests took 1722s; setup/reporting crossed the 30m deadline.
-    # Preserve every test and leave reporting/runner variance reserve.
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PYTEST_CI_SHARD: ${{ matrix.shard }}/4
+      PYTEST_ADDOPTS: -p scripts.ci.pytest_shard
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,8 +76,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pytest-results
+          name: pytest-results-${{ matrix.shard }}
           path: pytest-results.xml
+  backend:
+    needs: backend-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          SHARDS: ${{ needs.backend-tests.result }}
+        run: test "$SHARDS" = success
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -127,14 +138,13 @@ jobs:
       artifact-prefix: smoke
   full:
     needs: [plan, frontend]
-    if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/e2e.yml
     with:
       full: true
       artifact-prefix: full
   e2e-smoke:
     name: e2e-smoke
-    needs: [plan, selected, full]
+    needs: [plan, selected]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -146,33 +156,31 @@ jobs:
         env:
           PLAN: ${{ needs.plan.result }}
           SELECTED: ${{ needs.selected.result }}
-          FULL_REQUIRED: ${{ needs.plan.outputs.full }}
-          FULL_RESULT: ${{ needs.full.result }}
         run: |
           test "$PLAN" = success && test "$SELECTED" = success
-          if [[ "$FULL_REQUIRED" == true ]]; then test "$FULL_RESULT" = success; fi
       - uses: actions/download-artifact@v4
         with:
           pattern: smoke-*
           path: reports/smoke
       - run: python scripts/ci/check_e2e.py reports/smoke
-      - uses: actions/download-artifact@v4
-        if: needs.plan.outputs.full == 'true'
-        with:
-          pattern: full-*
-          path: reports/full
-      - if: needs.plan.outputs.full == 'true'
-        run: python scripts/ci/check_e2e.py reports/full
   e2e-full:
     name: e2e-full
     needs: [plan, full]
-    if: always() && needs.plan.outputs.full == 'true'
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - env:
           RESULT: ${{ needs.full.result }}
         run: test "$RESULT" = success
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: full-*
+          path: reports/full
+      - run: python scripts/ci/check_e2e.py reports/full --shards 8
   timing:
     needs: [verify, e2e-smoke, e2e-full]
     if: always()
