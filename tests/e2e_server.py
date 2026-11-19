@@ -1352,13 +1352,15 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/family-seed')
-    def family_seed(checkpoint: str = 'family', dead: bool = False):
+    def family_seed(checkpoint: str = 'family', dead: bool = False, current: bool = False):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
         repo=app.state.repository
         if checkpoint not in ('family','family-incapacitated'): raise ValueError('Unknown test checkpoint')
         result=load_fixture(repo,checkpoint)
         ordinary_job(repo,result['save'],'start',expected_choices=0 if checkpoint=='family-incapacitated' else 6)
+        if current:
+            extraction_versions.EXTRACTION_VERSION = CURRENT_SCENE_VERSION
         if dead:
             snap=repo.get_snapshot(result['save']);state=snap['world_state'];cid=state['meta']['current_protagonist_id']
             state['characters'][cid]['life_status']='dead';state['meta']['protagonist_required']=True

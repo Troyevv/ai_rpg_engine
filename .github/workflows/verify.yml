@@ -121,7 +121,7 @@ jobs:
           path: frontend/vitest-results.xml
   verify:
     name: verify
-    needs: [backend, frontend, plan]
+    needs: [backend, frontend, plan, e2e-smoke, e2e-full]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -130,7 +130,9 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           FRONTEND: ${{ needs.frontend.result }}
           PLAN: ${{ needs.plan.result }}
-        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$PLAN" = success
+          SMOKE: ${{ needs.e2e-smoke.result }}
+          FULL: ${{ needs.e2e-full.result }}
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$PLAN" = success && test "$SMOKE" = success && test "$FULL" = success
   selected:
     needs: [plan, frontend]
     uses: ./.github/workflows/e2e.yml

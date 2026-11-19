@@ -387,7 +387,7 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Выбери персонажа или сцену камеры, не оба сразу.')
         settings={**body.config.model_dump(),'expected_revision':body.revision,
                   'camera_actor_id':body.actor_id,'camera_scene_id':body.scene_id,'camera_direct':True}
-        jid=engine.submit(repo,sid,'','background',settings,api_key=credentials.resolve(body.config.provider,body.key()))
+        jid=engine.submit(repo,sid,body.direction,'background',settings,api_key=credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 
     @app.get('/api/saves/{sid}/timeline')

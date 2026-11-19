@@ -284,7 +284,7 @@ def test_current_menu_owner_and_actor_availability(mode):
     last_input = json.loads(messages[-1]['content'].split('\n', 1)[1])
     from backend.runtime_v3.narrative_frame import FORMAT
     assert last_input.get('response_format','').startswith(FORMAT) == (mode!='background')
-    if mode=='observer': assert 'наблюдателя' in last_input['response_format']
+    if mode in ('observer','blocked'): assert 'наблюдателя' in last_input['response_format']
     if mode == 'ordinary':
         assert 'output only literary prose' not in messages[0]['content']
         from backend.services.structured_extraction import request_schema

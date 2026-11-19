@@ -152,7 +152,9 @@ export function Game({
   const turnLocked = generating || (rejected && !!job.narrative_complete);
   const observer = save?.state.camera?.mode==='observer';
   const canAct = !!save && !save.state.protagonist_required && (observer || (!!actorId && save.state.actor_capabilities?.can_act!==false));
-  const canSubmit = canAct && !busy && !turnLocked && !!save?.turns.length;
+  const observeInstead = !observer && !!actorId && save?.state.actor_capabilities?.can_act===false && !save?.state.protagonist_required;
+  const directionInput = observer || observeInstead;
+  const canSubmit = (canAct || observeInstead) && !busy && !turnLocked && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
   const requestLock=useRef(false);
@@ -196,12 +198,14 @@ export function Game({
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
     refreshControl(after);jumpToLatest();
   });
-  const observe=(actor?:string,scene?:string)=>void run(async()=>{
+  const observe=(actor?:string,scene?:string,direction?:string)=>void run(async()=>{
     if(!save)return;
-    if(actor){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
-    const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
+    if(actor&&!direction){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
+    const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,direction,revision:save.revision,config:prefs.game,api_key:apiKey});
+    if(direction && direction===draftRef.current){setDraft("");sessionStorage.removeItem(draftKey)}
     setSubmitted(j);jumpToLatest();
   });
+  const submitDraft=()=>observeInstead&&actorId ? observe(actorId,undefined,draft) : turn("turn");
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
 
   const stableRun=useStableEvent(run);
@@ -213,6 +217,8 @@ export function Game({
   }));
   const allEntries=presentationEntries(save,job);
   const entries=surfaceEntries(allEntries,'physical');
+  const callEntries=surfaceEntries(allEntries,'call',actorId,selectedCall);
+  const latestCall=callEntries.at(-1);
   const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
     <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
@@ -275,12 +281,12 @@ export function Game({
     );
   return (
     <main className="game">
-      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
+      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');
       }} end={async()=>{await run(async()=>{const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:selectedCall,operation_id:crypto.randomUUID()}});refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
-        {surfaceEntries(allEntries,'call',actorId,selectedCall).map(e=>renderEntry(e))}
+        {callEntries.map(e=>renderEntry(e))}
       </CallScene>}
       {save&&<div className="narrative-toolbar" role="group" aria-label="Действия истории">
         <CurrentGame refresh={refreshControl} save={save} disabled={busy||turnLocked} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
@@ -410,7 +416,7 @@ export function Game({
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
-                    {(save.state.camera?.mode==='observer'||(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId)?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
+                    {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
@@ -491,14 +497,14 @@ export function Game({
             <Textarea
               ref={input}
               rows={1}
-              aria-label={observer ? "Направление истории" : "Своё действие или реплика"}
+              aria-label={directionInput ? "Направление истории" : "Своё действие или реплика"}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
-              disabled={!canAct}
-              placeholder={observer?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
+              disabled={!canAct && !observeInstead}
+              placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -507,21 +513,21 @@ export function Game({
                   draft.trim()
                 ) {
                   e.preventDefault();
-                  turn("turn");
+                  submitDraft();
                 }
               }}
             />
             <Button
-              aria-label={observer ? "Отправить направление истории" : "Отправить действие"}
+              aria-label={directionInput ? "Отправить направление истории" : "Отправить действие"}
               size="icon"
               disabled={!canSubmit || !draft.trim()}
-              onClick={() => turn("turn")}
+              onClick={submitDraft}
             >
               <Send size={19} />
             </Button>
           </div>
           <div className="composer-footer">
-            <span>{observer?"Можно задать своё направление истории.":"Твоё действие всегда важнее предложенных вариантов."}</span>
+            <span>{directionInput?"Можно задать своё направление истории.":"Твоё действие всегда важнее предложенных вариантов."}</span>
             {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
             {away&&<button
               onClick={jumpToLatest}

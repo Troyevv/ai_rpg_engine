@@ -120,7 +120,8 @@ def visible_views(snapshot, turns, kind):
     from backend.services.pov import visible, actor_view
     actor = snapshot['world_state']['camera'].get('pov_actor_id') or snapshot['world_state']['camera']['controlled_actor_id']
     main = snapshot.get('campaign', {}).get('protagonist_id')
-    return [t if kind == 'background' and actor is None else actor_view(t, actor, main) for t in turns if not t.get('_temporal_only') and t.get('kind') != 'communication'
+    observing = snapshot['world_state']['camera']['mode'] == 'observer'
+    return [t if kind == 'background' and actor is None else actor_view(t, actor, main, observer=observing) for t in turns if not t.get('_temporal_only') and t.get('kind') != 'communication'
             if kind == 'background' and actor is None or visible(t, actor, main)]
 
 
@@ -858,8 +859,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
             from backend.runtime_v3.narrative_frame import FORMAT
             rules = rules.replace(PROSE_ONLY_OUTPUT, '')
+            from backend.runtime_v3.life import capabilities
+            directs = camera['mode']=='observer' or (scope.controlled_actor_id and
+                        not capabilities(state,scope.controlled_actor_id)['can_act'])
             reply_format = FORMAT + (' Варианты задают направление истории в режиме наблюдателя.'
-                                     if camera['mode']=='observer' else ' Варианты от лица героя.')
+                                     if directs else ' Варианты от лица героя.')
+            if state['meta'].get('interaction_focus')=='call':
+                reply_format += ' Предложи продолжения этого звонка.'
         elif camera['mode']=='actor' and scope.controlled_actor_id:
             from backend.runtime_v3.life import capabilities
             from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION

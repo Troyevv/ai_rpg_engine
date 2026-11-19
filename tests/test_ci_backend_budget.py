@@ -40,11 +40,13 @@ def test_backend_still_executes_the_entire_suite_and_keeps_failure_status():
     assert 'continue-on-error' not in backend and 'if:' not in backend.split(command)[0]
 
 
-@pytest.mark.parametrize('backend', ['success', 'failure', 'cancelled', 'skipped'])
-def test_verify_rejects_every_unsuccessful_backend(backend):
+@pytest.mark.parametrize('check', ['BACKEND','FRONTEND','PLAN','SMOKE','FULL'])
+@pytest.mark.parametrize('status', ['success', 'failure', 'cancelled', 'skipped'])
+def test_verify_rejects_every_unsuccessful_check(check,status):
     gate = job('verify')
     assert 'if: always()' in gate and 'continue-on-error' not in gate
     command = re.search(r'^        run: (.+)$', gate, re.MULTILINE)[1]
-    result = subprocess.run(['bash', '-c', command],
-                            env={'BACKEND': backend, 'FRONTEND': 'success', 'PLAN': 'success'})
-    assert (result.returncode == 0) == (backend == 'success')
+    checks = dict.fromkeys(['BACKEND','FRONTEND','PLAN','SMOKE','FULL'],'success')
+    checks[check] = status
+    result = subprocess.run(['bash', '-c', command], env=checks)
+    assert (result.returncode == 0) == (status == 'success')

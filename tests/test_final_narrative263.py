@@ -76,7 +76,7 @@ def test_group_move_and_employment_replacement_are_explicit():
     from test_residence_roles import state as residence_state
     s=residence_state()
     s=apply(s,dict(residence_changes=[dict(actor_ids=['a','b'],location_id='home')],
-                   role_changes=[dict(actor_id='a',kind='employment',title='Архивариус')])).state
+                   role_changes=[dict(actor_id='a',kind='employment',title='Архивариус',replaces='current')])).state
     assert {r['actor_id'] for r in s['residences'].values() if r['location_id']=='home'} >= {'a','b'}
     s=apply(s,dict(role_changes=[dict(actor_id='a',kind='employment',title='Хранитель',replaces='current')]),2).state
     s=apply(s,dict(role_changes=[dict(actor_id='a',kind='employment',title='Лектор')]),3).state
@@ -156,10 +156,24 @@ def test_marriage_supersedes_engagement_and_divorce_keeps_both_phases():
 
 def test_observer_reads_own_public_scene_and_other_actor_only_receives_known_facts():
     from backend.services.pov import actor_view, visible
-    changes = dict(presentation=dict(observer_scene=True))
+    changes = dict(presentation=dict(observer_scene=True), facts=[dict(text='Звонила Анна',known_by=['b'])])
     scene = dict(kind='background',pov_actor_id='b',audience_json='["a"]',assistant_text='Утро в мастерской.',
                  changes_json=json.dumps(changes))
-    assert visible(scene,'b','a') and actor_view(scene,'b','a')['assistant_text']==scene['assistant_text']
+    assert visible(scene,'b','a') and actor_view(scene,'b','a',observer=True)['assistant_text']==scene['assistant_text']
+    for kind in ('turn','background'):
+        waking = actor_view(dict(scene,kind=kind),'b','a')['assistant_text']
+        assert 'Звонила Анна' in waking and scene['assistant_text'] not in waking
     assert scene['assistant_text'] not in actor_view(scene,'a','a')['assistant_text']
     legacy = dict(scene,pov_actor_id=None,changes_json='{}')
     assert scene['assistant_text'] not in actor_view(legacy,'b','a')['assistant_text']
+
+
+def test_call_frame_scopes_actions_to_the_current_call_only():
+    s = state()
+    s['meta']['interaction_focus'] = 'call'
+    options = [dict(text=f'Реплика {i}',facts=[]) for i in range(6)]
+    frame = dict(actions=[dict(text='Раскрыть секрет',facts=['unknown']), *options])
+    choices,warnings = narrative_frame.menu(frame,s)
+    assert [c['action'] for c in choices] == [o['text'] for o in options]
+    assert all(c['interaction_channel']=='call' for c in choices)
+    assert warnings[0]['received']==7 and warnings[0]['available']==6

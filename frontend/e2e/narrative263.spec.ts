@@ -94,3 +94,26 @@ test('six authored actions survive reload and keep the editable draft', async ({
   await input.fill('Открываю альбом на первой странице.');
   expect((await read()).revision).toBe(revision);
 });
+
+test('a free direction from an incapacitated hero follows the observer camera', async ({page, request}) => {
+  const selection = await (await request.post('/test/family-seed?checkpoint=family-incapacitated&current=true')).json();
+  const profile = 'observer263-' + selection.save;
+  await request.put('/api/settings/' + profile, {data: {...defaults, game: {...defaults.game, model:'frame263-test', context_length:65536}}});
+  await page.addInitScript(({selection, profile}) => {
+    localStorage.setItem('selection',JSON.stringify(selection));
+    localStorage.setItem('profile',profile);
+  }, {selection, profile});
+  await page.goto('/');
+  const before = await (await request.get('/api/saves/' + selection.save)).json();
+  const direction = 'Показать, что происходит у окна.';
+  await page.getByRole('textbox',{name:'Направление истории',exact:true}).fill(direction);
+  const sent = page.waitForRequest(r => r.method()==='POST' && r.url().endsWith('/camera'));
+  await page.getByRole('button',{name:'Отправить направление истории',exact:true}).click();
+  expect((await sent).postDataJSON()).toMatchObject({actor_id:before.state.protagonist_id,direction});
+  const read = async () => (await request.get('/api/saves/' + selection.save)).json();
+  await expect.poll(async () => (await read()).turns.length).toBe(before.turns.length+1);
+  const after = await read();
+  expect(after.turns.at(-1)).toMatchObject({kind:'background',user_text:direction});
+  expect(after.state.controlled_actor_id).toBeNull();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+});

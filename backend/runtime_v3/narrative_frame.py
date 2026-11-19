@@ -108,7 +108,9 @@ def menu(frame, state):
     camera = state['camera']
     pov = camera.get('pov_actor_id') or camera.get('controlled_actor_id')
     seen, choices = set(), []
-    for item in actions[:6]:
+    for item in actions:
+        if len(choices)==6:
+            break
         if not isinstance(item, dict):
             continue
         text, refs = item.get('text'), item.get('facts')
@@ -121,7 +123,10 @@ def menu(frame, state):
         if key in seen:
             continue
         seen.add(key)
-        choices.append(dict(action=text.strip(), speech=''))
+        choice = dict(action=text.strip(), speech='')
+        if state['meta'].get('interaction_focus') == 'call':
+            choice['interaction_channel'] = 'call'
+        choices.append(choice)
     return choices, menu_diagnostics(len(actions), len(choices))
 
 

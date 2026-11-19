@@ -46,8 +46,8 @@ def phase_changes(records, state, turn_id, namespace):
                 if row.get('replaces') == 'current':
                     prior = [r['id'] for r in state[collection].values() if r['actor_id']==actor and
                              r['status']=='active' and (collection=='residences' or r['kind']==row.get('kind'))]
-                    if len(prior)!=1:
-                        reject('При нескольких или отсутствующих действующих фазах укажи точные ID для замены.')
+                    if len(prior)>1:
+                        reject('При нескольких действующих фазах укажи точные ID для замены.')
                     row['replaces'] = prior
                 if 'id' not in row:
                     if row.get('status')=='closed':

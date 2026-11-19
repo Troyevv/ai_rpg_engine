@@ -142,7 +142,7 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   ).toBe(true);
 });
 
-test("incapacitation blocks keyboard and submit while observation remains available", async ({
+test("incapacitation offers direction without a voluntary actor command", async ({
   page,
   request,
 }) => {
@@ -157,15 +157,15 @@ test("incapacitation blocks keyboard and submit while observation remains availa
   const before = await (
     await request.get(`/api/saves/${selected.save}`)
   ).json();
-  const input = page.getByLabel("Своё действие или реплика");
-  await expect(input).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Отправить действие", exact: true }),
-  ).toBeDisabled();
-  await input.dispatchEvent("keydown", { key: "Enter", ctrlKey: true });
-  expect(
-    (await (await request.get(`/api/saves/${selected.save}`)).json()).turns,
-  ).toHaveLength(before.turns.length);
+  await expect(page.getByLabel("Своё действие или реплика",{exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Отправить действие",exact:true})).toHaveCount(0);
+  const input = page.getByLabel("Направление истории",{exact:true});
+  await expect(input).toBeEnabled();
+  const send = page.getByRole("button",{name:"Отправить направление истории",exact:true});
+  await expect(send).toBeDisabled();
+  await input.fill("Показать утро вокруг героя.");
+  await expect(send).toBeEnabled();
+  expect((await (await request.get(`/api/saves/${selected.save}`)).json()).turns).toHaveLength(before.turns.length);
   await page
     .getByRole("button", {
       name: "Продолжить наблюдать за героем",

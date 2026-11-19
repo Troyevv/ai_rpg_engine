@@ -21,10 +21,12 @@ def visible(turn,actor,main):
     return turn.get('kind')!='background' and actor==(turn.get('pov_actor_id') or main)
 
 
-def actor_view(turn,actor,main):
+def actor_view(turn,actor,main, *, observer=False):
     """Other viewpoints expose only explicitly attributed knowledge, not private prose."""
     changes=json.loads(turn.get('changes_json') or '{}')
-    if (turn.get('kind')!='background' or changes.get('presentation',{}).get('observer_scene')) and actor==(turn.get('pov_actor_id') or main):
+    observer_scene = changes.get('presentation',{}).get('observer_scene')
+    full_prose = observer if observer_scene else turn.get('kind')!='background'
+    if full_prose and actor==(turn.get('pov_actor_id') or main):
         from backend.runtime_v3.surfaces import reconciled_view
         return reconciled_view(turn)
     facts=[f['text'] for f in changes.get('facts',[]) if actor in f.get('known_by',[])]

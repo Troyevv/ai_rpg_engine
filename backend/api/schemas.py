@@ -136,6 +136,7 @@ class DocumentChange(DTO):
     source_id: int | None = None
 
 class Camera(Revision, Credential):
+    direction: str = Field(default='',max_length=12000)
     actor_id: str | None = None
     scene_id: str | None = None
     config: ModelConfig
