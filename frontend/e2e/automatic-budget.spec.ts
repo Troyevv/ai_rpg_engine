@@ -77,12 +77,14 @@ test('older picker engine restores focus inside the parent dialog after selectio
   await page.getByRole('option',{name:'Подробно',exact:true}).click();
   await expect(field).toHaveText('Подробно');
   await expect(field).toBeFocused();
+  const selectedOption = page.getByRole('option', { name: 'Подробно', exact: true });
   await field.press('ArrowDown');
-  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(selectedOption).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('listbox')).toHaveCount(0);
   await expect(field).toBeFocused();
   await field.click();
+  await expect(selectedOption).toBeFocused();
   await page.mouse.click(2,2);
   await expect(page.getByRole('listbox')).toHaveCount(0);
   await expect(field).toBeVisible();
