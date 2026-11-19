@@ -63,13 +63,16 @@ def test_live_ilya_sonya_completed_not_long_term_goals_and_not_next_choices():
     assert 'fact_cottage_agreed' in s['facts']
 
 
-def test_extraction_supplies_existing_ids_status_revision_not_terminal_entries():
+@pytest.mark.parametrize('version',[4,5])
+def test_extraction_supplies_existing_ids_status_revision_not_terminal_entries(version):
     snap=initial();s=snap['world_state']
-    msgs=build_context(snap,[],'Иду к Соне.','turn',32768,2000,extraction_text=MEET)
+    msgs=build_context(snap,[],'Иду к Соне.','turn',32768,2000,extraction_text=MEET,extraction_contract=version)
     current=json.loads(next(m['content'].split('\n',1)[1] for m in msgs if m['content'].startswith('Текущее состояние')))
     row=current['characters']['a']['intentions'][0]
     assert row['id']==ILYA and row['status']=='active' and row['revision']==0
-    assert 'Live regression' in str(msgs)
+    rules=msgs[0]['content']
+    assert ('completed/failed=actual result' if version>=5 else 'completed needs actual narrated result') in rules
+    assert ('Offering trip completes offering only.' if version>=5 else 'offering, NOT relationship/weekend goals') in rules
 
 
 @pytest.mark.parametrize('bad', ['future','missing_event','stale_revision','unknown_id'])

@@ -22,7 +22,7 @@ def payload():
 
 
 @pytest.mark.parametrize('case',['witness','fact','source','action','dimension'])
-def test_leaf_errors_keep_independent_changes_without_repair(db,case):
+def test_optional_dimension_warning_but_declared_knowledge_requires_source(db,case):
     repo,_,sid=db;p=payload()
     if case=='witness':p['events'][0]['witnesses']=[]
     if case=='fact':p['events'][0]['fact_ids']=[]
@@ -40,6 +40,14 @@ def test_leaf_errors_keep_independent_changes_without_repair(db,case):
         conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(before),sid))
     p['relationship_changes'][0].update(source_event_ids=['prior'],assertion='grounded_feelings',rationale='Подтверждённая помощь.')
     job=repo.begin_job(sid,'','start',CONFIG)
+    if case!='dimension':
+        assert len(execute(repo,job,p,NARRATIVE))==3
+        assert repo.get_job(job)['status']=='error'
+        assert repo.get_snapshot(sid)==before
+        expected={'fact':'knowledge_fact_link_missing','source':'knowledge_event_unknown',
+                  'witness':'knowledge_witness_missing','action':'knowledge_medium_invalid'}[case]
+        assert expected in repo.get_job(job)['repair_diagnostics_json']
+        return
     assert len(execute(repo,job,p,NARRATIVE))==2
     assert repo.get_job(job)['status']=='saved'
     world=repo.get_snapshot(sid)['world_state']

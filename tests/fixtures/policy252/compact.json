@@ -1,0 +1,11 @@
+{
+  "final_scene": {"location_id": "home", "present_character_ids": ["a", "b"], "elapsed_minutes": 0},
+  "information_events": [{
+    "id": "news", "text": "b сообщил a и c два факта.", "source_actor_id": "b", "medium": "conversation",
+    "claims": [
+      {"fact": {"text": "Библиотека открылась."}, "assertion": "testimony", "perceived_by": ["a", "c"], "status": "known"},
+      {"fact": {"text": "Директор собирается уехать."}, "assertion": "rumor", "perceived_by": ["a", "c"], "status": "suspected"}
+    ]
+  }],
+  "movements": [{"actor_id": "c", "assertion": "intent", "to_location_id": "home"}]
+}

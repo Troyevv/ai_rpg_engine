@@ -52,14 +52,14 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
 
 def consume_authored_traits(state):
     """Materialize art direction once, after ID remap; never add it to a card."""
+    from backend.services.portrait_traits import input_diagnostics
+    from backend.services.draft_initial import DraftErrors
+    errors = input_diagnostics(state['characters'])
+    if errors:
+        raise DraftErrors(errors)
     runtime=portrait_state(state)
     for card in state['characters']:
         hints=card.pop('portrait_traits',None)
-        if hints is not None:
-            from backend.services.portrait_traits import STYLES
-            options = dict(STYLES,form=('human','neutral'))
-            if not isinstance(hints,dict) or any(k not in options or v not in options[k] for k,v in hints.items()):
-                raise ValueError('portrait_traits: используйте только поддерживаемые признаки из схемы.')
         cid=card['id'];actor=runtime['characters'].get(cid)
         if isinstance(hints,dict) and hints and actor is not None and not actor.get('procedural_portrait'):
             actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor,hints,visual_age(runtime,cid))

@@ -91,7 +91,7 @@ def test_full_call_atomic_continuity_calendar_reload_next_turn(tmp_path):
         seen.append(kw['messages'])
         if not kw.get('response_format'):yield 'Виктория ждёт ответа за дверью.';return
         camera=state['camera']
-        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0)))
+        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0)))
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=ordinary):engine.run_job(repo.path,jid,engine.Worker())
     saved(repo,jid)
     assert DEMAND in json.dumps(seen[0],ensure_ascii=False)
@@ -238,22 +238,21 @@ def test_text_only_situation_preserves_choices_and_clock(tmp_path):
     assert calls==['narrative','extraction']
 
 
-def test_unconfirmed_optional_arrival_is_dropped_and_disclosed(tmp_path):
-    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)['world_state']
+def test_unconfirmed_call_scene_arrival_is_atomic(tmp_path):
+    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
     def arrival(value,current):
         value['events']=[];value['physical_projections']=[]
         value['final_scene']['present_character_ids'].append('qa_marina')
         value['final_scene']['situation']='Виктория вошла в кабинет.'
         value['final_scene']['situation_evidence']=KNOCK
         return value
-    jid,calls=turn(repo,client,sid,OFFER,arrival);saved(repo,jid)
-    after=repo.get_snapshot(sid)['world_state']
-    assert 'qa_marina' in after['camera']['present_character_ids']
-    assert after['characters']['qa_marina']['location_id']==after['camera']['location_id']
-    route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
-    assert ASSENT in route['call_text']
-    assert not route['physical_text']
-    assert 'call_scene_hint_dropped' not in repo.get_job(jid)['warnings_json']
+    jid,calls=turn(repo,client,sid,OFFER,arrival)
+    job=repo.get_job(jid)
+    assert job['status']=='error'
+    assert 'scene_arrival_unproven' in json.dumps(job,ensure_ascii=False)
+    assert calls==['narrative','extraction','extraction']
+    assert repo.get_snapshot(sid)==before
+    assert Repository(repo.path).get_snapshot(sid)==before
 
 
 def test_repair_may_remove_unaccepted_optional_events(tmp_path):
@@ -344,7 +343,7 @@ def test_missing_choices_then_real_action_uses_current_state_once(tmp_path):
         seen.append(kw['messages'])
         if not kw.get('response_format'):yield 'После стука дверь остаётся закрытой.';return
         camera=before['camera']
-        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Открыть дверь',speech='')]))
+        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Открыть дверь',speech='',grounding=dict(fact_ids=[],from_scene=True))]))
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):engine.run_job(repo.path,job,engine.Worker())
     saved(repo,job)
     assert KNOCK in json.dumps(seen[0],ensure_ascii=False)

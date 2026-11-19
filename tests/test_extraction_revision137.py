@@ -13,9 +13,9 @@ TEXT = 'Виктория молча пододвинула записку к И�
 
 
 def payload():
-    raw = arrival(); raw['movements'] = []
-    raw['player_agency'] = dict(status='preserved', actions=[])
-    raw['events'] = [dict(id='note', text=TEXT, participants=['ilya', NPC],
+    raw = arrival()
+    raw['player_agency'] = dict(status='preserved', actions=[], narrative_audit=[])
+    raw['events'] += [dict(id='note', text=TEXT, participants=['ilya', NPC],
                          witnesses=['ilya'], medium='observation')]
     return raw
 
@@ -78,23 +78,20 @@ def test_domain_invariants_are_not_delegated_to_annotations(api, fault):
     raw = payload(); raw['scene_actions'] = []
     if fault == 'agency':
         raw['final_scene']['location_id'] = 'salon_lak'
-        raw['movements'] = [dict(actor_id='ilya', to_location_id='salon_lak')]
+        raw['movements'] = [dict(actor_id='ilya', to_location_id='salon_lak', assertion='completed_arrival')]
     elif fault == 'knowledge':
         raw['facts'] = [dict(id='secret', text='Закрытая информация.', visibility='secret', character_ids=[NPC])]
         raw['knowledge_gained'] = [dict(actor_id=NPC, fact_id='secret', source_event_id='note')]
     else:
         raw['condition_changes'] = [dict(id='grant', actor_id=NPC, description='Нельзя выдать способность условием.', effects={'can_speak':True})]
     job, calls = run(client, sid, [raw, raw])
-    if fault == 'knowledge':
-        assert job['status'] == 'saved', job.get('error')
-        assert len(calls) == 2
-        assert repo.get_snapshot(sid)['world_state']['knowledge'] == before['world_state']['knowledge']
-        assert any(w['code'] == 'knowledge_path_invalid' for w in json.loads(repo.get_job(job['id'])['warnings_json']))
-    else:
-        assert job['status'] == 'error' and len(calls) == 3
-        assert repo.get_snapshot(sid) == before and not repo.list_turns(sid)
-        codes = {r['repair_error_code'] for r in json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])}
-        assert ('movement_agency' if fault == 'agency' else 'life_transition_invalid') in codes
+    assert job['status'] == 'error' and len(calls) == 3
+    assert repo.get_snapshot(sid) == before and not repo.list_turns(sid)
+    codes = {r['repair_error_code'] for r in json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])}
+    expected = {'agency':'movement_agency', 'knowledge':'knowledge_witness_missing',
+                'capability_grant':'life_transition_invalid'}[fault]
+    assert expected in codes
+
 
 
 @pytest.mark.parametrize('initial_death,final_death', [(True,False), (False,True), (True,True)])
@@ -104,7 +101,7 @@ def test_bounded_repair_can_correct_provisional_semantics(api, initial_death, fi
     def interpretation(dead):
         raw = payload()
         raw['life_changes'] = [dict(id=NPC, life_status='dead')] if dead else []
-        raw['events'] = [dict(id='outcome', text='Её дыхание оборвалось.' if dead else 'Она жива.', participants=[NPC])]
+        raw['events'] = [raw['events'][0], dict(id='outcome', text='Её дыхание оборвалось.' if dead else 'Она жива.', participants=[NPC])]
         return raw
     bad = interpretation(initial_death); bad['final_scene']['location_id'] = 'missing-room'
     good = interpretation(final_death)
@@ -153,11 +150,11 @@ def test_retry_reinterprets_failed_claims_and_keeps_same_lineage(api):
 def test_committed_death_survives_repair_reload_regenerate_and_rollback(api):
     client, app = api; sid = imported(client); repo = app.state.repository
     death = payload(); death['life_changes'] = [dict(id=NPC, life_status='dead')]
-    death['events'] = [dict(id='death', text='Её дыхание оборвалось.', participants=[NPC])]
+    death['events'] = [death['events'][0],dict(id='death', text='Её дыхание оборвалось.', participants=[NPC])]
     first, _ = run(client, sid, [death], 'Её дыхание оборвалось.')
     assert first['status'] == 'saved'
     canonical = Storage(repo.path).get_snapshot(sid); accepted = history(repo, sid)
-    good = payload(); good['events'] = []
+    good = payload(); good['events'] = []; good['movements'] = []
     good['final_scene']['present_character_ids'] = ['ilya']
     bad = deepcopy(good); bad['final_scene']['location_id'] = 'missing-room'
     second, calls = run(client, sid, [bad,good], 'Илья ждёт.', 'turn', 'Жду.')

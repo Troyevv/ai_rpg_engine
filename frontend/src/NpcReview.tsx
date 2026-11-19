@@ -113,7 +113,6 @@ export function NpcReview({
   const [canCompare, setCanCompare] = useState(false);
   const [notice, setNotice] = useState("");
   const gate = useRef(false);
-  const seen = useRef(new Set<string>());
   const record = records.find((r) => r.id === selected) || records[0];
   const storageKey = (r: NpcReviewRecord) =>
     `npc-review:${save.id}:${r.id}:${r.creation_id}:${r.revision}`;
@@ -128,21 +127,6 @@ export function NpcReview({
   const completed = draft
     ? fields.filter((f) => draft.fields[f]?.trim()).length
     : 0;
-  useEffect(() => {
-    if (locked) return;
-    const fresh = records.find(
-      (r) =>
-        r.status === "pending_review" &&
-        !seen.current.has(`${save.id}:${r.id}:${r.creation_id}`),
-    );
-    records.forEach((r) =>
-      seen.current.add(`${save.id}:${r.id}:${r.creation_id}`),
-    );
-    if (fresh) {
-      setSelected(fresh.id);
-      setOpen(true);
-    }
-  }, [save.id, reviews, locked]);
   useEffect(() => {
     if (!record) return;
     const key = storageKey(record);

@@ -17,3 +17,6 @@
 @media(prefers-reduced-motion:reduce){.call-activity-dots i{animation:none;opacity:1}}
 
 .phone-dialing{display:inline-block;color:var(--accent);animation:call-pulse 1.2s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.phone-dialing{animation:none}}
+
+.call-suggestions { display: grid; gap: .4rem; margin-block: .8rem; }
+.call-suggestions button { text-align: start; padding: .65rem .8rem; }

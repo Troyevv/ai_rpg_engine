@@ -39,7 +39,7 @@ def transition_provenance(resolver, item, actors):
     event_id = item.get('source_event_id')
     if event_id is not None:
         event = next((e for e in resolver.history.events if event_id in (e['id'], e.get('local_id'))
-                      and set(actors) & set(e.get('participants', []))), None)
+                      and (resolver.scene_version >= 10 or set(actors) & set(e.get('participants', [])))), None)
         if event:
             result['source_event_id'] = event['id']
         else:

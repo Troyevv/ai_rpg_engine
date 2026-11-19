@@ -152,7 +152,7 @@ def apply_appearance(r, raw, events):
                 raise ValueError('Косметическое изменение требует добровольного действия.')
             if c['transition']=='voluntary' and cid==r.protected_actor_id:
                 quote=normalized(c['player_evidence'])
-                if r.mode=='background' or c['player_assertion']!='explicit_choice' or not quote or quote not in normalized(r.player_input):
+                if r.mode=='background' or r.scene_version < 10 and (c['player_assertion']!='explicit_choice' or not quote or quote not in normalized(r.player_input)):
                     raise ValueError('Нет явного выбора EXTERNAL actor.')
             profile=actor.get('appearance') or AppearanceProfile().model_dump()
             guard=identity('appearance',cid,event['id'],c['item_id'])

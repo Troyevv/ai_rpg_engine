@@ -126,7 +126,9 @@ def test_retry_reload_regenerate_and_rollback_preserve_event_lineage(tmp_path):
     turns = repo.list_turns(sid)
     raw = library_turn(before['world_state'])
     unsupported = deepcopy(raw)
-    unsupported['continuity_beats'][0]['decision_actor_id'] = ACTOR_ID
+    # #251: an optional malformed beat no longer triggers repair. Exercise a
+    # genuinely required Event→Action source here; lineage assertions stay intact.
+    unsupported['events'][0]['player_action_id'] = 'missing_action'
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
     assert len(execute(repo, job, unsupported, NARRATIVE)) == 3  # one bounded Extraction repair
     assert repo.get_job(job)['status'] == 'error'

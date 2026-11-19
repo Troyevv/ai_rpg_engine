@@ -25,6 +25,7 @@ test('E5 starts with warnings in Player View without new review',async({page,req
  await expect(page.locator('.choices button')).toHaveCount(1);
  await expect(page.locator('.choices button')).toContainText('Посмотреть в окно');
  await page.locator('.choices button').click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await page.reload();
  await expect(page.locator('.turn')).toHaveCount(2);

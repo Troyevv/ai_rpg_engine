@@ -109,6 +109,7 @@ for (const skin of ["graphite", "parchment"])
       .click();
     await expect(page.locator(".choices button").first()).toBeVisible();
     await page.locator(".choices button").first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
     await expect
       .poll(
         async () =>
@@ -119,6 +120,7 @@ for (const skin of ["graphite", "parchment"])
     await page.reload();
     await expect(page.locator(".choices button").first()).toBeVisible();
     await page.locator(".choices button").first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
     await expect
       .poll(
         async () =>

@@ -3,6 +3,7 @@
 The #239 raw archive was unpublished at implementation time. Semantic assessments
 are provider fixtures, not proof that arbitrary free-form prose is always understood.
 """
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 
@@ -18,7 +19,7 @@ from test_due_scene import HELP, SIGNS, block
 
 def ongoing(state, minutes=0, *, assessed=False):
     camera = state['camera']
-    raw = dict(player_agency=dict(status='preserved', actions=[]),
+    raw = dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),
         final_scene=dict(location_id=camera['location_id'],
             present_character_ids=camera['present_character_ids'], elapsed_minutes=minutes),
         events=[dict(id='labor', text=SIGNS, evidence=SIGNS, medium='observation',
@@ -47,7 +48,9 @@ def family(path, checkpoint='pregnancy'):
     return repo, sid
 
 
-def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path):
+@pytest.mark.parametrize('context_length', [32768, 65536])
+def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path, monkeypatch, context_length):
+    monkeypatch.setitem(CONFIG, 'context_length', context_length)
     repo, sid = family(tmp_path/'replay.sqlite')
     before = repo.get_snapshot(sid)
     state = before['world_state']
@@ -61,6 +64,10 @@ def test_family_replay_repairs_two_to_zero_and_reloads(tmp_path):
     job, calls = execute(repo, sid, SIGNS, [bad, good])
     assert job['status'] == 'saved', job['error']
     assert len(calls) == 3
+    # Browser local-model is capped at 32K even when settings request 64K.
+    # Keep complete repair context within that existing limit, including #251 dates.
+    from context_builder import estimate
+    assert all(estimate(call['messages']) <= context_length - call['max_tokens'] - 256 for call in calls)
     logs = list(reversed(repo.request_log(job_id=job['id'])))
     assert [c['stage'] for c in logs] == ['narrative', 'extraction', 'extraction_repair']
     assert all(block(c['messages'], 'completed_narrative') == SIGNS for c in logs[1:])
@@ -183,10 +190,10 @@ def test_known_hidden_local_remote_repair_does_not_grant_knowledge(tmp_path, rem
     if remote:
         destination = next(lid for lid in state['locations'] if lid != state['camera']['location_id'])
         text = 'Вера перешла в другую комнату. Кирилл остался.'
-        result, _ = ordinary(repo,sid,0,text=text,config=CONFIG,extra=dict(
+        result, _ = ordinary(repo,sid,0,text=text,config=CONFIG,extra=arrival_sources(dict(
             movements=[dict(actor_id='qa_vera',to_location_id=destination,evidence=text)],
             final_scene=dict(location_id=state['camera']['location_id'],elapsed_minutes=0,
-                present_character_ids=[c for c in state['camera']['present_character_ids'] if c!='qa_vera'])))
+                present_character_ids=[c for c in state['camera']['present_character_ids'] if c!='qa_vera']))))
         assert result['status']=='saved',result['error']
     before = repo.get_snapshot(sid)
     state = before['world_state']
@@ -204,6 +211,7 @@ def test_known_hidden_local_remote_repair_does_not_grant_knowledge(tmp_path, rem
             yield from provider(**kw)
     job, calls = execute(repo,sid,narrative,[bad,good],background_provider=background)
     assert job['status']=='saved', job['error']
+    # A due birth can freeze the scene clock: a NEW turn must still develop it.
     assert len(calls)==(5 if remote else 3)
     after = Repository(repo.path).get_snapshot(sid)['world_state']
     assert after['knowledge']==state['knowledge']

@@ -69,9 +69,17 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     def public_job(job):
         from backend.runtime_v3.surfaces import job_route
         from backend.services.world_delta_errors import requires_narrative_reauthor
-        reauthor = requires_narrative_reauthor(json.loads(job.get('repair_diagnostics_json') or '[]'))
+        from backend.services.world_delta_errors import chronology_correction, prose_correction
+        diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
+        grounds = prose_correction(diagnostics, job.get('narrative') or '')
+        editable = bool(grounds) and job.get('kind') in ('start','turn','regenerate','background','pov')
+        reauthor = requires_narrative_reauthor(diagnostics)
         job = dict(job, presentation=job_route(job), retry_allowed=not reauthor,
-                   narrative_reauthor_required=reauthor)
+                   narrative_reauthor_required=reauthor, prose_correction_available=editable,
+                   chronology_correction_available=editable and bool(chronology_correction(diagnostics)))
+        publication = json.loads(job.get('config_json') or '{}').get('_published_scene')
+        if publication:
+            job['published_revision'] = publication['revision']
         journal = json.loads(job.get('response_journal') or '{}')
         world=journal.get('responses',{}).get('world',{})
         assembly_error=world.get('assembly_error','')

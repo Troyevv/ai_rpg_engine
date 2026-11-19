@@ -1,0 +1,304 @@
+{
+  "crisis": {
+    "job_id": "ab19e16663294bcc814a28994e560cfd",
+    "before_updates": {},
+    "before_sha256": "1e5890b845d6c944eece79f5e9621f7db50f0e74302ca421ddd2a0f768afec56",
+    "narrative": "— Вера, — Нина негромко окликает её, когда та проходит мимо стола с книгами. — Как Кирилл? Ты говорила с врачом сегодня?\n\nОна откладывает в сторону карточку с детскими рисунками, но не встаёт.\n\n— И скажи, что нужно по дому. Продукты, с Асей посидеть, что-то ещё. Не тяни одна, я свободна до вечера.",
+    "player_input": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+    "responses": [
+      {
+        "id": "b5ba9eeb99264b1e81622762b4a09500",
+        "stage": "extraction",
+        "response_text": "{\"final_scene\":{\"location_id\":\"location_cc730cd3a861be83e138\",\"present_character_ids\":[\"qa_asya\",\"qa_marina\",\"qa_nina\",\"qa_zoya\"],\"observed_character_ids\":[\"qa_vera\"],\"situation\":\"Нина в библиотеке окликнула проходящую мимо Веру, спросила о состоянии Кирилла и о разговоре с врачом, предложила практическую помощь по дому и с Асей. Вера находится у стола с книгами, ответа пока нет.\",\"situation_evidence\":\"«— Вера, — Нина негромко окликает её, когда та проходит мимо стола с книгами. — Как Кирилл? Ты говорила с врачом сегодня?»\",\"elapsed_minutes\":1},\"player_agency\":{\"status\":\"preserved\",\"actions\":[{\"id\":\"act_nina_ask_vera\",\"player_evidence\":\"Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.\",\"target_ids\":[\"qa_vera\"],\"narrative_target_ids\":[\"qa_vera\"],\"outcome\":\"completed\",\"meaning\":\"preserved\",\"target_mode\":\"interaction\"}]},\"events\":[{\"id\":\"event_nina_asks_vera_help\",\"text\":\"Нина окликнула Веру в библиотеке, спросила о состоянии Кирилла и о разговоре с врачом, предложила помощь по дому и с Асей.\",\"participants\":[\"qa_nina\",\"qa_vera\"],\"witnesses\":[\"qa_nina\",\"qa_vera\"],\"actor_id\":\"qa_nina\",\"target_ids\":[\"qa_vera\"],\"player_action_id\":\"act_nina_ask_vera\",\"player_evidence\":\"Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.\",\"medium\":\"conversation\",\"location_id\":\"location_cc730cd3a861be83e138\",\"minute\":558,\"evidence\":\"«— Вера, — Нина негромко окликает её, когда та проходит мимо стола с книгами. — Как Кирилл? Ты говорила с врачом сегодня?»\"}],\"choices\":[{\"action\":\"Выслушать ответ Веры и уточнить, что нужно сделать в первую очередь.\",\"speech\":\"Хорошо. Скажи, что важнее сейчас — продукты или с Асей посидеть?\",\"kind\":\"question\"},{\"action\":\"Предложить конкретный план помощи на сегодня.\",\"speech\":\"Тогда я до обеда зайду в магазин, а после посижу с Асей. Тебе надо к врачу или в больницу?\",\"kind\":\"proposal\"},{\"action\":\"Спросить, как Вера сама держится.\",\"speech\":\"А ты сама как? Ты сегодня хоть ела?\",\"kind\":\"question\"},{\"action\":\"Не давить и подождать, пока Вера сама скажет, что нужно.\",\"speech\":\"Я рядом. Если что — скажи.\",\"kind\":\"decision\"}]}"
+      },
+      {
+        "id": "e056ffdaff6347a79bf9a450972e1b4f",
+        "stage": "extraction_repair",
+        "response_text": "{\"final_scene\":{\"location_id\":\"location_cc730cd3a861be83e138\",\"present_character_ids\":[\"qa_asya\",\"qa_marina\",\"qa_nina\",\"qa_zoya\"],\"observed_character_ids\":[\"qa_vera\"],\"situation\":\"Нина в библиотеке окликнула проходящую мимо Веру, спросила о состоянии Кирилла и о разговоре с врачом, предложила практическую помощь по дому и с Асей. Вера находится у стола с книгами, ответа пока нет.\",\"situation_evidence\":\"«— Вера, — Нина негромко окликает её, когда та проходит мимо стола с книгами. — Как Кирилл? Ты говорила с врачом сегодня?»\",\"elapsed_minutes\":1},\"player_agency\":{\"status\":\"preserved\",\"actions\":[{\"id\":\"act_nina_ask_vera\",\"player_evidence\":\"Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.\",\"target_ids\":[\"qa_vera\"],\"narrative_target_ids\":[\"qa_vera\"],\"outcome\":\"completed\",\"meaning\":\"preserved\",\"target_mode\":\"interaction\"}]},\"events\":[{\"id\":\"event_nina_asks_vera_help\",\"text\":\"Нина окликнула Веру в библиотеке, спросила о состоянии Кирилла и о разговоре с врачом, предложила помощь по дому и с Асей.\",\"participants\":[\"qa_nina\",\"qa_vera\"],\"witnesses\":[\"qa_nina\"],\"actor_id\":\"qa_nina\",\"target_ids\":[\"qa_vera\"],\"player_action_id\":\"act_nina_ask_vera\",\"player_evidence\":\"Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.\",\"medium\":\"conversation\",\"location_id\":\"location_cc730cd3a861be83e138\",\"minute\":558,\"evidence\":\"«— Вера, — Нина негромко окликает её, когда та проходит мимо стола с книгами. — Как Кирилл? Ты говорила с врачом сегодня?»\"}],\"choices\":[{\"action\":\"Выслушать ответ Веры и уточнить, что нужно сделать в первую очередь.\",\"speech\":\"Хорошо. Скажи, что важнее сейчас — продукты или с Асей посидеть?\",\"kind\":\"question\"},{\"action\":\"Предложить конкретный план помощи на сегодня.\",\"speech\":\"Тогда я до обеда зайду в магазин, а после посижу с Асей. Тебе надо к врачу или в больницу?\",\"kind\":\"proposal\"},{\"action\":\"Спросить, как Вера сама держится.\",\"speech\":\"А ты сама как? Ты сегодня хоть ела?\",\"kind\":\"question\"},{\"action\":\"Не давить и подождать, пока Вера сама скажет, что нужно.\",\"speech\":\"Я рядом. Если что — скажи.\",\"kind\":\"decision\"}]}"
+      }
+    ]
+  },
+  "phone": {
+    "job_id": "f19b75f8f5384bf4940517a688263a14",
+    "before_updates": {
+      "meta": {
+        "turn_id": 8,
+        "world_time": 554
+      },
+      "camera": {
+        "present_character_ids": [
+          "qa_kirill",
+          "qa_vera"
+        ],
+        "situation": "Кирилл у подоконника разбирает фотографии. Вера вымыла его чашку и вернулась к столу со своей чашкой и снимком. Тимур собрал свои фотографии и ушёл, попрощавшись и попросив дать знать, когда решат с картой."
+      },
+      "characters": {
+        "qa_kirill": {
+          "id": "qa_kirill",
+          "location_id": "location_9ff4b311a7fb45cb4b93",
+          "situation": "Кирилл у подоконника разбирает фотографии. Вера вымыла его чашку и вернулась к столу со своей чашкой и снимком. Тимур собрал свои фотографии и ушёл, попрощавшись и попросив дать знать, когда решат с картой.",
+          "birth_date": null,
+          "life_status": "unknown",
+          "life_fact_id": null,
+          "display_name": "Кирилл Ларин",
+          "name_history": [],
+          "capabilities": {
+            "conscious": null,
+            "can_perceive": null,
+            "can_act": null,
+            "can_speak": null,
+            "can_move": null
+          },
+          "developmental_stage": "unknown",
+          "parentage_complete_fact_id": null,
+          "reproductive_capability": "unknown",
+          "biological_sex": null,
+          "identity_components": {},
+          "birth_provenance": {},
+          "birth_date_provenance": {},
+          "appearance": {
+            "items": {},
+            "legacy_text": "",
+            "applied": []
+          },
+          "procedural_portrait": {
+            "version": 1,
+            "seed": "4c985efb6c562bbfddeb26f488dac8c3",
+            "form": "neutral",
+            "stage": "unknown",
+            "face": 6,
+            "hair": 0,
+            "skin": 3,
+            "eyes": 6,
+            "clothing": 0,
+            "accessory": 0,
+            "palette": 1
+          },
+          "portrait_mode": "auto",
+          "portraits": [],
+          "personality": {
+            "items": {
+              "traits": {
+                "field": "traits",
+                "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              },
+              "communication": {
+                "field": "communication",
+                "text": "Спокойные короткие фразы, уточняющие вопросы.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              }
+            },
+            "evidence": {},
+            "applied": [],
+            "seen_sources": []
+          },
+          "values": {},
+          "physical_state": "",
+          "emotion": "",
+          "emotion_source_sequence": null,
+          "goals": [],
+          "intentions": [],
+          "obligations": []
+        },
+        "qa_vera": {
+          "id": "qa_vera",
+          "location_id": "location_9ff4b311a7fb45cb4b93",
+          "situation": "Утро в доме Лариных. Тимур ушёл; Вера вымыла чашку Кирилла и вернулась к столу со своей чашкой и снимком.",
+          "birth_date": "1993-10-06",
+          "life_status": "unknown",
+          "life_fact_id": null,
+          "display_name": "Вера Ларина",
+          "name_history": [],
+          "capabilities": {
+            "conscious": null,
+            "can_perceive": null,
+            "can_act": null,
+            "can_speak": null,
+            "can_move": null
+          },
+          "developmental_stage": "adult",
+          "parentage_complete_fact_id": null,
+          "reproductive_capability": "unknown",
+          "biological_sex": null,
+          "identity_components": {},
+          "birth_provenance": {},
+          "birth_date_provenance": {},
+          "appearance": {
+            "items": {},
+            "legacy_text": "",
+            "applied": []
+          },
+          "procedural_portrait": {
+            "version": 1,
+            "seed": "e85a08fa45e5ccff4f20e5c8c8b8984b",
+            "form": "human",
+            "stage": "adult",
+            "face": 1,
+            "hair": 2,
+            "skin": 1,
+            "eyes": 5,
+            "clothing": 0,
+            "accessory": 0,
+            "palette": 1,
+            "visual_age": "young_adult"
+          },
+          "portrait_mode": "auto",
+          "portraits": [],
+          "personality": {
+            "items": {
+              "traits": {
+                "field": "traits",
+                "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              },
+              "communication": {
+                "field": "communication",
+                "text": "Спокойные короткие фразы, уточняющие вопросы.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              }
+            },
+            "evidence": {},
+            "applied": [],
+            "seen_sources": []
+          },
+          "values": {},
+          "physical_state": "",
+          "emotion": "Спокойное любопытство.",
+          "emotion_source_sequence": null,
+          "goals": [],
+          "intentions": [],
+          "obligations": []
+        },
+        "qa_timur": {
+          "id": "qa_timur",
+          "location_id": null,
+          "situation": "",
+          "birth_date": null,
+          "life_status": "unknown",
+          "life_fact_id": null,
+          "display_name": "Тимур Серов",
+          "name_history": [],
+          "capabilities": {
+            "conscious": null,
+            "can_perceive": null,
+            "can_act": null,
+            "can_speak": null,
+            "can_move": null
+          },
+          "developmental_stage": "unknown",
+          "parentage_complete_fact_id": null,
+          "reproductive_capability": "unknown",
+          "biological_sex": null,
+          "identity_components": {},
+          "birth_provenance": {},
+          "birth_date_provenance": {},
+          "appearance": {
+            "items": {},
+            "legacy_text": "",
+            "applied": []
+          },
+          "procedural_portrait": {
+            "version": 1,
+            "seed": "bd9f6bc67caf6dbac0ea034e26d700d0",
+            "form": "neutral",
+            "stage": "unknown",
+            "face": 0,
+            "hair": 7,
+            "skin": 2,
+            "eyes": 2,
+            "clothing": 0,
+            "accessory": 0,
+            "palette": 4
+          },
+          "portrait_mode": "auto",
+          "portraits": [],
+          "personality": {
+            "items": {
+              "traits": {
+                "field": "traits",
+                "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              },
+              "communication": {
+                "field": "communication",
+                "text": "Спокойные короткие фразы, уточняющие вопросы.",
+                "revision": 0,
+                "source_ids": [],
+                "witnesses": [],
+                "fact_ids": []
+              }
+            },
+            "evidence": {},
+            "applied": [],
+            "seen_sources": []
+          },
+          "values": {},
+          "physical_state": "",
+          "emotion": "",
+          "emotion_source_sequence": null,
+          "goals": [],
+          "intentions": [
+            {
+              "id": "intentions_c2c23af6c5650d901f36",
+              "text": "Показать Кириллу фотографии карты.",
+              "status": "completed",
+              "source_sequence": 0,
+              "evidence": "Тимур разложил фотографии и показал их Кириллу и Вере.",
+              "due_minute": null,
+              "revision": 1,
+              "source_event_id": "event_9477c0a29ee4f3489a98",
+              "dependencies": {},
+              "review_required": [],
+              "reviewed_signature": ""
+            }
+          ],
+          "obligations": []
+        }
+      },
+      "threads": {
+        "qa_map": {
+          "discovered_by": null,
+          "source_event_id": "event_8fadc53db77dbff80e73",
+          "stakes_for": [],
+          "favorable_path": null,
+          "id": "qa_map",
+          "description": "Реставрация старой карты двух берегов.",
+          "character_ids": [
+            "qa_kirill",
+            "qa_timur",
+            "qa_oleg"
+          ],
+          "status": "active",
+          "state": "Фотографии разложены; Тимур указал на возможную старую переправу, Вера предположила дорогу на другом берегу. Вера предложила завтра после работы сесть за карту; Тимур поддержал и договорился с Верой созвониться завтра после обеда. Тимур ушёл, попросив дать знать, когда решат с картой. Кирилл пока не ответил.",
+          "relevance": 0.6
+        }
+      }
+    },
+    "before_sha256": "1e470e443340cd65467d3685cac6d966a48b2076fdc9161c6b3861e0011d22e4",
+    "narrative": "Вера садится обратно, но не сразу берётся за снимок. Сначала просто смотрит в окно, на улицу, где тележка уже давно проехала и снова стало тихо. Потом подтягивает к себе чашку — теперь уже остывшую — и делает маленький глоток.\n\n— Знаешь, — говорит она, не поднимая глаз, — я всё думаю про эту линию у воды. Если это правда переправа, то кто-то ведь её построил. Не просто так, на пустом месте. — Она проводит пальцем над снимком, не касаясь его. — Лодки, паром, мостки какие-нибудь. И люди каждый день туда-сюда.\n\nОна замолкает, будто прислушиваясь к собственным словам.\n\n— А теперь от неё осталась одна бледная полоска на фотографии. — Вера поднимает взгляд. — Странно, да? Вот так взять и исчезнуть.\n\nЗа окном мимо дома проходит соседка с собакой — та тянет поводок к газону, обнюхивает траву. Вера провожает её глазами и снова возвращается к снимку.\n\n— Тимур, наверное, уже дома, — говорит она ровно, без вопроса. — Или у себя в мастерской. Он всегда после таких разговоров идёт что-нибудь переснимать.",
+    "player_input": "Я продолжаю заниматься фотографиями. Если кто-то уже ушёл, я не считаю, что он прибыл куда-либо, пока этого не произошло.",
+    "responses": [
+      {
+        "id": "7e947661a4e345f68fd6fd1cfcaf387d",
+        "stage": "extraction",
+        "response_text": "{\n  \"final_scene\": {\n    \"location_id\": \"location_9ff4b311a7fb45cb4b93\",\n    \"present_character_ids\": [\"qa_kirill\", \"qa_vera\"],\n    \"observed_character_ids\": [],\n    \"remote_interactions\": [],\n    \"situation\": \"Кирилл продолжает разбирать фотографии у подоконника. Вера сидит за столом со своей чашкой и снимком, размышляет о старой переправе и предполагает, что Тимур уже дома или в мастерской.\",\n    \"situation_evidence\": \"Вера садится обратно... подтягивает к себе чашку... — Знаешь, — говорит она... я всё думаю про эту линию у воды... — Тимур, наверное, уже дома, — говорит она ровно, без вопроса. — Или у себя в мастерской.\",\n    \"elapsed_minutes\": 2\n  },\n  \"player_agency\": {\n    \"status\": \"preserved\",\n    \"actions\": [\n      {\n        \"id\": \"act_continue_photos\",\n        \"player_evidence\": \"Я продолжаю заниматься фотографиями.\",\n        \"target_ids\": [],\n        \"narrative_target_ids\": [],\n        \"outcome\": \"completed\",\n        \"meaning\": \"preserved\",\n        \"target_mode\": \"interaction\"\n      }\n    ]\n  },\n  \"character_changes\": [\n    {\n      \"id\": \"qa_vera\",\n      \"situation\": \"Утро в доме Лариных. Вера сидит за столом со своей чашкой и снимком, размышляет о старой переправе и предполагает, что Тимур уже дома или в мастерской.\",\n      \"evidence\": \"Вера садится обратно... — Знаешь, — говорит она... — Тимур, наверное, уже дома, — говорит она ровно, без вопроса. — Или у себя в мастерской.\"\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"event_vera_reflects_crossing\",\n      \"text\": \"Вера размышляет вслух о старой переправе: кто-то её построил, а теперь от неё осталась лишь бледная полоска на фотографии. Предполагает, что Тимур уже дома или в мастерской.\",\n      \"participants\": [\"qa_kirill\", \"qa_vera\"],\n      \"witnesses\": [\"qa_kirill\", \"qa_vera\"],\n      \"medium\": \"conversation\",\n      \"location_id\": \"location_9ff4b311a7fb45cb4b93\",\n      \"evidence\": \"— Знаешь, — говорит она... я всё думаю про эту линию у воды. Если это правда переправа, то кто-то ведь её построил... — Тимур, наверное, уже дома, — говорит она ровно, без вопроса. — Или у себя в мастерской.\"\n    }\n  ],\n  \"thread_changes\": [\n    {\n      \"id\": \"qa_map\",\n      \"state\": \"Фотографии разложены; Тимур указал на возможную старую переправу, Вера предположила дорогу на другом берегу и размышляет, кто мог построить переправу. Вера предложила завтра после работы сесть за карту; Тимур поддержал и договорился с Верой созвониться завтра после обеда. Тимур ушёл, попросив дать знать, когда решат с картой. Кирилл пока не ответил.\",\n      \"evidence\": \"— Знаешь, — говорит она... я всё думаю про эту линию у воды. Если это правда переправа, то кто-то ведь её построил.\"\n    }\n  ],\n  \"choices\": [\n    {\n      \"action\": \"Кирилл откладывает фотографии и подходит к столу.\",\n      \"speech\": \"Может, и построил кто-то. Только вот кто и когда — по такой полоске не скажешь.\",\n      \"kind\": \"information\"\n    },\n    {\n      \"action\": \"Кирилл продолжает разбирать снимки, поглядывая на Веру.\",\n      \"speech\": \"Если Тимур уже в мастерской, он, скорее всего, и правда что-то переснимает.\",\n      \"kind\": \"information\"\n    },\n    {\n      \"action\": \"Кирилл берёт свой снимок и сравнивает с тем, что у Веры.\",\n      \"speech\": \"Дай-ка посмотрю ещё раз на эту полоску. Может, на моём снимке она виднее.\",\n      \"kind\": \"proposal\"\n    },\n    {\n      \"action\": \"Кирилл садится напротив Веры.\",\n      \"speech\": \"Странно, согласен. Но если переправа была, должны остаться и другие следы — не только на фотографии.\",\n      \"kind\": \"information\"\n    }\n  ]\n}"
+      }
+    ]
+  }
+}

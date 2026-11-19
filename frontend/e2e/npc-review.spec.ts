@@ -1,4 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function openReview(page: Page) {
+  const entry = page.getByRole("button", { name: /Новые лица в истории/ });
+  await expect(entry).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await entry.click();
+}
 
 test("NPC review: committed identity, draft lifecycle, typed attributes and proposals", async ({
   page,
@@ -12,6 +19,7 @@ test("NPC review: committed identity, draft lifecycle, typed attributes and prop
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
+  await openReview(page);
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "Лада", exact: true }),
@@ -192,7 +200,7 @@ test("NPC review: committed identity, draft lifecycle, typed attributes and prop
       dialog.getByText("Черновик сохранён", { exact: true }),
     ).toBeVisible();
     await page.reload();
-    // pending_review reopens on reload; deferred does not.
+    await openReview(page);
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(dialog).toHaveCSS("overflow", "hidden");
     expect(
@@ -232,6 +240,7 @@ test("NPC review resolves parallel edits without overwriting either version", as
     selected,
   );
   await page.goto("/");
+  await openReview(page);
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Возраст", { exact: true }).fill("Мои 27 лет");
   await dialog.getByRole("tab", { name: /Состояние/ }).click();
@@ -268,6 +277,7 @@ test("NPC review resolves parallel edits without overwriting either version", as
     .click();
   await expect(dialog.locator(".npc-review-conflict")).toHaveCount(2);
   await page.reload();
+  await openReview(page);
   await expect(dialog.locator(".npc-review-conflict")).toHaveCount(2);
   const age = dialog
     .locator(".npc-review-conflict")
@@ -317,6 +327,7 @@ test("deferred NPC keeps later canon, exposes conflicts, reloads and continues",
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Начать игру", exact: true }).click();
+  await openReview(page);
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "Лада", exact: true }),

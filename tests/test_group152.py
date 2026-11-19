@@ -90,7 +90,7 @@ def test_t06_t07_read_and_ordinary_turn_not_response_expiry_no_answer():
     assert projection(out)['conversations'][0]['awaiting_response']
     from backend.runtime_v3.resolver import StateResolver
     state=out['world_state'];camera=state['camera']
-    result=StateResolver(state,'В комнате тихо.','Жду.').resolve(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(
+    result=StateResolver(state,'В комнате тихо.','Жду.').resolve(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(
         location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1)))
     assert pending(result.state,gid)
     result.state['meta']['world_time']+=120
@@ -105,7 +105,7 @@ def test_t06_explicit_response_through_existing_semantic_resolver(answer,asserti
     out=command(out,'send',conversation_id=gid,content=answer)
     response=list(out['world_state']['remote_events'].values())[-1]
     state=out['world_state'];c=state['camera']
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
         group_response_changes=[dict(request_event_id=request['id'],response_event_id=response['id'],assertion=assertion,evidence=answer)])
     after,batch=resolve(out,response['id'],raw)
     assert not pending(after['world_state'],gid)
@@ -177,7 +177,8 @@ def test_t12_real_api_jobs_sqlite_reload_rollback_regenerate_cost(tmp_path):
     before=repo.get_snapshot(sid)
     jid=turn();state=repo.get_snapshot(sid)['world_state']
     assert [e['content'] for e in state['remote_events'].values()]==[FIRST,QUESTION]
-    assert pending(state,'qa-group') and len(calls)==6 # start 2 + author/semantic/narrative/extraction 4
+    assert pending(state,'qa-group') and len(calls)==8 # start 2 + group/foreground 4 + accumulated-time background 2
+    assert [r['stage'] for r in reversed(repo.request_log(job_id=jid))][-2:]==['world_simulation','world_simulation_delta']
     assert state['camera']==before['world_state']['camera']
     assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
     count=len(calls);execute(jid);assert len(calls)==count # duplicate completed job is no-op
@@ -232,7 +233,7 @@ def test_t07_invalid_response_sources_cannot_clear_pending():
     out=command(out,'send',character_id='b',content='Нет.',operation_id='wrong-chat-response')
     response=list(out['world_state']['remote_events'].values())[-1]
     c=out['world_state']['camera']
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
         group_response_changes=[dict(request_event_id=request['id'],response_event_id=response['id'],assertion='refused',evidence='Нет.')])
     after,batch=resolve(out,response['id'],raw)
     assert pending(after['world_state'],gid)
@@ -319,7 +320,7 @@ def test_existing_group_message_semantic_request_uses_same_lifecycle():
     out,gid=group()
     out,_=apply(out,dict(action='send',conversation_id=gid,content='Ты придёшь?',operation_id='existing-request'),actor_id='b',autonomous=True)
     e=list(out['world_state']['remote_events'].values())[-1];c=out['world_state']['camera']
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
         group_request_changes=[dict(source_event_id=e['id'],target_id='a',evidence='Ты придёшь?',expires_at=e['world_time']+120)])
     after,batch=resolve(out,e['id'],raw)
     assert pending(after['world_state'],gid)[0]['id']==e['id']
@@ -377,7 +378,7 @@ def test_competing_requests_keep_separate_sources_and_stable_order():
     for i,actor in enumerate(['b','c']):
         out,_=apply(out,dict(action='send',conversation_id=gid,content=f'Вопрос {i}?',operation_id=f'competing-{i}'),actor_id=actor,autonomous=True)
     events=list(out['world_state']['remote_events'].values());c=out['world_state']['camera']
-    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
+    raw=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=c['location_id'],present_character_ids=c['present_character_ids'],elapsed_minutes=0),
         group_request_changes=[dict(source_event_id=e['id'],target_id='a',evidence=e['content'],expires_at=e['world_time']+120) for e in reversed(events)])
     after,_=resolve(out,events[-1]['id'],raw)
     assert [e['id'] for e in pending(after['world_state'],gid)]==[e['id'] for e in events]

@@ -5,12 +5,16 @@ import json
 import os
 from pathlib import Path
 from functools import wraps
+from llm import OutputLimitReached
 
 MODEL = 'deepseek-flash'
 # Reserve the entire provider context window, even if our prompt estimator is wrong.
 CONTEXT = 1_048_576
 LIMIT_TOKENS = 3_000_000
 LIMIT_CALLS = 320
+# Same ceiling as the production draft Resume DTO. This permits a configured
+# world recovery; it does not raise any request's output limit automatically.
+MAX_OUTPUT_TOKENS = 65536
 # Integer nano-USD per token: maximum (peak, cold input), verified 2026-11-06.
 INPUT, OUTPUT = 300, 1200
 LIMIT_NUSD = 2_000_000_000
@@ -146,7 +150,7 @@ class Budget:
             return ceiling
 
     def reserve(self, max_tokens):
-        if type(max_tokens) is not int or not 0 < max_tokens <= 32000:
+        if type(max_tokens) is not int or not 0 < max_tokens <= MAX_OUTPUT_TOKENS:
             raise ValueError('Missing or excessive output cap')
         with sqlite3.connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
@@ -176,8 +180,48 @@ class Budget:
         if any(type(n) is not int or n < 0 for n in (inp, out)):
             return
         with sqlite3.connect(self.path) as db:
-            db.execute('UPDATE reservations SET input=?,output=?,settled=1 WHERE id=? AND input>=? AND output>=?',
+            db.execute('UPDATE reservations SET input=?,output=?,settled=1 WHERE id=? AND settled=0 AND input>=? AND output>=?',
                        (inp, out, rid, inp, out))
+
+    def charge_unknown(self, rid, *, stream_sha256, reason):
+        """Explicit offline resolution, NOT a usage receipt or a budget renewal.
+
+        settled: 0=unknown/blocking, 1=provider usage, 2=full conservative charge.
+        Keeps reserved tokens and immutable source stream, records the decision
+        in this ledger row. The same server lock excludes active QA workers.
+        """
+        import fcntl
+        import hashlib
+        from datetime import datetime, timezone
+        if type(rid) is not int or not isinstance(reason, str) or not reason.strip():
+            raise ValueError('Explicit reservation and resolution reason required')
+        with (Path(self.path).parent / 'server.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            source = Path(self.path).parent / 'provider-streams' / f'{rid:06d}.jsonl'
+            raw = source.read_bytes()
+            if hashlib.sha256(raw).hexdigest() != stream_sha256:
+                raise ValueError('Changed provider evidence')
+            records = [json.loads(line) for line in raw.splitlines()]
+            if (not records or records[0].get('reservation_id') != rid
+                    or records[-1].get('event') != 'end'
+                    or records[-1].get('complete') is not False
+                    or records[-1].get('usage') is not None):
+                raise ValueError('Requires ended unknown stream; reconcile any actual receipt first')
+            with sqlite3.connect(self.path) as db:
+                db.execute('BEGIN IMMEDIATE')
+                row = db.execute('SELECT input,output,settled FROM reservations WHERE id=?', (rid,)).fetchone()
+                if not row or row[2] != 0:
+                    raise ValueError('Reservation is not unresolved')
+                if 'resolution_json' not in {r[1] for r in db.execute('PRAGMA table_info(reservations)')}:
+                    db.execute('ALTER TABLE reservations ADD COLUMN resolution_json TEXT')
+                resolution = dict(kind='full_reserve_charge', previous_settled=0,
+                    usage_known=False, input_reserve=row[0], output_reserve=row[1],
+                    conservative_nusd=row[0]*INPUT+row[1]*OUTPUT,
+                    source_sha256=stream_sha256, reason=reason,
+                    recorded_at=datetime.now(timezone.utc).isoformat())
+                db.execute('UPDATE reservations SET settled=2,resolution_json=? WHERE id=?',
+                           (json.dumps(resolution, ensure_ascii=False), rid))
+                return resolution
 
     def wrap(self, stream):
         signature = inspect.signature(stream)
@@ -189,7 +233,13 @@ class Budget:
             p = params.arguments
             if p['provider'] != 'deepseek' or p['model'] != MODEL:
                 raise ValueError('QA allows only the verified DeepSeek model')
-            rid = self.reserve(p['max_tokens'])
+            from backend.services.provider_attempt import emit, identity, failed, CURRENT
+            try:
+                rid = self.reserve(p['max_tokens'])
+            except Exception:
+                emit(phase='budget_pre_dispatch', dispatch_started=False)
+                raise
+            emit(reservation_id=rid)
             consumer = p['on_usage']
 
             usage_receipt = None
@@ -203,6 +253,7 @@ class Budget:
             p['on_usage'] = receipt
             audit = None
             complete = False
+            failure_record = None
             def record(value):
                 if audit:
                     audit.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + '\n')
@@ -215,18 +266,34 @@ class Budget:
                     folder = Path(self.run_directory) / 'provider-streams'
                     folder.mkdir(parents=True, exist_ok=True)
                     audit = (folder / f'{rid:06d}.jsonl').open('x', encoding='utf-8')
-                    record(dict(event='request', reservation_id=rid, **{
+                    record(dict(event='request', reservation_id=rid, attempt=identity(), **{
                         k: p[k] for k in ('provider', 'model', 'messages', 'max_tokens',
                                          'temperature', 'thinking', 'response_format') if k in p}))
+                emit(dispatch_started=True)
                 for chunk in stream(**p):
                     record(dict(event='chunk', text=chunk))
                     yield chunk
                 self.settle(rid, usage_receipt)
                 complete = True
+            except OutputLimitReached as exc:
+                failed(exc)
+                # A terminal LENGTH can carry authoritative usage even without
+                # visible JSON. Missing usage still retains the full reserve.
+                self.settle(rid, usage_receipt)
+                raise
+            except BaseException as exc:
+                from backend.services.provider_attempt import failure
+                failed(exc)
+                failure_record = failure(exc)
+                # Preserve the existing fail-closed rule on an errored stream.
+                # A callback alone is not proof that the final response completed.
+                raise
             finally:
                 if audit:
                     try:
-                        record(dict(event='end', complete=complete, usage=usage_receipt))
+                        record(dict(event='end', complete=complete, usage=usage_receipt,
+                            attempt=dict(CURRENT.get()['data']) if CURRENT.get() else identity(),
+                            error=failure_record))
                     finally:
                         audit.close()
 

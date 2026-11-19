@@ -1,3 +1,4 @@
+import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
   useEffect,
   useLayoutEffect,
@@ -648,11 +649,22 @@ function SceneEditor({
   const [scene, setScene] = useState<Scene>(
     meta ?? { time: "", location: "", present_ids: [] },
   );
+  const [fact, setFact] = useState("");
+  const [factId, setFactId] = useState("");
+  const [social,setSocial]=useState<SocialEdit|null>(null);
+  const [movedActor, setMovedActor] = useState("");
+  const [destination, setDestination] = useState("");
+  const [holders, setHolders] = useState<string[]>([]);
+  const [status, setStatus] = useState("known");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     if (!edit) setScene(meta ?? { time: "", location: "", present_ids: [] });
   }, [meta, edit]);
+  const revision=useRef(save.revision);
+  useEffect(()=>{
+    if (!edit) { revision.current=save.revision;setSocial(null); }
+  },[edit,save.revision]);
   const blocked = busy || active(save.job);
   if (!edit) return null;
   return (
@@ -672,11 +684,20 @@ function SceneEditor({
                 time: scene.time === meta?.time ? "" : scene.time,
                 location: scene.location,
                 present_ids: scene.present_ids,
-                revision: save.revision,
+                social: social ?? undefined,
+                position: movedActor ? {actor_id:movedActor,location:destination.trim()} : undefined,
+                knowledge: factId || fact.trim() ? {fact_id:factId || null,text:factId ? "" : fact.trim(), actor_ids:holders, status} : undefined,
+                revision: revision.current,
               },
               "PATCH",
             );
             refresh();
+            setFact("");
+            setFactId("");
+            setMovedActor("");
+            setSocial(null);
+            setDestination("");
+            setHolders([]);
             setEdit(false);
             toast.success(it("sceneSaved"));
           } catch (e) {
@@ -723,6 +744,34 @@ function SceneEditor({
               {c.name}
             </label>
           ))}
+          <label>Исправить место отдельного персонажа
+            <select value={movedActor} onChange={e=>setMovedActor(e.target.value)}>
+              <option value="">Выбрать персонажа</option>
+              {save.state.characters.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          {movedActor && <label>Местонахождение персонажа
+            <Input value={destination} maxLength={200} onChange={e=>setDestination(e.target.value)}/>
+          </label>}
+          <SocialCorrection state={save.state} value={social} onChange={setSocial}/>
+          <label>Исправить знание
+            <select value={factId} onChange={e=>setFactId(e.target.value)}>
+              <option value="">Новое сведение</option>
+              {Object.entries(save.state.world?.facts || {}).map(([id,f])=><option value={id} key={id}>{f.text}</option>)}
+            </select>
+          </label>
+          {!factId && <label>Сведение персонажа
+            <Input value={fact} maxLength={2000} placeholder="Что именно известно?" onChange={e=>setFact(e.target.value)}/>
+          </label>}
+          {(factId || fact.trim()) && <fieldset>
+            <legend>Кому известно это сведение?</legend>
+            {save.state.characters.map(c=><label className="check" key={c.id}>
+              <input type="checkbox" checked={holders.includes(c.id)} onChange={e=>setHolders(e.target.checked?[...holders,c.id]:holders.filter(id=>id!==c.id))}/>{c.name}
+            </label>)}
+            <label>Статус знания <select value={status} onChange={e=>setStatus(e.target.value)}>
+              <option value="known">Знает</option><option value="suspected">Предполагает</option><option value="refuted">Опровергнуто</option>
+            </select></label>
+          </fieldset>}
           {error && <p role="alert">{error}</p>}
           <div className="actions">
             <Button
@@ -732,7 +781,7 @@ function SceneEditor({
             >
               {it("cancel")}
             </Button>
-            <Button type="submit">{it("saveScene")}</Button>
+            <Button type="submit" disabled={!!(factId || fact.trim()) && !holders.length || !!movedActor && !destination.trim()}>{it("saveScene")}</Button>
           </div>
         </fieldset>
       </form>

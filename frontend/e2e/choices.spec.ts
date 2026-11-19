@@ -24,6 +24,7 @@ test('choice proposals survive reload without committing action; free input rema
  await page.reload();
  await expect(page.locator('.choices button')).toHaveCount(6);
  await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(5);
  await expect(page.locator('.turn').last().getByTestId('player-action')).toContainText('Действие 0');
  const after=await saved();

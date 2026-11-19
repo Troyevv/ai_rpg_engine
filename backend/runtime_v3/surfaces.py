@@ -77,17 +77,20 @@ def physical_scene(state):
 def physical_choice_source(turns, state, after_for=None):
     """Latest physical source in the active History lineage, never latest job."""
     actor=state.get('camera',{}).get('controlled_actor_id')
-    if not actor:return None
+    observer = state.get('camera',{}).get('mode') == 'observer'
+    if not actor and not observer:return None
     for turn in reversed(turns):
         presentation=turn['presentation']
         mixed=bool(presentation.get('physical_text'))
         if mixed and (presentation.get('actor_id')!=actor or not presentation.get('physical_events')):
             return None  # Legacy/other actor projection has no applicable choices.
-        if not mixed and (presentation['surface']!='physical' or turn['kind'] not in ('start','turn','pov')):
+        if not mixed and (presentation['surface']!='physical' or (turn['kind'] not in ('start','turn','pov','long_term') and not (observer and turn['kind']=='background'))):
             continue
         after=(after_for(turn['id']) if after_for else json.loads(turn['after_json'])).get('world_state',{})
         camera=after.get('camera',{})
-        if (camera.get('pov_actor_id') or camera.get('controlled_actor_id'))!=actor:
+        if observer != (camera.get('mode')=='observer'):return None
+        if observer and camera.get('subject_id') != state['camera'].get('subject_id'):return None
+        if not observer and (camera.get('pov_actor_id') or camera.get('controlled_actor_id'))!=actor:
             return None
         if physical_scene(after)!=physical_scene(state):return None
         return dict(turn_id=turn['id'],variant_id=turn['active_variant_id'])
@@ -98,7 +101,7 @@ def visible_changes(changes, state, actor):
     """Gameplay summaries only; omniscient Extraction/patches stay author-side."""
     from copy import deepcopy
     result=deepcopy(changes)
-    for key in ('raw_turn_result', 'state_patch', 'world_delta'):
+    for key in ('raw_turn_result', 'state_patch', 'world_delta', 'interpretation_warnings'):
         result.pop(key, None)
     # Legacy summaries may duplicate the full Fact/Event payload even after the
     # main world projection has hidden it. Unlinked rows have no safe provenance;

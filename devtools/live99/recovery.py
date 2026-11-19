@@ -161,7 +161,7 @@ def probe_context(directory, job, context_length=FAMILY_CONTEXT, stage_b=None, s
         history[name] = reader(repo, before.get('history_head'))
     recorded_messages = json.loads(job['context_json'])
     messages = build_context(before, turns, job['user_text'], job['kind'], context_length,
-        config['update_tokens'], extraction_text=job['narrative'],
+        config['update_tokens'], extraction_text=job['narrative'], extraction_contract=config.get('_extraction_contract', 1),
         pacing_decision=recorded_policy(recorded_messages, before['world_state']),
         initiative_decision=recorded_plan(recorded_messages), continuity_decision=recorded(recorded_messages),
         recent_turns=config.get('recent_turns', 6), prompts=config.get('_prompts'), world_history=history)

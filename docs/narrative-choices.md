@@ -1,4 +1,18 @@
-# Narrative choice generation (#73)
+# Narrative choices
+
+For new turns (Extraction/11), Narrative streams a JSON object with literary
+`scene` followed by `actions`. Each action has author-written `text` and can
+reference POV-known `facts`. A system example illustrates six choices. The
+runtime retains usable suggestions individually and the player can edit or
+ignore them. No extra generation is scheduled when a menu is short or absent.
+Extraction interprets the completed scene and its end time and geography.
+Suggestions neither grant Knowledge nor count as submitted actions.
+
+Recorded turns retain their original messages, contract and menu transport.
+Extraction/9 used separately marked suggestions and /10 also read a Narrative
+ending. Their readers remain available for recovery.
+
+## Historical Extraction-generated choices (#73)
 
 The existing Extraction call generates up to six `{action, speech}` suggestions.
 `Choice context / controlled actor` is a disposable projection in the existing

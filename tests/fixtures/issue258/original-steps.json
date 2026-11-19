@@ -1,0 +1,456 @@
+{
+  "river": {
+    "provenance": {
+      "archive_sha256": "c6906963e14fbb5d3750465e1a28273aa2e7cdaceb247b0f0a352fedd9c1880d",
+      "events_sha256": "913e08db98efae2f2a28884285ce03a1e1e8d1ef0e038d9d39813a8831a68dab"
+    },
+    "player_input": "Иду рядом с мамой к Березянке, подстраиваясь под её шаг. «Покажи ту тропинку. А с кем ты тогда бегала после школы — кто-нибудь из твоих подруг ещё здесь живёт?»",
+    "narrative": "Дорожка от подъезда идёт вниз, между домами, и в темноте под фонарями блестит мокрым асфальтом. Галина Фёдоровна ступает мелко, но уверенно, одной рукой придерживает сумку, другой изредка касается его локтя — не для опоры, скорее чтобы чувствовать, что он рядом.\n\n— Вниз, вниз, — говорит она. — Вот тут раньше был пустырь, а теперь детская площадка. — Она кивает на разноцветные горки, мокрые и пустые. — А за ней — видишь, тропка начинается, меж кустов? Это уже к реке.\n\nОни сворачивают. Кусты сирени по сторонам ещё голые, но уже набухли, и от них пахнет сырой землёй. Где-то далеко за домами лает собака.\n\n— Бегала я с двумя, — отвечает она наконец, и в голосе слышится улыбка. — С Таней Кузнецовой и с Валей. Валя потом в область уехала, в техникум какой-то поступила, след потерялся. А Таня… — Галина Фёдоровна задумывается, замедляет шаг. — Таня здесь. Это Тамара Ильинична теперь, кафе у неё на первом этаже. — Она поворачивается к нему. — Ты не знал? Мы с ней с первого класса. Она тогда Танькой была, тощей такой, с косичками, а как вымахала. — Она тихо смеётся. — Мы с ней, знаешь, одно время и не разговаривали, года три. Из-за ерунды, если честно. — Пауза, и уже мягче: — А потом помирились. Она мне как-то принесла булочек из своей пекарни, просто так, на порог. И всё, будто и не ссорились.\n\nТропка выводит на берег. Внизу, в темноте, угадывается река — по блеску, по плеску воды о корягу. Над водой висит туман, редкий, клочьями.\n\n— Вот здесь мы и сидели, — говорит Галина Фёдоровна, останавливаясь. — На этом самом месте, кажется. Ноги в воду свешивали, хотя мама запрещала. — Она смотрит на реку, потом на сына. — А ты с Тамарой Ильиничной, выходит, уже виделся? В кафе-то?",
+    "responses": [
+      {
+        "scene": {
+          "elapsed_minutes": 8,
+          "situation": "Галина Фёдоровна и Алексей спустились по тропке к берегу Березянки; она показала место, где когда-то сидела с подругами, и спрашивает, виделся ли он уже с Тамарой Ильиничной.",
+          "situation_evidence": "Тропка выводит на берег... «А ты с Тамарой Ильиничной, выходит, уже виделся? В кафе-то?»",
+          "visible_character_ids": [
+            "char_alexey",
+            "char_galina"
+          ]
+        },
+        "scene_steps": [
+          {
+            "id": "step_50_01",
+            "text": "Алексей идёт рядом с матерью к Березянке, подстраиваясь под её шаг, и просит показать ту тропинку.",
+            "kind": "movement",
+            "assertion": "completed_arrival",
+            "actor_ids": [
+              "char_alexey",
+              "char_galina"
+            ],
+            "destination": {
+              "name": "Берег Березянки",
+              "anchor_id": "loc_berezovsk",
+              "relation": "вниз по тропке от пустыря, за детской площадкой, у реки"
+            },
+            "input_source": {
+              "quote": "Иду рядом с мамой к Березянке, подстраиваясь под её шаг. «Покажи ту тропинку.",
+              "meaning": "preserved",
+              "intended_target_ids": [
+                "char_galina"
+              ]
+            }
+          },
+          {
+            "id": "step_50_02",
+            "text": "Алексей спрашивает, с кем мать бегала после школы и живёт ли кто-нибудь из её подруг здесь до сих пор.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [
+              "char_galina"
+            ],
+            "outcome": "completed",
+            "channel": "physical",
+            "input_source": {
+              "quote": "А с кем ты тогда бегала после школы — кто-нибудь из твоих подруг ещё здесь живёт?",
+              "meaning": "preserved",
+              "intended_target_ids": [
+                "char_galina"
+              ]
+            }
+          },
+          {
+            "id": "step_50_03",
+            "text": "Галина Фёдоровна рассказывает, что бегала с Таней Кузнецовой и Валей; Валя уехала в область, а Таня — это Тамара Ильинична, с которой они дружат с первого класса и когда-то ссорились на три года.",
+            "kind": "information",
+            "source_actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "medium": "conversation",
+            "channel": "physical",
+            "claims": [
+              {
+                "fact": {
+                  "id": "fact_galina_childhood_friends",
+                  "text": "В детстве Галина Фёдоровна бегала после школы с Таней Кузнецовой и Валей; Валя потом уехала в область, а Таня — это Тамара Ильинична, с которой Галина Фёдоровна дружит с первого класса и с которой они когда-то не разговаривали три года из-за ерунды, пока Тамара не принесла ей булочек.",
+                  "visibility": "public",
+                  "character_ids": [
+                    "char_galina",
+                    "char_alexey",
+                    "char_tamara"
+                  ]
+                },
+                "assertion": "testimony",
+                "perceived_by": [
+                  "char_alexey"
+                ],
+                "status": "known"
+              }
+            ]
+          },
+          {
+            "id": "step_50_04",
+            "text": "Галина Фёдоровна спрашивает Алексея, виделся ли он уже с Тамарой Ильиничной в кафе.",
+            "kind": "interaction",
+            "actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "outcome": "completed",
+            "channel": "physical"
+          }
+        ],
+        "choices": [
+          {
+            "action": "Ответить, что уже был в кафе «Берёзка» и познакомился с Тамарой Ильиничной.",
+            "speech": "«Был, мам. Заходил в „Берёзку“ — она меня пирогом накормила и про фотографии расспрашивала».",
+            "kind": "information",
+            "grounding": {
+              "fact_ids": [
+                "information-fact_3ea88e006749d3aacc40",
+                "information-fact_bf9d167c55b7dc91c3eb"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, почему они с Тамарой Ильиничной не разговаривали три года.",
+            "speech": "«А из-за чего вы с ней тогда поссорились? Ты сказала — из-за ерунды».",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_childhood_friends"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Сказать, что Тамара Ильинична показалась ему человеком, который умеет мирить без лишних слов.",
+            "speech": "«Она и сейчас такая, судя по всему. Булочки на порог — это очень в её духе».",
+            "kind": "information",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_childhood_friends",
+                "information-fact_6e1b3ab6af1454542aad"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, не хочет ли мать зайти к Тамаре Ильиничне вместе с ним как-нибудь.",
+            "speech": "«Может, зайдём к ней вместе? Я бы посмотрел, как вы теперь разговариваете».",
+            "kind": "proposal",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_childhood_friends"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Признаться, что в кафе ему было немного неловко одному среди незнакомых людей.",
+            "speech": "«Был. Только я там чувствовал себя чужим, пока она не заговорила со мной».",
+            "kind": "information",
+            "grounding": {
+              "fact_ids": [
+                "information-fact_3ea88e006749d3aacc40"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, часто ли они теперь видятся с Тамарой Ильиничной.",
+            "speech": "«А вы с ней сейчас часто видитесь? Или так, урывками?»",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_childhood_friends"
+              ],
+              "from_scene": true
+            }
+          }
+        ]
+      },
+      {
+        "candidate_hash": "a5fe9793903fa1654257d886031941084c63954fc3e7c4b3788881b08e4a0388",
+        "replacements": [
+          {
+            "id": "step_50_01",
+            "text": "Алексей идёт рядом с матерью к Березянке, подстраиваясь под её шаг, и просит показать ту тропинку.",
+            "kind": "movement",
+            "assertion": "completed_arrival",
+            "actor_ids": [
+              "char_alexey",
+              "char_galina"
+            ],
+            "destination": {
+              "name": "Берег Березянки",
+              "anchor_id": "loc_berezovsk",
+              "relation": "вниз по тропке от пустыря, за детской площадкой, у реки"
+            },
+            "input_source": {
+              "quote": "Иду рядом с мамой к Березянке, подстраиваясь под её шаг. «Покажи ту тропинку.",
+              "meaning": "preserved",
+              "intended_target_ids": [
+                "char_galina"
+              ]
+            }
+          },
+          {
+            "id": "step_50_02",
+            "text": "Алексей спрашивает, с кем мать бегала после школы и живёт ли кто-нибудь из её подруг здесь до сих пор.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [
+              "char_galina"
+            ],
+            "outcome": "completed",
+            "channel": "physical",
+            "input_source": {
+              "quote": "А с кем ты тогда бегала после школы — кто-нибудь из твоих подруг ещё здесь живёт?",
+              "meaning": "preserved",
+              "intended_target_ids": [
+                "char_galina"
+              ]
+            }
+          },
+          {
+            "id": "step_50_03",
+            "text": "Галина Фёдоровна рассказывает, что бегала с Таней Кузнецовой и Валей; Валя уехала в область, а Таня — это Тамара Ильинична, с которой они дружат с первого класса и когда-то ссорились на три года.",
+            "kind": "information",
+            "source_actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "medium": "conversation",
+            "channel": "physical",
+            "claims": [
+              {
+                "fact": {
+                  "id": "fact_galina_childhood_friends",
+                  "text": "В детстве Галина Фёдоровна бегала после школы с Таней Кузнецовой и Валей; Валя потом уехала в область, а Таня — это Тамара Ильинична, с которой Галина Фёдоровна дружит с первого класса и с которой они когда-то не разговаривали три года из-за ерунды, пока Тамара не принесла ей булочек.",
+                  "visibility": "public",
+                  "character_ids": [
+                    "char_galina",
+                    "char_alexey",
+                    "char_tamara"
+                  ]
+                },
+                "assertion": "testimony",
+                "perceived_by": [
+                  "char_alexey"
+                ],
+                "status": "known"
+              }
+            ]
+          },
+          {
+            "id": "step_50_04",
+            "text": "Галина Фёдоровна спрашивает Алексея, виделся ли он уже с Тамарой Ильиничной в кафе.",
+            "kind": "interaction",
+            "actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "outcome": "completed",
+            "channel": "physical"
+          }
+        ],
+        "sections": {
+          "agency_findings": [],
+          "chronology_claims": [],
+          "facts": [],
+          "locations": [],
+          "promotions": [],
+          "scene": {
+            "elapsed_minutes": 8,
+            "situation": "Галина Фёдоровна и Алексей спустились по тропке к берегу Березянки; она показала место, где когда-то сидела с подругами, и спрашивает, виделся ли он уже с Тамарой Ильиничной.",
+            "situation_evidence": "Тропка выводит на берег... «А ты с Тамарой Ильиничной, выходит, уже виделся? В кафе-то?»",
+            "visible_character_ids": [
+              "char_alexey",
+              "char_galina"
+            ]
+          }
+        },
+        "reason": "Исправлена несогласованность целей в шаге step_50_01: intended_target_ids приведены в соответствие с target_ids (оба указывают на char_galina). Остальные шаги и сцены оставлены без изменений, так как диагностика касалась только этого шага."
+      }
+    ]
+  },
+  "unrequested_refusal": {
+    "provenance": {
+      "archive_sha256": "c6906963e14fbb5d3750465e1a28273aa2e7cdaceb247b0f0a352fedd9c1880d",
+      "events_sha256": "88ac33fc5f01d33626813d4417d67f0c79315cc070fa1bd75b87bb40eae74fcd"
+    },
+    "player_input": "Рассматриваю фотографию на столе.",
+    "narrative": "Галина предлагает чаю. Алексей отвечает: «Нет, не хочу», и продолжает рассматривать фотографию.",
+    "responses": [
+      {
+        "scene": {
+          "elapsed_minutes": 1,
+          "situation": "Алексей стоит у стола и рассматривает старую фотографию; Галина Фёдоровна, смущённая собственной откровенностью, смотрит на него, ожидая реакции.",
+          "visible_character_ids": [
+            "char_alexey",
+            "char_galina"
+          ]
+        },
+        "scene_steps": [
+          {
+            "id": "step_49_photo_observation",
+            "text": "Алексей рассматривает фотографию на столе.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [],
+            "outcome": "completed",
+            "input_source": {
+              "quote": "Рассматриваю фотографию на столе.",
+              "meaning": "preserved"
+            }
+          },
+          {
+            "id": "step_49_galina_tea_offer",
+            "text": "Галина Фёдоровна предлагает Алексею чаю.",
+            "kind": "interaction",
+            "actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "outcome": "completed"
+          },
+          {
+            "id": "step_49_alexey_refusal",
+            "text": "Алексей отказывается от чая и продолжает рассматривать фотографию.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [
+              "char_galina"
+            ],
+            "outcome": "completed",
+            "input_source": {
+              "quote": "«Нет, не хочу»",
+              "meaning": "preserved"
+            }
+          }
+        ],
+        "choices": [
+          {
+            "action": "Показать фотографию матери и спросить, где и когда она сделана.",
+            "speech": "Мам, а это где снято?",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_photo_circle"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, кто изображён на фотографии рядом с матерью.",
+            "speech": "А кто это рядом с тобой?",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_photo_circle"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Заметить, что мать была красивой в молодости, и улыбнуться.",
+            "speech": "Ты тут совсем юная.",
+            "kind": "information",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_photo_circle"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, не жалеет ли она до сих пор, что не стала учительницей.",
+            "speech": "Ты так и не рассказала, почему не пошла в педагогический.",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "information-fact_12eb810596b9dfd7c951",
+                "information-fact_fa9a8dbb19991cdab1f3"
+              ],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Отложить фотографию и предложить поговорить о чём-то другом.",
+            "speech": "Ладно, давай не будем ворошить прошлое.",
+            "kind": "decision",
+            "grounding": {
+              "fact_ids": [],
+              "from_scene": true
+            }
+          },
+          {
+            "action": "Спросить, что за фотокружок был у неё в техникуме.",
+            "speech": "Расскажи про фотокружок. Что вы там снимали?",
+            "kind": "question",
+            "grounding": {
+              "fact_ids": [
+                "fact_galina_photo_circle"
+              ],
+              "from_scene": true
+            }
+          }
+        ]
+      },
+      {
+        "candidate_hash": "82a81521401ad94a4a2fc0660983d2c86cb45c52441bb5a8ee95152caca1d447",
+        "replacements": [
+          {
+            "id": "step_49_photo_observation",
+            "text": "Алексей рассматривает фотографию на столе.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [],
+            "outcome": "completed",
+            "input_source": {
+              "quote": "Рассматриваю фотографию на столе.",
+              "meaning": "preserved"
+            }
+          },
+          {
+            "id": "step_49_galina_tea_offer",
+            "text": "Галина Фёдоровна предлагает Алексею чаю.",
+            "kind": "interaction",
+            "actor_id": "char_galina",
+            "target_ids": [
+              "char_alexey"
+            ],
+            "outcome": "completed"
+          },
+          {
+            "id": "step_49_alexey_refusal",
+            "text": "Алексей отказывается от чая и продолжает рассматривать фотографию.",
+            "kind": "interaction",
+            "actor_id": "char_alexey",
+            "target_ids": [
+              "char_galina"
+            ],
+            "outcome": "completed",
+            "input_source": {
+              "quote": "«Нет, не хочу»",
+              "meaning": "preserved"
+            }
+          }
+        ],
+        "sections": {
+          "scene": {
+            "elapsed_minutes": 1,
+            "situation": "Алексей стоит у стола и рассматривает старую фотографию; Галина Фёдоровна, смущённая собственной откровенностью, смотрит на него, ожидая реакции.",
+            "visible_character_ids": [
+              "char_alexey",
+              "char_galina"
+            ]
+          }
+        },
+        "reason": "Устранена диагностика player_action_source_invalid: шаг step_49_alexey_refusal теперь содержит input_source с точной цитатой отказа из текущего ввода, что даёт однозначный источник действия. Остальные шаги и сцена согласованы с неизменным Narrative."
+      }
+    ]
+  }
+}

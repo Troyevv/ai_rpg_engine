@@ -106,6 +106,12 @@ def test_invalid_updates_never_retire_or_broadcast(damage):
         if damage=='dead':s['characters']['c']['life_status']='dead'
         else:s['characters']['c']['capabilities']['conscious']=False
     before=deepcopy(s['knowledge'])
+    if damage=='fact':
+        with pytest.raises(StructuralDeltaError) as error:
+            StateResolver(s,text,player).resolve(p)
+        assert error.value.code=='knowledge_fact_link_missing'
+        assert s['knowledge']==before
+        return
     r=StateResolver(s,text,player).resolve(p)
     assert r.state['knowledge']==before
     assert bool(r.warnings)==(damage!='future')

@@ -13,6 +13,29 @@ STYLES = {
     'clothing': ('plain', 'tshirt', 'shirt', 'blazer', 'jacket', 'cardigan', 'jumper', 'sweater'),
     'clothing_color': ('dark', 'light', 'blue', 'green', 'brown', 'red', 'sand'),
 }
+
+
+def input_diagnostics(cards):
+    """Address unsupported cosmetic hints before later canonical preparation.
+
+    The optional hint object is the repair unit: unsupported features can be
+    omitted without inventing a replacement or changing literary appearance.
+    """
+    options = dict(STYLES, form=('human', 'neutral'))
+    errors = []
+    for index, card in enumerate(cards if isinstance(cards, list) else []):
+        if not isinstance(card, dict) or 'portrait_traits' not in card:
+            continue
+        hints = card['portrait_traits']
+        if hints is None:  # Legacy optional null was always equivalent to absent.
+            continue
+        invalid = [k for k, v in hints.items() if k not in options or v not in options[k]] if isinstance(hints, dict) else None
+        if invalid or invalid is None:
+            errors.append(dict(path=f'/characters/{index}/portrait_traits', category='portrait_traits',
+                message='portrait_traits: используйте только поддерживаемые признаки из схемы. '
+                        'Неподдерживаемые признаки можно опустить; корректные признаки и Внешность сохраните.',
+                invalid_fields=invalid, allowed={k:list(v) for k,v in options.items()}))
+    return errors
 # Exact, unambiguous values of a *typed* initial feature, never substrings of
 # sentences, names, legacy_text, biographies or derived identity characteristics.
 _TYPED = {

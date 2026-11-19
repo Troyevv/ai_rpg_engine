@@ -188,6 +188,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     s["threads"]["education"] = Thread(
         id="education", description="Учёба", character_ids=["c"], relevance=1
     ).model_dump()
+    s["characters"]["a"]["situation"] = "Waiting in the old player scene"
     text = "Персонаж c начал учиться и тайно переехал."
     raw = dict(
         final_scene=dict(
@@ -229,11 +230,12 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     if misdated:
         raw["events"][0]["minute"] = candidate.minute + 1
 
+    from backend.runtime_v3.context_contract import RECORDED_CONTROL_CONTRACT
     from test_narrative_style import assert_style
     stages = []
     def generate(stage, messages, *args, **kwargs):
         stages.append(stage)
-        assert_style(messages, 0 if "extraction" in stage else 1)
+        assert_style(messages, 0 if "extraction" in stage else 1, control=RECORDED_CONTROL_CONTRACT)
         if custom_prompt and "extraction" not in stage:
             assert "CUSTOM LTA" in str(messages)
         return iter([json.dumps(raw) if "extraction" in stage else text])
@@ -249,6 +251,7 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
         assert any(d.get("code") == "event_minute_invalid" for d in report["diagnostics"])
         assert "study" not in after["world_state"]["roles"]
         return
+    assert after["world_state"]["characters"]["a"] == before["world_state"]["characters"]["a"]
     assert report["accepted"], report["diagnostics"]
     assert batch["events"][0]["minute"] == batch["events"][0]["recorded_minute"] == candidate.minute
     assert after["world_state"]["roles"]["study"]["status"] == "active"
@@ -336,13 +339,25 @@ def test_real_jobs_reload_regenerate_rollback_branch_and_ordinary_turn(tmp_path)
 
 
 def test_accepted_birth_then_child_ages_without_adult_personality():
-    before = snap(conceive().state)
+    assert_child_after_advance(15, 'adolescent', 14)
+
+
+@pytest.mark.parametrize(('years','age'), [(5,4),(10,9)])
+def test_birth_inside_multi_year_advance_has_correct_age(years, age):
+    assert_child_after_advance(years, 'child', age)
+
+
+def assert_child_after_advance(years, stage, age):
+    from backend.runtime_v3.calendar import age_on, current_time
+    initial = state()
+    initial['reproduction_policy']['gestation_days'] = 280
+    before = snap(conceive(initial).state)
     s = before["world_state"]
     s["camera"].update(controlled_actor_id="c", present_character_ids=["c"])
     p = next(iter(s["pregnancies"].values()))
     candidate = next(
         c
-        for c in plan(before, dict(amount=15, unit="years")).candidates
+        for c in plan(before, dict(amount=years, unit="years")).candidates
         if c.kind == "birth"
     )
     text = "Роды завершились."
@@ -375,17 +390,56 @@ def test_accepted_birth_then_child_ages_without_adult_personality():
         return iter([json.dumps(raw) if "extraction" in stage else text])
 
     after, batch, report = run(
-        before, dict(amount=15, unit="years", max_llm_calls=2), generate=generate
+        before, dict(amount=years, unit="years", max_llm_calls=2), generate=generate
     )
     assert report["accepted"], report["diagnostics"]
     process = after["world_state"]["pregnancies"][p["id"]]
     assert process["status"] == "born" and process["birth_minute"] == p["due_minute"]
     child = after["world_state"]["characters"][p["children"][0]["id"]]
-    assert child["developmental_stage"] == "adolescent"
+    assert child["developmental_stage"] == stage
+    assert age_on(child['birth_date'],current_time(after['world_state'])['date']) == age
     assert set(child["personality"]["items"]) == {"early_temperament"}
     assert not any(
         k["actor_id"] == "c" for k in after["world_state"]["knowledge"].values()
     )
+
+
+def test_due_process_reference_survives_an_unrelated_invalid_lta_record():
+    from backend.runtime_v3.calendar import age_on, current_time
+    initial = state()
+    initial["reproduction_policy"]["gestation_days"] = 280
+    before = snap(conceive(initial).state)
+    world = before["world_state"]
+    world["camera"].update(controlled_actor_id="c", present_character_ids=["c"])
+    pregnancy = next(iter(world["pregnancies"].values()))
+    request = dict(amount=5, unit="years", max_llm_calls=2)
+    cause = next(c for c in plan(before, request).candidates if c.kind == "birth")
+    text = "Роды завершились."
+    claim = dict(pregnancy_id=pregnancy["id"], source_event_id=cause.id,
+                 assertion="birth_completed", location_id="home", evidence=text)
+    payload = dict(births=[claim], scene_steps=[dict(kind="occurrence", text=text,
+                   actor_ids=["a"], location_id="home", advance_candidate_ids=[cause.id])],
+                   unrelated_bad_section=True)
+
+    public = "Через пять лет в доме горит свет."
+    actions = [dict(text=f"Действие {i}") for i in range(6)]
+
+    def generate(stage, messages, *args, **kwargs):
+        if "extraction" in stage:
+            completed = next(m["content"] for m in messages if m["content"].startswith("completed_narrative"))
+            assert json.loads(completed.split("\n", 1)[1]) == text
+            return iter([json.dumps(payload)])
+        wire = dict(scene={"text":text}, arrival={"text":public, "time":"21:52"}, actions=actions)
+        return iter([json.dumps(wire)])
+
+    after, _, report = run(before, request, generate=generate, config={"_extraction_contract":10})
+    result = after["world_state"]
+    assert after["_public_arrival"] == (public, {"actions":actions})
+    assert report["llm_calls"] == 2
+    assert any(row["section"] == "unrelated_bad_section" for row in report["diagnostics"])
+    assert result["pregnancies"][pregnancy["id"]]["birth_minute"] == pregnancy["due_minute"]
+    child = result["characters"][pregnancy["children"][0]["id"]]
+    assert age_on(child["birth_date"], current_time(result)["date"]) == 4
 
 
 def test_incapacitated_controlled_actor_has_no_invented_actions():
@@ -619,8 +673,12 @@ def test_regenerate_keeps_group_context_when_prior_call_count_changes(tmp_path):
     with patch("engine.chat_stream", side_effect=again):
         engine.run_job(repo.path, regen, engine.Worker())
     assert repo.get_job(regen)["status"] == "saved", repo.get_job(regen)["error"]
-    assert replayed == recorded
-    assert repo.get_snapshot(sid)["last_long_term_advance"]["llm_calls"] == 4
+    # A repair consumes the existing budget: the second group may be unattempted.
+    assert replayed == recorded[:len(replayed)]
+    assert len(replayed)==1
+    report=repo.get_snapshot(sid)['last_long_term_advance']
+    assert report['llm_calls']==3 and report['coverage']['budget_unattempted']>0
+    assert repo.get_snapshot(sid)["last_long_term_advance"]["llm_calls"] == 3
 
 
 def test_new_character_only_committed_with_accepted_relationship():

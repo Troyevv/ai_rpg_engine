@@ -117,14 +117,19 @@ test('genealogy and narrative entry, partner return, draft and persisted next tu
  await expect(dossier(page).locator('.dossier-name')).toContainText('Кирилл Ларин');
  await page.keyboard.press('Escape');await expect(family).toBeVisible();await page.keyboard.press('Escape');
  await expect(composer).toHaveValue('Сохранить мой черновик');
- const turns=await page.locator('.turn').count();await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(turns+1);
+ const turns=await page.locator('.turn').count();await page.locator('.choices button').first().click();
+  await page.getByRole('dialog').getByRole('button',{name:'Заменить черновик',exact:true}).click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(turns+1);
  // The seeded ordinary narrative references Kirill or Vera, both linked spouses.
  const link=page.locator('.turn [data-character-id="qa_kirill"],.turn [data-character-id="qa_vera"]').first();
  await link.click();const original=await dossier(page).getByRole('combobox',{name:'Персонаж',exact:true}).getAttribute('data-value');
  await dossier(page).locator('.dossier-partner-link').first().click();await page.keyboard.press('Escape');
  await expect(dossier(page).getByRole('combobox',{name:'Персонаж',exact:true})).toHaveAttribute('data-value',original!);
  await page.keyboard.press('Escape');await page.reload();await expect(page.locator('.turn')).toHaveCount(turns+1);
- await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(turns+2);
+ await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(turns+2);
  const saved=await(await request.get(`/api/saves/${s.save}`)).json();expect(saved.turns).toHaveLength(turns+2);
 });
 

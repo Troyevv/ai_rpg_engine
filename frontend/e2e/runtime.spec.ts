@@ -16,6 +16,7 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  await expect(page.locator('.turn')).toHaveCount(1);
  await expect(page.locator('.choices button')).toHaveCount(6);
  await page.locator('.choices button').first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.turn').last().getByTestId('player-action')).toContainText('Действие 0: «Реплика 0»');
  await page.getByLabel('Своё действие или реплика').fill('Мой собственный выбор');

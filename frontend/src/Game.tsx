@@ -39,6 +39,7 @@ import {
   type Job,
   type Preferences,
 } from "./types";
+import {Dialog, DialogContent, DialogTitle, DialogDescription} from "./components/ui/dialog";
 import { Markdown } from "./Markdown";
 import { Diagnostics } from "./Diagnostics";
 
@@ -117,7 +118,20 @@ export function Game({
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
   const initialChoice=useRef(choiceKey);
   const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
-  useEffect(()=>{setSelectedChoice(null)},[choiceKey]);
+  const [pendingChoice,setPendingChoice]=useState<string|null>(null);
+  useEffect(()=>{setSelectedChoice(null);setPendingChoice(null)},[choiceKey]);
+  const writeChoice=(text:string)=>{
+    setDraft(text);
+    sessionStorage.setItem(draftKey,text);
+    input.current?.focus({preventScroll:true});
+  };
+  useEffect(()=>{
+    if(pendingChoice===null)return;
+    const back=(event:PopStateEvent)=>{event.stopImmediatePropagation();setPendingChoice(null)};
+    window.addEventListener('popstate',back,true);
+    return ()=>window.removeEventListener('popstate',back,true);
+  },[pendingChoice]);
+  const closeChoice=()=>{if(history.state?.choiceDraft)history.back();else setPendingChoice(null)};
   useEffect(() => {
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
@@ -125,8 +139,9 @@ export function Game({
   const { job: snapshot, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const rejected = !!job && ['error','stopped'].includes(job.status) && job.revision === save?.revision;
-  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
+  const publishedHere = !!job?.published_revision && !!save?.turns.some(t=>t.variants?.some(v=>v.id===t.active_variant_id && v.job_id===job.id));
+  const rejected = !!job && ['error','stopped'].includes(job.status) && (publishedHere || job.revision === save?.revision);
+  const retryable = rejected && (job.published_revision ?? job.revision)===save?.revision && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const streamedJob=useRef<string|null>(null);
@@ -135,8 +150,11 @@ export function Game({
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const generating = running || !!revealingCommit;
   const turnLocked = generating || (rejected && !!job.narrative_complete);
-  const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
-  const canSubmit = canAct && !busy && !turnLocked && !!save?.turns.length;
+  const observer = save?.state.camera?.mode==='observer';
+  const canAct = !!save && !save.state.protagonist_required && (observer || (!!actorId && save.state.actor_capabilities?.can_act!==false));
+  const observeInstead = !observer && !!actorId && save?.state.actor_capabilities?.can_act===false && !save?.state.protagonist_required;
+  const directionInput = observer || observeInstead;
+  const canSubmit = (canAct || observeInstead) && !busy && !turnLocked && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
   const requestLock=useRef(false);
@@ -162,6 +180,7 @@ export function Game({
         text,
         target_turn_id: target,
         time_skip: timeSkip,
+        observer_direction: kind==='turn' && observer,
         interaction_channel: kind==='turn'?channel:undefined,
         rollback_following: rollback,
         config: prefs.game,
@@ -179,12 +198,14 @@ export function Game({
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
     refreshControl(after);jumpToLatest();
   });
-  const observe=(actor?:string,scene?:string)=>void run(async()=>{
+  const observe=(actor?:string,scene?:string,direction?:string)=>void run(async()=>{
     if(!save)return;
-    if(actor){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
-    const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
+    if(actor&&!direction){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
+    const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,direction,revision:save.revision,config:prefs.game,api_key:apiKey});
+    if(direction && direction===draftRef.current){setDraft("");sessionStorage.removeItem(draftKey)}
     setSubmitted(j);jumpToLatest();
   });
+  const submitDraft=()=>observeInstead&&actorId ? observe(actorId,undefined,draft) : turn("turn");
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
 
   const stableRun=useStableEvent(run);
@@ -196,16 +217,22 @@ export function Game({
   }));
   const allEntries=presentationEntries(save,job);
   const entries=surfaceEntries(allEntries,'physical');
+  const callEntries=surfaceEntries(allEntries,'call',actorId,selectedCall);
+  const latestCall=callEntries.at(-1);
   const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
-    <div className="flex flex-wrap gap-2" aria-busy={busy}>
-      <Button disabled={busy || running} onClick={() => void run(async () => {
+    <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
+      {!!job.narrative_complete && ['start','turn','background','pov'].includes(job.kind) && <Button disabled={busy || running} onClick={()=>void run(async()=>{
+        setSubmitted(await api<Job>(`/jobs/${job.id}/save-scene`, {revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
+        await refresh();
+      })}>Сохранить исходную сцену без запроса к модели</Button>}
+      {!job.published_revision && <Button disabled={busy || running} onClick={() => void run(async () => {
         try {
           const discarded = await api<Job>(`/saves/${save.id}/jobs/${job.id}/abandon`, {
             revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
           });
           setSubmitted(discarded);
-          if (physical && (job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
+          if (physical && (!job.narrative_complete || job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
             setDraft(job.user_text);
             sessionStorage.setItem(draftKey, job.user_text);
           }
@@ -214,7 +241,14 @@ export function Game({
           await refresh();
           setSubmitted(null);
         }
-      })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
+      })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>}
+      {(job.prose_correction_available || job.chronology_correction_available) && <div className="flex flex-col gap-2">
+        <p className="text-sm text-muted-foreground">Адресная правка создаст новую редакцию и заново проверит состояние. Запросы к модели могут быть платными.</p>
+        <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
+          setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey,
+            correct_prose:true, revision:save.revision, attempt_epoch:job.attempt_epoch ?? 0}));
+        })}>{job.chronology_correction_available?'Исправить хронологию сцены':'Исправить противоречие в сцене'}</Button>
+      </div>}
       {retryable && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
         setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey}));
       })}>{physical ? 'Повторить обработку состояния' : t('retry')}</Button>}
@@ -247,12 +281,12 @@ export function Game({
     );
   return (
     <main className="game">
-      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
+      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');
       }} end={async()=>{await run(async()=>{const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:selectedCall,operation_id:crypto.randomUUID()}});refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
-        {surfaceEntries(allEntries,'call',actorId,selectedCall).map(e=>renderEntry(e))}
+        {callEntries.map(e=>renderEntry(e))}
       </CallScene>}
       {save&&<div className="narrative-toolbar" role="group" aria-label="Действия истории">
         <CurrentGame refresh={refreshControl} save={save} disabled={busy||turnLocked} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
@@ -269,6 +303,7 @@ export function Game({
                     }}/>
                     <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||turnLocked||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
 </>}
+      {job?.published_revision && active(job) && <Button size="sm" variant="ghost" disabled={busy} onClick={stopJob}>Продолжить с сохранённой сценой</Button>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
@@ -303,13 +338,6 @@ export function Game({
         </div>
       </div>
       </>}
-      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
-      {save?.state.last_long_term_advance&&<details className="skip-diagnostics advance-result" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
-        <details className="advance-result-details"><summary>Подробности симуляции</summary><p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p></details>
-        {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
-        {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
-      </details>}
-      {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
       <div
         className="story-scroll"
         ref={scroll}
@@ -323,6 +351,17 @@ export function Game({
             lineHeight: prefs.line_height,
           }}
         >
+          {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+          {save?.state.last_long_term_advance&&<details className="skip-diagnostics advance-result" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
+            {save.state.last_long_term_advance.status==='incomplete'&&<p role="status">Симуляция неполная. Принятые события сохранены; часть причин осталась без результата.</p>}
+            {save.state.last_long_term_advance.status==='calendar_only'&&<p>Изменился календарь. Жизнь NPC в этом переходе не моделировалась.</p>}
+            {save.state.last_long_term_advance.status==='quiet'&&<p>Рассмотренные ситуации пока не привели к новым событиям.</p>}
+            {save.state.last_long_term_advance.coverage&&<p>Принято групп: {save.state.last_long_term_advance.coverage.accepted_groups}. Без новых событий: {save.state.last_long_term_advance.coverage.quiet_groups}. Отклонено причин: {save.state.last_long_term_advance.coverage.rejected_causes}. Не рассмотрено из-за лимита: {save.state.last_long_term_advance.coverage.budget_unattempted}.</p>}
+            <details className="advance-result-details"><summary>Подробности симуляции</summary><p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p></details>
+            {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
+            {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
+          </details>}
+          {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
           {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
             <SkinHeader pack={decoration}/>
@@ -355,8 +394,7 @@ export function Game({
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
-                    Всё готово. Ведущий разыграет первую сцену и предложит шесть
-                    действий.
+                    Всё готово. Ведущий разыграет первую сцену и предложит возможные действия.
                   </p>
                 </div>
               )}
@@ -378,17 +416,20 @@ export function Game({
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
-                    {(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
+                    {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
                         key={i}
                         disabled={!canSubmit}
                         onClick={() => {
-                          setSelectedChoice(i); void turn(
-                            "turn",
-                            c.action + (c.speech ? `: «${c.speech}»` : ""),
-                          );}
+                          setSelectedChoice(i);
+                          const text=c.action + (c.speech ? `: «${c.speech}»` : "");
+                          if(draftRef.current.trim()&&draftRef.current!==text){
+                            history.pushState({...history.state,choiceDraft:true},'');
+                            setPendingChoice(text);
+                          }
+                          else writeChoice(text);}
                         }
                       >
                         <span className="choice-index">0{i + 1}</span>
@@ -440,19 +481,30 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
+          <Dialog open={pendingChoice!==null} onOpenChange={open=>{if(!open)closeChoice()}}>
+            <DialogContent onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
+              <DialogTitle>В поле уже есть черновик</DialogTitle>
+              <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
+              <div className="actions">
+                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice);closeChoice()}}>Добавить к черновику</Button>
+                <Button variant="outline" onClick={()=>{writeChoice(pendingChoice!);closeChoice()}}>Заменить черновик</Button>
+                <Button variant="ghost" onClick={closeChoice}>Отмена</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Phone recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea
               ref={input}
               rows={1}
-              aria-label="Своё действие или реплика"
+              aria-label={directionInput ? "Направление истории" : "Своё действие или реплика"}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
-              disabled={!canAct}
-              placeholder={activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
+              disabled={!canAct && !observeInstead}
+              placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -461,21 +513,22 @@ export function Game({
                   draft.trim()
                 ) {
                   e.preventDefault();
-                  turn("turn");
+                  submitDraft();
                 }
               }}
             />
             <Button
-              aria-label="Отправить действие"
+              aria-label={directionInput ? "Отправить направление истории" : "Отправить действие"}
               size="icon"
               disabled={!canSubmit || !draft.trim()}
-              onClick={() => turn("turn")}
+              onClick={submitDraft}
             >
               <Send size={19} />
             </Button>
           </div>
           <div className="composer-footer">
-            <span>Твоё действие всегда важнее предложенных вариантов.</span>
+            <span>{directionInput?"Можно задать своё направление истории.":"Твоё действие всегда важнее предложенных вариантов."}</span>
+            {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
             {away&&<button
               onClick={jumpToLatest}
             >

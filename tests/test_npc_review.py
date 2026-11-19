@@ -147,7 +147,8 @@ def test_initial_character_matches_startup_contract(db,sex):
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     actual=repo.get_snapshot(sid)['world_state']['characters']['new_npc']
     expected=Character(id='new_npc',**dict(attrs,biological_sex=None if sex=='unknown' else sex)).model_dump()
-    assert set(actual)==set(expected)==set(Character.model_fields)
+    # A living NPC has no recorded death. Old living snapshots retain their exact keys.
+    assert set(actual)==set(expected)==set(Character.model_fields)-{'death_date','death_minute'}
     for key in attrs:assert actual[key]==expected[key]
     # Exercise the actual startup validation/migration boundary, not a second
     # hand-maintained list of defaults. Motivation IDs belong to each identity.

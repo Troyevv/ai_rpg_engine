@@ -31,7 +31,7 @@ it('bursty snapshots reveal intermediate exact prefixes without HTTP; drain surv
  await advance(64);
  const partial=node.textContent!;
  expect(partial.length).toBeGreaterThan(0);expect(partial.length).toBeLessThan(text.length);
- expect(text.replace(/\n\n/g,'').startsWith(partial)).toBe(true);
+ expect(text.replace(/\n/g,'').startsWith(partial.replace(/\n/g,''))).toBe(true);
  // Only the player's static action may render; narrative must not.
  expect(vi.mocked(fetch).mock.calls.every(c=>!JSON.parse(c[1]!.body as string).text.includes('Первый абзац'))).toBe(true);
  for(const status of ['extracting','validating'])await render(<Journal job={{...initialJob,narrative:text,narrative_complete:true,status}}/>);
@@ -71,15 +71,16 @@ it('navigation remount resumes the shown prefix instead of replaying it',async()
 it('Markdown failure retains readable text and link_names survives final render',async()=>{
  vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
  await render(<Markdown text="Текст **не теряется**" links={false}/>);await advance(100);
- expect(host.textContent).toBe('Текст **не теряется**');
+ expect(host.querySelector('strong')?.textContent).toBe('не теряется');
+ expect(host.textContent?.trim()).toBe('Текст не теряется');
  const clicked=vi.fn();await render(<Markdown text="NPC" links onCharacter={clicked}/>);await advance(100);
  await act(()=>host.querySelector('button')!.click());expect(clicked).toHaveBeenCalledWith('npc');
  expect(JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string).link_names).toBe(true);
 });
 it('a new attempt replaces stale HTML instead of displaying the previous response',async()=>{
  await render(<Markdown text="old"/>);await advance(100);
- await render(<Markdown text="new" streaming/>);expect(host.textContent).toBe('new');
- await render(<Markdown text="new"/>);expect(host.textContent).toBe('new');
+ await render(<Markdown text="new" streaming/>);expect(host.textContent?.trim()).toBe('new');
+ await render(<Markdown text="new"/>);expect(host.textContent?.trim()).toBe('new');
 });
 it('Chat renders safe Markdown snapshots locally and retains formatting if final HTTP rendering fails',async()=>{
  const prose='Лена ждёт.\n\n---\n\n### Варианты действий\n\n';
@@ -173,6 +174,30 @@ it('layout clamping when choices disappear does not turn off bottom-follow',asyn
  height=1200;await act(()=>resize());await advance(20);expect(top).toBe(1000);
 });
 
+it.each(['wheel','scrollbar'])('queued layout scroll preserves following but %s input still unpins',async input=>{
+ let resize=noop;
+ vi.stubGlobal('ResizeObserver',class {constructor(cb:()=>void){resize=cb}observe(){}disconnect(){}});
+ function Reader(){const {scroll,onScroll,away}=useStoryScroll(74);return <div ref={scroll} onScroll={onScroll} data-away={away}><article data-reading-id="one">Scene</article></div>}
+ await render(<Reader/>);const el=host.firstElementChild as HTMLElement;let height=1000,top=0;
+ Object.defineProperties(el,{scrollHeight:{get:()=>height},clientHeight:{get:()=>200},scrollTop:{get:()=>top,set:v=>{top=Math.min(height-200,v)}}});
+ await act(()=>resize());await advance(20);expect(top).toBe(800);
+ Object.defineProperty(el,'clientWidth',{get:()=>200});
+ // Browser clamps after a shrink, then React adds the next stream block before
+ // that queued scroll event is delivered. The old top is no longer the maximum.
+ height=600;top=400;height=1200;
+ await act(()=>{el.dispatchEvent(new Event('scroll',{bubbles:true}));resize()});
+ expect(el.dataset.away).toBe('false');
+ await advance(20);expect(top).toBe(1000);
+ // A real upward gesture still wins even when the layout changes concurrently.
+ height=1400;
+ await act(()=>{
+  if(input==='wheel')el.dispatchEvent(new WheelEvent('wheel',{deltaY:-100}));
+  else el.dispatchEvent(new MouseEvent('pointerdown',{clientX:201,bubbles:true}));
+  top=900;el.dispatchEvent(new Event('scroll',{bubbles:true}));resize();
+ });
+ expect(el.dataset.away).toBe('true');await advance(20);expect(top).toBe(900);
+});
+
 it('Stop keeps the existing SSE recovery until the worker is no longer live, so Retry can unlock',async()=>{
  class Stream extends EventTarget {static last:Stream;onopen=noop;onerror=noop;closed=false;constructor(){super();Stream.last=this}close(){this.closed=true}}
  vi.stubGlobal('EventSource',Stream);const complete=vi.fn();
@@ -204,7 +229,7 @@ it('letter streams as literal prose while ordinary code fences remain ordinary',
  }
  await render(<Markdown text={'```python\nx = 1\n```'} streaming/>);
  expect(host.querySelector('blockquote')).toBeNull();
- expect(host.textContent).toContain('```python');
+ expect(host.querySelector('pre code.language-python')?.textContent?.trim()).toBe('x = 1');
  expect(fetch).not.toHaveBeenCalled();
 });
 

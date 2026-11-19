@@ -48,9 +48,11 @@ for (const scenario of ['entry','doorway','optional-annotation','semantic-retry'
     expect(accepted.state.world.characters.viktoria_solovyova.location_id).toBe(first.state.world.characters.viktoria_solovyova.location_id);
    }
    await page.locator('.choices button').filter({hasText:'Ждать ответа'}).click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
    await expect(page.locator('.turn')).toHaveCount(2);
    await page.reload();await expect(page.locator('.turn')).toHaveCount(2);
    await page.locator('.choices button').filter({hasText:'Ждать ответа'}).click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
    await expect(page.locator('.turn')).toHaveCount(3);
    const last=await view();expect(last.state.characters).toHaveLength(19);
    expect(last.state.world_clock.minute).toBe(first.state.world_clock.minute+3);
@@ -90,7 +92,8 @@ test('136 complete journey: arrival, interaction, threshold, call, agreement, re
  await physical('Подождать у двери.');
  const threshold=await view();
  expect(threshold.state.scene_meta.observed_ids).toEqual(['qa_marina']);
- expect(threshold.state.world.characters.qa_marina.location_id).toBeNull();
+ expect(threshold.state.world.characters.qa_marina.location_id).toBe(initial.state.world.characters.qa_marina.location_id);
+ expect(threshold.state.scene_meta.present_ids).not.toContain('qa_marina');
  await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  await phone.getByRole('button',{name:'Катя',exact:true}).click();

@@ -29,6 +29,7 @@ def validate(reports, expected_reports=4):
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('directory')
+    p.add_argument('--shards', type=int, default=4)
     args = p.parse_args()
     reports = [json.loads(f.read_text()) for f in Path(args.directory).rglob('ci-summary.json')]
-    print(f'Validated {validate(reports)} test results across isolated shards')
+    print(f'Validated {validate(reports, args.shards)} test results across isolated shards')

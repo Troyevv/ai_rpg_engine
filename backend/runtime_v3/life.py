@@ -100,7 +100,8 @@ def validate_life_state(state):
 def _proof(resolver, item):
     from backend.runtime_v3.resolver import normalized
     proof = item.get('player_evidence')
-    return (item.get('player_assertion') == 'explicit_choice' and isinstance(proof,str)
+    return ((item.get('player_assertion') == 'explicit_choice' or
+             resolver.scene_version >= 10 and item.get('player_assertion') is None) and isinstance(proof,str)
             and bool(normalized(proof)) and normalized(proof) in normalized(resolver.player_input))
 
 
@@ -167,9 +168,12 @@ def apply_life(resolver, raw):
                                 (years<18 and actor['developmental_stage']=='adult')):
                             raise ValueError('developmental stage contradicts established birth date')
                     if 'life_status' in item:
+                        if old['life_status'] != 'dead' and item['life_status'] == 'dead':
+                            actor.update(death_minute=now, death_date=date)
                         if old['life_status'] == 'dead' and item['life_status'] != 'dead':
                             raise ValueError('death cannot be undone by ordinary extraction; use rollback')
-                        actor['life_fact_id'] = item.get('fact_id')
+                        if 'fact_id' in item or old['life_status'] != item['life_status']:
+                            actor['life_fact_id'] = item.get('fact_id')
                     if is_game_birth(s,key) and any(k in item for k in ('identity_components','display_name')):
                         raise ValueError('birth identity changes require the structured naming lifecycle')
                     if 'identity_components' in item and key == controlled and not _proof(resolver,item):
@@ -239,11 +243,22 @@ def apply_life(resolver, raw):
                         raise ValueError('voluntary relation needs explicit player choice')
                     if old and fields.get('status') == 'closed' and controlled in ids:
                         decision = item.get('decision_actor_id')
-                        if decision not in ids or decision == controlled:
+                        legal_divorce = (resolver.scene_version >= 10 and decision is None and
+                                         old['kind']=='spouse' and fields['outcome']=='divorced')
+                        if not legal_divorce and (decision not in ids or decision == controlled):
                             if not _proof(resolver,item): raise ValueError('closure needs NPC decision or player choice')
                     fields.update(evidence=item['evidence'],source_turn=resolver.turn_id)
                     after = ObjectiveRelation.model_validate(fields).model_dump()
                     s['objective_relations'][key] = after
+                    if resolver.scene_version >= 10 and after['kind']=='spouse' and after['status']=='active':
+                        explicit_closures = {r.get('id') for r in raw.records[section] if r.get('status')=='closed'}
+                        for phase in s['objective_relations'].values():
+                            if (phase['id'] not in explicit_closures and phase['kind']=='engaged'
+                                    and phase['status']=='active' and (phase['source_id'],phase['target_id'])==ids):
+                                prior = deepcopy(phase)
+                                phase.update(status='closed', outcome='superseded', until=now, until_date=date,
+                                             closure_fact_id=after['fact_id'])
+                                _transition(resolver,section,phase['id'],prior,phase,item)
                 validate_life_state(s)
                 _transition(resolver,section,key,old,after,item)
             except (ValueError,TypeError,KeyError,ValidationError) as exc:

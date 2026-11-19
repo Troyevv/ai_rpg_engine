@@ -151,7 +151,7 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits','procedural_portrait','portrait_mode'):
+        for field in ('death_date','death_minute','life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits','procedural_portrait','portrait_mode'):
             actor.pop(field,None)
     from backend.runtime_v3.personality import visible_item
     # One bounded-per-actor projection pass, not NPC-count × History scans.
@@ -231,7 +231,7 @@ def ui_view(snapshot, history=None):
     result['phone'] = phone_projection(dict(snapshot,world_state=state))
     result['runtime_version']=3
     report = snapshot.get('last_long_term_advance')
-    result['last_long_term_advance'] = ({k: deepcopy(report[k]) for k in ('start','requested_target','actual_target','interruption','llm_calls','max_llm_calls','decisions','accepted','unresolved') if k in report} if report else None)
+    result['last_long_term_advance'] = ({k: deepcopy(report[k]) for k in ('start','requested_target','actual_target','interruption','llm_calls','max_llm_calls','decisions','accepted','unresolved','status','coverage') if k in report} if report else None)
     visible_report = result['last_long_term_advance']
     if visible_report:
         visible_report.update(public_advance_choices(visible_report.get('interruption'), visible_report.get('decisions', [])))

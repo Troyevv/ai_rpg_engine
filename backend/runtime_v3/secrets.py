@@ -46,6 +46,8 @@ def acquire_disclosures(state, event, actor, batch):
     class Perception:
         observed=True
         mode='turn'
+        consequence_first=False
+        semantic_slice=False
         protected_knowledge_actor_ids=set()
         def __init__(self):
             self.state=state
@@ -53,7 +55,7 @@ def acquire_disclosures(state, event, actor, batch):
             self.turn_id=state['meta']['turn_id']
         def records(self, raw, section):
             return enumerate(raw)
-        def typed(self, model, value, *args):
+        def typed(self, model, value, *args, **kwargs):
             return model.model_validate(value).model_dump()
         def warn(self, *args, **kwargs):
             # A later read must not revive retired beliefs or overwrite a newer
@@ -252,6 +254,10 @@ def initialize_authored_secrets(world):
     transitions remain authoritative, including refuted/forgotten knowledge.
     """
     from backend.runtime_v3.models import Knowledge
+    pairs = {}
+    for record in world.get('knowledge', {}).values():
+        if isinstance(record, dict):
+            pairs.setdefault((record.get('actor_id'), record.get('fact_id')), []).append(record)
     for fid, fact in world.get('facts', {}).items():
         keepers = fact.get('secret_keeper_ids', [])
         if not isinstance(keepers, list) or any(not isinstance(cid, str) for cid in keepers):
@@ -262,11 +268,15 @@ def initialize_authored_secrets(world):
             raise ValueError('Собственная тайна должна быть сюжетной.')
         for cid in keepers:
             key = cid + ':' + fid
-            prior = world['knowledge'].get(key)
-            if prior and prior.get('status') != 'known':
+            prior = pairs.get((cid, fid), [])
+            if any(record.get('status') != 'known' for record in prior):
                 raise ValueError('Собственная известная стартовая тайна противоречит Knowledge: ' + key)
-            if prior is None:
-                world['knowledge'][key] = Knowledge(actor_id=cid, fact_id=fid, confirmed_once=True).model_dump()
+            if not prior:
+                if key in world['knowledge']:
+                    raise ValueError('Ключ Knowledge принадлежит другой паре: ' + key)
+                record = Knowledge(actor_id=cid, fact_id=fid, confirmed_once=True).model_dump()
+                world['knowledge'][key] = record
+                pairs[(cid, fid)] = [record]
 
 
 def secret_category(state, fact, cid):

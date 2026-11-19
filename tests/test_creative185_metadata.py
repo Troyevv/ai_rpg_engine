@@ -93,7 +93,7 @@ def test_existing_revision_and_nested_provenance_remain_protected():
     walk(prompt_schema())
 
 
-def test_legacy_rejection_resume_review_confirm_and_versions(api):
+def test_optional_creative_rejection_keeps_valid_base_review_and_confirmation(api):
     client,app=api;calls=[];data=saved()
     def stream(**kw):
         system=kw['messages'][0]['content'];calls.append(system)
@@ -109,30 +109,24 @@ def test_legacy_rejection_resume_review_confirm_and_versions(api):
         with patch.object(draft_creative,'VALIDATION_VERSION',1),patch.object(draft_creative,'apply_proposal',side_effect=ValueError('Модель не может назначать серверное происхождение: revision')):
             r=client.post(url+'/generate',json=dict(revision=0,text='Сосновка.',config=dict(REMOTE,context_length=131072,max_tokens=20000),api_key='offline'))
             assert r.status_code==200,r.text
-            jid=r.json()['id'];assert wait_job(client,jid)['status']=='error'
-        draft=client.get(url+'?author=true').json();raw=client.get(url+'/raw').json()
-        assert raw['creative']['correction_complete'] and len(calls)==2
-        old_version=draft['version_id'];old_candidate=draft['candidate'];old_requests=deepcopy(raw['requests'])
-        r=client.post(url+'/resume',json=dict(revision=draft['revision'],api_key='offline'))
-        assert r.status_code==200,r.text
-        job=wait_job(client,jid);assert job['status']=='saved',job
+            jid=r.json()['id'];assert wait_job(client,jid)['status']=='saved'
+    # Current production deliberately continues from the structurally valid base.
+    # Historical rejected-journal revalidation remains tested above without calls.
     assert len(calls)==3 and calls[-1].startswith(draft_completeness.MARKER)
-    draft=client.get(url+'?author=true').json();raw2=client.get(url+'/raw').json()
-    assert draft['review']['status']=='completed' and raw2['creative']['status']=='applied'
-    assert len(raw2['creative']['proposal']['changes'])==7
-    assert raw2['creative']['corrections']==[]
-    assert any(v['id']==old_version for v in draft['history'])
-    assert len(raw2['requests'])==len(old_requests)+1
-    assert raw2['actual_tokens']==raw['actual_tokens']+120
-    assert old_candidate['world']['knowledge']==data['candidate']['world']['knowledge']
+    draft=client.get(url+'?author=true').json();raw=client.get(url+'/raw').json()
+    assert draft['review']['status']=='completed'
+    assert raw['creative']['status']=='rejected' and raw['creative']['correction_complete']
+    assert raw['creative']['corrections']==[]
+    journal=json.loads(app.state.repository.preparation_job(jid)['response_journal'])
+    assert json.loads(journal['candidate_text'])['world']['knowledge']==data['candidate']['world']['knowledge']
+    assert 'loc_sonya_room' not in {row['id'] for row in draft['state']['locations']}
     result=client.post(url+'/confirm',json=dict(revision=draft['revision'],version_id=draft['version_id'],accept_warnings=True))
     assert result.status_code==200,result.text
     sid=result.json()['save'];snap=app.state.repository.get_snapshot(sid)['world_state']
-    assert snap['knowledge']['sonya:fact_house_repair']['revision']==0
-    assert snap['knowledge']['ilya:fact_house_repair']['status']=='unknown'
-    assert 'loc_sonya_room' in snap['locations'] and 'poss_sonya_tablet' in snap['possessions']
+    assert 'loc_sonya_room' not in snap['locations'] and 'poss_sonya_tablet' not in snap['possessions']
     assert client.get(f'/api/saves/{sid}').status_code==200
     assert client.post(url+'/confirm',json=dict(revision=draft['revision'],version_id=draft['version_id'],accept_warnings=True)).json()['save']==sid
+
 
 
 @pytest.mark.parametrize('root',['characters','locations'])

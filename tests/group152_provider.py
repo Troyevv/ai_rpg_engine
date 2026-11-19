@@ -48,7 +48,7 @@ def response(messages, structured=False):
         return json.dumps(dict(action=dict(actor_id=option['actor_id'],action='read',event_id=option['event_id'],basis_ids=option['basis_ids']) if option else None))
     if system.startswith('Remote semantic extraction/'):
         data=json.loads(messages[1]['content'])
-        value=dict(player_agency=dict(status='preserved', actions=[]),final_scene=data['final_scene'])
+        value=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=data['final_scene'])
         answers=[e for e in data['accepted_messages'] if e['content'] in (ANSWER,ACCEPT) and e['sender_id']==data['controlled_actor_id']]
         if answers:
             value['group_response_changes']=[dict(request_event_id=r['event_id'],response_event_id=answers[-1]['id'],
@@ -66,6 +66,6 @@ def response(messages, structured=False):
     if not structured:
         return 'За окном шёл дождь. В комнате было тихо.'
     camera=current['camera']
-    return json.dumps(dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=camera['location_id'],
+    return json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]),final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if any('Фоновая симуляция:' in m['content'] for m in messages) else 31),
         choices=[dict(action='Посмотреть в окно',speech=''),dict(action='Рассмотреть карту',speech='')]),ensure_ascii=False)

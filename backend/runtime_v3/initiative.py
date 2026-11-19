@@ -84,7 +84,7 @@ def validate_actions(resolver, raw, events):
         event = events.get(claim.source_event_id)
         if cid == external or not event or cid not in event['participants'] or not set(claim.target_ids) <= set(event['participants']):
             warning('initiative_event_invalid'); continue
-        if claim.phase in ('accept', 'answer', 'refuse', 'end', 'redirect'):
+        if resolver.scene_version < 10 and claim.phase in ('accept', 'answer', 'refuse', 'end', 'redirect'):
             # These phases can attest to an NPC decision in continuity. Bind the
             # action to this Event's evidence before discarding its duplicate.
             # Extraction owns the phase's meaning; the Event may summarize prose.
@@ -99,7 +99,7 @@ def validate_actions(resolver, raw, events):
             resolver.warn('scene_actions', index, 'Неизвестная ссылка ответа; аннотация пропущена.', code='initiative_response_reference_invalid'); continue
         if claim.response == 'player_supplied':
             quote = normalized(claim.player_evidence)
-            if external not in claim.target_ids or not quote or quote not in normalized(resolver.player_input):
+            if external not in claim.target_ids or resolver.scene_version < 10 and (not quote or quote not in normalized(resolver.player_input)):
                 warning('initiative_player_evidence_required'); continue
         invalid_knowledge = any(
             (k := resolver.before['knowledge'].get(key)) is None or k['actor_id'] != cid

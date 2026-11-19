@@ -10,7 +10,7 @@ from backend.services.timeline import parse_time
 
 def wire(payload,narrative,before=None):
     if not isinstance(payload,dict):return deepcopy(payload)
-    if 'final_scene' in payload:return reviewed(payload)
+    if 'final_scene' in payload:return reviewed(payload, choice_source=narrative)
     if 'scene' not in payload:return deepcopy(payload)
     from canonical_fixture import canonical
     p=canonical(payload);scene=p['scene'];delta=p['world_delta']
@@ -33,7 +33,7 @@ def wire(payload,narrative,before=None):
     for fact in result.get('facts',[]):fact['visibility']='secret' if fact.get('secret') else 'public'
     for scheduled in result.get('scheduled_event_changes',[]):
         if 'participants' in scheduled:scheduled['character_ids']=scheduled['participants']
-    return reviewed(result)
+    return reviewed(result, choice_source=narrative)
 
 
 def setup_scenario(repo,sid,present=None,observer=False):
@@ -73,7 +73,7 @@ def execute(repo,job,payload,narrative,repaired=None):
     return calls
 
 
-def reviewed(payload):
+def reviewed(payload, *, choice_source=None):
     """Protocol adapter for pre-232 scripted scenarios reviewed by their authors.
 
     These fixtures do not claim completed player interactions. New agency tests
@@ -81,7 +81,11 @@ def reviewed(payload):
     """
     raw = deepcopy(payload)
     if isinstance(raw, dict) and 'final_scene' in raw:
-        raw.setdefault('player_agency', dict(status='preserved', actions=[]))
+        raw.setdefault('player_agency', dict(status='preserved', actions=[], narrative_audit=[]))
+        if choice_source:
+            # Opt-in provenance for explicitly authored synthetic wire fixtures.
+            for choice in raw.get('choices', []):
+                choice.setdefault('grounding', dict(fact_ids=[], from_scene=True))
     return raw
 
 
@@ -89,7 +93,24 @@ def player_action(raw, actor, targets, quote, event_id, action_id='input-1'):
     """Explicit fixture declaration, no parsing of language or inferred targets."""
     event = next(e for e in raw['events'] if e['id'] == event_id)
     event.update(actor_id=actor, target_ids=targets, player_action_id=action_id, player_evidence=quote)
-    raw['player_agency'] = dict(status='preserved', actions=[dict(
+    raw['player_agency'] = dict(status='preserved', narrative_audit=[dict(narrative_evidence=event.get('text') or quote, classification='authorized', player_action_id=action_id)], actions=[dict(
         id=action_id, player_evidence=quote, target_ids=targets,
-        narrative_target_ids=targets, outcome='completed', meaning='preserved')])
+        narrative_target_ids=targets, outcome='completed', meaning='preserved', target_mode='interaction')])
+    return raw
+
+
+def arrival_sources(raw):
+    """Complete explicitly authored synthetic routes for the current contract.
+
+    Opt-in fixture builder only: never used by provider adapters, raw archive
+    replays or negative provenance tests. Each declared leg gets its own Event.
+    """
+    for index, move in enumerate(raw.get('movements', [])):
+        if move.get('source_event_id'):
+            continue
+        source = f'fixture_arrival_{index}'
+        move.update(source_event_id=source, assertion='completed_arrival')
+        raw.setdefault('events', []).append(dict(id=source, text=move.get('evidence') or 'Подтверждённое прибытие.',
+            participants=[move['actor_id']], witnesses=[], medium='action',
+            location_id=move['to_location_id'], **({'order':move['order']} if 'order' in move else {})))
     return raw

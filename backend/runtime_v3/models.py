@@ -309,6 +309,7 @@ class PersonalityItem(StrictModel):
 
 
 class DevelopmentEvidence(StrictModel):
+    theme: str | None = Field(default=None, max_length=100)
     id: str
     source_event_id: str
     source_turn: int = Field(ge=0)
@@ -511,6 +512,8 @@ class Character(StrictModel):
     situation: str = ''
     birth_date: str | None = None
     life_status: Literal['alive', 'dead', 'missing', 'unknown'] = 'unknown'
+    death_date: str | None = None
+    death_minute: int | None = Field(default=None, ge=0)
     life_fact_id: str | None = None
     display_name: str | None = Field(default=None, min_length=1)
     name_history: list[NameChange] = Field(default_factory=list)
@@ -545,6 +548,14 @@ class Character(StrictModel):
             value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value
+
+    @model_serializer(mode='wrap')
+    def _recorded_death_time(self, handler):
+        result = handler(self)
+        for key in ('death_date','death_minute'):
+            if result.get(key) is None:
+                result.pop(key,None)
+        return result
 
 
 class Location(StrictModel):

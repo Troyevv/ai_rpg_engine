@@ -23,6 +23,7 @@ def install(app, repo, credentials, public_job):
         from backend.runtime_v3.repository import advance_receipt_reader
         from backend.runtime_v3.milestones import reader
 
+        from backend.runtime_v3.player_actions import EXTRACTION_VERSION
         p = plan(
             snapshot,
             body,
@@ -31,7 +32,7 @@ def install(app, repo, credentials, public_job):
                     repo, snapshot.get("history_head")
                 ),
                 "_milestone_query": reader(repo, snapshot.get("history_head")),
-            },
+            }, version=EXTRACTION_VERSION,
         )
         return dict(
             revision=saved["revision"],

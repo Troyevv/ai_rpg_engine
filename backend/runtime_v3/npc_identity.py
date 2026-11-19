@@ -7,7 +7,7 @@ from copy import deepcopy
 from backend.runtime_v3.models import Character, assert_world_state_v3_invariants
 from backend.services.draft_initial import ACTOR_FIELDS, runtime_schema
 
-TECHNICAL = {'birth_provenance','birth_date_provenance','name_history','life_fact_id','parentage_complete_fact_id'}
+TECHNICAL = {'death_date','death_minute','birth_provenance','birth_date_provenance','name_history','life_fact_id','parentage_complete_fact_id'}
 PROFILE_FIELDS = {'appearance','personality','values'}
 INITIAL_FIELDS = tuple(f for f in ACTOR_FIELDS if f not in TECHNICAL) + ('situation','goals','intentions','obligations','emotion')
 EDITABLE_FIELDS = tuple(f for f in INITIAL_FIELDS if f not in PROFILE_FIELDS)

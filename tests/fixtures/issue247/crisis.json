@@ -1,0 +1,2115 @@
+{
+  "archive_sha256": "e19a0b07ea8a76223c16c6b5805f3e7c9b85733aea0a5828719d0522e5176a36",
+  "case": "crisis",
+  "job_id": "e3b9501fc2494c6d9a8bb9c6a35206b6",
+  "before": {
+    "contacts": {},
+    "conversations": {},
+    "remote_events": {},
+    "meta": {
+      "genre": {
+        "primary_genre": "custom",
+        "secondary_genres": [],
+        "custom_genre": "Повседневная история"
+      },
+      "weather": null,
+      "npc_expressiveness": "realistic",
+      "communication": {
+        "profile_version": 1,
+        "preset": "unspecified",
+        "letter": false,
+        "courier": false,
+        "telegram": false,
+        "landline": false,
+        "magic": false,
+        "delivery_policy": {},
+        "delivery_minutes": {},
+        "author_note": "",
+        "text_message": false,
+        "voice_call": false,
+        "presentation": "none",
+        "region": "",
+        "ring_timeout_minutes": 2,
+        "emergency_numbers": {}
+      },
+      "interaction_focus": "physical",
+      "narrative_pacing": {
+        "preset": "moderate",
+        "intensity": 0.45,
+        "quiet_minutes": 360,
+        "pressure_limit": 1.5,
+        "disruption": 0.3,
+        "escalation": 0.4,
+        "thread_cap": 4,
+        "candidate_budget": 2,
+        "relevance_floor": 0.6,
+        "extra_llm_calls": 0
+      },
+      "narrative_risk": {
+        "preset": "realistic",
+        "minor_illness": true,
+        "serious_illness": true,
+        "injury": true,
+        "permanent_injury": false,
+        "relationship_loss": true,
+        "career_loss": true,
+        "life_role_loss": true,
+        "major_accident": true,
+        "npc_death": true,
+        "protagonist_death": false
+      },
+      "outcome_preference": "natural",
+      "pacing_recent": [],
+      "current_protagonist_id": "qa_nina",
+      "protagonist_required": false,
+      "protagonist_periods": [
+        {
+          "actor_id": "qa_kirill",
+          "since": 540,
+          "until": 540,
+          "operation_id": "legacy"
+        },
+        {
+          "actor_id": "qa_vera",
+          "since": 540,
+          "until": 558,
+          "operation_id": "55c4b77c-e4ae-410e-9f91-0e951319729a"
+        },
+        {
+          "actor_id": "qa_nina",
+          "since": 558,
+          "until": null,
+          "operation_id": "2d5ea95b-c3cd-47b7-ac1a-16a4f2deaaa8"
+        }
+      ],
+      "schema_version": 3,
+      "calendar": {
+        "start_minute": 540,
+        "start_weekday": 0,
+        "start_date": "2026-10-05",
+        "profile": {
+          "id": "two-shores",
+          "system": "gregorian",
+          "month_lengths": [],
+          "month_names": [],
+          "weekday_names": [],
+          "observances": [
+            {
+              "id": "map-day",
+              "name": "День старых карт",
+              "month": 10,
+              "day": 5,
+              "character_ids": []
+            }
+          ],
+          "seasons": []
+        }
+      },
+      "turn_id": 10,
+      "world_time": 558
+    },
+    "camera": {
+      "subject_id": "qa_nina",
+      "pov_actor_id": "qa_nina",
+      "location_id": "location_cc730cd3a861be83e138",
+      "present_character_ids": [
+        "qa_asya",
+        "qa_nina",
+        "qa_marina",
+        "qa_zoya"
+      ],
+      "observed_character_ids": [],
+      "controlled_actor_id": "qa_nina",
+      "mode": "actor",
+      "situation": "Находится в месте, указанном в карточке состояния.",
+      "remote_interactions": []
+    },
+    "characters": {
+      "qa_kirill": {
+        "id": "qa_kirill",
+        "location_id": "location_9ff4b311a7fb45cb4b93",
+        "situation": "Утро в доме Лариных. Кирилл, Вера и Тимур сидят у стола. Тимур положил рядом фотографии старой карты; разговор ещё не начался.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Кирилл Ларин",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "4c985efb6c562bbfddeb26f488dac8c3",
+          "form": "human",
+          "stage": "adult",
+          "face": 6,
+          "hair": 0,
+          "skin": 3,
+          "eyes": 6,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 1,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_vera": {
+        "id": "qa_vera",
+        "location_id": "location_9ff4b311a7fb45cb4b93",
+        "situation": "Утро в доме Лариных. Тимур передал ответ Олега: рука ноет, но терпимо; за физическую работу он не возьмётся, советом поможет. Вера у двери, Кирилл без сознания.",
+        "birth_date": "1993-10-06",
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Вера Ларина",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "e85a08fa45e5ccff4f20e5c8c8b8984b",
+          "form": "human",
+          "stage": "adult",
+          "face": 1,
+          "hair": 2,
+          "skin": 1,
+          "eyes": 5,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 1,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "Спокойное любопытство.",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_asya": {
+        "id": "qa_asya",
+        "location_id": "location_cc730cd3a861be83e138",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": "2017-02-12",
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Ася Ларина",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "child",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "5b6c871721831b4740ae51d46191f0f0",
+          "form": "human",
+          "stage": "child",
+          "face": 0,
+          "hair": 4,
+          "skin": 2,
+          "eyes": 2,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 6,
+          "visual_age": "child"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_nina": {
+        "id": "qa_nina",
+        "location_id": "location_cc730cd3a861be83e138",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Нина Ларина",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "44153a20ace822a0a4f59104bf71dbb8",
+          "form": "human",
+          "stage": "adult",
+          "face": 5,
+          "hair": 5,
+          "skin": 2,
+          "eyes": 4,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 6,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_pavel": {
+        "id": "qa_pavel",
+        "location_id": "location_b514e5cdf67e6f435db4",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Павел Ларин",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "9d97aa7ab4835261eb2c1f30d80ca00a",
+          "form": "human",
+          "stage": "adult",
+          "face": 3,
+          "hair": 7,
+          "skin": 2,
+          "eyes": 3,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 5,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_timur": {
+        "id": "qa_timur",
+        "location_id": "location_9ff4b311a7fb45cb4b93",
+        "situation": "Утро в доме Лариных. Тимур передал Вере ответ Олега о руке и о готовности помочь советом; телефон у него в руке.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Тимур Серов",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "bd9f6bc67caf6dbac0ea034e26d700d0",
+          "form": "human",
+          "stage": "adult",
+          "face": 0,
+          "hair": 7,
+          "skin": 2,
+          "eyes": 2,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 4,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [
+          {
+            "id": "intentions_c2c23af6c5650d901f36",
+            "text": "Показать Кириллу фотографии карты.",
+            "status": "completed",
+            "source_sequence": 1,
+            "evidence": "Тимур показал фотографии карты и ответил на вопросы о Кирилле.",
+            "due_minute": null,
+            "revision": 1,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "obligations": []
+      },
+      "qa_oleg": {
+        "id": "qa_oleg",
+        "location_id": "location_567f2d7db666cb5e4abf",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Олег Рудин",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "6b2858cd01671b672f3b424552889d12",
+          "form": "human",
+          "stage": "adult",
+          "face": 2,
+          "hair": 0,
+          "skin": 4,
+          "eyes": 2,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 6,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [
+          {
+            "id": "goals_3e86cd4df24c1e3e6eb1",
+            "text": "Подготовить старую карту к реставрации.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_marina": {
+        "id": "qa_marina",
+        "location_id": "location_cc730cd3a861be83e138",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Марина Белова",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "888fcf359f1676649f2224196d97e02b",
+          "form": "human",
+          "stage": "adult",
+          "face": 3,
+          "hair": 7,
+          "skin": 4,
+          "eyes": 4,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 6,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_boris": {
+        "id": "qa_boris",
+        "location_id": "location_b514e5cdf67e6f435db4",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Борис Туманов",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "682654ae1a43f52b1af6ea138c9b27d5",
+          "form": "human",
+          "stage": "adult",
+          "face": 6,
+          "hair": 6,
+          "skin": 0,
+          "eyes": 6,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 0,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_zoya": {
+        "id": "qa_zoya",
+        "location_id": "location_cc730cd3a861be83e138",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Зоя Лесная",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "b9e53749f5933bd178edd47947f834ad",
+          "form": "human",
+          "stage": "adult",
+          "face": 3,
+          "hair": 5,
+          "skin": 6,
+          "eyes": 3,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 3,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_elena": {
+        "id": "qa_elena",
+        "location_id": "location_1e50dcb115bb3f6dea60",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Елена Ветрова",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "0861987ae2efbfc9051bf71449beb6fe",
+          "form": "human",
+          "stage": "adult",
+          "face": 1,
+          "hair": 1,
+          "skin": 5,
+          "eyes": 3,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 2,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      },
+      "qa_roman": {
+        "id": "qa_roman",
+        "location_id": "location_6ff460b0f08e78b9397f",
+        "situation": "Находится в месте, указанном в карточке состояния.",
+        "birth_date": null,
+        "life_status": "alive",
+        "life_fact_id": null,
+        "display_name": "Роман Луговой",
+        "name_history": [],
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "parentage_complete_fact_id": null,
+        "reproductive_capability": "unknown",
+        "biological_sex": null,
+        "identity_components": {},
+        "birth_provenance": {},
+        "birth_date_provenance": {},
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "procedural_portrait": {
+          "version": 1,
+          "seed": "bfea51ffe684ddfcb30c02e199f6121c",
+          "form": "human",
+          "stage": "adult",
+          "face": 2,
+          "hair": 2,
+          "skin": 4,
+          "eyes": 3,
+          "clothing": 0,
+          "accessory": 0,
+          "palette": 4,
+          "visual_age": "young_adult"
+        },
+        "portrait_mode": "auto",
+        "portraits": [],
+        "personality": {
+          "items": {
+            "traits": {
+              "field": "traits",
+              "text": "Внимателен к деталям, ценит ясность и доброжелательный разговор.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            },
+            "communication": {
+              "field": "communication",
+              "text": "Спокойные короткие фразы, уточняющие вопросы.",
+              "revision": 0,
+              "source_ids": [],
+              "witnesses": [],
+              "fact_ids": []
+            }
+          },
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "physical_state": "",
+        "emotion": "",
+        "emotion_source_sequence": null,
+        "goals": [],
+        "intentions": [],
+        "obligations": []
+      }
+    },
+    "locations": {
+      "location_9ff4b311a7fb45cb4b93": {
+        "id": "location_9ff4b311a7fb45cb4b93",
+        "name": "Озёрск — дом Лариных",
+        "description": "Дом в Озёрске, Северный край. Общий стол у окна.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      },
+      "location_567f2d7db666cb5e4abf": {
+        "id": "location_567f2d7db666cb5e4abf",
+        "name": "Озёрск — мастерская",
+        "description": "Мастерская Озёрска, Северный край. Рабочий стол для реставрации.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      },
+      "location_cc730cd3a861be83e138": {
+        "id": "location_cc730cd3a861be83e138",
+        "name": "Озёрск — библиотека",
+        "description": "Библиотека Озёрска, Северный край. Читальный зал и стол для рисования.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      },
+      "location_b514e5cdf67e6f435db4": {
+        "id": "location_b514e5cdf67e6f435db4",
+        "name": "Озёрск — пристань",
+        "description": "Пристань Озёрска, Северный край. Здесь ремонтируют лодки.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      },
+      "location_1e50dcb115bb3f6dea60": {
+        "id": "location_1e50dcb115bb3f6dea60",
+        "name": "Речной Посад — сад",
+        "description": "Сад Речного Посада, Южная долина. Здесь живёт Елена.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      },
+      "location_6ff460b0f08e78b9397f": {
+        "id": "location_6ff460b0f08e78b9397f",
+        "name": "Речной Посад — кафе",
+        "description": "Кафе Речного Посада, Южная долина. Здесь работает Роман.",
+        "parent_id": null,
+        "kind": "unknown",
+        "aliases": []
+      }
+    },
+    "facts": {
+      "qa_library_open": {
+        "id": "qa_library_open",
+        "text": "Библиотека Озёрска вновь открыта после ремонта.",
+        "visibility": "public",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [],
+        "claim": null
+      },
+      "qa_private_letter": {
+        "id": "qa_private_letter",
+        "text": "Олег получил предложение работать в Речном Посаде и ещё не ответил.",
+        "visibility": "secret",
+        "story_secret": true,
+        "secret_subject_ids": [
+          "qa_oleg"
+        ],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_oleg"
+        ],
+        "claim": null
+      },
+      "qa_marriage_fact": {
+        "id": "qa_marriage_fact",
+        "text": "Установленная связь: spouse, qa_kirill, qa_vera.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_kirill",
+          "qa_vera"
+        ],
+        "claim": null
+      },
+      "qa_father_fact": {
+        "id": "qa_father_fact",
+        "text": "Установленная связь: parent, qa_kirill, qa_asya.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_kirill",
+          "qa_asya"
+        ],
+        "claim": null
+      },
+      "qa_mother_fact": {
+        "id": "qa_mother_fact",
+        "text": "Установленная связь: parent, qa_vera, qa_asya.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_vera",
+          "qa_asya"
+        ],
+        "claim": null
+      },
+      "qa_grandmother_fact": {
+        "id": "qa_grandmother_fact",
+        "text": "Установленная связь: parent, qa_nina, qa_kirill.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_nina",
+          "qa_kirill"
+        ],
+        "claim": null
+      },
+      "qa_grandfather_fact": {
+        "id": "qa_grandfather_fact",
+        "text": "Установленная связь: parent, qa_pavel, qa_kirill.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_pavel",
+          "qa_kirill"
+        ],
+        "claim": null
+      },
+      "qa_friend_fact": {
+        "id": "qa_friend_fact",
+        "text": "Установленная связь: friend, qa_kirill, qa_timur.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_kirill",
+          "qa_timur"
+        ],
+        "claim": null
+      },
+      "qa_secret_parent_fact": {
+        "id": "qa_secret_parent_fact",
+        "text": "Установленная связь: parent, qa_elena, qa_zoya.",
+        "visibility": "secret",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_elena",
+          "qa_zoya"
+        ],
+        "claim": null
+      },
+      "fact_qa_ambulance_called": {
+        "id": "fact_qa_ambulance_called",
+        "text": "Скорую к Кириллу вызвали сразу, как стало ясно, что он не отвечает, ещё до приезда Тимура; вызов приняли. Кто именно звонил, Тимуру неизвестно.",
+        "visibility": "public",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_kirill",
+          "qa_timur",
+          "qa_vera"
+        ],
+        "claim": {
+          "subject_id": "qa_kirill",
+          "predicate": "ambulance_called",
+          "value": "вызов принят до приезда Тимура; звонивший неизвестен",
+          "scope": ""
+        }
+      },
+      "fact_qa_kirill_condition_known": {
+        "id": "fact_qa_kirill_condition_known",
+        "text": "По сведениям Тимура, Кирилл без сознания, его не оставили одного, врачи пока ничего определённого не сказали.",
+        "visibility": "public",
+        "story_secret": false,
+        "secret_subject_ids": [],
+        "secret_keeper_ids": [],
+        "secret_biography_ids": [],
+        "secret_existence": "hidden",
+        "origin_remote_event_id": null,
+        "character_ids": [
+          "qa_kirill",
+          "qa_timur",
+          "qa_vera"
+        ],
+        "claim": {
+          "subject_id": "qa_kirill",
+          "predicate": "known_condition",
+          "value": "без сознания, не оставлен один, врачи без определённого заключения",
+          "scope": ""
+        }
+      }
+    },
+    "knowledge": {
+      "qa_kirill:qa_library_open": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_library_open",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_read_notice",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_library_open": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_library_open",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_read_notice",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_timur:qa_library_open": {
+        "confirmed_once": false,
+        "actor_id": "qa_timur",
+        "fact_id": "qa_library_open",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_read_notice",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_oleg:qa_private_letter": {
+        "confirmed_once": false,
+        "actor_id": "qa_oleg",
+        "fact_id": "qa_private_letter",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_read_letter",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_marriage_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_marriage_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_marriage_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_marriage_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_marriage_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_marriage_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_father_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_father_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_father_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_father_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_father_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_father_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_mother_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_mother_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_mother_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_mother_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_mother_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_mother_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_grandmother_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_grandmother_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_grandmother_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_grandmother_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_grandmother_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_grandmother_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_grandfather_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_grandfather_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_grandfather_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_grandfather_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_grandfather_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_grandfather_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_kirill:qa_friend_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_kirill",
+        "fact_id": "qa_friend_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_friend_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_vera:qa_friend_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_vera",
+        "fact_id": "qa_friend_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_friend_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      },
+      "qa_elena:qa_secret_parent_fact": {
+        "confirmed_once": false,
+        "actor_id": "qa_elena",
+        "fact_id": "qa_secret_parent_fact",
+        "status": "known",
+        "revision": 0,
+        "source_event_id": "qa_secret_parent_event",
+        "evidence": "",
+        "source_turn": null,
+        "replaced_by": null
+      }
+    },
+    "relationships": {
+      "qa_kirill:qa_vera": {
+        "source_id": "qa_kirill",
+        "target_id": "qa_vera",
+        "dimensions": {
+          "trust": 70.0,
+          "affection": 65.0
+        },
+        "context": "Кирилл доверяет Вере."
+      },
+      "qa_vera:qa_kirill": {
+        "source_id": "qa_vera",
+        "target_id": "qa_kirill",
+        "dimensions": {
+          "trust": 60.0,
+          "affection": 75.0
+        },
+        "context": "Вера тепло относится к Кириллу."
+      },
+      "qa_kirill:qa_timur": {
+        "source_id": "qa_kirill",
+        "target_id": "qa_timur",
+        "dimensions": {
+          "trust": 55.0
+        },
+        "context": "Давняя дружба."
+      },
+      "qa_oleg:qa_kirill": {
+        "source_id": "qa_oleg",
+        "target_id": "qa_kirill",
+        "dimensions": {
+          "trust": 40.0
+        },
+        "context": "Уважает аккуратность коллеги."
+      },
+      "qa_vera:qa_timur": {
+        "source_id": "qa_vera",
+        "target_id": "qa_timur",
+        "dimensions": {
+          "trust": 5.0
+        },
+        "context": "Вера ценит, что Тимур обещал передавать только подтверждённые сведения и предложил помощь."
+      }
+    },
+    "threads": {
+      "qa_map": {
+        "discovered_by": null,
+        "source_event_id": null,
+        "stakes_for": [],
+        "favorable_path": null,
+        "id": "qa_map",
+        "description": "Реставрация старой карты двух берегов.",
+        "character_ids": [
+          "qa_kirill",
+          "qa_timur",
+          "qa_oleg"
+        ],
+        "status": "active",
+        "state": "",
+        "relevance": 0.6
+      }
+    },
+    "scheduled_events": {},
+    "objective_relations": {
+      "qa_marriage": {
+        "id": "qa_marriage",
+        "kind": "spouse",
+        "source_id": "qa_kirill",
+        "target_id": "qa_vera",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_marriage_fact",
+        "closure_fact_id": null
+      },
+      "qa_father": {
+        "id": "qa_father",
+        "kind": "parent",
+        "source_id": "qa_kirill",
+        "target_id": "qa_asya",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_father_fact",
+        "closure_fact_id": null
+      },
+      "qa_mother": {
+        "id": "qa_mother",
+        "kind": "parent",
+        "source_id": "qa_vera",
+        "target_id": "qa_asya",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_mother_fact",
+        "closure_fact_id": null
+      },
+      "qa_grandmother": {
+        "id": "qa_grandmother",
+        "kind": "parent",
+        "source_id": "qa_nina",
+        "target_id": "qa_kirill",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_grandmother_fact",
+        "closure_fact_id": null
+      },
+      "qa_grandfather": {
+        "id": "qa_grandfather",
+        "kind": "parent",
+        "source_id": "qa_pavel",
+        "target_id": "qa_kirill",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_grandfather_fact",
+        "closure_fact_id": null
+      },
+      "qa_friend": {
+        "id": "qa_friend",
+        "kind": "friend",
+        "source_id": "qa_kirill",
+        "target_id": "qa_timur",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_friend_fact",
+        "closure_fact_id": null
+      },
+      "qa_secret_parent": {
+        "id": "qa_secret_parent",
+        "kind": "parent",
+        "source_id": "qa_elena",
+        "target_id": "qa_zoya",
+        "status": "active",
+        "since": 0,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "",
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": "qa_secret_parent_fact",
+        "closure_fact_id": null
+      }
+    },
+    "conditions": {
+      "qa_hand_injury": {
+        "id": "qa_hand_injury",
+        "actor_id": "qa_oleg",
+        "description": "Восстановление после травмы руки.",
+        "status": "active",
+        "duration": "temporary",
+        "effects": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": false,
+          "can_speak": null,
+          "can_move": null
+        },
+        "since": 0,
+        "until": null,
+        "evidence": "Исходные сведения QA.",
+        "source_turn": 0,
+        "fact_id": null
+      },
+      "qa_unconscious": {
+        "id": "qa_unconscious",
+        "actor_id": "qa_kirill",
+        "description": "Кирилл без сознания; исход ещё не установлен.",
+        "status": "active",
+        "duration": "temporary",
+        "effects": {
+          "conscious": false,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "since": 540,
+        "until": null,
+        "evidence": "Установленное исходное состояние QA.",
+        "source_turn": 0,
+        "fact_id": null
+      },
+      "qa_leg": {
+        "id": "qa_leg",
+        "actor_id": "qa_kirill",
+        "description": "У Кирилла сохраняется ограничение движения.",
+        "status": "active",
+        "duration": "persistent",
+        "effects": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": false
+        },
+        "since": 540,
+        "until": null,
+        "evidence": "Установленное исходное состояние QA.",
+        "source_turn": 0,
+        "fact_id": null
+      }
+    },
+    "residences": {},
+    "roles": {},
+    "organizations": {},
+    "reproduction_policy": {
+      "protected": 0.01,
+      "unprotected": 0.2,
+      "unknown": 0.0,
+      "child_weights": [
+        0.98,
+        0.019,
+        0.001
+      ],
+      "gestation_days": 280,
+      "adult_age": 18,
+      "shared_family_name": true
+    },
+    "reproductive_events": {},
+    "pregnancies": {},
+    "naming_decisions": {},
+    "possessions": {}
+  },
+  "narrative": "Утренний свет ложится на длинный стол для рисования в читальном зале, и от него бумага кажется чуть тёплой на вид. Ася сидит боком на стуле, подперев щёку ладонью, и разглядывает разложенные перед ней листы — не рисует, а будто прислушивается к разговору взрослых. Марина стоит у полки и вынимает тонкую папку с образцами, но движения у неё замедленные, внимательные.\n\nНина спрашивает про Кирилла — про то, как он сегодня, и что можно взять на себя, чтобы Вере не пришлось разрываться.\n\nВера на мгновение отводит взгляд, будто сверяясь с чем-то внутри себя, и поправляет рукав.\n\n— Сегодня утром был в сознании, — говорит она негромко. — Недолго. Врач говорит, что это хороший знак, но двигаться ему пока нельзя. Рука, нога — всё это ещё будет долго.\n\nОна переводит дыхание, и голос её становится чуть твёрже, деловитее.\n\n— Мне бы очень помогло, если бы кто-то забрал Асю после занятия. Я хочу поехать к нему после обеда, а её одну оставлять не хочется. И ещё — если ты сможешь заглянуть домой, проверить, что там с продуктами и с его бумагами. Он ведь всё оставил на столе, когда...\n\nОна не договаривает и коротко кивает сама себе.\n\nМарина оборачивается от полки:\n\n— Я могу подвезти Асю, если нужно. Мне всё равно в ту сторону.\n\nАся поднимает голову и смотрит сначала на бабушку, потом на мать — молча, ожидая, что решат за неё.",
+  "responses": [
+    {
+      "stage": "extraction",
+      "payload": {
+        "final_scene": {
+          "location_id": "location_cc730cd3a861be83e138",
+          "present_character_ids": [
+            "qa_asya",
+            "qa_marina",
+            "qa_nina",
+            "qa_zoya"
+          ],
+          "observed_character_ids": [],
+          "remote_interactions": [],
+          "situation": "В читальном зале библиотеки Нина спросила Веру о Кирилле; Вера ответила, что утром он ненадолго был в сознании, двигаться ему нельзя, и попросила забрать Асю после занятия и проверить дом. Марина предложила подвезти Асю. Ася ждёт решения взрослых.",
+          "situation_evidence": "Вера: «Сегодня утром был в сознании... двигаться ему пока нельзя»; просьба забрать Асю и проверить дом; Марина: «Я могу подвезти Асю»; Ася смотрит на бабушку и мать, ожидая решения.",
+          "elapsed_minutes": 3
+        },
+        "player_agency": {
+          "status": "preserved",
+          "actions": [
+            {
+              "id": "act_nina_ask_kirill_help",
+              "player_evidence": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+              "target_ids": [
+                "qa_vera"
+              ],
+              "narrative_target_ids": [
+                "qa_vera"
+              ],
+              "outcome": "completed",
+              "meaning": "preserved",
+              "target_mode": "interaction"
+            }
+          ]
+        },
+        "events": [
+          {
+            "id": "event_nina_asks_vera_help",
+            "text": "Нина спросила Веру о состоянии Кирилла и предложила практическую помощь. Вера рассказала, что утром он ненадолго был в сознании, двигаться ему нельзя, и попросила забрать Асю после занятия и проверить дом; Марина предложила подвезти Асю.",
+            "participants": [
+              "qa_nina",
+              "qa_vera",
+              "qa_asya",
+              "qa_marina"
+            ],
+            "witnesses": [
+              "qa_nina",
+              "qa_vera",
+              "qa_asya",
+              "qa_marina",
+              "qa_zoya"
+            ],
+            "actor_id": "qa_nina",
+            "target_ids": [
+              "qa_vera"
+            ],
+            "player_action_id": "act_nina_ask_kirill_help",
+            "player_evidence": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+            "medium": "conversation",
+            "location_id": "location_cc730cd3a861be83e138",
+            "minute": 558,
+            "order": 1,
+            "evidence": "Нина спрашивает про Кирилла и что можно взять на себя; Вера отвечает о его состоянии и просит о помощи."
+          }
+        ],
+        "facts": [
+          {
+            "id": "fact_kirill_condition_morning",
+            "text": "По словам Веры, утром Кирилл ненадолго был в сознании; врач считает это хорошим знаком, но двигаться ему пока нельзя, восстановление руки и ноги будет долгим.",
+            "claim": {
+              "subject_id": "qa_kirill",
+              "predicate": "known_condition",
+              "value": "утром ненадолго в сознании, двигаться нельзя, долгое восстановление руки и ноги",
+              "scope": ""
+            },
+            "visibility": "public",
+            "character_ids": [
+              "qa_kirill",
+              "qa_vera",
+              "qa_nina",
+              "qa_asya",
+              "qa_marina",
+              "qa_zoya"
+            ],
+            "evidence": "Вера: «Сегодня утром был в сознании... двигаться ему пока нельзя. Рука, нога — всё это ещё будет долго»."
+          }
+        ],
+        "knowledge_gained": [
+          {
+            "actor_id": "qa_nina",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Вера рассказала Нине о состоянии Кирилла."
+          },
+          {
+            "actor_id": "qa_asya",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Ася слышала ответ Веры в читальном зале."
+          },
+          {
+            "actor_id": "qa_marina",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Марина слышала ответ Веры."
+          },
+          {
+            "actor_id": "qa_zoya",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Зоя находилась в читальном зале при разговоре."
+          }
+        ],
+        "character_changes": [
+          {
+            "id": "qa_vera",
+            "situation": "Утро в библиотеке Озёрска. Вера рассказала Нине о состоянии Кирилла и попросила забрать Асю после занятия и проверить дом; Марина предложила подвезти Асю.",
+            "evidence": "Вера отвечает о Кирилле и просит о помощи."
+          },
+          {
+            "id": "qa_asya",
+            "situation": "В читальном зале библиотеки. Ася слышала разговор взрослых о состоянии отца и ждёт, что решат за неё насчёт того, кто заберёт её после занятия.",
+            "evidence": "Ася поднимает голову и смотрит сначала на бабушку, потом на мать — молча, ожидая, что решат за неё."
+          },
+          {
+            "id": "qa_marina",
+            "situation": "В читальном зале библиотеки. Марина предложила подвезти Асю после занятия.",
+            "evidence": "Марина: «Я могу подвезти Асю, если нужно. Мне всё равно в ту сторону»."
+          }
+        ],
+        "choices": [
+          {
+            "action": "Согласиться забрать Асю после занятия и уточнить, во сколько заканчивается занятие.",
+            "speech": "Хорошо, я заберу Асю. Во сколько мне подойти?",
+            "basis_ids": [
+              "qa_vera",
+              "qa_asya"
+            ],
+            "kind": "decision"
+          },
+          {
+            "action": "Принять предложение Марины подвезти Асю и договориться о времени.",
+            "speech": "Марина, спасибо. Тогда я встречу Асю после занятия, а ты подвезёшь?",
+            "basis_ids": [
+              "qa_marina",
+              "qa_asya"
+            ],
+            "kind": "proposal"
+          },
+          {
+            "action": "Спросить у Веры, что именно проверить в доме — продукты и бумаги Кирилла.",
+            "speech": "А что с его бумагами? Их нужно просто собрать или что-то конкретное?",
+            "basis_ids": [
+              "qa_vera"
+            ],
+            "kind": "question"
+          },
+          {
+            "action": "Уточнить у Веры, когда она собирается к Кириллу и что ещё нужно сделать до этого.",
+            "speech": "Ты поедешь после обеда? Что ещё нужно успеть до этого?",
+            "basis_ids": [
+              "qa_vera"
+            ],
+            "kind": "question"
+          },
+          {
+            "action": "Спросить Асю, как она хочет — чтобы её забрали сразу после занятия или позже.",
+            "speech": "Ася, а ты как хочешь? Чтобы тебя забрали сразу после занятия?",
+            "basis_ids": [
+              "qa_asya"
+            ],
+            "kind": "question"
+          }
+        ]
+      }
+    },
+    {
+      "stage": "extraction_repair",
+      "payload": {
+        "final_scene": {
+          "location_id": "location_cc730cd3a861be83e138",
+          "present_character_ids": [
+            "qa_asya",
+            "qa_marina",
+            "qa_nina",
+            "qa_zoya"
+          ],
+          "observed_character_ids": [],
+          "remote_interactions": [],
+          "situation": "В читальном зале библиотеки Нина спросила Веру о Кирилле; Вера ответила, что утром он ненадолго был в сознании, двигаться ему нельзя, и попросила забрать Асю после занятия и проверить дом. Марина предложила подвезти Асю. Ася ждёт решения взрослых.",
+          "situation_evidence": "Вера: «Сегодня утром был в сознании... двигаться ему пока нельзя»; просьба забрать Асю и проверить дом; Марина: «Я могу подвезти Асю»; Ася смотрит на бабушку и мать, ожидая решения.",
+          "elapsed_minutes": 3
+        },
+        "player_agency": {
+          "status": "preserved",
+          "actions": [
+            {
+              "id": "act_nina_ask_kirill_help",
+              "player_evidence": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+              "target_ids": [
+                "qa_vera"
+              ],
+              "narrative_target_ids": [
+                "qa_vera"
+              ],
+              "outcome": "completed",
+              "meaning": "preserved",
+              "target_mode": "interaction"
+            }
+          ]
+        },
+        "events": [
+          {
+            "id": "event_nina_asks_vera_help",
+            "text": "Нина спросила Веру о состоянии Кирилла и предложила практическую помощь. Вера рассказала, что утром он ненадолго был в сознании, двигаться ему нельзя, и попросила забрать Асю после занятия и проверить дом; Марина предложила подвезти Асю.",
+            "participants": [
+              "qa_nina",
+              "qa_vera",
+              "qa_asya",
+              "qa_marina"
+            ],
+            "witnesses": [
+              "qa_nina",
+              "qa_vera",
+              "qa_asya",
+              "qa_marina",
+              "qa_zoya"
+            ],
+            "fact_ids": [
+              "fact_kirill_condition_morning"
+            ],
+            "actor_id": "qa_nina",
+            "target_ids": [
+              "qa_vera"
+            ],
+            "player_action_id": "act_nina_ask_kirill_help",
+            "player_evidence": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь.",
+            "medium": "conversation",
+            "location_id": "location_cc730cd3a861be83e138",
+            "minute": 558,
+            "order": 1,
+            "evidence": "Нина спрашивает про Кирилла и что можно взять на себя; Вера отвечает о его состоянии и просит о помощи."
+          }
+        ],
+        "facts": [
+          {
+            "id": "fact_kirill_condition_morning",
+            "text": "По словам Веры, утром Кирилл ненадолго был в сознании; врач считает это хорошим знаком, но двигаться ему пока нельзя, восстановление руки и ноги будет долгим.",
+            "claim": {
+              "subject_id": "qa_kirill",
+              "predicate": "known_condition",
+              "value": "утром ненадолго в сознании, двигаться нельзя, долгое восстановление руки и ноги",
+              "scope": ""
+            },
+            "visibility": "public",
+            "character_ids": [
+              "qa_kirill",
+              "qa_vera",
+              "qa_nina",
+              "qa_asya",
+              "qa_marina",
+              "qa_zoya"
+            ],
+            "evidence": "Вера: «Сегодня утром был в сознании... двигаться ему пока нельзя. Рука, нога — всё это ещё будет долго»."
+          }
+        ],
+        "knowledge_gained": [
+          {
+            "actor_id": "qa_nina",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Вера рассказала Нине о состоянии Кирилла."
+          },
+          {
+            "actor_id": "qa_asya",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Ася слышала ответ Веры в читальном зале."
+          },
+          {
+            "actor_id": "qa_marina",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Марина слышала ответ Веры."
+          },
+          {
+            "actor_id": "qa_zoya",
+            "fact_id": "fact_kirill_condition_morning",
+            "status": "known",
+            "source_event_id": "event_nina_asks_vera_help",
+            "evidence": "Зоя находилась в читальном зале при разговоре."
+          }
+        ],
+        "character_changes": [
+          {
+            "id": "qa_vera",
+            "situation": "Утро в библиотеке Озёрска. Вера рассказала Нине о состоянии Кирилла и попросила забрать Асю после занятия и проверить дом; Марина предложила подвезти Асю.",
+            "evidence": "Вера отвечает о Кирилле и просит о помощи."
+          },
+          {
+            "id": "qa_asya",
+            "situation": "В читальном зале библиотеки. Ася слышала разговор взрослых о состоянии отца и ждёт, что решат за неё насчёт того, кто заберёт её после занятия.",
+            "evidence": "Ася поднимает голову и смотрит сначала на бабушку, потом на мать — молча, ожидая, что решат за неё."
+          },
+          {
+            "id": "qa_marina",
+            "situation": "В читальном зале библиотеки. Марина предложила подвезти Асю после занятия.",
+            "evidence": "Марина: «Я могу подвезти Асю, если нужно. Мне всё равно в ту сторону»."
+          }
+        ],
+        "choices": [
+          {
+            "action": "Согласиться забрать Асю после занятия и уточнить, во сколько заканчивается занятие.",
+            "speech": "Хорошо, я заберу Асю. Во сколько мне подойти?",
+            "basis_ids": [
+              "qa_vera",
+              "qa_asya"
+            ],
+            "kind": "decision"
+          },
+          {
+            "action": "Принять предложение Марины подвезти Асю и договориться о времени.",
+            "speech": "Марина, спасибо. Тогда я встречу Асю после занятия, а ты подвезёшь?",
+            "basis_ids": [
+              "qa_marina",
+              "qa_asya"
+            ],
+            "kind": "proposal"
+          },
+          {
+            "action": "Спросить у Веры, что именно проверить в доме — продукты и бумаги Кирилла.",
+            "speech": "А что с его бумагами? Их нужно просто собрать или что-то конкретное?",
+            "basis_ids": [
+              "qa_vera"
+            ],
+            "kind": "question"
+          },
+          {
+            "action": "Уточнить у Веры, когда она собирается к Кириллу и что ещё нужно сделать до этого.",
+            "speech": "Ты поедешь после обеда? Что ещё нужно успеть до этого?",
+            "basis_ids": [
+              "qa_vera"
+            ],
+            "kind": "question"
+          },
+          {
+            "action": "Спросить Асю, как она хочет — чтобы её забрали сразу после занятия или позже.",
+            "speech": "Ася, а ты как хочешь? Чтобы тебя забрали сразу после занятия?",
+            "basis_ids": [
+              "qa_asya"
+            ],
+            "kind": "question"
+          }
+        ]
+      }
+    }
+  ],
+  "player_input": "Я, Нина, спрашиваю Веру о состоянии Кирилла и предлагаю практическую помощь."
+}

@@ -5,11 +5,23 @@ Family nodes/edges expose a strict allowlist, never private facts or provenance.
 from backend.runtime_v3.birth_identity import is_game_birth
 from collections import deque
 from backend.runtime_v3.life import FAMILY, PARENTAGE
+from backend.runtime_v3.models import identity
 
 
 def knowledge_status(state, observer, fact_id):
     status = state['knowledge'].get(f'{observer}:{fact_id}', {}).get('status','unknown') if fact_id else 'unknown'
     return status if status in ('known', 'suspected') else 'unknown'
+
+
+def death_notice_fact(actor_id):
+    return identity('death-notice', actor_id)
+
+
+def knows_life_status(state, observer, actor_id):
+    actor = state['characters'][actor_id]
+    return (knowledge_status(state, observer, actor.get('life_fact_id')) == 'known'
+            or actor['life_status'] == 'dead'
+            and knowledge_status(state, observer, death_notice_fact(actor_id)) == 'known')
 
 
 def visible_relations(state, observer):
@@ -22,7 +34,7 @@ def visible_relations(state, observer):
         # A known death only closes a known partnership, never reveals a secret one.
         death_known = (r['kind'] in ('spouse','partner','engaged') and any(
             state['characters'][cid].get('life_status') == 'dead' and
-            knowledge_status(state,observer,state['characters'][cid].get('life_fact_id')) == 'known'
+            knows_life_status(state, observer, cid)
             for cid in (r['source_id'],r['target_id'])))
         closed = r['status'] == 'closed' and (closure or death_known)
         rows.append(dict(id=r['id'],kind=r['kind'],source_id=r['source_id'],target_id=r['target_id'],

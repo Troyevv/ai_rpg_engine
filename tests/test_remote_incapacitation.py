@@ -1,4 +1,5 @@
 """#109: real engine/Resolver/SQLite lifecycle, with controlled provider output."""
+from runtime_v3_fixture import arrival_sources
 
 from copy import deepcopy
 import json
@@ -29,7 +30,7 @@ def connected(tmp_path):
     execute(
         repo,
         jid,
-        dict(
+        arrival_sources(dict(
             final_scene=dict(
                 location_id=camera["location_id"],
                 present_character_ids=[
@@ -38,7 +39,7 @@ def connected(tmp_path):
                 elapsed_minutes=0,
             ),
             movements=[dict(actor_id="qa_vera", to_location_id=away, evidence=text)],
-        ),
+        )),
         text,
     )
     assert repo.get_job(jid)["status"] == "saved", repo.get_job(jid)["error"]

@@ -42,7 +42,10 @@ class BirthSexObservation(StrictModel):
     narrative_sex: Literal['male', 'female'] | None
     event_sex: Literal['male', 'female'] | None
     basis: Literal['not_disclosed', 'observation', 'announcement']
-    source_actor_id: str | None = None
+    source_actor_id: str | None = Field(default=None, description=(
+        'Actual speaker of the announcement, never a nearby witness or parent. '
+        'Use null if the Narrative speaker has no established canonical identity; '
+        'do not invent a Character solely to fill this field.'))
     source_assertion: Literal['direct_observation', 'prior_knowledge'] | None = None
     perceived_by: list[str] = Field(default_factory=list, max_length=64)
     evidence: str = ''
@@ -244,6 +247,7 @@ def apply_births(resolver, raw, events):
             # Parse the essential claim first. Optional appearance references
             # cannot invalidate an otherwise accepted birth of one or more children.
             fields = dict(row)
+            observers = fields.pop('perceived_by', None) if resolver.scene_version >= 10 else None
             appearance = fields.pop('appearance', {})
             claim = BirthClaim.model_validate(fields).model_dump()
             pregnancy = resolver.state['pregnancies'].get(claim['pregnancy_id'])
@@ -256,7 +260,13 @@ def apply_births(resolver, raw, events):
             if claim['appearance'] != appearance:
                 resolver.warn('births', index, 'Некорректные описания внешности опущены.',
                               field='appearance', code='birth_appearance_invalid')
-            birth(resolver, claim, source(resolver, claim, events))
+            event = source(resolver, claim, events)
+            if observers is not None:
+                known = [cid for cid in dict.fromkeys(observers) if cid in resolver.state['characters']]
+                if len(known) != len(set(observers)):
+                    resolver.warn('births', index, 'Неизвестный наблюдатель.', field='perceived_by', code='unknown_character')
+                event = dict(event, witnesses=known)
+            birth(resolver, claim, event)
             validate_life_state(resolver.state)
         except StructuralDeltaError:
             raise
@@ -277,7 +287,17 @@ def birth(r,c,event):
     if not r.before['meta']['world_time']<=now<=s['meta']['world_time']: raise ValueError('birth minute outside accepted interval')
     if now<p['due_minute']: raise ValueError('pregnancy is not due under configured game policy')
     if c['location_id'] is not None and c['location_id'] not in s['locations']: raise ValueError('unknown birth location')
-    parents=p['parent_ids'];date=current_time(s,now)['date'];fids=[]
+    parents=p['parent_ids']
+    if r.scene_version >= 10 and not parents:
+        # Older encounters can lack the optional parent list. Delivery
+        # establishes the gestational parent. A separately disclosed parent
+        # must belong to the recorded conception before gaining an edge.
+        encounter=s['reproductive_events'].get(p['event_id'], {})
+        participants=set(encounter.get('participants', []))
+        if set(c['disclosed_parent_ids']) <= participants:
+            parents=list(dict.fromkeys([mother, *c['disclosed_parent_ids']]))
+            p['parent_ids']=parents
+    date=current_time(s,now)['date'];fids=[]
     if set(c['disclosed_parent_ids'])-set(parents): raise ValueError('unestablished disclosed parent')
     for ch in p['children']:
         cid=ch['id']
@@ -330,6 +350,22 @@ def birth(r,c,event):
 def validate_birth_sex(r, claim, event, pregnancy):
     """Validate all disclosures before creating any child. No prose parsing."""
     rows = claim['sex_observations']
+    if r.scene_version >= 10:
+        # Previously recorded v10 observations may be present. Keep consistent
+        # disclosures only. A bad optional disclosure cannot invalidate delivery.
+        sex_by_child = {ch['id']:ch['sex'] for ch in pregnancy['children']}
+        accepted = []
+        for index, row in enumerate(rows):
+            if row['basis'] == 'not_disclosed':
+                continue
+            observers = row['perceived_by']
+            if (row['child_id'] in sex_by_child and row['narrative_sex'] == sex_by_child[row['child_id']]
+                    and all(cid in r.state['characters'] for cid in observers)):
+                accepted.append(row)
+            else:
+                r.warn('births', index, 'Некорректное раскрытие сведений о ребёнке.', field='sex_observations',
+                       code='birth_disclosure_invalid')
+        return accepted
     children = {ch['id']: ch for ch in pregnancy['children']}
     ids = [row['child_id'] for row in rows]
     if len(ids) != len(set(ids)) or set(ids) != set(children):
@@ -342,8 +378,10 @@ def validate_birth_sex(r, claim, event, pregnancy):
         # The diagnostic survives retry/reload; only a new authored scene is safe.
         if row['narrative_sex'] is not None and row['narrative_sex'] != children[cid]['sex']:
             fatal('Повествование противоречит установленным данным ребёнка. '
-                  'Ход не сохранён. Отмените неудачный ход и создайте новую сцену.',
+                  'Состояние до этого хода сохранено.',
                   'birth_narrative_sex_conflict', repairable=False, **path,
+                  correction_ground=dict(kind='birth', child_id=cid, pregnancy_id=pregnancy['id'],
+                                         established_sex=children[cid]['sex'], evidence=row.get('evidence') or event.get('evidence')),
                   action='reauthor_narrative')
         if row['event_sex'] != row['narrative_sex']:
             fatal('Описание пола в Event не соответствует интерпретации Narrative. '
@@ -370,6 +408,13 @@ def validate_birth_sex(r, claim, event, pregnancy):
             raise ValueError('background birth cannot disclose sex to protected observers')
         if row['basis'] == 'announcement':
             actor = row['source_actor_id']
+            if actor is None:
+                # An unnamed clinician can announce an observed birth outcome.
+                # No canonical identity or Knowledge is invented for the source.
+                # Recipients still require this Event's perception/witness proof.
+                if row['source_assertion'] != 'direct_observation':
+                    raise ValueError('unidentified speaker requires established direct observation, not assumed prior Knowledge')
+                continue
             if actor not in event['participants'] or not row['source_assertion']:
                 raise ValueError('announcement requires its established speaker and information source')
             if not capabilities(r.state, actor)['can_perceive']:
@@ -385,40 +430,66 @@ def validate_birth_sex(r, claim, event, pregnancy):
     return rows
 
 
-def validate_birth_knowledge(r, raw, events):
+def validate_birth_knowledge(r, raw, events, *, rejected_event_ids=()):
     """Prevent generic Knowledge from bypassing the typed birth disclosure."""
+    if r.scene_version >= 10:
+        return  # Ordinary individual Knowledge is owned by the current contract.
     guarded = {}
-    for row in raw.records['births']:
-        if not isinstance(row, dict): continue
+    errors = []
+    unvalidated_facts = set()
+    for index, row in enumerate(raw.records['births']):
+        pregnancy_id = row.get('pregnancy_id') if isinstance(row, dict) else None
+        pregnancy = r.state['pregnancies'].get(pregnancy_id) if isinstance(pregnancy_id, str) else None
+        protected_facts = set(pregnancy['sex_fact_ids'].values()) if pregnancy else set()
         try:
-            claim = BirthClaim.model_validate({k:v for k,v in row.items() if k != 'appearance'}).model_dump()
-        except ValueError:
-            continue  # apply_births emits the precise structural diagnostic.
+            claim = BirthClaim.model_validate({k:v for k,v in row.items() if k != 'appearance'}
+                                             if isinstance(row, dict) else row).model_dump()
+        except ValueError as exc:
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError(str(exc), 'birth_claim_invalid', repairable=True,
+                                              section='births', index=index))
+            continue
         p = r.state['pregnancies'].get(claim['pregnancy_id'])
         event = events.get(claim['source_event_id'])
-        if not p or not event: continue
+        if p and claim['source_event_id'] in rejected_event_ids:
+            continue
+        if not p or not event:
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError('unknown pregnancy' if not p else 'current completed narrative event required',
+                'birth_claim_invalid', repairable=True, section='births', index=index,
+                source_ids=[claim['pregnancy_id'], claim['source_event_id']]))
+            continue
         try:
             observations = validate_birth_sex(r, claim, event, p)
-        except StructuralDeltaError:
-            raise
+        except StructuralDeltaError as exc:
+            unvalidated_facts.update(protected_facts)
+            exc.path.update(index=index, path=f'births[{index}].sex_observations')
+            errors.append(exc)
+            continue
         except (ValueError, TypeError, KeyError) as exc:
-            fatal(str(exc), 'birth_sex_observation_invalid', repairable=True,
-                  section='births', field='sex_observations', entity=p['id'])
+            unvalidated_facts.update(protected_facts)
+            errors.append(StructuralDeltaError(str(exc), 'birth_sex_observation_invalid', repairable=True,
+                  section='births', index=index, field='sex_observations', entity=p['id']))
+            continue
         allowed = {(actor, p['sex_fact_ids'][o['child_id']]) for o in observations
                    for actor in o['perceived_by'] if o['basis'] != 'not_disclosed'}
         for fid in p['sex_fact_ids'].values():
             guarded.setdefault(fid, set()).update((actor, event['local_id']) for actor, fact_id in allowed if fact_id == fid)
-    if not guarded:
-        return
-    for item in raw.records['knowledge_gained']:
+    for index, item in enumerate(raw.records['knowledge_gained']):
         if not isinstance(item, dict): continue
         fid = item.get('fact_id')
         if not isinstance(fid, str) or fid not in guarded:
             continue  # Ordinary malformed Knowledge keeps its existing local diagnostics.
         actor, source_id = item.get('actor_id'), item.get('source_event_id')
         if not isinstance(actor, str) or not isinstance(source_id, str) or (actor, source_id) not in guarded[fid]:
-            fatal('Знание пола не подтверждено наблюдением этого свидетеля.',
-                  'birth_sex_knowledge_invalid', repairable=True, section='knowledge_gained')
+            unvalidated_facts.add(fid)
+            errors.append(StructuralDeltaError('Знание пола не подтверждено наблюдением этого свидетеля.',
+                  'birth_sex_knowledge_invalid', repairable=True, section='knowledge_gained', index=index))
+    if errors:
+        failure = StructuralDeltaError.combine(errors)
+        # Internal dependency information, not an additional persistent store.
+        failure.unvalidated_fact_ids = frozenset(unvalidated_facts)
+        raise failure
 
 
 def advance_due(state):

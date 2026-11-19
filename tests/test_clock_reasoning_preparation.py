@@ -106,7 +106,9 @@ def test_generated_summary_can_start_game(tmp_path):
     from canonical_fixture import canonical
     change=canonical(result());change['scene']['time']='Пятница 09:00'
     minute=current_time(repo.get_save(sid)['state'])
-    change['world_delta']['transitions']=[dict(actor_id='character_2',minute=minute,from_location=None,to_location='Кухня',evidence='Персонаж 1 подвигает свободный стул.')]
+    change['scene']['present_ids']=['character_1']
+    change['world_delta']['events'][0]['participants']=['character_1']
+    change['world_delta']['events'][0]['witnesses']=['character_1']
     change['world_delta']['events'][0].update(minute=minute,order=1)
     run(repo,jid,change)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']

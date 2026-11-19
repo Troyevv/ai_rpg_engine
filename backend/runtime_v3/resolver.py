@@ -32,12 +32,20 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False, agency_audit_required=False, consequence_first=False, preserve_scene_locations=False, choice_grounding_required=False, semantic_slice=False, chronology_events=None, scene_sequence=False, scene_version=6):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
-        self.require_player_agency = require_player_agency
+        self.scene_version = scene_version
+        self.scene_sequence = scene_sequence
+        self.semantic_slice = semantic_slice
+        self.chronology_events = {e['id']:e for e in (chronology_events or []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
+        self.agency_audit_required = agency_audit_required
+        self.consequence_first = consequence_first
+        self.preserve_scene_locations = preserve_scene_locations or mode == 'background'
+        self.choice_grounding_required = choice_grounding_required
+        self.require_player_agency = require_player_agency or agency_audit_required
         self.require_due_birth_assessment = require_due_birth_assessment
         self.letter_sources = {a["id"]: a for a in sources}
         self.call_sources = call_sources or {}
@@ -116,14 +124,34 @@ class StateResolver:
             fatal('неизвестный обязательный character_id', 'unknown_character', repairable=True, section=section,index=index)
         return value
 
-    def movement_authorized(self, item, raw):
+    def movement_authorized(self, item, events, actions):
+        # Called only after Event provenance, physical presence and completions
+        # have been validated on the isolated candidate. Never authorize from raw.
         quote = item.get('player_evidence')
+        source = item.get('source_event_id')
+        event = events.get(source) if isinstance(source, str) else None
+        action = (event or {}).get('player_action')
+        reference = item.get('player_action_id')
+        if reference is not None:
+            direct = actions.get(reference) if isinstance(reference, str) else None
+            if not direct or action and action['id'] != reference:
+                return False
+            action = direct.model_dump()
+        linked = (self.consequence_first and action
+                  and (reference is not None or event.get('actor_id') == self.protected_actor_id)
+                  and action['meaning'] == 'preserved'
+                  and action['outcome'] in ('completed', 'partial'))
+        if linked and 'player_evidence' in item:
+            if not isinstance(quote, str) or normalized(quote) != normalized(action['player_evidence']):
+                return False
         if item.get('player_assertion') == 'explicit_choice':
+            if linked and 'player_evidence' not in item:
+                return True
             return isinstance(quote, str) and bool(normalized(quote)) and normalized(quote) in normalized(self.player_input)
-        return item.get('player_assertion') == 'involuntary' and any(
-            isinstance(event, dict) and event.get('id') == item.get('source_event_id')
-            and isinstance(event.get('participants'), list) and self.protected_actor_id in event['participants']
-            for event in raw.records['events'])
+        if 'player_assertion' not in item and linked:
+            return True
+        return (item.get('player_assertion') == 'involuntary' and not linked
+                and event is not None and self.protected_actor_id in event['participants'])
 
     def typed(self, model, values, section, index, *, required_code=None):
         try:
@@ -139,16 +167,112 @@ class StateResolver:
             self.warn(section,index,'некорректная необязательная запись', code='optional_schema_invalid')
             return None
 
+    def raise_independent_errors(self, raw, events, rejected_events, elapsed, errors):
+        """Finish independent domain diagnostics on a disposable failed candidate.
+
+        No resolve retries, payload deletion or persistence. Temporal validation
+        must see accepted Life/Birth/Commitment transitions; an invalid source
+        or transition makes that dependent check inconclusive, not another error.
+        """
+        from copy import copy
+        from backend.services.world_delta_errors import StructuralDeltaError
+        from backend.runtime_v3.life import apply_life
+        from backend.runtime_v3.reproduction import apply_reproduction
+        from backend.runtime_v3.commitments import apply_commitments
+        from backend.runtime_v3.continuity import validate_temporal_boundaries
+        probe = copy(self)
+        probe.state, probe.history = deepcopy(self.state), deepcopy(self.history)
+        probe.warnings = deepcopy(self.warnings)
+        probe.cards, probe.pending_reviews = deepcopy(self.cards), deepcopy(self.pending_reviews)
+        errors = list(errors)
+        candidate = deepcopy(raw)
+        temporal_ready = not any(row['section'] in ('births', 'reproductive_events', 'naming_decisions')
+                                 for error in errors for row in error.diagnostics('preflight'))
+        try:
+            apply_life(probe, candidate)
+        except StructuralDeltaError as exc:
+            errors.append(exc)
+            temporal_ready = False
+        birth_sources_invalid = any(isinstance(row, dict) and isinstance(row.get('source_event_id'), str)
+                                    and row['source_event_id'] in rejected_events
+                                    for section in ('births', 'reproductive_events', 'naming_decisions')
+                                    for row in candidate.records[section])
+        if temporal_ready and not birth_sources_invalid:
+            try:
+                apply_reproduction(probe, candidate, events)
+            except StructuralDeltaError as exc:
+                errors.append(exc)
+                temporal_ready = False
+        else:
+            temporal_ready = False
+        try:
+            apply_commitments(probe, candidate)
+        except StructuralDeltaError as exc:
+            errors.append(exc)
+            temporal_ready = False
+        if temporal_ready:
+            try:
+                validate_temporal_boundaries(probe, elapsed)
+            except StructuralDeltaError as exc:
+                errors.append(exc)
+        raise StructuralDeltaError.combine(errors)
+
     def resolve(self, payload):
-        raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
+        from backend.services.world_delta_errors import StructuralDeltaError
+        try:
+            result = self._resolve(payload)
+            raw = getattr(self, 'source_raw', None)
+            if raw is not None and raw.semantic_candidate:
+                from backend.runtime_v3.scene_steps import source_diagnostic
+                result.warnings = [source_diagnostic(raw, row) for row in result.warnings]
+            return result
+        except StructuralDeltaError as exc:
+            raw=getattr(self,'source_raw',None)
+            if raw is None or not raw.semantic_candidate:raise
+            from backend.runtime_v3.scene_steps import source_diagnostic
+            errors=[]
+            pending = getattr(self, 'preflight_errors', [])
+            rows = exc.diagnostics('validation')
+            for prior in pending:
+                for row in prior.diagnostics('validation'):
+                    if not any(r['code']==row['code'] and r.get('path')==row.get('path') for r in rows): rows.append(row)
+            for row in rows:
+                translated=source_diagnostic(raw,row)
+                path={k:v for k,v in translated.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
+                errors.append(StructuralDeltaError(row.get('repair_reason',str(exc)),row['code'],repairable=exc.repairable,**path))
+            raise StructuralDeltaError.combine(errors) from exc
+
+    def _resolve(self, payload):
+        from backend.services.world_delta_errors import StructuralDeltaError
+        if self.scene_sequence and not isinstance(payload, RawTurnResult):
+            from backend.runtime_v3.scene_steps import compile_scene
+            raw = compile_scene(payload, self.before, self.narrative, self.turn_id, namespace=self.event_namespace, version=self.scene_version, defer_errors=True)
+        else:
+            raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
+        if self.semantic_slice:
+            from backend.runtime_v3.raw import compile_semantic
+            raw = compile_semantic(raw, self.before, self.narrative, self.turn_id, namespace=self.event_namespace)
+            from backend.runtime_v3.continuity import validate_chronology
+            if self.scene_version < 10:
+                validate_chronology(self, raw)
+        elif raw.records['information_events'] or raw.records['chronology_claims']:
+            fatal('Семантический срез недоступен в записанной версии запроса.', 'contract_version_mismatch', repairable=True)
+        self.source_raw = raw
         self.warnings.extend(raw.warnings)
         from backend.runtime_v3.continuity import validate_due_birth_assessments
-        validate_due_birth_assessments(self, raw)
+        if self.scene_version < 10:
+            validate_due_birth_assessments(self, raw)
         from backend.runtime_v3.player_actions import review
-        player_actions = review(self, raw)
+        preflight_errors = []
+        for row in raw.preflight_errors:
+            path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
+            preflight_errors.append(StructuralDeltaError(row['repair_reason'], row['code'], **path))
+        self.preflight_errors = preflight_errors
+        player_actions = {} if self.scene_version >= 10 else review(self, raw, errors=preflight_errors if self.scene_sequence else None)
         s = self.state
         from backend.runtime_v3.pacing import validate_risk
-        validate_risk(self, raw)
+        if self.scene_version < 10:
+            validate_risk(self, raw)
         from backend.runtime_v3.residence import apply_locations
         apply_locations(self, raw)
         for i, item in self.records(raw,'promotions'):
@@ -181,7 +305,10 @@ class StateResolver:
         scene = raw.final_scene
         lid, present = scene.get('location_id'), scene.get('present_character_ids')
         if lid is not None and (not isinstance(lid,str) or lid not in s['locations']):
-            fatal('неизвестное конечное место камеры', 'camera_location_invalid', repairable=True)
+            error = StructuralDeltaError('неизвестное конечное место камеры', 'camera_location_invalid',
+                                         section='final_scene', field='location_id')
+            if not self.scene_sequence: fatal(str(error), error.code, repairable=True)
+            preflight_errors.append(error)
         if not isinstance(present,list) or any(not isinstance(cid,str) for cid in present):
             fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
         reserved = {ch['id'] for p in s['pregnancies'].values() if p['status']!='born' for ch in p['children']}
@@ -206,7 +333,10 @@ class StateResolver:
         lid, present = scene.get('location_id'), scene['present_character_ids']
         camera = deepcopy(s['camera'])
         if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
-            fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
+            error = StructuralDeltaError('controlled actor отсутствует в final_scene', 'camera_actor_missing',
+                                         section='final_scene', field='present_character_ids')
+            if not self.scene_sequence: fatal(str(error), error.code, repairable=True)
+            preflight_errors.append(error)
         if self.require_elapsed and 'elapsed_minutes' not in scene:
             fatal('Extraction не указал elapsed_minutes.', 'elapsed_minutes_missing', repairable=True, section='final_scene', path='final_scene.elapsed_minutes')
         elapsed = scene.get('elapsed_minutes',0)
@@ -220,7 +350,8 @@ class StateResolver:
             self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
             elapsed = 0
         from backend.runtime_v3.continuity import validate_compression, validate_temporal_boundaries
-        validate_compression(self, scene, elapsed)
+        if self.scene_version < 10:
+            validate_compression(self, scene, elapsed)
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
@@ -251,59 +382,112 @@ class StateResolver:
         camera.update(location_id=lid,present_character_ids=present,observed_character_ids=observed,situation=situation)
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
+        if self.scene_version >= 10 and s['meta']['world_time']//1440 != self.before['meta']['world_time']//1440:
+            from backend.runtime_v3.calendar import update_developmental_stages
+            update_developmental_stages(s, self.history.state_changes)
         moves = {}
+        movement_errors, invalid_moves, invalid_route_actors = [], set(), set()
         for i, item in self.records(raw,'movements'):
-            cid = self.actor(item.get('actor_id'),'movements',i)
-            if 'assertion' in item and item['assertion'] != 'completed_arrival':
-                fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
-                      section='movements', index=i, field='assertion', entity=cid)
-            target = item.get('to_location_id')
-            if not isinstance(target,str) or target not in s['locations']:
-                fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
-                      'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
-                      'сохрани Event ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
-                      'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
-                      'movement_endpoint_invalid', repairable=True, section='movements', index=i,
-                      field='to_location_id', entity=cid)
-            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
-            if cid == self.protected_actor_id and target != s['characters'][cid]['location_id'] and not initial_placement and not self.movement_authorized(item, raw):
-                fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, section='movements', index=i, entity=cid)
-            order = item.get('order')
-            if order is not None and (type(order) is not int or order < 0):
-                self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
-            moves.setdefault(cid,[]).append((order,target,item['evidence'],item))
+            try:
+                cid = self.actor(item.get('actor_id'),'movements',i)
+                if cid != self.protected_actor_id and item.get('player_action_id') is not None:
+                    fatal('PlayerAction управляемого персонажа не является действием другого actor.',
+                          'movement_agency', repairable=True, section='movements', index=i, entity=cid)
+                departure = item.get('assertion') == 'departure'
+                if self.consequence_first and 'assertion' not in item:
+                    fatal('Movement фиксирует только completed_arrival или departure. Будущее намерение остаётся планом.',
+                          'movement_assertion_invalid', repairable=True, section='movements', index=i, field='assertion')
+                if 'assertion' in item and item['assertion'] not in ('completed_arrival', 'departure'):
+                    fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
+                          section='movements', index=i, field='assertion', entity=cid)
+                target = item.get('to_location_id')
+                if departure and (target is not None or not isinstance(item.get('from_location_id'), str)):
+                    fatal('Уход без известного назначения требует to_location_id=null и известного from_location_id.',
+                          'movement_endpoint_invalid', repairable=True, section='movements', index=i, field='to_location_id', entity=cid)
+                if not departure and (not isinstance(target,str) or target not in s['locations']):
+                    exit_instruction = ('и используй Movement assertion=departure, to_location_id=null, известный from_location_id. '
+                                        if self.preserve_scene_locations else 'и опусти только неподтверждённую запись прибытия. ')
+                    fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
+                          'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
+                          'сохрани факт ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
+                          + exit_instruction + 'Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                          'movement_endpoint_invalid', repairable=True, section='movements', index=i,
+                          field='to_location_id', entity=cid)
+                # Authority is checked after accepted Event/Action provenance below;
+                # tentative geography is needed by the shared presence validator.
+                order = item.get('order')
+                if order is not None and (type(order) is not int or order < 0):
+                    self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
+                moves.setdefault(cid,[]).append((order,target,item['evidence'],item))
+            except StructuralDeltaError as exc:
+                movement_errors.append(exc)
+                invalid_moves.add(i)
+                if isinstance(item.get('actor_id'), str):
+                    invalid_route_actors.add(item['actor_id'])
         for cid, route in moves.items():
-            if len({r[1] for r in route}) > 1:
-                if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
-                    fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
-                route.sort(key=lambda r:r[0])
-            if cid in present:
-                if route[-1][1] != lid:
-                    fatal('конечное перемещение участника противоречит final_scene',
-                          'scene_movement_conflict', repairable=True, entity=cid,
-                          scene_location_id=lid, movement_location_id=route[-1][1])
-            origin = s['characters'][cid]['location_id']
-            for order,target,evidence,item in route:
-                if 'from_location_id' in item and item['from_location_id'] != origin:
-                    fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
-                self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
-                    evidence=evidence,order=order,turn_id=self.turn_id))
-                origin = target
-            s['characters'][cid]['location_id'] = origin
+            if cid in invalid_route_actors:
+                continue  # Dependent geography is inconclusive, never publish this candidate.
+            history_start = len(self.history.movements)
+            try:
+                if len({r[1] for r in route}) > 1:
+                    if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
+                        fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
+                    route.sort(key=lambda r:r[0])
+                if self.scene_version < 10 and cid in present:
+                    if route[-1][1] != lid:
+                        fatal('конечное перемещение участника противоречит final_scene',
+                              'scene_movement_conflict', repairable=True, entity=cid,
+                              scene_location_id=lid, movement_location_id=route[-1][1])
+                origin = s['characters'][cid]['location_id']
+                for order,target,evidence,item in route:
+                    if 'from_location_id' in item and item['from_location_id'] != origin:
+                        fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
+                    self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
+                        evidence=evidence,order=order,turn_id=self.turn_id,
+                        **({'assertion': item['assertion']} if 'assertion' in item else {}),
+                        **{key:item[key] for key in ('player_assertion','player_evidence') if key in item},
+                        **({'player_action':player_actions[item['player_action_id']].model_dump()}
+                           if isinstance(item.get('player_action_id'),str) and item['player_action_id'] in player_actions else {}),
+                        **({'source_event_id':item['source_event_id']} if item.get('source_event_id') else {})))
+                    origin = target
+                s['characters'][cid]['location_id'] = origin
+            except StructuralDeltaError as exc:
+                if not self.scene_sequence: raise
+                # Do not let a rejected partial route become diagnostic history
+                # for other actors/earlier encounters. Independent routes proceed.
+                del self.history.movements[history_start:]
+                invalid_route_actors.add(cid)
+                movement_errors.append(exc)
+        scene_errors = []
         for cid in present:
+            if cid in invalid_route_actors:
+                continue
             origin = s['characters'][cid]['location_id']
-            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
-            if self.before['characters'].get(cid, {}).get('location_id') != lid and cid == self.protected_actor_id and not initial_placement:
-                claims = [m for m in raw.records['movements'] if isinstance(m, dict)
-                          and m.get('actor_id') == cid and m.get('to_location_id') == lid]
-                if not any(self.movement_authorized(m, raw) for m in claims):
-                    fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, entity=cid)
-
+            initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+                                 and self.before['characters'].get(cid, {}).get('location_id') is None)
             if origin != lid:
+                if (not initial_placement and cid in self.before['characters'] and
+                        (self.scene_version < 10 or self.mode == 'background' and cid in self.protected_knowledge_actor_ids)):
+                    scene_errors.append(StructuralDeltaError(
+                        f'final_scene не подтверждает прибытие {cid} из {origin} в {lid}. '
+                        'Если неизменный Narrative действительно описывает приход, добавьте Movement '
+                        'с assertion=completed_arrival и правильным actor/endpoint; Event необязателен в consequence-first. '
+                        'Порядок нужен для неоднозначного маршрута или встречи; новые локации и самостоятельный приход допустимы. '
+                        'Если только Extraction ошиблась составом сцены, исправьте её. Если сама проза изображает '
+                        'отсутствующего персонажа без установленного прихода, укажите player_agency.status=violated '
+                        'для явного reauthor/abandon. Не выдумывайте прибытие и не скрывайте противоречие удалением Events.',
+                        'scene_arrival_unproven', repairable=True, section='final_scene',
+                        field='present_character_ids', entity=cid, source_ids=[cid]))
+                    # Rejected end composition is not a route, even in diagnostic
+                    # scratch state: it must not invalidate earlier encounters.
+                    continue
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
-        for cid in (set(self.before['camera']['present_character_ids']) | set(observed)) - set(present):
+        # Visibility never establishes departure. Keep the old ordinary producer's
+        # membership convention only for recorded pre-v4 jobs, not new turns/LTA.
+        absent = set() if self.preserve_scene_locations else set(self.before['camera']['present_character_ids'])
+        for cid in absent - set(present) - set(observed):
             if cid not in moves and s['characters'][cid]['location_id'] == lid:
                 s['characters'][cid]['location_id'] = None
                 self.history.state_changes.append(dict(kind='scene_position', entity=cid, location_id=None, derived_from='final_scene', turn_id=self.turn_id))
@@ -324,7 +508,7 @@ class StateResolver:
             if fields.get('id') in s['facts']:
                 for key in ('story_secret','secret_subject_ids','secret_keeper_ids','secret_biography_ids','secret_existence','origin_remote_event_id'):
                     fields.setdefault(key, s['facts'][fields['id']][key])
-            entry = self.typed(Fact,fields,'facts',i)
+            entry = self.typed(Fact,fields,'facts',i, required_code='fact_invalid' if self.semantic_slice else None)
             if entry:
                 for cid in entry['character_ids'] + entry['secret_subject_ids'] + entry['secret_keeper_ids'] + entry['secret_biography_ids']: self.actor(cid,'facts',i)
                 if entry['id'] in s['facts'] and entry != s['facts'][entry['id']]:
@@ -336,10 +520,16 @@ class StateResolver:
         event_indices = {}
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
-        from backend.services.world_delta_errors import StructuralDeltaError
-        event_errors = []
+        event_errors = list(preflight_errors) + list(scene_errors) + movement_errors
+        self.preflight_errors = list(event_errors)
+        rejected_events = set()
         for i, item in self.records(raw,'events'):
+            error_start = len(event_errors)
             eid = item.get('id')
+            action_ref = item.get('player_action_id')
+            if isinstance(action_ref, str) and action_ref in getattr(self, 'rejected_player_actions', set()):
+                rejected_events.add(eid)
+                continue  # Dependent authority is inconclusive, not a second source error.
             if 'minute' in item:
                 minute = item['minute']
                 if type(minute) is not int or not scene_start <= minute <= scene_end:
@@ -356,6 +546,9 @@ class StateResolver:
                             for n, cid in enumerate(lists[role]) if cid not in s['characters']), None)
             if unknown:
                 role, n, cid = unknown
+                if self.semantic_slice and item.get('information_source'):
+                    fatal('Информационное событие ссылается на неизвестного персонажа.',
+                          'information_actor_unknown', repairable=True, section='information_events', entity=cid)
                 self.warn('events', i, f'Неизвестный персонаж {cid} в Event {eid}.', entity=eid,
                           code='event_character_unknown')
                 self.warnings[-1].update(path=f'events[{i}].{role}[{n}]', source_ids=[eid, cid])
@@ -372,6 +565,11 @@ class StateResolver:
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=scene_end)
+            if eid in raw.event_routes:
+                route_id = raw.event_routes[eid]
+                event['during_event_id'] = identity('event',self.turn_id,route_id,self.narrative,self.event_namespace) if self.event_namespace else identity('event',self.turn_id,route_id,self.narrative)
+            if self.semantic_slice and item.get('information_source'):
+                event['information_source'] = deepcopy(item['information_source'])
             if item.get('interaction_channel') is not None:
                 event['interaction_channel']=item['interaction_channel']
             if 'minute' in item and type(item['minute']) is int and scene_start <= item['minute'] <= scene_end:
@@ -389,35 +587,114 @@ class StateResolver:
                     self.warn('events', i, 'Автор должен быть участником сообщения.', 'author_id', eid,
                               'event_author_invalid')
                     self.warnings[-1]['path'] = f'events[{i}].author_id'
-            from backend.runtime_v3.player_actions import event_provenance
+            from backend.runtime_v3.player_actions import event_provenance, movement_component
+            if self.scene_version < 10:
+                item = movement_component(self, raw, item, player_actions, i)
             try:
-                event_provenance(self, item, event, i, player_actions)
+                if self.scene_version < 10:
+                    event_provenance(self, item, event, i, player_actions)
+                if self.semantic_slice and item.get('actor_id') is not None and not event.get('player_action'):
+                    actor, targets = item['actor_id'], item.get('target_ids', [])
+                    if (not isinstance(actor, str) or actor not in event['participants'] or
+                            not isinstance(targets, list) or any(not isinstance(t, str) for t in targets) or
+                            not set(targets) <= set(event['participants'] + event['witnesses']) or actor in targets):
+                        if item.get('information_source') and self.scene_version < 10:
+                            fatal('Автор/адресаты NPC-взаимодействия не согласованы с участниками.',
+                                'event_contact_invalid', repairable=True, section='events', index=i)
+                        self.warn('events', i, 'Снята некорректная вспомогательная аннотация контакта.', code='event_contact_annotation_ignored')
+                    else:
+                        event.update(actor_id=actor, target_ids=list(targets))
             except StructuralDeltaError as exc:
                 event_errors.append(exc)
+                rejected_events.add(eid)
+                continue
+            if len(event_errors) != error_start:
+                rejected_events.add(eid)
                 continue
             event_indices[eid] = i
             events[eid] = event
             self.history.events.append(event)
-        if event_errors:
-            raise StructuralDeltaError.combine(event_errors)
-        for _, item in self.records(raw,'movements'):
-            if item.get('actor_id') == self.protected_actor_id and item.get('player_assertion') == 'involuntary':
-                cause=events.get(item.get('source_event_id'))
-                if cause is None or self.protected_actor_id not in cause['participants']:
-                    fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
         from backend.runtime_v3.narrative_remote import apply_extracted_remote
         remote_history, written_sources = apply_extracted_remote(self, raw, events)
         from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
-        situation_actors = {
-            eid: validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
-            for eid, event in events.items()
-        }
+        from backend.runtime_v3.event_presence import validate_movement_sources
+        try:
+            if self.scene_version < 10:
+                validate_movement_sources(self, raw, events, rejected_events, invalid_moves)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+        situation_actors = {}
+        for eid, event in list(events.items()):
+            if invalid_route_actors & set(event['participants'] + event['witnesses']):
+                rejected_events.add(eid)
+                del events[eid]
+                continue  # Provenance was checked; presence depends on the rejected route.
+            try:
+                situation_actors[eid] = set(event['participants'] + event['witnesses']) if self.scene_version >= 10 else validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+            except StructuralDeltaError as exc:
+                event_errors.append(exc)
+                rejected_events.add(eid)
+                del events[eid]
         from backend.runtime_v3.player_actions import validate_completions
-        validate_completions(self, player_actions, events, event_indices, written_sources)
+        # Rejected sources cannot prove completion or produce missing-coverage
+        # cascades. Actions with independent sources remain checkable.
+        rejected_actions = {row.get('player_action_id') if isinstance(row.get('player_action_id'), str) else None
+                            for row in raw.records['events']
+                            if isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'] in rejected_events
+                            and (row.get('player_action_id') is not None
+                                 or row.get('player_assertion') == 'completed_interaction'
+                                 or self.protected_actor_id and row.get('actor_id') == self.protected_actor_id)}
+        if None in rejected_actions:
+            # A missing source→action reference cannot yet be assigned to one
+            # action. Coverage is inconclusive until that source is repaired.
+            rejected_actions.update(player_actions)
+        try:
+            if self.scene_version < 10:
+                validate_completions(self, player_actions,
+                                 {eid: event for eid, event in events.items()
+                                  if event.get('player_action', {}).get('id') not in rejected_actions},
+                                 event_indices, written_sources, rejected_actions=rejected_actions)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+        for i, item in self.records(raw, 'movements'):
+            source = item.get('source_event_id')
+            if item.get('actor_id') != self.protected_actor_id or isinstance(source, str) and source in rejected_events:
+                continue
+            initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+                                 and self.before['characters'][self.protected_actor_id]['location_id'] is None)
+            if self.scene_version < 10 and not initial_placement and not self.movement_authorized(item, events, player_actions):
+                event_errors.append(StructuralDeltaError(
+                    'Перемещение требует explicit_choice с цитатой ввода, involuntary с принятым источником '
+                    'или проверенного player_action_id (напрямую либо через принятый source_event_id). '
+                    'Противоречащие собственные поля Movement не наследуются.',
+                    'movement_agency', repairable=True, section='movements', index=i,
+                    entity=self.protected_actor_id, source_ids=[item.get('source_event_id')]))
         from backend.runtime_v3.knowledge import apply_knowledge
         from backend.runtime_v3.reproduction import validate_birth_knowledge
-        validate_birth_knowledge(self, raw, events)
-        apply_knowledge(self, raw, events)
+        unvalidated_facts = set()
+        try:
+            validate_birth_knowledge(self, raw, events, rejected_event_ids=rejected_events)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+            # Birth disclosure is a prerequisite only for its protected facts.
+            # Diagnose unrelated acquisitions without applying dependent claims.
+            unvalidated_facts = exc.unvalidated_fact_ids
+        try:
+            apply_knowledge(self, raw, events, rejected_event_ids=rejected_events,
+                            unvalidated_fact_ids=unvalidated_facts)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+        if (event_errors and all(e.code == 'camera_invalid' and e.path.get('field') == 'observer_location_id' for e in event_errors)
+                and raw.semantic_candidate and self.before['camera']['mode']=='actor'
+                and raw.semantic_candidate['scene'].get('observer_location_id') == lid):
+            # The complete independently validated route already establishes this
+            # place. A legacy observer annotation adds no authority or outcome.
+            self.warn('scene', 0, 'Избыточная observer-аннотация не меняет принятую географию.',
+                      field='observer_location_id', code='camera_annotation_ignored')
+            event_errors = []
+            self.preflight_errors = []
+        if event_errors:
+            self.raise_independent_errors(raw, events, rejected_events, elapsed, event_errors)
         from backend.runtime_v3.secrets import apply_disclosures
         apply_disclosures(self, raw)
         from backend.runtime_v3.remote import deliver_due
@@ -467,7 +744,7 @@ class StateResolver:
                 if key == 'situation' and self.mode == 'background' and cid == self.protected_actor_id and value != actor[key]:
                     fatal('Фон меняет ситуацию управляемого персонажа.', 'background_agency_invalid', repairable=True,
                           section='character_changes', index=i, field=key, entity=cid)
-                if key == 'situation' and not situation_supported(self, item, situation_actors):
+                if key == 'situation' and self.scene_version < 10 and not situation_supported(self, item, situation_actors):
                     self.warn('character_changes', i, 'Ситуация не подтверждена сценой, перемещением или принятым Event.',
                               key, cid, 'situation_source_unconfirmed')
                     continue
@@ -499,7 +776,7 @@ class StateResolver:
                 if key == 'emotion' and cid == camera['controlled_actor_id']: actor['emotion_source_sequence'] = self.turn_id-1
             apply_changes(self, item, cid, i, events)
         from backend.runtime_v3.relationships import apply_relationships
-        apply_relationships(self, raw)
+        apply_relationships(self, raw, events)
         for i, item in self.records(raw, 'thread_changes'):
             if not isinstance(item.get('id'), str) or not item['id']:
                 self.warn('thread_changes', i, 'отсутствует ID'); continue
@@ -530,13 +807,6 @@ class StateResolver:
         from backend.runtime_v3.possessions import apply_possessions
         apply_possessions(self, raw, events)
         from backend.runtime_v3.commitments import apply_commitments
-        owned = set(s['pregnancies'])
-        claims = raw.records['scheduled_event_changes']
-        for i, item in enumerate(claims):
-            if isinstance(item,dict) and isinstance(item.get('id'),str) and item['id'] in owned:
-                self.warn('scheduled_event_changes',i,'Pregnancy schedule is Runtime-owned.',code='reproduction_schedule_owned')
-        raw.records['scheduled_event_changes'] = [item for item in claims
-            if not isinstance(item,dict) or not isinstance(item.get('id'),str) or item['id'] not in owned]
         apply_commitments(self, raw)
         from backend.runtime_v3.commitments import invalidate_dead_commitments
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
@@ -549,8 +819,10 @@ class StateResolver:
         from backend.runtime_v3.protagonist import reconcile
         reconcile(s)
         from backend.runtime_v3.pacing import validate_developments, validate_threads, validate_resolved_consequences
-        validate_resolved_consequences(self, raw)
-        validate_threads(self, raw)
+        if self.scene_version < 10:
+            validate_resolved_consequences(self, raw)
+        if self.scene_version < 10:
+            validate_threads(self, raw)
         accepted = validate_developments(self, raw)
         if accepted:
             s['meta']['pacing_recent'] = (s['meta']['pacing_recent'] + accepted)[-12:]
@@ -569,7 +841,8 @@ class StateResolver:
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
         from backend.runtime_v3.player_actions import validate_targets
-        validate_targets(self, player_actions)
+        if self.scene_version < 10:
+            validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -603,4 +876,7 @@ class StateResolver:
             choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
             if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):
                 choices = [c for c in choices if c['interaction_channel']!='physical']
+        for movement in self.history.movements:
+            if movement.get('source_event_id') in events:
+                movement['source_event_id'] = events[movement['source_event_id']]['id']
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards,self.pending_reviews)

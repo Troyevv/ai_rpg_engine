@@ -64,3 +64,13 @@ def test_api_projection_survives_storage_reload_without_mutating_save(tmp_path):
     second=TestClient(create_app(tmp_path/'game.sqlite',recover=False)).get(f'/api/saves/{sid}').json()
     assert [c['dossier'] for c in second['state']['characters']]==[c['dossier'] for c in first['state']['characters']]
     assert repo.get_snapshot(sid)==original
+
+
+def test_dossier_shows_known_death_independently_of_family_graph():
+    from backend.runtime_v3.models import Fact, Knowledge
+    s=state()
+    s['characters']['b'].update(life_status='dead', life_fact_id='death')
+    s['facts']['death']=Fact(id='death',text='Получено известие о смерти.',character_ids=['b']).model_dump()
+    assert details(s,'b')['life_status'] is None
+    s['knowledge']['a:death']=Knowledge(actor_id='a',fact_id='death').model_dump()
+    assert details(s,'b')['life_status']=='dead'

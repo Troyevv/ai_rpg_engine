@@ -111,7 +111,7 @@ class HTTPProvider:
         current=json.loads(next(m['content'].split('\n',1)[1] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
         if extraction:
             if self.fail_extraction:raise RuntimeError('fixture extraction failure')
-            value=json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=current['camera']['present_character_ids'],elapsed_minutes=self.elapsed),remote_events=self.rows),ensure_ascii=False)
+            value=json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=current['camera']['present_character_ids'],elapsed_minutes=self.elapsed),remote_events=self.rows),ensure_ascii=False)
             chunks=[NS(choices=[NS(delta=NS(content=value),finish_reason='stop')])]
         else:
             assert 'tools' not in kw and 'tool_choice' not in kw
@@ -383,7 +383,7 @@ def test_long_term_authored_send_and_npc_read_receipts():
         if stage=='long_term_narrative':
             return iter([authored(a)])
         current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
-        return iter([json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=['b'],elapsed_minutes=0),
+        return iter([json.dumps(dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=['b'],elapsed_minutes=0),
             events=[dict(id='write',text=PUBLIC,participants=['b'],witnesses=['b'],medium='action',advance_candidate_ids=kw['context_key'])],
             remote_events=[dict(sender_id='a',recipient_ids=['b'],channel='LETTER',existing_event_id=original['id'],reader_id='b'),extracted(a)]))])
     after,batch,report=run(s,dict(amount=10,unit='weeks',max_llm_calls=2),generate=generate,config=CONFIG)

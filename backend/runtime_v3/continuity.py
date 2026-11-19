@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field
 from backend.runtime_v3.models import StrictModel, fatal
 from backend.runtime_v3.calendar import scheduled_boundary
-from backend.runtime_v3.commitments import temporal_boundaries
+from backend.runtime_v3.commitments import temporal_boundaries, clock_barrier
 
 
 class ContinuityBeat(StrictModel):
@@ -79,7 +79,7 @@ def visible_event(state, observer, event):
     return bool(facts) and all(state['knowledge'].get(observer+':'+fid, {}).get('status') == 'known' for fid in facts)
 
 
-def project(state, scope, history=None):
+def project(state, scope, history=None, *, version=1):
     """Bounded tail, already limited to the active immutable History lineage."""
     history = history or {}
     rows = bases(state)
@@ -122,7 +122,7 @@ def project(state, scope, history=None):
                 if t['status'] in ('resolved', 'dormant', 'paused') and core.intersection(t['character_ids'])][:8]
     return dict(pressure=pressure, ordinary_scene_valid=True,
         recent_beats=list(beats.values())[-16:], pending_response_ids=pending,
-        closed_threads=terminal, compression=compression_limit(state, core), extra_llm_calls=0)
+        closed_threads=terminal, compression=compression_limit(state, core, 10080 if version >= 11 else 30, version=version), extra_llm_calls=0)
 
 
 def scene_signature(state):
@@ -130,11 +130,13 @@ def scene_signature(state):
     return [camera['location_id'], sorted(camera['present_character_ids']), camera['controlled_actor_id']]
 
 
-def compression_limit(state, actors, max_minutes=30):
+def compression_limit(state, actors, max_minutes=30, *, version=1):
     now = state['meta']['world_time']
     limit = max_minutes
     boundaries = []
     for event in temporal_boundaries(state):
+        if not clock_barrier(event, version):
+            continue
         due = event['due_minute']
         relevant = bool(set(event['character_ids']) & actors or event.get('interrupts') or
                         event.get('location_id') and event['location_id'] == state['camera']['location_id'])
@@ -198,7 +200,9 @@ def validate_due_birth_assessments(resolver, raw, *, require=False):
             if claim.narrative_outcome == 'unresolved_time_advance':
                 fatal('Narrative требует продвижения времени через неразрешённые роды; Extraction не может переписать сцену.',
                       'narrative_temporal_conflict', repairable=False, action='reauthor_narrative',
-                      entity=claim.pregnancy_id, **path)
+                      entity=claim.pregnancy_id, correction_ground=dict(kind='birth_boundary',
+                          pregnancy_id=claim.pregnancy_id, evidence=claim.evidence,
+                          constraint='Время не может пройти через неразрешённую границу родов.'), **path)
             if (claim.narrative_outcome == 'completed') != (claim.pregnancy_id in births):
                 raise ValueError('BirthClaim must agree with the Narrative assessment; ongoing labor is not birth_completed.')
     except (ValueError, TypeError) as exc:
@@ -239,7 +243,7 @@ def validate_temporal_boundaries(resolver, elapsed):
         for pid, p in state['pregnancies'].items()
     }
     boundary = compression_limit(dict(state, scheduled_events=boundaries, pregnancies=pregnancies),
-                                 actors, elapsed)
+                                 actors, elapsed, version=resolver.scene_version)
     if elapsed > boundary['max_minutes']:
         rows = [event for event in temporal_boundaries(dict(state,
             scheduled_events=boundaries, pregnancies=pregnancies))
@@ -448,7 +452,7 @@ def apply(resolver, raw, events):
     for index, row in enumerate(raw.records['continuity_beats']):
         try: claim = ContinuityBeat.model_validate(row)
         except (ValueError, TypeError):
-            if (isinstance(row, dict) and external is not None
+            if (not resolver.consequence_first and isinstance(row, dict) and external is not None
                     and (row.get('decision_actor_id') == external
                          or row.get('kind') == 'decision' and row.get('actor_id') == external)):
                 fatal('Повреждена аннотация действия игрока; проверьте типы и источник решения.',
@@ -461,9 +465,23 @@ def apply(resolver, raw, events):
         event = events.get(claim.source_event_id)
         if player_owned and (resolver.mode == 'background' or not player_dialogue):
             if resolver.mode == 'background':
+                if resolver.consequence_first:
+                    resolver.warn('continuity_beats', index, 'Фон не подтверждает решение игрока.',
+                                  code='continuity_external_decision_ignored')
+                    continue
                 reject('continuity_external_decision', section='continuity_beats', index=index,
                        field='player_evidence', entity=claim.source_event_id)
-            validate_player_decision(resolver, claim, event, index)
+            from backend.services.world_delta_errors import StructuralDeltaError
+            try:
+                validate_player_decision(resolver, claim, event, index)
+            except StructuralDeltaError as exc:
+                if not resolver.consequence_first:
+                    raise
+                # Only this optional annotation loses authority. Domain handlers
+                # run independently and never consume an unverified beat.
+                resolver.warn('continuity_beats', index, str(exc),
+                              code='continuity_external_decision_ignored')
+                continue
         actors = {claim.actor_id, *claim.target_ids}
         if claim.decision_actor_id is not None:
             actors.add(claim.decision_actor_id)
@@ -494,6 +512,10 @@ def apply(resolver, raw, events):
                 continue
         elif any(key in state['facts'] and state['knowledge'].get(claim.actor_id+':'+key, {}).get('status') != 'known'
                  for key in claim.basis_ids):
+            if resolver.consequence_first:
+                resolver.warn('continuity_beats', index, 'Основание аннотации неизвестно персонажу.',
+                              code='continuity_basis_unavailable')
+                continue
             reject('continuity_unknown_fact')
         value = claim.model_dump()
         if npc_decides or external is not None and decider == external:
@@ -505,6 +527,15 @@ def apply(resolver, raw, events):
         key = (event['id'], beat_key(value), value['decision_actor_id'])
         if key in accepted_beats:
             if accepted_beats[key] != value:
+                if resolver.consequence_first:
+                    # Neither conflicting annotation may suppress a later choice.
+                    event['continuity'] = [b for b in event.get('continuity', []) if
+                        (event['id'], beat_key(b), b['decision_actor_id']) != key]
+                    accepted_beats[key] = None
+                    prior.pop(beat_key(value), None)
+                    resolver.warn('continuity_beats', index, 'Противоречащие аннотации решения сняты.',
+                                  code='continuity_beat_conflict_ignored')
+                    continue
                 fatal('Противоречащие аннотации одного решения в одном Event.',
                       'continuity_beat_conflict', repairable=True, section='continuity_beats', index=index)
             resolver.warn('continuity_beats', index, 'Повторная аннотация этого Event.', code='continuity_duplicate')
@@ -525,7 +556,22 @@ def filter_choices(resolver, choices):
     blocked = {(r['kind'], tuple(sorted(r['basis_ids']))) for r in recent
                if r['status'] in ('resolved', 'rejected') and r['basis_digest'] == fingerprint(rows, r['basis_ids'])}
     seen, result = set(), []
-    for choice in choices:
+    for index, choice in enumerate(choices):
+        if resolver.choice_grounding_required:
+            grounding = choice.get('grounding')
+            actor = resolver.state['camera']['controlled_actor_id']
+            facts = grounding.get('fact_ids') if isinstance(grounding, dict) else None
+            scene = grounding.get('from_scene') if isinstance(grounding, dict) else None
+            # Scene meaning remains Extraction's responsibility. A typed source
+            # declaration is not a prose matcher, an Event or a Knowledge grant.
+            valid = (isinstance(facts, list) and all(isinstance(fid, str) and fid in resolver.state['facts']
+                     and resolver.state['knowledge'].get(actor+':'+fid, {}).get('status') in ('known', 'suspected') for fid in facts)
+                     and type(scene) is bool and bool(facts or scene)
+                     and (not scene or bool(resolver.narrative.strip() or resolver.player_input.strip())))
+            if not valid:
+                resolver.warn('choices', index, 'Источник предложения не указан или недоступен персонажу.',
+                              code='choice_knowledge_unproven')
+                continue
         ids, kind = choice.get('basis_ids'), choice.get('kind')
         key = None
         if ids:
@@ -533,6 +579,16 @@ def filter_choices(resolver, choices):
                 resolver.warn('choices', 0, 'Неизвестное основание варианта.', code='choice_basis_invalid'); continue
             if kind not in ('question', 'proposal', 'information', 'decision', 'opportunity'):
                 resolver.warn('choices', 0, 'Некорректный смысл варианта.', code='choice_kind_invalid'); continue
+            actor = resolver.state['camera']['controlled_actor_id']
+            def known_basis(key):
+                thread = resolver.state['threads'].get(key)
+                if thread and thread.get('discovered_by') is None and thread['character_ids']:
+                    # Legacy null is missing provenance, not worldwide awareness.
+                    return actor in thread['character_ids']
+                return actor_knows_dialogue_basis(resolver.state, rows, key, actor)
+            if any(not known_basis(key) for key in ids):
+                resolver.warn('choices', index, 'Основание предложения недоступно управляемому персонажу.',
+                              code='choice_knowledge_unproven'); continue
             key = (kind, tuple(sorted(ids)))
             if key in blocked: continue
             if any(rows[k].get('status') in ('resolved', 'cancelled', 'completed', 'failed', 'expired', 'closed') for k in ids): continue
@@ -563,3 +619,122 @@ def turn_signal(resolver):
                     if r.get('kind') == 'natural_compression')
     return dict(scene=scene_signature(after), progress=progress,
                 answered_response_ids=[eid for eid in pending if eid in answered])
+
+
+def validate_chronology(resolver, raw):
+    """Check explicit objective claims against Calendar/History, never parse prose."""
+    from backend.runtime_v3.raw import ChronologyClaim
+    from backend.runtime_v3.calendar import MINUTES_PER_DAY, current_time
+    from pydantic import ValidationError
+    from backend.services.world_delta_errors import StructuralDeltaError
+    errors = []
+    for i, value in enumerate(raw.records['chronology_claims']):
+        try:
+            claim = ChronologyClaim.model_validate(value)
+        except ValidationError as exc:
+            fatal(str(exc), 'chronology_claim_invalid', repairable=True, section='chronology_claims', index=i)
+        if claim.assertion != 'narrator':
+            continue
+        now = resolver.before['meta']['world_time']
+        elapsed = raw.final_scene.get('elapsed_minutes', 0)
+        end = now + elapsed if resolver.mode == 'turn' and not resolver.runtime_time_skip and type(elapsed) is int else now
+        if claim.reference_minute is not None:
+            if not now <= claim.reference_minute <= end:
+                fatal('Время высказывания вне текущей сцены.', 'chronology_reference_invalid', repairable=True, section='chronology_claims', index=i)
+            now = claim.reference_minute
+        if claim.kind == 'current_calendar':
+            from backend.runtime_v3.calendar import weekday_options, date_parts, profile_of
+            time = current_time(resolver.before, now)
+            if claim.date is not None:
+                try:
+                    date_parts(claim.date, profile_of(resolver.before))
+                except ValueError as exc:
+                    fatal(str(exc), 'chronology_claim_invalid', repairable=True,
+                          section='chronology_claims', index=i, field='date')
+            options = weekday_options(resolver.before)
+            if claim.weekday is not None and claim.weekday not in {o['id'] for o in options}:
+                fatal('Используйте ID из calendar_weekdays.', 'chronology_claim_invalid',
+                      repairable=True, section='chronology_claims', index=i, field='weekday')
+            # A fallback weekday calculated without a configured calendar is
+            # presentation only, not proof against an unknown in-world date.
+            configured = resolver.before['meta'].get('calendar') or {}
+            weekday = options[time['weekday']]['id'] if configured.get('start_date') or 'start_weekday' in configured else None
+            mismatch = ((claim.date is not None and time['date'] is not None and claim.date != time['date']) or
+                        (claim.weekday is not None and weekday is not None and claim.weekday != weekday))
+            if mismatch:
+                errors.append(StructuralDeltaError(
+                    'Объективная проза противоречит текущему Calendar. Требуется адресная коррекция текста.',
+                    'narrative_chronology_conflict', repairable=False, action='reauthor_narrative',
+                    section='chronology_claims', index=i, source_ids=['calendar'],
+                    chronology=dict(kind='current_calendar', current_minute=now,
+                        actual_date=time['date'], actual_weekday=weekday,
+                        claimed_date=claim.date, claimed_weekday=claim.weekday, evidence=claim.evidence)))
+            continue
+        event = resolver.chronology_events.get(claim.event_id)
+        minute = (event or {}).get('minute')
+        if type(minute) is not int:
+            fatal('Нет известного времени исходного события; recorded_minute не заменяет его.',
+                'chronology_source_unknown', repairable=True, section='chronology_claims', index=i,
+                source_ids=[claim.event_id])
+        actual = now // MINUTES_PER_DAY - minute // MINUTES_PER_DAY
+        if claim.elapsed_days == actual:
+            continue
+        errors.append(StructuralDeltaError('Объективная проза противоречит датированному событию. Требуется адресная коррекция текста.',
+            'narrative_chronology_conflict', repairable=False, action='reauthor_narrative',
+            section='chronology_claims', index=i, source_ids=[claim.event_id],
+            chronology=dict(event_id=claim.event_id, event_text=event.get('text', ''),
+                event_minute=minute, current_minute=now, actual_elapsed_days=actual,
+                claimed_elapsed_days=claim.elapsed_days, evidence=claim.evidence,
+                event_date=current_time(resolver.before, minute)['date'])))
+    if errors: raise StructuralDeltaError.combine(errors)
+
+
+def corrected_candidate(original, payload, grounds):
+    """Exact edits of rejected spans, not a regex interpretation or a reroll."""
+    import json
+    try:
+        edits = json.loads(payload)
+    except (ValueError, TypeError) as exc:
+        raise ValueError('Коррекция не вернула JSON edits.') from exc
+    if not isinstance(edits, dict) or set(edits) != {'edits'} or not isinstance(edits['edits'], list):
+        raise ValueError('Ожидается объект edits.')
+    expected = {g['evidence'] for g in grounds}
+    seen, spans = set(), []
+    for edit in edits['edits']:
+        if not isinstance(edit, dict) or set(edit) != {'original', 'replacement'}:
+            raise ValueError('Некорректная локальная правка.')
+        source, replacement = edit['original'], edit['replacement']
+        if (not isinstance(source, str) or source not in expected or source in seen or
+                original.count(source) != 1 or not isinstance(replacement, str) or
+                not replacement.strip() or replacement == source):
+            raise ValueError('Коррекция не ограничена однозначным отклонённым фрагментом.')
+        start = original.index(source)
+        spans.append((start, start+len(source), replacement))
+        seen.add(source)
+    if seen != expected:
+        raise ValueError('Исправлены не все отклонённые фрагменты.')
+    spans.sort()
+    if any(left[1] > right[0] for left, right in zip(spans, spans[1:])):
+        raise ValueError('Перекрывающиеся фрагменты требуют новой сцены.')
+    result = original
+    for start, end, replacement in reversed(spans):
+        result = result[:start] + replacement + result[end:]
+    return result
+
+
+def require_chronology_recheck(raw, grounds):
+    """Known corrected assertions cannot disappear from the new interpretation."""
+    def keys(value, ground=False):
+        if value.get('kind') == 'current_calendar':
+            minute = value.get('current_minute') if ground else value.get('reference_minute')
+            return {('calendar', minute, field) for field in ('date', 'weekday')
+                    if value.get(('claimed_' if ground else '') + field) is not None}
+        return {('event', value.get('event_id'))}
+    required = set().union(*(keys(g, True) for g in grounds))
+    found = set().union(*(keys(c) for c in raw.records['chronology_claims']
+                        if isinstance(c, dict) and c.get('assertion') == 'narrator'))
+    if required - found:
+        fatal('Повторно интерпретируйте исправленные утверждения через chronology_claims; '
+              'для Calendar сохраните reference_minute исправляемого утверждения.',
+              'chronology_recheck_missing', repairable=True, section='chronology_claims',
+              source_ids=[str(k) for k in sorted(required - found, key=str)])

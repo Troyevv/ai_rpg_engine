@@ -40,8 +40,11 @@ def create_app(db_path=None, recover=True):
             app.state.chat.recover()
             with repo.connect() as db:
                 stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
-                db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE status IN ('generating','extracting','validating')")
+                interrupted = [r[0] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
+                db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE json_extract(config_json,'$._published_scene') IS NULL AND status IN ('generating','extracting','validating')")
                 db.execute("UPDATE llm_requests SET status='interrupted' WHERE status='running'")
+            for jid in interrupted:
+                repo.recover_interrupted_scene(jid)
             for jid in stale:
                 preparation.stop(jid)
         yield
@@ -236,10 +239,16 @@ def create_app(db_path=None, recover=True):
         settings = body.config.model_dump()
         if body.interaction_channel is not None:
             settings['interaction_channel'] = body.interaction_channel
+        if body.observer_direction:
+            settings['observer_direction'] = True
         if body.time_skip:
             if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
             settings['time_skip'] = body.time_skip.model_dump()
         settings['expected_revision'] = body.revision
+        if body.recovery_source_job_id:
+            if body.kind != 'turn' or body.text or body.time_skip:
+                raise ValueError('Восстановление использует исходный ввод и Narrative обычного хода.')
+            settings['_recovery_source_job_id'] = body.recovery_source_job_id
         settings['target_turn_id'] = body.target_turn_id
         settings['rollback_following'] = body.rollback_following
         jid = engine.submit(repo, sid, body.text, body.kind, settings, api_key=credentials.resolve(body.config.provider, body.key()))
@@ -275,10 +284,18 @@ def create_app(db_path=None, recover=True):
         repo.abandon_job(sid, jid, body.revision, body.attempt_epoch)
         return job(jid)
 
+    @app.post('/api/jobs/{jid}/save-scene')
+    def save_completed_scene(jid: str, body: AbandonJob):
+        repo.save_completed_scene(jid,body.revision,body.attempt_epoch)
+        return job(jid)
+
     @app.post('/api/jobs/{jid}/retry')
     def retry(jid: str, body: Retry):
-        engine.retry(repo, jid, body.config.model_dump(), api_key=credentials.resolve(body.config.provider, body.key()))
-        return job(jid)
+        correction = body.correct_prose or body.correct_chronology
+        provider = json.loads(repo.get_job(jid)['config_json']).get('provider', 'local') if correction else body.config.provider
+        new_id = engine.retry(repo, jid, body.config.model_dump(), api_key=credentials.resolve(provider, body.key()),
+            correct_chronology=correction, revision=body.revision, attempt_epoch=body.attempt_epoch)
+        return job(new_id)
 
     @app.get('/api/jobs/{jid}/events')
     async def events(jid: str, request: Request):
@@ -374,7 +391,7 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Выбери персонажа или сцену камеры, не оба сразу.')
         settings={**body.config.model_dump(),'expected_revision':body.revision,
                   'camera_actor_id':body.actor_id,'camera_scene_id':body.scene_id,'camera_direct':True}
-        jid=engine.submit(repo,sid,'','background',settings,api_key=credentials.resolve(body.config.provider,body.key()))
+        jid=engine.submit(repo,sid,body.direction,'background',settings,api_key=credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 
     @app.get('/api/saves/{sid}/timeline')

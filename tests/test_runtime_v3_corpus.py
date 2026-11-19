@@ -1,4 +1,5 @@
 """Historical failure scenarios replayed as v3 inputs, not v2 mutation fallback."""
+from runtime_v3_fixture import arrival_sources
 from pathlib import Path
 from copy import deepcopy
 import json
@@ -23,6 +24,7 @@ def player_movement(raw, actor='character_1'):
         raw.setdefault('movements',[]).append(dict(actor_id=actor,to_location_id=target))
         rows=[raw['movements'][-1]]
     for row in rows: row.update(player_assertion='explicit_choice',player_evidence=PLAYER)
+    arrival_sources(raw)
 
 
 @pytest.mark.parametrize('path',sorted(p for p in CORPUS.glob('*.json') if p.stem not in SCENE_CONFLICTS),ids=lambda p:p.stem)
@@ -34,6 +36,14 @@ def test_reconstructed_failure_corpus_commits_without_repair(db,path):
     # Background scenarios start from the supplied observer camera; no artificial
     # preceding turn is needed to test the same resolver and commit path.
     job=repo.begin_job(sid,PLAYER,'pov' if fixture['kind']=='pov' else 'start',dict(CONFIG,recent_turns=100,**fixture['config']))
+    if path.stem=='14_background':
+        before=repo.get_snapshot(sid)
+        # This old reconstructed reply places Lyuda in the corridor although
+        # its prose sends her to the staff room. END alone cannot certify it.
+        assert len(execute(repo,job,raw,fixture['narrative']))==3
+        assert repo.get_job(job)['status']=='error'
+        assert repo.get_snapshot(sid)==before
+        return
     assert len(execute(repo,job,raw,fixture['narrative']))==2
     assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
     state=repo.get_snapshot(sid)['world_state'];assert_world_state_v3_invariants(state)
@@ -55,6 +65,9 @@ def test_earlier_source_backed_scenarios_on_v3(db,path):
         repaired['events'][0].pop('minute')
         repaired['events'][0]['order'] = 1
         repaired['movements'][0]['order'] = 2
+        for move in repaired['movements']:
+            event=next(e for e in repaired['events'] if e['id']==move['source_event_id'])
+            if 'order' in move:event['order']=move['order']
         assert len(execute(repo, job, raw, fixture['narrative'], repaired=repaired)) == 3
         repair, = repo.turn_diagnostics(sid)[0]['repairs']
         assert repair['repair_error_code'] == 'event_presence_invalid'
@@ -79,6 +92,7 @@ def test_conflicting_scene_corpus_requires_repair_before_commit(db, name):
     before = setup_scenario(repo, sid, fixture['initial'])
     raw = wire(fixture['payload'], fixture['narrative'], before)
     for row in raw.get('movements', []):
+        row['assertion'] = 'completed_arrival'
         if row.get('actor_id')=='character_1':
             row.update(player_assertion='explicit_choice',player_evidence=PLAYER)
     # The old policy silently discarded these conflicting movements. #64

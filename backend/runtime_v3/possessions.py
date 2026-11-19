@@ -115,7 +115,9 @@ def apply_possessions(r, raw, events):
     introductions = {v['fact_id'] for v in items.values() if v['fact_id']}
     proposals = []
     for i, row in r.records(raw, 'possession_deltas'):
-        c = r.typed(PossessionDelta, row, 'possession_deltas', i)
+        declared = row.get('assertion') == 'completed_outcome' and row.get('significance') == 'continuity_required'
+        c = r.typed(PossessionDelta, row, 'possession_deltas', i,
+                    required_code='possession_invalid' if r.semantic_slice and declared else None)
         if c: proposals.append((i, c))
     counts = {}
     for _, c in proposals: counts.setdefault(c['item_id'], []).append(c)
@@ -169,7 +171,7 @@ def apply_possessions(r, raw, events):
                 required.add(decision)
                 if r.protected_actor_id in required:
                     quote = normalized(c['player_evidence'])
-                    if r.mode == 'background' or c['player_assertion'] != 'explicit_choice' or not quote or quote not in normalized(r.player_input):
+                    if r.mode == 'background' or r.scene_version < 10 and (c['player_assertion'] != 'explicit_choice' or not quote or quote not in normalized(r.player_input)):
                         raise ValueError('Добровольное распоряжение EXTERNAL требует явного действия пользователя.')
             elif c['transition'] == 'involuntary' and event['medium'] not in ('action', 'observation', 'discovery'):
                 raise ValueError('Недобровольное изменение требует принятого последствия, не слуха/плана.')
@@ -184,6 +186,9 @@ def apply_possessions(r, raw, events):
                 source_ids=[event['id']], operation_ids=[guard], source_event_id=event['id'],
                 fact_id=c['fact_id'], evidence=c['evidence'], operation=c['operation'])
         except ValueError as exc:
+            if r.semantic_slice:
+                from backend.runtime_v3.models import fatal
+                fatal(str(exc), 'possession_rejected', repairable=True, section='possession_deltas', index=i)
             r.warn('possession_deltas', i, str(exc), code='possession_rejected')
 
 

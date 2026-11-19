@@ -22,12 +22,14 @@ def response(current, text, narrative=None):
     if text=='Отменяем встречу.':prose='Катя отвечает: «Хорошо, встреча отменена».'
     if physical:prose+='\n\n'+physical
     if narrative is None:return prose
-    result=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=2),choices=[])
+    result=dict(player_agency=dict(status='preserved', actions=[], narrative_audit=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=2),choices=[])
     if physical:
         result['events']=[dict(id='outside',text='Стук в дверь.' if text==OFFER else 'Виктория требует ответа.',evidence=physical,
             participants=[actor],witnesses=[actor],medium='observation',interaction_channel='physical')]
         result['physical_projections']=[dict(event_id='outside',text=physical)]
         result['choices']=[dict(action='Подойти к двери и ответить Виктории',speech='',interaction_channel='physical'),dict(action='Выйти из кабинета',speech='',interaction_channel='physical')]
+        for choice in result['choices']:
+            choice['grounding']=dict(fact_ids=[],from_scene=True)
         result['final_scene'].update(situation=physical,situation_evidence=physical)
     if ending:result['call_lifecycle_changes']=[dict(call_id=comm['active_call'],actor_id=npc,assertion='completed_end',evidence=END)]
     # Deliberately defer agreement until a later turn: current player input is

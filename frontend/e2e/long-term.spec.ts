@@ -65,3 +65,37 @@ test('209: father can play the delivery scene and advance again', async ({ page,
   expect(resumed.interruption).toBeNull();
   expect(resumed.actual_target).toBe(1981 + 14 * 1440);
 });
+
+test('#250 rejected LTA groups show incomplete coverage after reload', async ({page, request}) => {
+  const {defaults} = await import('../src/types');
+  const seed = await request.post('/test/long-term-seed');
+  expect(seed.ok()).toBeTruthy();
+  const selected = await seed.json();
+  const profile = `lta250-${selected.save}`;
+  await request.put(`/api/settings/${profile}`, {data: {...defaults, game: {
+    ...defaults.game, model: 'lta250-test', context_length: 49152,
+  }}});
+  await page.addInitScript(({selected, profile}) => {
+    localStorage.setItem('selection', JSON.stringify(selected));
+    localStorage.setItem('profile', profile);
+  }, {selected, profile});
+  await page.goto('/');
+  await gameAction(page, 'Длительный переход');
+  const dialog = page.getByRole('dialog').last();
+  await dialog.getByLabel('Количество единиц перехода').fill('15');
+  await dialog.getByText(/Подробности симуляции/).click();
+  await dialog.getByLabel('Лимит обращений к модели').fill('4');
+  await dialog.getByRole('button', {name: 'Подтвердить длительный переход'}).click();
+  const view = async () => (await request.get(`/api/saves/${selected.save}`)).json();
+  await expect.poll(async () => (await view()).state.last_long_term_advance?.status).toBe('incomplete');
+  const before = await view();
+  expect(before.state.last_long_term_advance.coverage.rejected_causes).toBeGreaterThan(0);
+  expect(before.state.last_long_term_advance.llm_calls).toBeLessThanOrEqual(4);
+  await page.reload();
+  const result = page.locator('.advance-result');
+  await expect(result).toContainText('Симуляция неполная');
+  await expect(result).toContainText('Отклонено причин:');
+  expect((await view()).state.last_long_term_advance).toEqual(before.state.last_long_term_advance);
+  await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});

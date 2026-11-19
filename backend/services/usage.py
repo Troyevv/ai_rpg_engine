@@ -52,7 +52,30 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         config.get('provider', 'local'), config['model'], config.get('thinking', 'off')
     )[0]
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
+    if config.get('_extraction_contract',1) >= 6:
+        from backend.services.structured_extraction import STAGES, transport, request_schema
+        if stage in STAGES:
+            selected=config.get('_extraction_transport',transport(config))
+            schema=request_schema(messages)
+            effective.update(extraction_contract=config['_extraction_contract'], extraction_transport=selected, extraction_schema=schema)
+            if selected=='responses_json_schema':
+                effective.pop('response_format',None)
+                name = f"extraction_v{config['_extraction_contract']}" if config['_extraction_contract'] >= 9 else 'extraction_v6'
+                effective['text_format']={'type':'json_schema','name':name}
+                if config['_extraction_contract'] >= 9:
+                    kwargs['structured_name'] = name
+                kwargs.update(structured_schema=schema, extraction_transport=selected)
+            elif selected!='chat_json_object':
+                raise ValueError('Неизвестный записанный transport Extraction.')
+    from backend.services.provider_attempt import CURRENT, failed
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
+    if hasattr(messages, '__dict__'):
+        messages.request_id = rid  # Exact request identity for subsequent candidate audit.
+    attempt = dict(request_id=rid, job_id=job_id, stage=stage, stream_complete=False, terminal_seen=False)
+    epoch = getattr(storage, 'worker_epoch', None)
+    if epoch is not None: attempt['attempt_epoch'] = epoch
+    persist = getattr(storage, 'record_provider_attempt', None)
+    token = CURRENT.set(dict(data=attempt, persist=(lambda data: persist(rid, data)) if persist else None))
     started=time.perf_counter()
     response = []
     usage, status, finish_reason = None, 'error', None
@@ -63,26 +86,38 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
     def finished(value):
         nonlocal finish_reason
         finish_reason=value
+        attempt['finish_reason'] = value
     try:
         for chunk in stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs):
             response.append(chunk)
             yield chunk
         if finish_reason == 'length': raise OutputLimitReached('Достигнут лимит ответа.')
         status = 'complete'
-    except GeneratorExit:
+        attempt['stream_complete'] = True
+    except GeneratorExit as exc:
+        failed(exc)
         status = 'stopped'
         raise
-    except OutputLimitReached:
+    except OutputLimitReached as exc:
+        failed(exc)
         status = 'length'
         raise
     except ProviderHTTPError as exc:
+        failed(exc)
         provider_error = exc.diagnostic
+        raise
+    except Exception as exc:
+        failed(exc)
         raise
     finally:
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():
             status = 'stopped'
-        storage.finish_request(
-            rid, status, usage, time.perf_counter() - started, finish_reason,
-            response_text=''.join(response), provider_error=provider_error,
-        )
+        attempt.update(status=status, finish_reason=finish_reason, usage_received=usage is not None)
+        try:
+            storage.finish_request(
+                rid, status, usage, time.perf_counter() - started, finish_reason,
+                response_text=''.join(response), provider_error=provider_error, provider_attempt=attempt,
+            )
+        finally:
+            CURRENT.reset(token)

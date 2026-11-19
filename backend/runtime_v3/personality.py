@@ -4,6 +4,7 @@ Extraction interprets meaning; Runtime owns provenance, agency, eligibility and
 compare-and-set. History owns chronology; no per-turn psychologist or trait scores.
 """
 from copy import deepcopy
+from backend.runtime_v3.models import fatal
 from typing import Literal
 import logging
 from pydantic import Field
@@ -17,6 +18,7 @@ MAX_EVIDENCE = 32
 
 
 class EvidenceClaim(StrictModel):
+    theme: str | None = Field(default=None, max_length=100)
     id: str = Field(min_length=1, max_length=100)
     actor_id: str
     source_event_id: str
@@ -101,6 +103,9 @@ def project_card(card, actor, *, state=None, observer=None):
 
 def _player_owned(resolver, claim, event):
     from backend.runtime_v3.resolver import normalized
+    if resolver.scene_version >= 10:
+        return (resolver.mode != 'background' and claim['actor_id'] == resolver.protected_actor_id
+                and claim['kind'] in ('behavior','turning_point') and claim['actor_id'] in event['participants'])
     quote = normalized(claim.get('player_evidence', ''))
     return (resolver.mode != 'background' and claim['actor_id'] == resolver.protected_actor_id
             and claim.get('player_assertion') == 'completed_voluntary_behavior'
@@ -120,7 +125,9 @@ def _record(resolver, kind, cid, before, after, **extra):
 def apply_personality(resolver, raw, events):
     aliases = {}
     for i, row in resolver.records(raw, 'development_evidence'):
-        claim = resolver.typed(EvidenceClaim, row, 'development_evidence', i)
+        observers = row.get('perceived_by') if resolver.scene_version >= 10 else None
+        claim = resolver.typed(EvidenceClaim, {k:v for k,v in row.items() if k != 'perceived_by'}
+                               if observers is not None else row, 'development_evidence', i)
         if not claim:
             continue
         cid = claim['actor_id']; actor = resolver.state['characters'].get(cid)
@@ -132,6 +139,11 @@ def apply_personality(resolver, raw, events):
                 event = dict(id=milestone['id'], participants=milestone['actor_ids'], witnesses=[],
                              fact_ids=[], evidence=claim['evidence'])
         if actor is None or actor['life_status'] == 'dead' or event is None or cid not in event['participants']:
+            dependent = any(isinstance(d, dict) and isinstance(d.get('evidence_ids'), list)
+                and row.get('id') in d['evidence_ids'] for d in raw.records['personality_deltas'] + raw.records['value_deltas'])
+            if resolver.semantic_slice and (dependent or actor is not None and actor['life_status'] != 'dead'
+                    and cid != resolver.protected_actor_id):
+                fatal('Заявленный опыт NPC должен иметь принятый источник.', 'development_source_invalid', repairable=True, section='development_evidence', index=i)
             resolver.warn('development_evidence', i, 'Источник опыта не является принятым событием персонажа.', code='development_source_invalid')
             continue
         owned = _player_owned(resolver, claim, event)
@@ -147,9 +159,12 @@ def apply_personality(resolver, raw, events):
         if eid in profile['evidence'] or eid in profile['seen_sources']:
             continue
         profile['seen_sources'].append(eid)
-        entry = DevelopmentEvidence(id=eid, source_event_id=event['id'], source_turn=resolver.turn_id,
+        entry = DevelopmentEvidence(theme=claim.get('theme'), id=eid, source_event_id=event['id'], source_turn=resolver.turn_id,
             minute=resolver.state['meta']['world_time'], meaning=claim['meaning'], kind=claim['kind'],
-            player_owned=owned, evidence=claim['evidence'], witnesses=event['witnesses'], fact_ids=event['fact_ids']).model_dump()
+            player_owned=owned, evidence=claim['evidence'] or claim['meaning'],
+            witnesses=event['witnesses'] if observers is None else [a for a in dict.fromkeys(observers)
+                if a in resolver.state['characters'] and not (resolver.mode == 'background' and a in resolver.protected_knowledge_actor_ids)],
+            fact_ids=event['fact_ids']).model_dump()
         profile['evidence'][eid] = entry
         _record(resolver, 'development_evidence', cid, None, entry, source_ids=[event['id']])
         while len(profile['evidence']) > MAX_EVIDENCE:
@@ -218,6 +233,8 @@ def apply_personality(resolver, raw, events):
                             witnesses=sorted(witnesses),fact_ids=sorted(facts)).model_dump()
                 if len(proposed) > 48: raise ValueError('Профиль превышает ограничение в 48 характеристик.')
             except ValueError as exc:
+                if resolver.semantic_slice:
+                    fatal(str(exc), 'personality_conflict', repairable=True, section='personality_deltas', index=i)
                 resolver.warn('personality_deltas', i, str(exc), code='personality_conflict'); continue
             before = {op['item_id']:deepcopy(profile['items'].get(op['item_id'])) for op in claim['operations']}
             after = {op['item_id']:deepcopy(proposed.get(op['item_id'])) for op in claim['operations']}
@@ -227,6 +244,8 @@ def apply_personality(resolver, raw, events):
             _record(resolver, 'personality_delta', cid, before, after, source_ids=ids,
                     operation_ids=guards, evidence=claim['evidence'], rationale=claim['rationale'], sources=deepcopy(sources))
             continue
+        if resolver.semantic_slice:
+            fatal('Неизвестная ссылка на canonical опыт.', 'personality_source_invalid', repairable=True, section='personality_deltas', index=i)
         resolver.warn('personality_deltas', i, 'Неизвестная ссылка на canonical опыт.', code='personality_source_invalid')
 
 
@@ -245,6 +264,7 @@ def context_profile(actor, *, evaluation=False):
         result['evidence'] = []; budget += 1400
         for entry in reversed(list(profile['evidence'].values())):
             record = {k:entry[k] for k in ('id','source_event_id','source_turn','meaning','kind','player_owned')}
+            if entry.get('theme'): record['theme'] = entry['theme']
             if len(str(record)) > budget: continue
             result['evidence'].append(record); budget -= len(str(record))
             if len(result['evidence']) == 8: break

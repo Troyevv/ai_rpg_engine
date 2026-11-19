@@ -43,6 +43,9 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             ''')
 
         self.init_engine()
+        with self.connect() as db:
+            db.execute("""CREATE INDEX IF NOT EXISTS turns_time_jumps ON turns(save_id,sequence)
+                WHERE kind='long_term' OR json_type(changes_json,'$.time_skip')='object'""")
         self.init_runtime()
         self.init_documents()
         from backend.repositories.living_world import migrate
@@ -137,14 +140,80 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             result['history_warnings']=warnings
             return result
 
-    def list_turns(self, save_id):
+    def context_history(self, save_id, before_id, limit, actor, main):
+        """Choose IDs before projecting snapshot JSON. Sequence bounds bind regeneration."""
         with self.connect() as db:
+            stop = (db.execute('SELECT sequence FROM turns WHERE id=? AND save_id=?', (before_id,save_id)).fetchone()[0]
+                    if before_id is not None else 2**63-1)
+            params = dict(save=save_id, stop=stop, actor=actor, main=main, limit=max(3,min(20,limit)))
+            sequence = db.execute('SELECT max(sequence) FROM turns WHERE save_id=:save AND sequence<:stop', params).fetchone()[0]
+            ids = {r[0] for r in db.execute("""
+                SELECT id FROM turns WHERE save_id=:save AND sequence<:stop AND kind!='communication'
+                AND (:actor IS NULL OR (pov_actor_id=:actor AND json_extract(changes_json,'$.presentation.observer_scene')=1)
+                     OR EXISTS(SELECT 1 FROM json_each(audience_json) WHERE value=:actor)
+                     OR (coalesce(json_array_length(audience_json),0)=0 AND kind!='background'
+                         AND coalesce(pov_actor_id,:main)=:actor))
+                ORDER BY sequence DESC LIMIT :limit""",params)}
+            # Preserve elapsed-time provenance across a long interval even when the jump
+            # is outside the literary tail. Later situation edits can refresh old prose.
+            jump = db.execute("""SELECT id,sequence FROM turns WHERE save_id=:save AND sequence<:stop
+                AND (kind='long_term' OR json_type(changes_json,'$.time_skip')='object')
+                ORDER BY sequence DESC LIMIT 1""",params).fetchone()
+            refreshed = set()
+            legacy_temporal = set()
+            if jump:
+                bounds = dict(params, start=jump['sequence']+1)
+                refreshed.update(r[0] for r in db.execute("""
+                    SELECT DISTINCT change.value FROM turns, json_each(changes_json,'$.context_situation_changes') change
+                    WHERE save_id=:save AND sequence BETWEEN :start AND :stop-1""", bounds))
+                # Older active variants have no receipt. Read their own snapshot
+                # projections only where the original situation may have changed.
+                legacy_temporal.update(r[0] for r in db.execute("""
+                    SELECT id FROM turns WHERE save_id=:save AND sequence BETWEEN :start AND :stop-1
+                    AND json_type(changes_json,'$.context_situation_changes') IS NULL
+                    AND (json_type(changes_json,'$.state_patch') IS NULL
+                         OR json_extract(before_json,'$.world_state.camera.situation')
+                            IS NOT json_extract(after_json,'$.world_state.camera.situation')
+                         OR EXISTS (SELECT 1 FROM json_each(changes_json,'$.state_patch.upserts.characters') c
+                             WHERE json_extract(c.value,'$.situation')
+                               IS NOT json_extract(before_json,'$.world_state.characters.' || json_quote(c.key) || '.situation')))
+                    """, bounds))
+                legacy_temporal.add(jump['id'])
+        rows = self.list_turns(save_id, context=True, ids=ids|legacy_temporal)
+        for row in rows:
+            row['_temporal_only'] = row['id'] not in ids
+            if jump and row['id'] == jump['id']:
+                row['_refreshed_situations'] = refreshed
+        return rows, 0 if sequence is None else sequence+1
+
+    def list_turns(self, save_id, *, context=False, ids=None, sequences=None):
+        with self.connect() as db:
+            # Internal context metadata comes from the active turn snapshots.
+            # Public history neither exposes GM situations nor ships snapshots.
+            temporal = ''
+            if context:
+                for column, name in (('before_json', 'temporal_before'), ('after_json', 'temporal_after')):
+                    temporal += f""", json_object(
+                        'meta',json_object('world_time',json_extract({column},'$.world_state.meta.world_time'),
+                                           'calendar',json_extract({column},'$.world_state.meta.calendar')),
+                        'camera',json_object('situation',json_extract({column},'$.world_state.camera.situation')),
+                        'characters',json((SELECT json_group_object(c.key,json_object('situation',json_extract(c.value,'$.situation')))
+                            FROM json_each(turns.{column},'$.world_state.characters') c))) AS {name}"""
+            clause, params = ' WHERE save_id=?', [save_id]
+            for key, items in (('id', ids), ('sequence', sequences)):
+                if items is not None:
+                    clause += f' AND {key} IN (SELECT value FROM json_each(?))'
+                    params.append(json.dumps(sorted(items)))
             rows = [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json'
+                + temporal + ' FROM turns' + clause + ' ORDER BY sequence', params)]
             from backend.runtime_v3.surfaces import route
             for row in rows:
                 before = json.loads(row.pop('before_json'))
                 row['presentation'] = json.loads(row['changes_json']).get('presentation') or route(before, row['kind'])
+                if context:
+                    for key in ('temporal_before', 'temporal_after'):
+                        row[key] = json.loads(row[key])
             return rows
 
     def physical_choice_source(self, save_id, turns, state):
@@ -169,15 +238,77 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.services.timeline import parse_time
             from backend.repositories.living_world import project
             world=state['world_state'];before=json.loads(row['state_json'])['world_state']
-            lid=identity('location',metadata['location'].strip().casefold())
-            world['locations'].setdefault(lid,Location(id=lid,name=metadata['location']).model_dump())
-            present=metadata['present_ids']
-            if any(cid not in world['characters'] for cid in present):raise ValueError('Неизвестный персонаж.')
-            world['camera'].update(location_id=lid,present_character_ids=present)
-            for cid in present:world['characters'][cid]['location_id']=lid
+            def location_id(name, current_id):
+                name = name.strip()
+                if not name:
+                    return current_id
+                matches = [lid for lid, loc in world['locations'].items() if loc['name'].casefold() == name.casefold()]
+                if current_id in matches:
+                    return current_id
+                if len(matches)>1:
+                    raise ValueError('Имя места неоднозначно. Уточни название.')
+                lid = matches[0] if matches else identity('location',name.casefold())
+                world['locations'].setdefault(lid, Location(id=lid,name=name).model_dump())
+                return lid
+
+            lid = location_id(metadata['location'],world['camera']['location_id'])
+            present = metadata['present_ids']
+            if len(set(present)) != len(present) or any(cid not in world['characters'] for cid in present):
+                raise ValueError('Проверь список участников сцены.')
+            camera = world['camera']
+            camera.update(location_id=lid, present_character_ids=present,
+                          observed_character_ids=[cid for cid in camera['observed_character_ids'] if cid not in present],
+                          remote_interactions=[row for row in camera['remote_interactions'] if row['actor_id'] not in present])
+            for cid in present:
+                world['characters'][cid]['location_id']=lid
             minute=parse_time(metadata['time'],world['meta']['world_time'])
             if minute is not None:world['meta']['world_time']=minute
+            from backend.runtime_v3.models import Fact, WorldHistoryV3
+            from backend.runtime_v3.knowledge import correct_knowledge
+            from backend.runtime_v3.repository import append_history
+            batch = WorldHistoryV3()
+            position = metadata.get('position')
+            if position:
+                actor = position['actor_id']
+                if actor not in world['characters']:
+                    raise ValueError('Неизвестный персонаж.')
+                dest = location_id(position['location'],world['characters'][actor]['location_id'])
+                world['characters'][actor]['location_id'] = dest
+                camera = world['camera']
+                if camera.get('controlled_actor_id') == actor and dest != lid:
+                    camera.update(location_id=dest,present_character_ids=[actor],observed_character_ids=[])
+                elif dest != lid:
+                    camera['present_character_ids'] = [cid for cid in present if cid != actor]
+                batch.state_changes.append(dict(kind='manual_position',source='player_edit',actor_id=actor,
+                    location_id=dest,turn_id=world['meta']['turn_id']))
+            if before['camera'] != world['camera']:
+                batch.state_changes.append(dict(kind='manual_scene',source='player_edit',
+                    turn_id=world['meta']['turn_id'], location_id=world['camera']['location_id'], present_ids=world['camera']['present_character_ids']))
+            knowledge = metadata.get('knowledge')
+            if knowledge:
+                text = knowledge['text'].strip()
+                actors = knowledge['actor_ids']
+                if len(set(actors)) != len(actors) or any(cid not in world['characters'] for cid in actors):
+                    raise ValueError('Укажи точное сведение и его получателей.')
+                # An author's own proposition has stable identity, independent
+                # of other assertions with the same words from different sources.
+                fid = knowledge.get('fact_id')
+                if fid:
+                    from backend.runtime_v3.secrets import visible_fact_ids
+                    if text or fid not in visible_fact_ids(before):
+                        raise ValueError('Выбери доступное утверждение или введи новое.')
+                else:
+                    if not text:
+                        raise ValueError('Введи текст нового сведения.')
+                    fid = identity('manual-fact', text)
+                    world['facts'].setdefault(fid, Fact(id=fid,text=text,visibility='secret').model_dump())
+                for actor in actors:
+                    correct_knowledge(world, batch, actor, fid, knowledge['status'])
+            if metadata.get('social'):
+                from backend.runtime_v3.manual_social import correct
+                world = state['world_state'] = correct(world,batch,metadata['social'],row['revision'])
             assert_world_state_v3_invariants(world,before)
+            state['history_head'] = append_history(db,state.get('history_head'),batch.to_dict(),before=before,after=world)
             project(db,save_id,state)
             db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))

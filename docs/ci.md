@@ -2,24 +2,18 @@
 
 ## Execution and dependency policy
 
-`verify` requires backend pytest, frontend Vitest, TypeScript + production build,
-and a valid selection plan. Backend and frontend run concurrently. Browser jobs
-start after frontend, without waiting for pytest. The production bundle is built
-once and transferred as a run-scoped artifact. Only pip/npm download caches are
-reused; databases, browser profiles and application state are never cached.
+`backend`, `frontend` and `e2e-smoke` give early feedback. Backend pytest is
+partitioned by module across four isolated runners using measured JUnit durations.
+Frontend runs Vitest, TypeScript and the production build once. All browser jobs use
+that build. The workflow caches pip/npm downloads and the Playwright browser
+distribution keyed to the lockfile. SQLite, browser profiles and saves are isolated.
 
-`e2e-smoke` is the stable required aggregate for both desktop and mobile. It
-requires four successful shard jobs and validates their JSON reports, including
-actual passed tests in every critical suite on both projects. A skipped job,
-missing report, empty collection, timeout, interrupted test or retry cannot pass.
-When policy requires full, this gate also requires and validates full regression.
-Do not make the conditional `e2e-full` check a globally required check.
-
-`e2e-full` runs all specs on desktop/mobile, two shards each, nightly at 01:17 UTC,
-via Actions → Verify RPG Engine → Run workflow, and for risky PR changes. The
-nightly runs the default branch. Until this workflow is merged, a genuine scheduled
-run cannot be demonstrated. Manual dispatch also requires the workflow to exist on
-the default branch; do not claim it has run merely because YAML validates.
+`e2e-smoke` validates four desktop/mobile shard reports. Missing results, empty
+coverage of a critical suite, interruptions and retries fail the gate.
+`e2e-full` validates the complete desktop and mobile suites across eight shards.
+It runs on every PR, on the nightly schedule at 01:17 UTC and on manual dispatch.
+`verify` requires both E2E gates, backend, frontend and the selection plan.
+The workflow cancels superseded PR runs for that PR. Other PRs retain their runners.
 
 The explicit dependency map is `scripts/ci/e2e-policy.json`. Phone changes include
 all phone/call specs (including new matching files), current-game, reachability,
@@ -52,28 +46,20 @@ multiple workers or unisolated processes on the same host.
 
 ## Safe rollout and branch protection
 
-On inspection 2026-10-30, master `0d6e3c5` reported `protected: false`, protection
-`enabled: false`, no required contexts, and repository rulesets `[]`. Detailed
-protection read returned 403 (integration lacks administration). Protection has
-NOT been enabled by this change.
+On 2026-11-19 the GitHub branch API reported `master` unprotected, enforcement
+off and no required contexts. The branch rules endpoint returned an empty list.
+Reading detailed administration settings returned HTTP 403.
 
-1. Before allowing merges, repository Settings → Branches → Add branch protection
-   rule → pattern `master`. Enable Require a pull request before merging, Require
-   status checks to pass before merging, Require branches to be up to date, and
-   Do not allow bypassing the above settings. Require exact check names `verify`
-   and `e2e-smoke` after they have appeared. Do not require individual matrix names.
-   Keep force pushes and deletions disabled. Review any admin/custom bypass lists.
-2. Default rollout runs full alongside selected smoke on every PR. Leave repository
-   variable `CI_SELECTIVE_ENABLED` unset until successful full/selected comparisons,
-   negative-gate checks, #163 integration and measured time/cost have been reviewed.
-   Both are blocking through e2e-smoke; this is intentionally not a false promise
-   of immediate 5–10 minute CI during migration.
-3. After evidence review, Settings → Secrets and variables → Actions → Variables →
-   New repository variable: `CI_SELECTIVE_ENABLED=true`. Document the enabling
-   decision. Low-risk mapped changes then run smoke + domain suites; risky changes
-   still require full. Removing the variable immediately restores full comparison.
-4. Re-read protection/required checks or verify them in Settings. A green workflow
-   alone does not prove merge protection. Test a failing PR cannot merge.
+To enforce the full regression before merge, require `verify` in the branch rule for
+`master`, require the branch to be current and disable bypasses. Existing rules
+that also require `e2e-smoke` can retain it. GitHub repository administrators
+manage these settings. A workflow present in a PR can report failure independently
+of whether GitHub allows the merge button.
+
+`CI_SELECTIVE_ENABLED=true` expands the early smoke selection for mapped domains.
+The full suite always runs in its own lane. A change requiring full coverage uses
+the critical smoke files for early feedback while the full lane covers every file.
+See the [Issue 263 timing comparison](manual_qa/narrative_v4/final263.md).
 
 Nightly failure is a failed visible workflow/check and creates or updates the open
 `CI: nightly regression on master` issue. The dedicated scheduled-only alert job

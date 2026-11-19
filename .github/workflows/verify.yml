@@ -47,11 +47,17 @@ jobs:
           name: e2e-plan
           path: e2e-plan.json
           retention-days: 7
-  backend:
+  backend-tests:
     runs-on: ubuntu-latest
-    # PR #261: hosted run 44276921181 reached only 93% at the 25m deadline.
-    # Allow the measured ~27m suite/setup plus report upload and a 3m reserve.
-    timeout-minutes: 30
+    # Keep setup, the combined Chat/Narrative tests and report upload within each shard's budget.
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PYTEST_CI_SHARD: ${{ matrix.shard }}/4
+      PYTEST_ADDOPTS: -p scripts.ci.pytest_shard
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,8 +77,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pytest-results
+          name: pytest-results-${{ matrix.shard }}
           path: pytest-results.xml
+  backend:
+    needs: backend-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          SHARDS: ${{ needs.backend-tests.result }}
+        run: test "$SHARDS" = success
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -108,7 +122,7 @@ jobs:
           path: frontend/vitest-results.xml
   verify:
     name: verify
-    needs: [backend, frontend, plan]
+    needs: [backend, frontend, plan, e2e-smoke, e2e-full]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -117,7 +131,9 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           FRONTEND: ${{ needs.frontend.result }}
           PLAN: ${{ needs.plan.result }}
-        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$PLAN" = success
+          SMOKE: ${{ needs.e2e-smoke.result }}
+          FULL: ${{ needs.e2e-full.result }}
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$PLAN" = success && test "$SMOKE" = success && test "$FULL" = success
   selected:
     needs: [plan, frontend]
     uses: ./.github/workflows/e2e.yml
@@ -125,14 +141,13 @@ jobs:
       artifact-prefix: smoke
   full:
     needs: [plan, frontend]
-    if: needs.plan.outputs.full == 'true'
     uses: ./.github/workflows/e2e.yml
     with:
       full: true
       artifact-prefix: full
   e2e-smoke:
     name: e2e-smoke
-    needs: [plan, selected, full]
+    needs: [plan, selected]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -144,33 +159,31 @@ jobs:
         env:
           PLAN: ${{ needs.plan.result }}
           SELECTED: ${{ needs.selected.result }}
-          FULL_REQUIRED: ${{ needs.plan.outputs.full }}
-          FULL_RESULT: ${{ needs.full.result }}
         run: |
           test "$PLAN" = success && test "$SELECTED" = success
-          if [[ "$FULL_REQUIRED" == true ]]; then test "$FULL_RESULT" = success; fi
       - uses: actions/download-artifact@v4
         with:
           pattern: smoke-*
           path: reports/smoke
       - run: python scripts/ci/check_e2e.py reports/smoke
-      - uses: actions/download-artifact@v4
-        if: needs.plan.outputs.full == 'true'
-        with:
-          pattern: full-*
-          path: reports/full
-      - if: needs.plan.outputs.full == 'true'
-        run: python scripts/ci/check_e2e.py reports/full
   e2e-full:
     name: e2e-full
     needs: [plan, full]
-    if: always() && needs.plan.outputs.full == 'true'
+    if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - env:
           RESULT: ${{ needs.full.result }}
         run: test "$RESULT" = success
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: full-*
+          path: reports/full
+      - run: python scripts/ci/check_e2e.py reports/full --shards 8
   timing:
     needs: [verify, e2e-smoke, e2e-full]
     if: always()

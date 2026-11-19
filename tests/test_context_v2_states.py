@@ -126,11 +126,27 @@ def test_relationship_inertia_directed_dynamics_manual_baseline():
 
 
 @pytest.mark.parametrize('agency', [False, True])
-def test_compact_schema_has_identical_validation_rules(agency):
-    schema=prompt_schema(player_agency_required=agency)
+@pytest.mark.parametrize('audit', [False, True])
+def test_compact_schema_has_identical_validation_rules(agency, audit):
+    schema=prompt_schema(player_agency_required=agency, agency_audit_required=audit)
     full=extraction_schema()
+    # This comparison explicitly requests the legacy producer projection.
+    full['properties'].pop('information_events')
+    full['properties'].pop('chronology_claims')
+    # Current generated arrivals require provenance; the raw/legacy schema
+    # intentionally stays compatible. All other compaction is lossless.
+    assert full['properties']['movements']['items']['required'] == ['actor_id', 'to_location_id']
+    full['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
     if agency:
         full['required'].append('player_agency')
+        review=full['properties']['player_agency']
+        if audit:
+            review['required'].append('narrative_audit')
+            review['properties']['narrative_audit']=review['properties']['narrative_audit']['anyOf'][0]
+            review['properties']['actions']['items']['required'].append('target_mode')
+            full['properties']['events']['items']['dependentRequired']['player_action_id']=['actor_id','target_ids']
+        else:
+            review['properties'].pop('narrative_audit')
     else:
         full['properties'].pop('player_agency')
         full['properties']['events']['items'].pop('dependentRequired')

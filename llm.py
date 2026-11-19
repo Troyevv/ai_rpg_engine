@@ -102,6 +102,21 @@ def get_models_info() -> dict:
     return response.json()
 
 
+# Published DeepSeek capabilities also used by draft generation.
+DEEPSEEK_WINDOWS = dict.fromkeys(
+    ('deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'), 1048576)
+
+
+def game_context_limit(config, loaded=None):
+    manual = config['context_length']
+    provider = config.get('provider', 'local')
+    available = ((loaded or {}).get('config', {}).get('context_length') if provider == 'local'
+                 else DEEPSEEK_WINDOWS.get(config['model']) if provider == 'deepseek' else None)
+    if type(available) is not int or available <= 0:
+        return manual
+    return available if config.get('auto_context') else min(available, manual)
+
+
 def get_loaded_models() -> list[dict]:
     data = get_models_info()
 
@@ -250,7 +265,11 @@ def unload_all_models() -> int:
 # Inference
 # =========================================================
 
-class ProviderHTTPError(RuntimeError):
+class ProviderGenerationError(RuntimeError):
+    """A provider call failed before any game result was published."""
+
+
+class ProviderHTTPError(ProviderGenerationError):
     """Confirmed HTTP rejection, without credentials or response bodies."""
     def __init__(self,message,status_code,diagnostic=None):
         super().__init__(message)
@@ -290,7 +309,7 @@ def provider_rejection(exc, messages, max_tokens, response_format):
             max_tokens=max_tokens,response_format=response_format))
 
 
-class OutputLimitReached(RuntimeError):
+class OutputLimitReached(ProviderGenerationError):
     """A valid streamed prefix reached the provider output/context limit."""
 
 
@@ -308,6 +327,9 @@ def chat_stream(
     thinking='off',
     on_usage=None,
     on_finish=None,
+    structured_schema=None,
+    structured_name='extraction_v6',
+    extraction_transport=None,
 ):
     if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
@@ -319,11 +341,30 @@ def chat_stream(
     if not key:
         raise ValueError('Укажи API-ключ провайдера.')
     client = OpenAI(base_url=spec.base_url, api_key=key, timeout=60.0, max_retries=0)
+    from backend.services.provider_attempt import emit, failed, identifier
     stream = None
     finish_reason = None
     from backend.services.answer_stream import AnswerStream
     answer = AnswerStream()
     try:
+        if structured_schema is not None:
+            from backend.services.structured_extraction import RESPONSES_MODELS, response_events
+            if extraction_transport != 'responses_json_schema' or provider != 'deepseek' or model not in RESPONSES_MODELS:
+                raise ValueError('Этот провайдер/модель не поддерживает выбранный schema transport.')
+            if cancel_event is not None and cancel_event.is_set():raise RuntimeError('Генерация остановлена.')
+            effective_thinking = thinking_options(provider,model,thinking)[0]
+            # Schema occupies one context slot, not both prompt text and API schema.
+            wire_messages=[m for m in messages if not m.get('content','').startswith('JSON Schema\n')]
+            emit(phase='responses_create')
+            stream=client.responses.create(model=model,input=wire_messages,
+                text={'format':{'type':'json_schema','name':structured_name,'schema':structured_schema}},
+                reasoning={'effort':'none' if effective_thinking=='off' else effective_thinking},
+                max_output_tokens=max_tokens,stream=True,
+                **({'temperature':temperature} if effective_thinking=='off' else {}))
+            emit(phase='responses_stream', provider_request_id=identifier((getattr(getattr(stream,'response',None),'headers',{}) or {}).get('x-request-id')))
+            if on_stream:on_stream(stream)
+            yield from response_events(stream,cancel_event,on_usage,on_finish)
+            return
         extra = {"response_format": response_format} if response_format else {}
         if spec.extra_body:
             extra['extra_body'] = spec.extra_body
@@ -335,6 +376,7 @@ def chat_stream(
             extra['temperature'] = temperature
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
+        emit(phase='chat_create')
         stream = client.chat.completions.create(
             model=model,
             messages=messages,
@@ -342,6 +384,7 @@ def chat_stream(
             stream=True,
             **extra,
         )
+        emit(phase='chat_stream')
         if on_stream is not None:
             on_stream(stream)
         for chunk in stream:
@@ -357,6 +400,7 @@ def chat_stream(
 
             if chunk.choices[0].finish_reason is not None:
                 finish_reason = chunk.choices[0].finish_reason
+                emit(terminal_seen=True, provider_status=identifier(finish_reason))
                 if on_finish:on_finish(finish_reason)
 
             delta = chunk.choices[0].delta
@@ -378,13 +422,18 @@ def chat_stream(
         if require_complete and finish_reason == "length":
             raise OutputLimitReached("Достигнут лимит одного ответа модели.")
         if require_complete and finish_reason != "stop":
-            raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
+            raise ProviderGenerationError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:
+        from backend.services.provider_attempt import RequestJournalError
+        if isinstance(exc, RequestJournalError):
+            raise
+        failed(exc)
         if stream is None and getattr(exc,'status_code',None) is not None:
             raise ProviderHTTPError(deepseek_error(exc),exc.status_code,
                 provider_rejection(exc,messages,max_tokens,response_format)) from None
-        if remote and not isinstance(exc, RuntimeError):
-            raise RuntimeError(deepseek_error(exc)) from None
+        from openai import APIError
+        if (remote and not isinstance(exc, RuntimeError)) or isinstance(exc, APIError):
+            raise ProviderGenerationError(deepseek_error(exc)) from None
         raise
     finally:
         # Always close the provider stream, including cancellation and errors.

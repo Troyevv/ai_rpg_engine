@@ -86,7 +86,9 @@ test('real Start Game → ordinary turn → persisted reload → next ordinary t
  const s=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
- await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(6);
+ await page.locator('.choices button').first().click();
+ if(!baseline) await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(6);
  const stored=await(await request.get(`/api/saves/${s.save}`)).json();expect(stored.turns).toHaveLength(2);
  await page.getByLabel('Своё действие или реплика').fill('Черновик следующего хода');await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик следующего хода');
  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(3);await expect(page.locator('.choices button')).toHaveCount(6);

@@ -276,6 +276,7 @@ test("155 Narrative Start Game, turn, calendar, save/reload, next turn", async (
   await page.getByRole("button", { name: "Начать игру", exact: true }).click();
   await expect(page.locator(".choices button")).toHaveCount(6);
   await page.locator(".choices button").first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator(".turn")).toHaveCount(2);
   await expect(page.locator(".choices button")).toHaveCount(6);
   await nav(page, "Календарь");
@@ -284,6 +285,7 @@ test("155 Narrative Start Game, turn, calendar, save/reload, next turn", async (
   await page.reload();
   await expect(page.locator(".turn")).toHaveCount(2);
   await page.locator(".choices button").first().click();
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect(page.locator(".turn")).toHaveCount(3);
   await expect(page.locator(".choices button")).toHaveCount(6);
   const saved = await (await request.get(`/api/saves/${s.save}`)).json();

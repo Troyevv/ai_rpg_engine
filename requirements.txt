@@ -13,3 +13,5 @@ Pillow>=11.3,<13
 
 # Pinned rules keep saved regional calendars reproducible.
 holidays==0.87
+
+jsonschema>=4.23,<5

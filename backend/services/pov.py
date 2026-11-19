@@ -14,17 +14,21 @@ def controlled(state):
 def visible(turn,actor,main):
     # Legacy ordinary scenes were written with the original protagonist's POV.
     audience=json.loads(turn.get('audience_json') or '[]')
+    if actor and actor==turn.get('pov_actor_id') and json.loads(turn.get('changes_json') or '{}').get('presentation',{}).get('observer_scene'):
+        return True
     if audience:
         return actor in audience
     return turn.get('kind')!='background' and actor==(turn.get('pov_actor_id') or main)
 
 
-def actor_view(turn,actor,main):
+def actor_view(turn,actor,main, *, observer=False):
     """Other viewpoints expose only explicitly attributed knowledge, not private prose."""
-    if turn.get('kind')!='background' and actor==(turn.get('pov_actor_id') or main):
+    changes=json.loads(turn.get('changes_json') or '{}')
+    observer_scene = changes.get('presentation',{}).get('observer_scene')
+    full_prose = observer if observer_scene else turn.get('kind')!='background'
+    if full_prose and actor==(turn.get('pov_actor_id') or main):
         from backend.runtime_v3.surfaces import reconciled_view
         return reconciled_view(turn)
-    changes=json.loads(turn.get('changes_json') or '{}')
     facts=[f['text'] for f in changes.get('facts',[]) if actor in f.get('known_by',[])]
     delta=changes.get('world_delta',{})
     patch=changes.get('state_patch',{}).get('upserts',{})

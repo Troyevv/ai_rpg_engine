@@ -1,5 +1,5 @@
 """Read-only dossier details. Knowledge gates conditions, never the public family directory."""
-from backend.runtime_v3.kinship import knowledge_status
+from backend.runtime_v3.kinship import knowledge_status, knows_life_status
 from backend.runtime_v3.portraits import silhouette
 
 
@@ -19,7 +19,11 @@ def details(state, cid):
     # Only explicit base restrictions for the controlled actor. Never derive an
     # NPC capability from a concealed condition (including its mere existence).
     restrictions = [k for k, v in actor.get('capabilities', {}).items() if v is False] if cid == observer else []
-    return dict(sex=silhouette(state, cid), conditions=rows, restrictions=restrictions)
+    life_status = actor['life_status'] if (cid == observer or
+        knows_life_status(state, observer, cid)) else None
+    from backend.runtime_v3.calendar import age_on, profile_of
+    date = actor.get('death_date') if life_status == 'dead' else None
+    return dict(death_date=date, age_at_death=age_on(actor.get('birth_date'), date, profile_of(state)) if date else None, sex=silhouette(state, cid), conditions=rows, restrictions=restrictions, life_status=life_status)
 
 
 def personal_relations(state):

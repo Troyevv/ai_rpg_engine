@@ -7,3 +7,24 @@ import pytest
 @pytest.fixture(autouse=True)
 def deterministic_retrieval_environment(monkeypatch):
     monkeypatch.setenv('RPG_SEMANTIC_ENABLED', '0')
+
+
+@pytest.fixture(autouse=True)
+def recorded_extraction_fixture_version(request, monkeypatch):
+    """Pre-255 provider fixtures are recorded RawTurnResult/v5 payloads.
+
+    Keep exercising those jobs with their actual wire contract. New v6 suites
+    opt out explicitly; no production parser accepts legacy payloads as v6.
+    Direct tests specifying v1-v5 resolver/context options remain unchanged.
+    """
+    if request.node.get_closest_marker('extraction_current') is not None:
+        return
+    monkeypatch.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION',
+                        8 if request.node.get_closest_marker('extraction_v8') else 7 if request.node.get_closest_marker('extraction_v7') else 6 if request.node.get_closest_marker('extraction_v6') else 5)
+
+
+def pytest_configure(config):
+    config.addinivalue_line('markers', 'extraction_v6: exercise recorded Extraction/6 jobs')
+    config.addinivalue_line('markers', 'extraction_v7: exercise recorded Extraction/7 jobs')
+    config.addinivalue_line('markers', 'extraction_v8: exercise recorded Extraction/8 jobs')
+    config.addinivalue_line('markers', 'extraction_current: exercise the production default')

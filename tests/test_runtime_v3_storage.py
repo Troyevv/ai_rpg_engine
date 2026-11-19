@@ -1,4 +1,5 @@
 """Persisted reconstructed saves, transactional history and 100 saved turns."""
+from runtime_v3_fixture import arrival_sources
 import json
 import sqlite3
 from copy import deepcopy
@@ -64,6 +65,7 @@ def test_100_persisted_turns_and_history_corruption(tmp_path):
         p['thread_changes']=[dict(id='thread',description='Найти письмо',character_ids=['a'],state=str(turn),evidence=QUOTE)]
         p['scheduled_event_changes']=[dict(id='schedule',description='Встреча',character_ids=['b'],temporal=dict(day_offset=0,time='16:40'),assertion='agreed',evidence=QUOTE)]
         if turn%7==0:p['knowledge_gained'][0]['source_event_id']='missing'
+        arrival_sources(p)
         resolved=StateResolver(snapshot['world_state'],QUOTE,'Я перехожу в '+location+'.').resolve(p)
         with db:
             snapshot=committed_snapshot(db,snapshot,resolved)

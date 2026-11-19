@@ -12,8 +12,9 @@ class ModelConfig(DTO):
     temperature: float = Field(default=0.8, ge=0, le=1.5)
     max_tokens: int = Field(default=2000, ge=256, le=32000)
     thinking: Literal['off','low','high'] = 'off'
+    auto_context: bool = False
     recent_turns: int = Field(default=6, ge=2, le=20)
-    memory_batch: int = Field(default=4, ge=2, le=20)
+    memory_batch: int = Field(default=4, ge=2, le=20, exclude=True)  # Accept old client preferences.
     update_tokens: int = Field(default=4096, ge=1024, le=16000)
 
 class Credential(DTO):
@@ -33,7 +34,9 @@ class TimeSkip(DTO):
 
 class Turn(Credential):
     interaction_channel: Literal["physical", "call"] | None = None
+    observer_direction: bool = False
     time_skip: TimeSkip | None = None
+    recovery_source_job_id: str | None = None
     target_turn_id: int | None = None
     rollback_following: bool = False
     kind: Literal['start', 'turn', 'regenerate','background'] = 'turn'
@@ -43,6 +46,10 @@ class Turn(Credential):
 
 class Retry(Credential):
     config: ModelConfig
+    correct_prose: bool = False
+    correct_chronology: bool = False
+    revision: int | None = Field(default=None, ge=0)
+    attempt_epoch: int | None = Field(default=None, ge=0)
 
 class Named(DTO):
     name: str = Field(min_length=1, max_length=120, pattern=r'\S')
@@ -56,7 +63,33 @@ class Revision(DTO):
 class AbandonJob(Revision):
     attempt_epoch: int = Field(ge=0)
 
+class CanonPosition(DTO):
+    actor_id: str = Field(min_length=1, max_length=200)
+    location: str = Field(min_length=1, max_length=200)
+
+
+class CanonKnowledge(DTO):
+    fact_id: str | None = Field(default=None, min_length=1, max_length=200)
+    text: str = Field(default='', max_length=2000)
+    actor_ids: list[str] = Field(min_length=1, max_length=100)
+    status: Literal['known','suspected','refuted'] = 'known'
+
+
+class CanonSocial(DTO):
+    action: Literal['engaged','spouse','divorce','parent','move','hire','leave_job','death_notice']
+    actor_id: str = Field(min_length=1)
+    other_id: str | None = None
+    phase_id: str | None = None
+    location_id: str | None = None
+    title: str = Field(default='',max_length=200)
+    description: str = Field(min_length=1,max_length=1000)
+    known_by: list[str] = Field(max_length=100)
+
+
 class Scene(DTO):
+    social: CanonSocial | None = None
+    position: CanonPosition | None = None
+    knowledge: CanonKnowledge | None = None
     time: str = Field(max_length=120)
     location: str = Field(max_length=200)
     present_ids: list[str] = Field(max_length=100)
@@ -103,6 +136,7 @@ class DocumentChange(DTO):
     source_id: int | None = None
 
 class Camera(Revision, Credential):
+    direction: str = Field(default='',max_length=12000)
     actor_id: str | None = None
     scene_id: str | None = None
     config: ModelConfig

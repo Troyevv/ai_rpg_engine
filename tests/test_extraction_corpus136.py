@@ -1,5 +1,6 @@
 """Synthetic transport replay measures plumbing, never live model accuracy."""
 import json
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 import pytest
@@ -18,6 +19,15 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     sid=imported(client,world_source);seen=[]
     from runtime_v3_fixture import reviewed
     reply=reviewed(case['synthetic_provider_reply']) if case['player_input'].strip() else case['synthetic_provider_reply']
+    reply=deepcopy(reply)
+    if case['id']=='rumor_knowledge':
+        # Authored v5 representation of the same fixed semantic oracle; no LLM inference.
+        fact=reply.pop('facts')[0]
+        reply.pop('knowledge_gained')
+        reply['events']=[e for e in reply['events'] if e['id']!='report']
+        reply['information_events']=[dict(id='report',text='Виктория передала слух.',
+            source_actor_id='viktoria_solovyova',medium='conversation',order=2,
+            claims=[dict(fact=fact,assertion='rumor',perceived_by=['ilya'],status='suspected')])]
     def provider(**kw):
         if kw.get('response_format'):
             seen.append(kw['messages'])
@@ -35,6 +45,9 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     Draft202012Validator(schema).validate(reply)
     world=app.state.repository.get_snapshot(sid)['world_state']
     assert world['camera']['present_character_ids']==case['expected']['present']
+    if case['id']=='rumor_knowledge':
+        gains=[k for k in world['knowledge'].values() if world['facts'][k['fact_id']]['text']=='Юра покинул город']
+        assert len(gains)==1 and gains[0]['actor_id']=='ilya' and gains[0]['status']=='suspected'
     if case['id']=='death_ellipsis':assert world['characters']['viktoria_solovyova']['life_status']=='dead'
     if case['id'] in ('rumor','hypothesis','negation'):assert world['characters']['viktoria_solovyova']['life_status']!='dead'
 

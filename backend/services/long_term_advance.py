@@ -42,6 +42,9 @@ def execute(storage, job, handle, chat_stream):
                 )
             messages[:] = frame["messages"]
             messages.selection = frame["selection"]
+        if (stage == 'long_term_narrative' and config.get('provider') == 'deepseek'
+                and any('Верни JSON: scene — закрытая сцена этой группы' in m['content'] for m in messages)):
+            extra['response_format'] = {'type':'json_object'}
         captured.append(
             dict(
                 stage=stage,
@@ -82,6 +85,8 @@ def execute(storage, job, handle, chat_stream):
         config=config,
         history=history,
         cancelled=handle.cancelled,
+        on_candidate=lambda messages,audit:storage.record_extraction_candidate(getattr(messages,'request_id',None),audit),
+        recorded_groups=[f["context_key"] for f in frames if f["stage"]=="long_term_narrative"] if frames else None,
     )
     if output is None:
         return
@@ -99,9 +104,21 @@ def execute(storage, job, handle, chat_stream):
         text += "\nПереход остановлен. Продолжи обычным ходом: можно осмотреться, отреагировать или остаться в стороне."
     elif report["interruption"]:
         text += "\nПереход прерван: требуется решение игрока."
+    if report['status'] == 'incomplete':
+        text += "\nСимуляция неполная. Принятые события сохранены; часть причин осталась без результата."
+    elif report['status'] == 'calendar_only':
+        text += "\nИзменился календарь. Жизнь NPC в этом переходе не моделировалась."
+    elif report['status'] == 'quiet':
+        text += "\nРассмотренные ситуации пока не привели к новым событиям."
     text += f"\nРазрешено групп: {len(report['accepted'])}. Нерешённых причин: {len(report['unresolved'])}."
+    choices, warnings = [], []
+    arrival = after.pop('_public_arrival', None)
+    if arrival:
+        from backend.runtime_v3.narrative_frame import menu
+        text, frame = arrival
+        choices, warnings = menu(frame, after['world_state'])
     storage.job_progress(job["id"], "validating", narrative=text, complete=True)
     if not handle.cancelled.is_set():
         storage.commit_job(
-            job["id"], after, [], {"long_term_advance": report}, history_batch=batch
+            job["id"], after, choices, {"long_term_advance": report, "interpretation_warnings":warnings}, history_batch=batch
         )

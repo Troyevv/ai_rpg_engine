@@ -42,10 +42,15 @@ def test_invalid_new_knowledge_is_optional(damage):
     if damage=='fact':p['events'][0]['fact_ids']=[]
     if damage=='source':p['knowledge_gained'][0]['source_event_id']='missing'
     if damage=='medium':p['events'][0]['medium']='action'
+    if damage=='fact':
+        with pytest.raises(StructuralDeltaError) as error:
+            StateResolver(initial(),QUOTE,'').resolve(p)
+        assert error.value.code=='knowledge_fact_link_missing'
+        return
     result=StateResolver(initial(),QUOTE,'').resolve(p)
     assert not result.state['knowledge']
     assert result.state['facts']['f']
-    assert result.warnings[0]['code']=='knowledge_path_invalid'
+    assert result.warnings[0]['code']=={'witness':'knowledge_witness_missing','source':'knowledge_event_unknown','medium':'knowledge_medium_invalid'}[damage]
 
 
 def test_old_knowledge_survives_deleted_history_and_next_turn():
