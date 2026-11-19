@@ -6,13 +6,16 @@ for(const width of [360,393,1280])test(`saved creative recovery at ${width}px`,a
  test.skip((width<760)!==(info.project.name==='mobile'));
  const {wid}=await(await request.post('/test/generation266')).json();
  await page.setViewportSize({width,height:800});
- await page.addInitScript(id=>{if(!localStorage.getItem('draftWorkspace'))localStorage.setItem('draftWorkspace',id)},wid);
+ const skin=width===360?'parchment':'graphite';
+ await page.addInitScript(({wid,skin})=>{
+   if(!localStorage.getItem('draftWorkspace'))localStorage.setItem('draftWorkspace',wid);
+   localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'}));
+ },{wid,skin});
  await page.goto('/');await nav(page,'Создать');await authorView(page);
  await workshopNav(page,'Идея и генерация');
  await expect(page.locator('.fl-stages li').filter({hasText:'Творческое развитие'})).toHaveAttribute('data-state','partial');
  const trigger=page.getByRole('button',{name:'Восстановить полученное дополнение'});
- const skin=width===360?'parchment':'graphite';
- await page.evaluate(theme=>document.documentElement.dataset.theme=theme,skin);
+ await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
  await trigger.click();
  const dialog=page.getByRole('dialog',{name:'Сохранённое дополнение'});
  await expect(dialog.getByText(/Текущий черновик изменился/)).toBeVisible();
