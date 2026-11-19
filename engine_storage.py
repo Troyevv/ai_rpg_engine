@@ -224,7 +224,7 @@ class EngineStorage:
                 config['_prompts'] = self.prompt_snapshot(db)
             if config['_extraction_contract'] >= 9 and '_scene_rules' not in config['_prompts']:
                 from backend.repositories.documents import ROOT
-                template = 'state_update_prompt.md' if config['_extraction_contract'] >= 10 else 'state_update_v9.md'
+                template = 'state_update_prompt.md' if config['_extraction_contract'] >= 11 else 'state_update_v10.md' if config['_extraction_contract'] == 10 else 'state_update_v9.md'
                 config['_prompts']['_scene_rules'] = {'content':(ROOT/template).read_text(encoding='utf-8')}
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)

@@ -4,17 +4,25 @@ import re
 
 # Keep the historical prefix for jobs whose original messages are replayed on retry.
 _FRAME_PREFIX = 'JSON object: "scene": full literary prose first;'
-FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open choices in the story language, '
+RECORDED_FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open choices in the story language, '
           'each {"text":"…"}. Current-scene actions and personal decisions need only text. Add "facts" '
           'with exact POV-known fact IDs only when relying on prior information. No secrets or predetermined outcomes. Optional "ending": '
           'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
           'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
+FORMAT = 'JSON со сценой и вариантами'
+AUTHOR_FORMAT = (FORMAT + '. Верни один объект, первым полем scene с полным художественным текстом, '
+    'затем actions. Цель — шесть разных уместных продолжений. Предложения оставляют выбор игроку. '
+    'Используй только доступные POV сведения. Необязательный facts содержит ID известных этому POV фактов. '
+    'Пример формы (подбери действия для своей сцены):\n'
+    '{"scene":"За окном стемнело. В дверь постучали.",'
+    '"actions":[{"text":"Спросить, кто там"},{"text":"Посмотреть в глазок"},'
+    '{"text":"Открыть дверь"},{"text":"Прислушаться"},{"text":"Позвать хозяйку"},{"text":"Отойти от двери"}]}')
 _DECODER = json.JSONDecoder()
 _JSON_FENCE = re.compile(r'^\s*```json[ \t]*\r?\n', re.IGNORECASE)
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
-# A malformed single-line action can be isolated at a physical record boundary.
+# Isolate a malformed flat object only at its own JSON array item boundary.
 # Never search inside nested objects or rewrite its text or knowledge references.
-_ACTION_ROW = re.compile(r'\{[^{}\r\n]*\}(?=[ \t]*(?:,[ \t]*\r?\n|\r?\n\s*\]))')
+_ACTION_ROW = re.compile(r'\{(?:[^{}"\\]|"(?:[^"\\]|\\.)*")*\}(?=\s*[,\]])')
 
 
 def requested(messages):
@@ -22,7 +30,7 @@ def requested(messages):
         content = msg.get('content', '')
         if content.startswith('Текущий ввод\n'):
             try:
-                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((_FRAME_PREFIX, 'JSON: сначала "scene"'))
+                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((FORMAT, _FRAME_PREFIX, 'JSON: сначала "scene"'))
             except (ValueError, AttributeError):
                 return False
     return False
@@ -107,9 +115,9 @@ def read(text, *, complete):
         body = text[fence.end():]
         if _START.match(body) or _QUOTED_FRAME.match(body):
             if complete:
-                body, newline, closing = body.rstrip().rpartition('\n')
-                if not newline or closing.strip() != '```':
-                    return None
+                prefix, newline, closing = body.rstrip().rpartition('\n')
+                if newline and closing.strip() == '```':
+                    body = prefix
             text = body
         elif not complete and (not body.strip() or body.lstrip().startswith('{')):
             return '', {}
@@ -189,9 +197,12 @@ def menu(frame, state):
         if state['meta'].get('interaction_focus') == 'call':
             choice['interaction_channel'] = 'call'
         choices.append(choice)
-    return choices, menu_diagnostics(len(actions), len(choices))
+    source = ('actions' if isinstance(frame.get('actions'), list) else
+              'invalid_actions' if 'actions' in frame else 'missing_actions')
+    return choices, menu_diagnostics(len(actions), len(choices), source)
 
 
-def menu_diagnostics(received, available):
+def menu_diagnostics(received, available, source=None):
     return [] if received==available==6 else [dict(section='choices', code='narrative_menu_count',
-        action='show_available', received=received, available=available)]
+        action='show_available', received=received, available=available,
+        source=source or ('legacy_suggestions' if received else 'unstructured_reply'))]

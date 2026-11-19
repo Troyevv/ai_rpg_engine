@@ -131,7 +131,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         return Stream([SimpleNamespace(usage=None,choices=[SimpleNamespace(finish_reason='stop',delta=SimpleNamespace(content=text))])])
     cfg = dict(provider='deepseek',model='deepseek-flash',context_length=131072,max_tokens=2400,update_tokens=8192)
     jid = repo.begin_job(sid,player,'turn',cfg)
-    assert json.loads(repo.get_job(jid)['config_json'])['_extraction_contract']==10
+    assert json.loads(repo.get_job(jid)['config_json'])['_extraction_contract']==11
     with patch('llm.OpenAI') as sdk:
         def chat(**kwargs):
             if not any(m.get('content','').startswith('Текущий ввод\n') and '"response_format"' in m['content'] for m in kwargs['messages']):
@@ -146,7 +146,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         requests=sdk.return_value.responses.create.call_args_list
         assert len(requests)==1
         wire=requests[0].kwargs
-        assert wire['text']['format']['name'] == 'extraction_v10'
+        assert wire['text']['format']['name'] == 'extraction_v11'
         Draft202012Validator(wire['text']['format']['schema']).validate(payload)
         assert MARKER not in job['narrative'] and job['narrative']==recorded['narrative']
         assert not any(m['content'].startswith('JSON Schema\n') for m in wire['input'])

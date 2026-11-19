@@ -52,9 +52,11 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                   {committed&&showTools&&!t.read_only_projection&&<>
                   {t.changes?.menu_available!=null&&t.changes.interpretation!=='pending'&&
                     <p className="muted small">Варианты продолжения · {t.changes.menu_available} из 6. Можно ввести своё действие.</p>}
+                  {t.changes?.interpretation==='pending'&&
+                    <p role="status" className="muted small">Сцена сохранена. Время, место и последствия ещё уточняются.</p>}
                   {['partial','deferred'].includes(t.changes?.interpretation || '') &&
                     <details className="turn-timing"><summary>Сцена сохранена. Есть замечания к состоянию мира.</summary>
-                      <p>Историю можно продолжить. Место, участников и знания можно поправить в инспекторе сцены.</p>
+                      <p>Историю можно продолжить. Часы и место показывают последние сохранённые данные и могут отставать от текста. Место, участников и знания можно поправить в инспекторе сцены.</p>
                     </details>}
                   {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
                   {mobile?<div className="mobile-variants">

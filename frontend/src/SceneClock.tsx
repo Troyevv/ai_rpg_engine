@@ -73,6 +73,8 @@ export function SceneClock({
   fallback?: string;
 }) {
   const time = save?.state.world_clock?.projection;
+  const interpretation = save?.turns.at(-1)?.changes?.interpretation;
+  const provisional = interpretation === "pending" || interpretation === "partial" || interpretation === "deferred";
   if (!time) return <>{fallback || "Время не указано"}</>;
   const parts = {
     morning: [Sunrise, "Утро"],
@@ -93,7 +95,7 @@ export function SceneClock({
               "weekday",
             )
           : `День ${time.day}`}{" "}
-        · {time.time}
+        · {time.time}{provisional && ' · по сохранению'}
       </span>
       <WeatherBadge weather={(save?.state.scene_meta as any)?.weather} />
     </span>

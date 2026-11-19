@@ -109,7 +109,9 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         if conflicts:
             decoding_warnings.append(dict(section='scene', code='scene_sources_disagree', fields=sorted(conflicts),
                                           action='use_extraction' if version >= 11 else 'use_recorded_narrative'))
-    if version >= 11:
+    if version >= 11 and authored_scene:
+        if not any(w['code'] == 'scene_sources_disagree' for w in decoding_warnings):
+            decoding_warnings.append(dict(section='scene', code='unrequested_narrative_ending', action='use_extraction'))
         authored_scene = None
     if authored_scene:
         proposal['scene'] = scene_with_authored_ending(proposal, authored_scene, before)

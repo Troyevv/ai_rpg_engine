@@ -121,3 +121,59 @@ def test_relation_observer_sees_established_divorce_only():
     assert {row['fact_id'] for row in world['knowledge'].values() if row['actor_id']=='d'} == {
         marriage['fact_id'],marriage['closure_fact_id']}
     assert not visible_relations(world,'a')
+
+
+def test_assembled_prompts_and_actor_owned_experience():
+    from backend.runtime_v3.context import build_context
+    from backend.runtime_v3.narrative_frame import AUTHOR_FORMAT, RECORDED_FORMAT
+    from backend.services.structured_extraction import request_schema
+    from test_narrative_choices import initial
+    snap = initial()
+    style = 'Короткие диалоги, мягкий юмор.'
+    prompts = {'game_system_prompt.md': {'content': style}}
+    for turn in range(1,4):
+        snap['world_state'] = apply(snap['world_state'], dict(development_evidence=[
+            dict(actor_id='b', meaning='Выслушал ученика.', theme='listen', perceived_by=['a'],
+                 develops=dict(field='habits',text='Даёт собеседнику договорить.'))]), turn).state
+    args = (snap, [], 'Молчу.', 'turn', 65536, 4096)
+    narrative = build_context(*args, prompts=prompts)
+    extraction = build_context(*args, prompts=prompts, extraction_text='Тимур выслушал ученика.')
+    assert AUTHOR_FORMAT in narrative[0]['content'] and style in str(narrative)
+    assert 'accepted Runtime involuntary consequences' not in str(narrative)
+    assert 'need canonical Condition/Life State' not in str(narrative)
+    assert 'End prose/choices' not in str(extraction)
+    assert 'Даёт собеседнику договорить.' in str(narrative)
+    evidence = next(m for m in narrative if m['content'].startswith('Наблюдавшийся опыт'))
+    owners = json.loads(evidence['content'].split('\n',1)[1])
+    assert list(owners) == ['b'] and len(owners['b']) == 3
+    schema = request_schema(extraction)['properties']
+    assert 'end_time' in schema['scene']['properties']
+    assert 'closure_fact_id' not in schema['role_changes']['items']['properties']
+    assert 'perceived_by' in schema['role_changes']['items']['properties']
+    recorded = build_context(*args, extraction_contract=10, prompts=prompts)
+    assert json.loads(recorded[-1]['content'].split('\n',1)[1])['response_format'].startswith(RECORDED_FORMAT)
+    assert prompts['game_system_prompt.md']['content'] == style
+
+
+def test_legacy_regeneration_keeps_version_and_original_context(game, monkeypatch):
+    from test_published_narrative263 import play
+    repo, sid = game
+    with monkeypatch.context() as old:
+        old.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 10)
+        first = play(repo, sid, 'Открыто окно.', '{}')
+    turn = repo.list_turns(sid)[-1]
+    jid = repo.begin_job(sid, '', 'regenerate', dict(CONFIG, target_turn_id=turn['id']))
+    regen = repo.get_job(jid)
+    assert json.loads(regen['config_json'])['_extraction_contract'] == 10
+    assert regen['context_json'] == first['context_json']
+    assert json.loads(regen['config_json'])['_prompts'] == json.loads(first['config_json'])['_prompts']
+
+
+def test_malformed_inline_action_does_not_consume_following_actions():
+    from backend.runtime_v3.narrative_frame import read, menu
+    raw = '{"scene":"Листок лежит на столе.","actions":[{"text":"Прочитать"},{"text":},{"text":"Отойти"}]}'
+    prose, frame = read(raw, complete=True)
+    choices, warnings = menu(frame, state())
+    assert prose == 'Листок лежит на столе.'
+    assert [c['action'] for c in choices] == ['Прочитать','Отойти']
+    assert warnings[0]['received'] == 3 and warnings[0]['available'] == 2

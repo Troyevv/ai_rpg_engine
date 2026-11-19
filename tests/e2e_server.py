@@ -20,6 +20,7 @@ import backend.runtime_v3.player_actions as extraction_versions
 CURRENT_SCENE_VERSION = extraction_versions.EXTRACTION_VERSION
 extraction_versions.EXTRACTION_VERSION = 5  # Historical browser replies are v5.
 scene255_mode = False
+scene264_gate = None
 scene255_attempts = 0
 provider_chat_stream = llm.chat_stream
 import backend.services.preparation as preparation
@@ -676,6 +677,9 @@ def stream(**kwargs):
             actions = ['Открыть альбом','Выйти во двор','Позвать хозяйку','Заварить чай','Осмотреть окно','Послушать радио']
             yield json.dumps(dict(scene='У окна лежит альбом.', actions=[dict(text=t,facts=[]) for t in actions]), ensure_ascii=False)
         else:
+            if identity()['stage'] == 'extraction' and scene264_gate is not None:
+                if not scene264_gate.wait(30):
+                    raise RuntimeError('Scene interpretation fixture timed out')
             yield '{}'
         return
     if kwargs.get('model') == 'scene263-test':
@@ -822,10 +826,18 @@ if __name__ == '__main__':
         return result
 
     @app.post('/test/scene263-seed')
-    def scene263_seed():
+    def scene263_seed(delay_interpretation: bool = False):
+        global scene264_gate
+        from threading import Event
+        scene264_gate = Event() if delay_interpretation else None
         result = scene255_seed()
         extraction_versions.EXTRACTION_VERSION = CURRENT_SCENE_VERSION
         return result
+
+    @app.post('/test/scene264-release')
+    def scene264_release():
+        scene264_gate.set()
+        return {'ok': True}
 
     @app.post('/test/scene258-seed')
     def scene258_seed():

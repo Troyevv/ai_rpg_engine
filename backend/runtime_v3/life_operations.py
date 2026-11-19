@@ -17,6 +17,8 @@ def wire_schema(props, version):
         if name == 'residence_changes':
             item['properties']['actor_ids'] = ids
     experience = props['development_evidence']['items']['properties']
+    if version >= 11:
+        experience['actor_id']['description'] = 'Владелец собственного опыта или поведения; наблюдатели перечислены в perceived_by.'
     experience['theme'] = dict(type='string', minLength=1, maxLength=100)
     experience['develops'] = dict(type='object', additionalProperties=False, required=['field','text'],
         properties=dict(field=dict(enum=['habits','traits','communication','preferences','strengths','weaknesses',

@@ -567,7 +567,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 config.get("max_tokens", 2000),
                 prompts=config.get("_prompts"),
                 world_history=history,
-                pacing_decision=group_policy,
+                pacing_decision=group_policy, extraction_contract=version,
             )
             if with_arrival:
                 from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT

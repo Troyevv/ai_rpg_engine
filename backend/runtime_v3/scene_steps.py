@@ -770,6 +770,8 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         moved = {move['actor_id'] for move in records['movements']}
         if subject in moved and camera['mode'] == 'actor' and location != positions[subject]:
             location = positions[subject]
+            # A cast listed at the rejected address cannot relocate stationary actors.
+            visible = [cid for cid in visible or () if positions.get(cid) == location]
             warnings.append(dict(section='scene', code='ending_disagrees_with_route', action='use_route'))
         if visible is not None:
             excluded = [cid for cid in visible if cid in moved and positions[cid] != location]
@@ -842,8 +844,9 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             section,index=row.get('section'),row.get('index')
             if section=='information_events' and isinstance(index,int):
                 candidates=[i for i,s in enumerate(original['scene_steps']) if s['kind']=='information']
-                row.update(compiled_path=row.get('path'),section='scene_steps',domain='scene_steps',index=candidates[index],
-                    path=f'scene_steps[{candidates[index]}]',source_ids=[original['scene_steps'][candidates[index]]['id']])
+                if 0 <= index < len(candidates):
+                    row.update(compiled_path=row.get('path'),section='scene_steps',domain='scene_steps',index=candidates[index],
+                        path=f'scene_steps[{candidates[index]}]',source_ids=[original['scene_steps'][candidates[index]]['id']])
             path={k:v for k,v in row.items() if k not in ('code','repair_error_code','repair_error_type','repair_reason','stage')}
             compiled_errors.append(StructuralDeltaError(row['repair_reason'],row['code'],repairable=exc.repairable,**path))
         raise StructuralDeltaError.combine(errors + compiled_errors) from exc

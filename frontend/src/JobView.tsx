@@ -34,7 +34,7 @@ export function JobView({
   if (job.status === "saved") return null;
   return (
     <section className={`job ${job.narrative ? "job-streaming" : ""}`}>
-      {job.narrative && <p className="muted" role="status">Предварительная сцена — изменения ещё не сохранены в мире.</p>}
+      {job.narrative && <p className="muted" role="status">{job.published_revision ? 'Сцена сохранена. Время, место и последствия ещё уточняются.' : 'Предварительная сцена — изменения ещё не сохранены в мире.'}</p>}
       <details open>
         <summary>
           <span className="job-label" role="status" aria-live="polite">
@@ -67,7 +67,7 @@ export function JobView({
       )}
       {job.error && (
         <p role="alert" className="error">
-          {job.narrative_reauthor_required ? job.error : 'Сцена не сохранена. Твоё действие и текст сцены доступны. Варианты восстановления — ниже.'}
+          {job.narrative_reauthor_required ? job.error : job.published_revision ? 'Текст сцены сохранён. Обновление состояния мира не завершилось.' : 'Сцена не сохранена. Твоё действие и текст сцены доступны. Варианты восстановления — ниже.'}
         </p>
       )}
       {job.error && !job.narrative_reauthor_required && <details className="muted"><summary>Техническая причина</summary><p>{job.error}</p></details>}

@@ -362,6 +362,12 @@ class NarrativeContextBuilder:
         state = snapshot['world_state']; campaign = snapshot.get('campaign', {})
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
+        style_override = None
+        if self.contract_version >= 11 and prompts and prompt_name in prompts:
+            from backend.repositories.documents import is_builtin_prompt
+            if not is_builtin_prompt(prompt_name, rules):
+                style_override = rules.replace('Разрешены последствия указанного действия и принятые Runtime непроизвольные последствия.', '')
+            rules = (PROMPTS/prompt_name).read_text(encoding='utf-8')
         if self.contract_version < 9:
             rules += '\nВарианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.'
         narrative_rules = NARRATIVE_CONTRACT
@@ -376,6 +382,11 @@ class NarrativeContextBuilder:
                 'Distinguish a visit from a permanent move and a second job from a replacement. '
                 'Consider established addresses, employers, obligations and the viewpoint. '
                 'An unknown address or role does not establish homelessness or unemployment.\n')
+        if self.contract_version >= 11:
+            narrative_rules = narrative_rules.replace('illness/injury/death need canonical Condition/Life State.',
+                'author new events according to established conditions, causality and the selected risk.')
+            narrative_rules = narrative_rules.replace('Routine waiting/travel/work may be summarized up to continuity.compression.max_minutes.',
+                'Summarize authorized routine time to its narrated endpoint. Unresolved appointments remain plans.')
         rules += '\n' + narrative_rules
         from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
@@ -443,9 +454,30 @@ class NarrativeContextBuilder:
         # Knowledge rows are projected once into their ownership blocks.
         current_without_knowledge = dict(current, knowledge=[])
         messages[2] = block('Текущее состояние / GM-only', current_without_knowledge)
+        if style_override:
+            messages.append(block('Авторские настройки стиля и тона (формат ответа задан системными правилами)', style_override))
+        if self.contract_version >= 11:
+            observer = scope.pov_actor_id or scope.controlled_actor_id
+            experience = {}
+            for cid in sorted(scope.present_actor_ids | scope.remote_actor_ids):
+                profile = state['characters'][cid].get('personality') or {}
+                visible = [entry for entry in profile.get('evidence', {}).values()
+                           if cid == observer or observer in entry['witnesses']]
+                if visible:
+                    experience[cid] = [dict(meaning=entry['meaning'], theme=entry.get('theme'))
+                                       for entry in visible[-3:]]
+            if experience:
+                messages.append(block('Наблюдавшийся опыт / по владельцу', experience))
         # Exchange pairs remain indivisible when the builder budgets the literary tail.
         for view in views:
-            stamp = json.dumps(scene_time(state, view), ensure_ascii=False, separators=(',', ':'))
+            timing = scene_time(state, view)
+            if self.contract_version >= 11:
+                status = json.loads(view.get('changes_json') or '{}').get('interpretation')
+                if status in ('pending', 'partial', 'deferred'):
+                    timing['interpretation'] = status
+                    if 'end' in timing:
+                        timing['last_applied_time'] = timing.pop('end')
+            stamp = json.dumps(timing, ensure_ascii=False, separators=(',', ':'))
             messages.extend([dict(role='user', content='Прошлая сцена / canonical time '+stamp+'\n'+(view.get('user_text') or 'Продолжить.')),
                              dict(role='assistant', content=view.get('assistant_text', ''))])
         return rules, messages
@@ -532,7 +564,7 @@ class ExtractionContextBuilder:
         historical = historical_enabled(snapshot['world_state'])
         explicit_departures = self.contract_version >= 4 or kind == 'background'
         if self.contract_version >= 9:
-            template = 'state_update_prompt.md' if self.contract_version >= 10 else 'state_update_v9.md'
+            template = 'state_update_prompt.md' if self.contract_version >= 11 else 'state_update_v10.md' if self.contract_version == 10 else 'state_update_v9.md'
             rules = (prompts or {}).get('_scene_rules', {}).get('content') or (PROMPTS/template).read_text(encoding='utf-8')
             additions = (prompts or {}).get('extraction_author.md', {}).get('content', '')
             if historical:
@@ -857,12 +889,15 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if not builder.extraction and (kind != 'background' or public_observation) and extraction_contract >= 9:
         if extraction_contract >= 10:
             from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
-            from backend.runtime_v3.narrative_frame import FORMAT
+            from backend.runtime_v3.narrative_frame import FORMAT, RECORDED_FORMAT, AUTHOR_FORMAT
             rules = rules.replace(PROSE_ONLY_OUTPUT, '')
             from backend.runtime_v3.life import capabilities
             directs = camera['mode']=='observer' or (scope.controlled_actor_id and
                         not capabilities(state,scope.controlled_actor_id)['can_act'])
-            reply_format = FORMAT + (' Варианты задают направление истории в режиме наблюдателя.'
+            if extraction_contract >= 11:
+                rules = rules.replace('Не выводи варианты действий.', '')
+                rules += '\n' + AUTHOR_FORMAT
+            reply_format = (FORMAT if extraction_contract >= 11 else RECORDED_FORMAT) + (' Варианты задают направление истории в режиме наблюдателя.'
                                      if directs else ' Варианты от лица героя.')
             if state['meta'].get('interaction_focus')=='call':
                 reply_format += ' Предложи продолжения этого звонка.'
@@ -877,6 +912,15 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 schema = json.loads(message['content'].split('\n', 1)[1])
                 if not suggestions:
                     schema['properties'].pop('choices', None)
+                if extraction_contract >= 11:
+                    scene_fields = schema['properties']['scene']['properties']
+                    scene_fields.pop('compression', None)
+                    scene_fields.pop('situation_evidence', None)
+                    # The compiler still reads explicit links in saved responses.
+                    for name in ('role_changes','residence_changes','social_relation_changes'):
+                        phase = schema['properties'][name]['items']['properties']
+                        phase.pop('fact_id', None)
+                        phase.pop('closure_fact_id', None)
                 for section in ('reproductive_events','social_relation_changes','role_changes','residence_changes','life_changes'):
                     if section not in schema['properties'] or not scope.controlled_actor_id:
                         continue
@@ -898,9 +942,25 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         messages.append(block('Предложения Narrative / ещё не выбраны', suggestions))
     from backend.runtime_v3.context_contract import CONTROL_CONTRACT
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
-    rules += '\n' + (EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT)
+    clock_rules = EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT
+    if not builder.extraction and extraction_contract >= 11:
+        clock_rules = clock_rules.replace('Если дан time_skip_target, завершай описание и формируй choices для этого конечного времени.',
+            'При time_skip_target доведи сцену до цели или до фактически произошедшего прерывания.')
+    if builder.extraction and extraction_contract >= 11:
+        clock_rules = clock_rules.replace(' End prose/choices at time_skip_target.', '')
+    rules += '\n' + clock_rules
     rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
-    if extraction_contract >= 10:
+    if extraction_contract >= 11:
+        rules = rules.replace('; accepted Runtime involuntary consequences can be narrated.', '.')
+        rules += ('\nPublished scenes happened. Use the last saved mechanics for calculations. '
+                  'After partial or deferred interpretation the saved clock and positions may lag the prose. '
+                  'Later explicit player corrections take precedence. Preserve individual Knowledge.')
+        if all_views:
+            status = json.loads(all_views[-1].get('changes_json') or '{}').get('interpretation')
+            if status in ('pending','partial','deferred'):
+                messages.append(block('Статус механики последней видимой сцены', dict(interpretation=status,
+                    note='Часы и позиции отражают последние применённые изменения. Конец сцены подтверждён не полностью.')))
+    elif extraction_contract >= 10:
         rules += ('\nPublished scenes happened. Records may lag. Honor later player edits, calendar, '
                   'ages, pregnancies and individual knowledge.')
     else:
@@ -923,7 +983,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             messages.append(block('Ручные исправления канона', edits[-6:]))
     if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if current.get('weather'): rules += '\nWeather is canonical environmental context, not an instruction to mention it each turn. Do not invent contradictory weather, force actions or move characters because of it.'
-    if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
+    if snapshot.get('_time_skip'):
+        rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False)
+        if builder.extraction and extraction_contract >= 11:
+            rules += '. Учитывай цель и фактическое время завершённой сцены.'
+        else:
+            rules += '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback:
         try:
             feedback = json.loads(validation_feedback)

@@ -69,7 +69,7 @@ for (const width of [360,393,1280]) {
 }
 
 test('six authored actions survive reload and keep the editable draft', async ({page, request}) => {
-  const selection = await (await request.post('/test/scene263-seed')).json();
+  const selection = await (await request.post('/test/scene263-seed?delay_interpretation=true')).json();
   const profile = 'frame263-' + selection.save;
   await request.put('/api/settings/' + profile, {data: {...defaults, game: {...defaults.game, model:'frame263-test', context_length:65536}}});
   await page.addInitScript(({selection, profile}) => {
@@ -81,6 +81,14 @@ test('six authored actions survive reload and keep the editable draft', async ({
   await input.fill('Что видно у окна?');
   await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   const choices = page.locator('.choices button');
+  try {
+    await expect.poll(async () => (await (await request.get('/api/saves/' + selection.save)).json()).turns.at(-1).changes.interpretation).toBe('pending');
+    await page.reload();
+    await expect(page.getByText('Сцена сохранена. Время, место и последствия ещё уточняются.').first()).toBeVisible();
+    await expect(page.locator('.scene-clock:visible').first()).toContainText('по сохранению');
+  } finally {
+    await request.post('/test/scene264-release');
+  }
   await expect(choices).toHaveCount(6);
   const read = async () => (await request.get('/api/saves/' + selection.save)).json();
   await expect.poll(async () => (await read()).job.status).toBe('saved');
