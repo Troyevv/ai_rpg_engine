@@ -363,7 +363,19 @@ class NarrativeContextBuilder:
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         if self.contract_version < 9:
             rules += '\nВарианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.'
-        rules += '\n' + NARRATIVE_CONTRACT
+        narrative_rules = NARRATIVE_CONTRACT
+        if self.contract_version >= 10:
+            from backend.runtime_v3.context_contract import LIFE_CONTRACT, RESIDENCE_CONTRACT
+            narrative_rules = narrative_rules.replace(LIFE_CONTRACT,
+                'Family ties, consent, feelings and individual knowledge are separate. '
+                'Respect identity, conditions and capabilities. Never choose for the player. '
+                'Death is lasting. No ordinary activity by the dead. Others learn through their own experiences. '
+                'A wedding need not follow an engagement. A finished phase remains history.\n')
+            narrative_rules = narrative_rules.replace(RESIDENCE_CONTRACT,
+                'Distinguish a visit from a permanent move and a second job from a replacement. '
+                'Consider established addresses, employers, obligations and the viewpoint. '
+                'An unknown address or role does not establish homelessness or unemployment.\n')
+        rules += '\n' + narrative_rules
         from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         if current.get('communication'): rules += REMOTE_NARRATIVE_CONTRACT

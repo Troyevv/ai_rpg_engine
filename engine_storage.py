@@ -574,8 +574,13 @@ class EngineStorage:
                     (json.dumps(record, ensure_ascii=False), job['context_json'],job['memory_before_json'],publication['variant_id']))
             else:
                 variant = self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
-            if changes.get('interpretation_warnings'):
-                warnings = json.loads(job['warnings_json'] or '[]') + changes['interpretation_warnings']
+            if publication or changes.get('interpretation_warnings'):
+                warnings = json.loads(job['warnings_json'] or '[]')
+                if publication:
+                    warnings = [w for w in warnings if w.get('code') != 'narrative_menu_count']
+                for warning in changes.get('interpretation_warnings', []):
+                    if warning not in warnings:
+                        warnings.append(warning)
                 db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(warnings,ensure_ascii=False),job_id))
             if publish:
                 marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1)

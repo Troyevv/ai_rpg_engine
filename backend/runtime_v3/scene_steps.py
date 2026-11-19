@@ -803,7 +803,6 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
     raw.semantic_candidate = original
     raw.movement_sources = movement_sources
     raw.event_routes = event_routes
-    raw.explicit_ending = bool(ending)
     raw.preflight_errors = [row for e in errors for row in e.diagnostics('compilation')]
     return raw
 

@@ -433,7 +433,7 @@ class StateResolver:
                     if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
                         fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
                     route.sort(key=lambda r:r[0])
-                if cid in present and not getattr(raw, 'explicit_ending', False):
+                if self.scene_version < 10 and cid in present:
                     if route[-1][1] != lid:
                         fatal('конечное перемещение участника противоречит final_scene',
                               'scene_movement_conflict', repairable=True, entity=cid,

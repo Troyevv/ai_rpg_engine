@@ -23,7 +23,11 @@ test('camera, observer continuation, timeline and immutable playback',async({pag
  await dialog.getByRole('button',{name:'Персонажи и сцены'}).click();
  await dialog.locator('.camera-cast article').nth(2).getByRole('button',{name:'Наблюдать',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- await expect(page.getByLabel('Своё действие или реплика')).toBeDisabled();
+ const direction=page.getByLabel('Направление истории',{exact:true});
+ await expect(direction).toBeEnabled();
+ await direction.fill('Показать, как проходит утро.');
+ await expect(page.getByRole('button',{name:'Отправить направление истории',exact:true})).toBeEnabled();
+ await expect(page.getByLabel('Своё действие или реплика',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Продолжить наблюдать',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await page.getByLabel('Участник фоновой сцены').selectOption('character_3');

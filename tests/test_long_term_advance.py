@@ -337,8 +337,16 @@ def test_real_jobs_reload_regenerate_rollback_branch_and_ordinary_turn(tmp_path)
     assert repo.get_job(jid)["status"] == "saved", repo.get_job(jid)["error"]
 
 
-@pytest.mark.parametrize(('years','stage','age'), [(5,'child',4),(10,'child',9),(15,'adolescent',14)])
-def test_accepted_birth_then_child_ages_without_adult_personality(years, stage, age):
+def test_accepted_birth_then_child_ages_without_adult_personality():
+    assert_child_after_advance(15, 'adolescent', 14)
+
+
+@pytest.mark.parametrize(('years','age'), [(5,4),(10,9)])
+def test_birth_inside_multi_year_advance_has_correct_age(years, age):
+    assert_child_after_advance(years, 'child', age)
+
+
+def assert_child_after_advance(years, stage, age):
     from backend.runtime_v3.calendar import age_on, current_time
     initial = state()
     initial['reproduction_policy']['gestation_days'] = 280

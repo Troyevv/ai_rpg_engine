@@ -491,14 +491,14 @@ export function Game({
             <Textarea
               ref={input}
               rows={1}
-              aria-label="Своё действие или реплика"
+              aria-label={observer ? "Направление истории" : "Своё действие или реплика"}
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
               disabled={!canAct}
-              placeholder={activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
+              placeholder={observer?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
@@ -512,7 +512,7 @@ export function Game({
               }}
             />
             <Button
-              aria-label="Отправить действие"
+              aria-label={observer ? "Отправить направление истории" : "Отправить действие"}
               size="icon"
               disabled={!canSubmit || !draft.trim()}
               onClick={() => turn("turn")}
@@ -521,7 +521,7 @@ export function Game({
             </Button>
           </div>
           <div className="composer-footer">
-            <span>Твоё действие всегда важнее предложенных вариантов.</span>
+            <span>{observer?"Можно задать своё направление истории.":"Твоё действие всегда важнее предложенных вариантов."}</span>
             {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
             {away&&<button
               onClick={jumpToLatest}

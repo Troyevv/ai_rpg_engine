@@ -2,12 +2,10 @@
 import json
 import re
 
-FORMAT = ('JSON: сначала "scene" (полный текст сцены строкой), затем "actions" (ровно шесть '
-          'разных конкретных продолжений без предрешённого результата, каждое {"text":"…","facts":[]}). '
-          'Для текущей сцены facts пуст, для прежних сведений укажи ID известных POV фактов. '
-          'Не раскрывай скрытое. Необязательное "ending": {"location_id":"ID","present_ids":["ID"],'
-          '"elapsed_minutes":0}. Только достигнутое место и физически присутствующие, включая героя. '
-          'Если место или время не определены, опусти соответствующие данные.')
+FORMAT = ('JSON object: "scene": full literary prose first; "actions": six distinct, specific open choices '
+          'in the story language, each {"text":"…","facts":[]}. Cite known POV fact IDs for prior knowledge. '
+          'No secrets or predetermined outcomes. Optional "ending": {"location_id":"ID","present_ids":["ID"],'
+          '"elapsed_minutes":30}. Only final physical participants, including the player in actor mode. Omit unknown fields.')
 _DECODER = json.JSONDecoder()
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
 
@@ -17,7 +15,7 @@ def requested(messages):
         content = msg.get('content', '')
         if content.startswith('Текущий ввод\n'):
             try:
-                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith(FORMAT)
+                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((FORMAT, 'JSON: сначала "scene"'))
             except (ValueError, AttributeError):
                 return False
     return False
