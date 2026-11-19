@@ -202,3 +202,20 @@ def test_resuming_another_stage_cannot_replace_a_paid_creative_batch():
     changed=deepcopy(state);changed['campaign']['title']='Редакция автора'
     result=draft_creative.develop(changed,'Автор',journal,lambda *_:pytest.fail('Unexpected paid request'),lambda:None)
     assert result==changed and draft_creative.recoverable(journal)[candidate_hash(state)]['current_reply']==raw
+
+
+def test_legacy_resume_uses_recorded_input_when_root_messages_are_missing():
+    messages=[dict(role='system',content='Исторические инструкции сохранённого запроса.'),dict(role='user',content='Город')]
+    class Recorded:
+        def preparation_job(self,jid):
+            return dict(workspace_id='w',response_journal=json.dumps({'responses':{'world':{'parts':[{'request_id':'receipt'}]}}}))
+        def preparation_request_messages(self,jid,rid):
+            assert (jid,rid)==('archive','receipt')
+            return messages
+        def draft(self,*args,**kwargs):return {'state':None}
+        def draft_phase(self,*args,**kwargs):pass
+        def save_response_journal(self,jid,journal):assert journal['messages']==messages
+    config=dict(_draft_task='world',context_length=32768,_prompts={'draft_world_prompt.md':dict(content='изменено')})
+    with patch.object(draft_response,'response',return_value=None) as dispatch:
+        draft_generation.run(SimpleNamespace(repo=Recorded()),'archive',config,None,SimpleNamespace(cancel=Event()),None,None)
+    assert dispatch.call_args.args[4]==messages

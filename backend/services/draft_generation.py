@@ -150,7 +150,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 prompt_contract=('historical_builtin' if builtin and chosen['content']!=bundled else contract['prompt_contract']),
                 effective_prompt_sha256=hashlib.sha256((bundled if builtin else chosen['content']).encode()).hexdigest())
     advisory_policy=journal['generation_contract'].get('audit_policy')==2
-    if 'messages' not in journal:journal['messages']=messages_for(repo,job,config)
+    if 'messages' not in journal:
+        parts=journal.get('responses',{}).get('world',{}).get('parts',[])
+        first=parts[0].get('request_id') if parts else None
+        recorded=repo.preparation_request_messages(jid,first) if first and hasattr(repo,'preparation_request_messages') else None
+        journal['messages']=recorded or messages_for(repo,job,config)
     messages=journal['messages']
     input_hash=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
     binding=dict(job_id=jid,input_hash=input_hash)
