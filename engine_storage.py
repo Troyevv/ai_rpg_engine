@@ -171,7 +171,7 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original:
                         pinned = json.loads(original[0])
-                        for key in ('provider','model','temperature','thinking','max_tokens','context_length','update_tokens','auto_context','budget_mode'):
+                        for key in ('provider','model','temperature','thinking','max_tokens','context_length','update_tokens','auto_context','budget_mode','_budget_snapshot'):
                             if key in pinned:
                                 config[key] = pinned[key]
                             else:
@@ -336,6 +336,7 @@ class EngineStorage:
                 if any(k in config and config[k] != settings.get(k) for k in
                        ('model','provider','budget_mode','context_length','max_tokens','update_tokens','thinking')):
                     settings.pop('_recorded_budget',None)
+                    settings.pop('_budget_snapshot',None)
                 settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','_extraction_contract','_extraction_transport','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             if settings.get('_extraction_contract',1) >= 6 and previous_provider != (settings.get('provider','local'),settings.get('model')):
                 from backend.services.structured_extraction import transport

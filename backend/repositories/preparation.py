@@ -152,7 +152,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if any(r.get('input_hash')==fingerprint and r.get('contract_version')==CONTRACT_VERSION and r.get('policy')==RECOVERY_POLICY for r in journal.get('no_progress',[])):return True
             state=json.loads(journal['candidate_text'])
             source=journal['messages'][-1]['content']
-            signature=review_signature(messages(state,source),config)
+            effective = dict(config, **journal.get('budget_snapshot', {}))
+            signature=review_signature(messages(state,source),effective)
             if journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False):return True
             return any(record.get('failure') for slot,record in journal.get('responses',{}).items() if slot.startswith('completeness_'+signature+'_') and slot not in journal.get('response_retries',{}))
         except (ValueError,KeyError,IndexError,TypeError):return False
@@ -189,8 +190,10 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 from backend.services.draft_response import MAX_FRAGMENTS
                 original = next(iter(journal.get('config_history') or [config]))
                 journal['token_budget'] = original.get('_draft_token_budget',
-                    3*MAX_FRAGMENTS*(original['context_length']+original['max_tokens']))
+                    3*MAX_FRAGMENTS*(original.get('context_length',32768)+original.get('max_tokens',12000)))
             proposed=dict(config,**(config_changes or {}))
+            if proposed != config and 'budget_snapshot' in journal:
+                journal.setdefault('budget_history', []).append(journal.pop('budget_snapshot'))
             if revision is None or revision==job['revision']:
                 if self.review_exhausted(journal,proposed):raise ValueError('Стратегии проверки этого кандидата исчерпаны. Повтор запроса не разрешён; сохранённые замечания доступны в редакторе.')
             if config_changes:

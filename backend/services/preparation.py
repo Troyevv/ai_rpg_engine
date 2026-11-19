@@ -98,8 +98,12 @@ class Preparation:
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
                 if worker_epoch is not None and json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
-                from backend.services.token_budget import prepare
-                config = prepare(config, job['kind'], loaded=loaded, api_key=api_key)
+                from backend.services.token_budget import prepare, snapshot
+                journal = json.loads(job.get('response_journal') or '{}')
+                config = prepare(dict(config, _budget_snapshot=journal.get('budget_snapshot')), job['kind'], loaded=loaded, api_key=api_key)
+                if worker_epoch is not None and config.get('budget_mode') and 'budget_snapshot' not in journal:
+                    journal['budget_snapshot'] = snapshot(config)
+                    self.repo.save_response_journal(jid, journal)
                 if job['kind']=='draft_editor':
                     from backend.services.draft_editor import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)

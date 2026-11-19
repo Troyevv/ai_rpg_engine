@@ -11,6 +11,8 @@ class ModelConfig(DTO):
     @model_validator(mode='before')
     @classmethod
     def budget_default(cls, values):
+        if isinstance(values, dict) and values.get('budget_mode') == 'manual' and 'context_length' not in values:
+            raise ValueError('Укажите проверенное окно контекста для ручного режима.')
         # Preserve the validation boundary of previously accepted payloads.
         if isinstance(values, dict) and values.get('budget_mode') is None and isinstance(values.get('context_length'), int) and values['context_length'] < 8192:
             raise ValueError('Для старой конфигурации контекст должен быть не меньше 8192. Для меньшего окна выберите ручной режим.')

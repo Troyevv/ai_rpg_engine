@@ -140,6 +140,7 @@ def test_custom_endpoint_independent_limits_and_cost_envelope(monkeypatch):
     from test_draft_response_v4 import JournalRepo
     monkeypatch.setitem(llm.PROVIDERS,'compatible',llm.ProviderSpec('https://example.invalid/v1'))
     monkeypatch.setenv('COMPATIBLE_MODEL_LIMITS',json.dumps({'https://example.invalid/v1':{'explicit':{'max_input':8192,'max_output':2048}}}))
+    monkeypatch.setattr(llm, 'OpenAI', lambda **_: (_ for _ in ()).throw(ConnectionError()))
     config=prepare(ModelConfig(provider='compatible',model='explicit').model_dump(),'draft_world')
     with pytest.raises(ValueError,match='Полный вход'):
         plan_request(config,'world',[dict(role='user',content='ю'*10000)],1024)
@@ -153,3 +154,14 @@ def test_detail_rejected_before_transport_when_model_cannot_fit_target():
     config['_budget_caps']['max_output'] = 512
     with pytest.raises(ValueError, match='Уменьшите подробность'):
         plan_request(config, 'narrative', MESSAGES, 512)
+
+
+def test_resume_pins_policy_and_checks_reloaded_local_capacity():
+    from backend.services.token_budget import snapshot
+    raw = ModelConfig(provider='local', model='same').model_dump()
+    original = prepare(raw, 'turn', loaded={'config': {'context_length': 32768}}, detail='brief')
+    recorded = dict(raw, _budget_snapshot=snapshot(original))
+    larger = prepare(recorded, 'turn', loaded={'config': {'context_length': 65536}}, detail='extended')
+    assert snapshot(larger) == snapshot(original)
+    with pytest.raises(ValueError, match='Сохранённый план несовместим'):
+        prepare(recorded, 'turn', loaded={'config': {'context_length': 8192}})

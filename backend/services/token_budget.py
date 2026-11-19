@@ -93,7 +93,24 @@ def prepare(config, operation, *, loaded=None, detail='balanced', api_key=None):
     if auto and config.get('_draft_task') in ('world', 'editor'):
         from backend.services.draft_response import MAX_FRAGMENTS
         working.setdefault('_draft_token_budget', 3 * MAX_FRAGMENTS * (32768 + 12000))
+
+    pinned = config.get('_budget_snapshot')
+    if pinned:
+        previous = pinned['_budget_caps']
+        smaller = any(caps.get(k) and previous.get(k) and caps[k] < previous[k]
+                      for k in ('context_length', 'max_input', 'max_output'))
+        if (smaller or previous.get('endpoint_id') != caps.get('endpoint_id')
+                or caps.get('max_output') and max(pinned['max_tokens'], pinned['update_tokens']) > caps['max_output']
+                or caps.get('max_input') and not previous.get('max_input') and pinned['context_length'] > caps['max_input']):
+            raise BudgetError('Возможности модели изменились. Сохранённый план несовместим. Подтвердите новые лимиты для восстановления.')
+        working.update(pinned)
     return working
+
+
+def snapshot(config):
+    keys = ('_budget_caps', '_visible_target', '_policy_version', '_reasoning_reserve',
+            '_output_target', '_detail', 'context_length', 'max_tokens', 'update_tokens')
+    return {key: config[key] for key in keys if key in config}
 
 
 def world_output(config, messages):
@@ -143,9 +160,9 @@ def plan_request(config, stage, messages, requested, *, response_format=None, st
         ceiling = config['update_tokens' if structured else 'max_tokens']
     output = min(requested, ceiling, caps.get('max_output') or requested, window - consumed - MARGIN)
     minimum = min(requested, 256)
-    if stage in ('extraction', 'extraction_repair'):
-        minimum = requested if config.get('budget_mode') == 'auto' else min(requested, 1024)
-    elif stage == 'narrative' and config.get('budget_mode') in ('auto', 'manual'):
+    if stage in ('extraction', 'extraction_repair', 'world_simulation_delta', 'world_simulation_repair', 'long_term_extraction', 'long_term_repair'):
+        minimum = max(requested, 1024) if config.get('budget_mode') == 'auto' else min(requested, 1024)
+    elif stage in ('narrative', 'world_simulation', 'long_term_narrative') and config.get('budget_mode') in ('auto', 'manual'):
         minimum = config['_visible_target'] + config['_reasoning_reserve']
         if output < minimum:
             raise BudgetError(f'Выбранная подробность требует места для {minimum} токенов ответа с учётом Thinking. '

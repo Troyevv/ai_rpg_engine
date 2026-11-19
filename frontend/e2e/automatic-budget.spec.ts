@@ -17,6 +17,17 @@ for (const [width, skin] of [[360,'graphite'], [393,'parchment'], [1280,'cyberpu
     await budget.getByText('Расширенные настройки').click();
     await auto.uncheck();
     await page.getByLabel('Контекст game',{exact:true}).fill('16384');
+    if (width < 700) {
+      // interactive-widget=resizes-content gives Android keyboards this layout.
+      const numeric = page.getByLabel('Контекст game',{exact:true});
+      await numeric.focus();
+      await page.setViewportSize({width,height:460});
+      await numeric.scrollIntoViewIfNeeded();
+      const field = await numeric.boundingBox();
+      expect(field!.y + field!.height).toBeLessThanOrEqual(460);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      await page.setViewportSize({width,height:820});
+    }
     await auto.check();
     const names=Array.from({length:42},(_,i)=>`Локальная модель ${i} с длинным описанием для проверки переноса и выбора в списке`);
     await page.route('**/api/models/list',route=>route.fulfill({json:{models:names,loaded:[]}}));

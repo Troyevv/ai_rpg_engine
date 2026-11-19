@@ -148,7 +148,7 @@ export function Settings({
                     loaded: { model_key: string }[];
                   }>("/models/list", {
                     provider: draft[key].provider,
-                    api_key: apiKey,
+                    api_key: draft[key].provider === "deepseek" ? apiKey : undefined,
                   });
                   setModels(previous=>({...previous,[draft[key].provider]:r.models}));
                   if (draft[key].provider==="local") setLoaded(r.loaded.map((m) => m.model_key));

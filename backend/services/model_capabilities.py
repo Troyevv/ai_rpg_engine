@@ -10,11 +10,12 @@ DEEPSEEK = {'deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp
 
 
 def positive(value):
-    return value if type(value) is int and 2048 <= value <= 2097152 else None
+    return value if type(value) is int and value > 0 else None
 
 
 def discover(provider, model, credentials=None, *, api_key=None):
     endpoint = {}
+    configured_limits = {}
     if provider == 'deepseek':
         return dict(context_length=1000000, max_output=384000, source=SOURCE, checked='2026-11-19') if model in DEEPSEEK else dict(context_length=None, source='Модель отсутствует в проверенной таблице DeepSeek')
     try:
@@ -36,21 +37,26 @@ def discover(provider, model, credentials=None, *, api_key=None):
             # expose the endpoint (it may contain credentials) in diagnostics.
             endpoint['endpoint_id'] = sha256(spec.base_url.encode()).hexdigest()[:16]
             configured = json.loads(os.getenv('COMPATIBLE_MODEL_LIMITS', '{}')).get(spec.base_url, {}).get(model)
-            if configured and (positive(configured.get('context_length')) or positive(configured.get('max_input')) and type(configured.get('max_output')) is int and configured['max_output'] > 0):
-                output = configured.get('max_output')
-                return dict(context_length=positive(configured.get('context_length')), max_input=positive(configured.get('max_input')),
-                            max_output=output if type(output) is int and output>0 else None,
-                            source='Серверная конфигурация (не подтверждена провайдером)',
-                            **endpoint)
+            if isinstance(configured, dict):
+                configured_limits = dict(context_length=positive(configured.get('context_length')),
+                                         max_input=positive(configured.get('max_input')),
+                                         max_output=positive(configured.get('max_output')))
             with llm.OpenAI(base_url=spec.base_url, api_key=api_key or (credentials and credentials.resolve(provider)) or os.getenv(spec.key_env, ''), timeout=10, max_retries=0) as client:
                 matches = [m.model_dump() for m in client.models.list().data if m.id == model]
             if len(matches) == 1:
                 metadata = matches[0]
                 windows = [positive(metadata.get(k)) for k in ('context_length', 'context_window')]
-                output = metadata.get('max_output_tokens')
-                return dict(context_length=min(filter(None, windows), default=None), max_input=positive(metadata.get('max_input_tokens')), **endpoint,
-                            max_output=output if type(output) is int and output > 0 else None,
-                            source='Метаданные GET /models')
+                discovered = dict(context_length=min(filter(None, windows), default=None),
+                                  max_input=positive(metadata.get('max_input_tokens')),
+                                  max_output=positive(metadata.get('max_output_tokens')))
+                limits = {key: min(filter(None, (value, configured_limits.get(key))), default=None)
+                          for key, value in discovered.items()}
+                source = 'Метаданные GET /models'
+                if any(configured_limits.values()):
+                    source += ' и серверные ограничения'
+                return dict(limits, source=source, **endpoint)
     except Exception:
         pass  # Never return transport errors containing endpoint credentials.
+    if any(configured_limits.values()):
+        return dict(configured_limits, source='Серверная конфигурация (не подтверждена провайдером)', **endpoint)
     return dict(context_length=None, source='Достоверные метаданные недоступны', **endpoint)

@@ -136,16 +136,23 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
-            from backend.services.token_budget import prepare, extraction_output, preflight_downstream
+            from backend.services.token_budget import prepare, snapshot, extraction_output, preflight_downstream
             before = json.loads(job['memory_before_json'] or job['before_json'])
             detail = before['world_state']['meta'].get('narrative_detail','balanced')
+            def prepare_job(loaded=None):
+                resolved = prepare(config, job['kind'], loaded=loaded, detail=detail, api_key=handle.api_key)
+                if config.get('budget_mode') and not config.get('_budget_snapshot'):
+                    with storage.connect() as db:
+                        db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._budget_snapshot',json(?)) WHERE id=? AND attempt_epoch=?",
+                                   (json.dumps(snapshot(resolved)), job_id, job['attempt_epoch']))
+                return resolved
             if job['kind'] in ('communication','long_term'):
                 if job['kind'] == 'communication':
                     from backend.services.communication import execute
                 else:
                     from backend.services.long_term_advance import execute
                 if job['kind']=='communication' or config['long_term_advance'].get('max_llm_calls') != 0:
-                    config = prepare(config, job['kind'], detail=detail, api_key=handle.api_key)
+                    config = prepare_job()
                 execute(storage, job, handle, chat_stream, config)
                 return
             model = None
@@ -153,7 +160,7 @@ def run_job(path, job_id, handle):
                 model = find_loaded_model(config['model'])
                 if model is None:
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
-            config = prepare(config, job['kind'], loaded=model, detail=detail, api_key=handle.api_key)
+            config = prepare_job(model)
             context = config['context_length']
             recorded = config.get('_recorded_budget')
             if recorded:
