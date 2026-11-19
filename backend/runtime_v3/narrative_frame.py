@@ -115,9 +115,9 @@ def read(text, *, complete):
         body = text[fence.end():]
         if _START.match(body) or _QUOTED_FRAME.match(body):
             if complete:
-                prefix, newline, closing = body.rstrip().rpartition('\n')
-                if newline and closing.strip() == '```':
-                    body = prefix
+                body, newline, closing = body.rstrip().rpartition('\n')
+                if not newline or closing.strip() != '```':
+                    return None
             text = body
         elif not complete and (not body.strip() or body.lstrip().startswith('{')):
             return '', {}
