@@ -5,12 +5,15 @@ import re
 # Keep the historical prefix for jobs whose original messages are replayed on retry.
 _FRAME_PREFIX = 'JSON object: "scene": full literary prose first;'
 FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open choices in the story language, '
-          'each {"text":"…","facts":[]}. Use [] for this scene and personal decisions; cite only exact known '
-          'fact IDs when recalling prior information. No secrets or predetermined outcomes. Optional "ending": '
+          'each {"text":"…"}. Current-scene actions and personal decisions need only text. Add "facts" '
+          'with exact POV-known fact IDs only when relying on prior information. No secrets or predetermined outcomes. Optional "ending": '
           'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
           'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
 _DECODER = json.JSONDecoder()
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
+# A malformed single-line action can be isolated at a physical record boundary.
+# Never search inside nested objects or rewrite its text or knowledge references.
+_ACTION_ROW = re.compile(r'\{[^{}\r\n]*\}(?=[ \t]*(?:,[ \t]*\r?\n|\r?\n\s*\]))')
 
 
 def requested(messages):
@@ -39,7 +42,13 @@ def _complete_metadata(remainder):
                 actions = frame['actions'] = []
                 rest = rest[1:].lstrip()
                 while rest and not rest.startswith(']') and len(actions) < 6:
-                    action, end = _DECODER.raw_decode(rest)
+                    try:
+                        action, end = _DECODER.raw_decode(rest)
+                    except ValueError:
+                        row = _ACTION_ROW.match(rest)
+                        if not row:
+                            raise
+                        action, end = None, row.end()
                     actions.append(action)
                     rest = rest[end:].lstrip()
                     if not rest.startswith(','):
@@ -148,7 +157,7 @@ def menu(frame, state):
             break
         if not isinstance(item, dict):
             continue
-        text, refs = item.get('text'), item.get('facts')
+        text, refs = item.get('text'), item.get('facts', [])
         if not isinstance(text, str) or not 0 < len(text.strip()) <= 800 or not isinstance(refs,list):
             continue
         if any(not isinstance(fid, str) or not pov or

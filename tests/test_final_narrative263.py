@@ -58,6 +58,21 @@ def test_stream_chunks_prose_and_partial_menu():
     assert len(choices)==4 and warnings[0]['available']==4
 
 
+def test_malformed_action_does_not_hide_independent_choices_or_ending():
+    wire = ('{"scene":"Телефон звонит.","actions":[\n'
+            '{"text":"Спросить о работе"},\n'
+            '{"text":"Спросить, что значит "посмотрим"","facts":["secret"]},\n'
+            '{"text":"Поблагодарить","facts":[]},\n'
+            '{"text":"Раскрыть тайну","facts":["secret"]},\n'
+            '{"text":"Уточнить время","facts":null},\n'
+            '{"text":"Попрощаться"}\n],"ending":{"elapsed_minutes":2}}')
+    prose, frame = narrative_frame.read(wire, complete=True)
+    assert prose == 'Телефон звонит.' and frame['ending'] == {'elapsed_minutes':2}
+    choices, warnings = narrative_frame.menu(frame, state())
+    assert [c['action'] for c in choices] == ['Спросить о работе','Поблагодарить','Попрощаться']
+    assert warnings[0]['received'] == 6 and warnings[0]['available'] == 3
+
+
 def test_frame_survives_failed_extraction_and_reload(game):
     from backend.repositories.preparation import Repository
     repo,sid=game
