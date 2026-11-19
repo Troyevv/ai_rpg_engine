@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {themes} from '../src/lib/skins';
@@ -139,7 +140,7 @@ test('Chat skins keep controls and reading layout usable',async({page},info)=>{
   test.setTimeout(120000);if(info.project.name==='mobile')await page.setViewportSize({width:320,height:780});
   await create(page);
   for(const skin of themes){
-    await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(skin.id);await fits(page);await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();await chooseOption(page.getByRole('combobox',{name:'Тема мира',exact:true}), skin.id);await fits(page);await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-theme',skin.id);await fits(page);
     const tooltip=page.locator('.chat-header').getByRole('tooltip',{name:'Настройки RP-чата',exact:true});if(await tooltip.isVisible()){const b=await tooltip.boundingBox();expect(b!.x).toBeGreaterThanOrEqual(0);expect(b!.y).toBeGreaterThanOrEqual(0);expect(b!.x+b!.width).toBeLessThanOrEqual(page.viewportSize()!.width)}
     if(info.project.name==='mobile')expect((await page.locator('.chat-toolbar').boundingBox())!.height).toBeLessThanOrEqual(50);

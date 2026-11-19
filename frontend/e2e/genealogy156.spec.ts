@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 
@@ -14,7 +15,7 @@ test('genealogy controls, relationship details, geometry and responsive skins',a
   await page.goto('/');await nav(page,'Родословная');
   const area=page.locator('.save-workspace');
   await area.getByLabel('Найти персонажа').fill('Тимур');
-  await area.getByLabel('Семья персонажа').selectOption('qa_timur');
+  await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');
   await expect(area.locator('.family-node')).toHaveCount(5);
   await expect(area.locator('.family-generation').first()).toBeVisible();
   await area.getByLabel('Глубина родословной').fill('6');
@@ -42,7 +43,7 @@ test('genealogy controls, relationship details, geometry and responsive skins',a
   const overflow=await area.evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,offenders:[...el.querySelectorAll('*')].filter(n=>n.getBoundingClientRect().right>el.getBoundingClientRect().right+1&&!n.closest('.react-flow')).map(n=>n.className).slice(0,12)}));
   expect(overflow.scroll,JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.width+1);
   await area.evaluate(el=>(el as HTMLElement).style.zoom='1');
-  if(process.env.GENEALOGY_QA==='1'&&[1440,393].includes(width)){await area.getByLabel('Семья персонажа').selectOption('qa_timur');await area.getByRole('button',{name:'Вся семья',exact:true}).click();await area.locator('.family-graph').scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/issue156-final-${width}.png`})}
+  if(process.env.GENEALOGY_QA==='1'&&[1440,393].includes(width)){await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await area.getByRole('button',{name:'Вся семья',exact:true}).click();await area.locator('.family-graph').scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/issue156-final-${width}.png`})}
  }
  const after=await(await request.get(`/api/saves/${s.save}`)).json();
  expect(after.revision).toBe(before.revision);expect(after.state).toEqual(before.state);expect(errors).toEqual([]);
@@ -89,7 +90,7 @@ test('screenshot family reads without legend and restores the selected central p
  await page.emulateMedia({reducedMotion:'reduce'});
  await page.setViewportSize({width:info.project.name==='mobile'?393:1440,height:1000});
  await page.goto('/');await nav(page,'Родословная');const area=page.locator('.save-workspace');
- await area.getByLabel('Семья персонажа').selectOption('marina');
+ await chooseOption(area.getByLabel('Семья персонажа'), 'marina');
  await expect(area.locator('.family-node')).toHaveCount(6);
  await expect(area.locator('.family-root')).toContainText('Марина Волкова');
  await expect(area.locator('.react-flow__edge')).toHaveCount(2);
@@ -102,6 +103,6 @@ test('screenshot family reads without legend and restores the selected central p
  await area.getByRole('button',{name:'В центре родословной: Катя Волкова',exact:true}).click();
  await expect(area.locator('.family-root')).toContainText('Катя Волкова');await expect(area.locator('.family-root')).toBeInViewport();
  await area.getByRole('button',{name:'Вернуться в историю',exact:true}).click();await nav(page,'Родословная');
- await expect(area.getByLabel('Семья персонажа')).toHaveValue('katya');await expect(area.locator('.family-root')).toContainText('Катя Волкова');
+ await expect(area.getByLabel('Семья персонажа')).toHaveJSProperty('value', 'katya');await expect(area.locator('.family-root')).toContainText('Катя Волкова');
  await area.locator('.family-sibling-summary summary').click();await expect(area.locator('.family-sibling-summary')).toContainText('Соня Величкина');await expect(area.locator('.family-sibling-summary')).toContainText('Тимур Волков');
 });

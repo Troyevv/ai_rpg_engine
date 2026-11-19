@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -42,10 +43,10 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
  await expect(dossier.locator('.draft-field-heading').getByText('Внешность',{exact:true})).toHaveCount(0);
  await expect(dossier.getByRole('button',{name:'Добавить ценности',exact:true})).toBeVisible();
  await expect(dossier).toContainText(source.characters.find((c:any)=>c.id==='maxim').fields.Характер);
- await dossier.getByLabel('Переключить досье').selectOption('sonya');
+ await chooseOption(dossier.getByLabel('Переключить досье'), 'sonya');
  for(const label of ['Черты характера','Ценности'])await dossier.locator('.draft-field').filter({has:page.locator('.draft-field-heading').getByText(label,{exact:true})}).locator(':scope > details > summary').click();
  await expect(dossier.getByRole('heading',{name:'Бережно относится к близким',exact:true})).toBeVisible();await expect(dossier.getByRole('heading',{name:'Семья важнее карьеры',exact:true})).toBeVisible();
- await dossier.getByLabel('Переключить досье').selectOption('maxim');
+ await chooseOption(dossier.getByLabel('Переключить досье'), 'maxim');
  await dossier.getByRole('tab',{name:'Основное',exact:true}).click();
  await dossier.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
  const field=page.locator('.ww-field-dialog');const old=source.characters.find((c:any)=>c.id==='maxim').fields.Внешность;

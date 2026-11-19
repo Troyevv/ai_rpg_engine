@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -27,7 +28,7 @@ test('W21 W22 empty motives use their canonical editor; searchable people retain
   await page.locator('.ww-field-dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
   await expect(empty.getByRole('button',{name:'Изменить Намерения',exact:true})).toBeVisible();
   await dossier.getByLabel('Найти персонажа в досье').fill('Александровна');
-  await dossier.getByLabel('Переключить досье').selectOption(second.id);
+  await chooseOption(dossier.getByLabel('Переключить досье'), second.id);
   await expect(dossier.locator('.ww-dossier-identity h2')).toHaveText(second.name);
   await expect(dossier.getByRole('tab',{name:'Цели',exact:true})).toHaveAttribute('aria-selected','true');
   await dossier.getByLabel('Найти персонажа в досье').fill('');

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -12,10 +13,10 @@ test('W61 W62 scenario follows explicit world and preserves separate input buffe
  for(const w of [a,b]){const h=await(await request.get(`/api/documents/idea/${w.id}`)).json();expect((await request.post(`/api/documents/idea/${w.id}`,{data:{content:w.name,expected_head:h.active_id}})).ok()).toBe(true)}
  await page.addInitScript(({a,b})=>{localStorage.setItem('workspace',a);localStorage.setItem('draftWorkspace',b)}, {a:a.id,b:b.id});
  await page.goto('/');await nav(page,'Создать');await creationMethod(page,'Со Сценаристом');
- await expect(page.getByLabel('Подготовка',{exact:true})).toHaveValue(b.id);await expect(page.locator('.preparation')).toContainText('Сценарий B');
+ await expect(page.getByLabel('Подготовка',{exact:true})).toHaveJSProperty('value', b.id);await expect(page.locator('.preparation')).toContainText('Сценарий B');
  const input=page.getByLabel('Идея или правки сценария');await input.fill('Несохранённое уточнение B');
- await page.getByLabel('Подготовка',{exact:true}).selectOption(a.id);await expect(input).toHaveValue('');await input.fill('Отдельный ввод A');
- await page.getByLabel('Подготовка',{exact:true}).selectOption(b.id);await expect(input).toHaveValue('Несохранённое уточнение B');
+ await chooseOption(page.getByLabel('Подготовка',{exact:true}), a.id);await expect(input).toHaveValue('');await input.fill('Отдельный ввод A');
+ await chooseOption(page.getByLabel('Подготовка',{exact:true}), b.id);await expect(input).toHaveValue('Несохранённое уточнение B');
  await page.getByRole('button',{name:'← Генератор мира',exact:true}).click();await creationMethod(page,'Со Сценаристом');await expect(input).toHaveValue('Несохранённое уточнение B');
  for(const w of [a,b]){const data=await(await request.get(`/api/workspaces/${w.id}`)).json();expect(data.idea).toBe(w.name)}
  await expect(page.locator('.ww-shell .preparation')).toBeVisible();
@@ -97,7 +98,7 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
 
   if(info.project.name==='mobile')await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
   await page.locator(info.project.name==='desktop'?'.ww-sidebar':'.ww-menu-dialog').getByRole('button',{name:'Оформление',exact:true}).click();
-  await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await chooseOption(page.getByRole('combobox',{name:'Тема мира',exact:true}), theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской',exact:true})).toHaveCount(0);if(info.project.name==='mobile'){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);}
   await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
   const dossier = page.locator('.ww-dossier-dialog');

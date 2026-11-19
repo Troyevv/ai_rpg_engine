@@ -1,3 +1,4 @@
+import {chooseOption, openOptions} from './choice-navigation';
 import {nav} from './navigation';
 import { test, expect } from "@playwright/test";
 import { calendarDate } from "../src/gameDate";
@@ -39,8 +40,10 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
     const family=page.locator(".save-workspace");
     await expect(family.locator(".react-flow__node").first()).toBeVisible();
     // PR #120 makes all canonical families public, independent of Knowledge.
-    await expect(family.getByLabel("Семья персонажа").locator('option[value="qa_zoya"]')).toContainText("Зоя");
-    await family.getByLabel("Семья персонажа").selectOption("qa_zoya");
+    const familyOptions = await openOptions(family.getByLabel("Семья персонажа"));
+    const zoya = familyOptions.filter({hasText:"Зоя"});
+    await expect(zoya).toHaveAttribute("data-value", "qa_zoya");
+    await zoya.click();
     await expect(family.locator(".family-node").filter({hasText:"Зоя"})).toBeVisible();
     await family.getByRole("button", { name: "Вся семья", exact: true }).click();
     await page.keyboard.press("Escape");
@@ -202,7 +205,7 @@ test("death automatically opens mandatory continuation and Escape cannot dismiss
   await expect(
     page.getByRole("button", { name: "Отмена", exact: true }),
   ).toBeDisabled();
-  await page.getByLabel("Новый главный герой").selectOption("qa_vera");
+  await chooseOption(page.getByLabel("Новый главный герой"), "qa_vera");
   await page.getByRole("button", { name: "Проверить и посмотреть" }).click();
   await page.getByRole("button", { name: "Подтвердить смену" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -233,7 +236,7 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
     before.state.locations.find(
       (l: any) => l.name === before.state.scene_meta.location,
     )?.id || before.state.locations[0].id;
-  await menu.getByLabel("Регион климата").selectOption(location);
+  await chooseOption(menu.getByLabel("Регион климата"), location);
   // Hold the real post-commit projection response. A fast local refresh used
   // to hide the race where the revision guard dismissed the settings dialog.
   let releaseRefresh!: () => void;

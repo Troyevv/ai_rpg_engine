@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {creationMethod} from './idea-navigation';
 import {nav} from "./navigation";
 import { test, expect } from "@playwright/test";
@@ -10,7 +11,7 @@ test("scenario → summary → world → save → start → action → regenerat
   await page.goto("/");
   await nav(page,'Настройки');
   for (const key of ["idea", "summary", "game"])
-    await page.getByLabel("Провайдер " + key).selectOption("deepseek");
+    await chooseOption(page.getByLabel("Провайдер " + key), "deepseek");
   await page.getByLabel("API-ключ DeepSeek").fill("fixture-key");
   await page.getByRole("button", { name: "Сохранить настройки" }).click();
   await nav(page,'Создать');

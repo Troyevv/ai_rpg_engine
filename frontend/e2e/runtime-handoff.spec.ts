@@ -39,7 +39,7 @@ test('original export identities and rejected opening recover through real API t
  await expect(page.locator('.camera-cast')).not.toContainText('Без имени');
  await page.screenshot({path:`test-results/handoff-camera-${info.project.name}.png`,fullPage:true,animations:'disabled'});
  await page.keyboard.press('Escape');
- if(info.project.name==='desktop')await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('ilya');
+ if(info.project.name==='desktop')await expect(page.getByLabel('Управляемый персонаж')).toHaveJSProperty('value', 'ilya');
  await request.post('/test/runtime-handoff-provider');
  let calls:{narratives:number;extractions:number}|undefined;
  try {

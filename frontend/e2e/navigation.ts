@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {expect,type Page} from '@playwright/test';
 export async function nav(page:Page,name:string){
  if(await page.locator('.ww-shell').isVisible()){
@@ -24,13 +25,13 @@ export async function actor(page:Page,id:string,name:string){
  const mobile=!await page.getByLabel('Управляемый персонаж').isVisible();
  if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
- if(!mobile)await page.getByLabel('Управляемый персонаж').selectOption(id);
+ if(!mobile)await chooseOption(page.getByLabel('Управляемый персонаж'), id);
  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
  const response=await committed;
  expect(response.ok(),await response.text()).toBe(true);
  const after=await response.json();
  expect(after.state.controlled_actor_id).toBe(id);
- if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveValue(id);
+ if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveJSProperty('value', id);
  else await expect(page.locator('.mobile-pov button').first()).toHaveText(after.state.characters.find((c:{id:string})=>c.id===id).name.replace(' (ГГ)','')+' ▾');
  await expect(page.getByLabel('Управляемый персонаж').or(page.locator('.mobile-pov button').first())).toBeEnabled();
  // API commit can precede Radix's CSS exit/unmount. A following actor switch

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page} from '@playwright/test';
 import {nav,actor,diagnostics,pickCharacter} from './navigation';
 
@@ -19,7 +20,7 @@ async function capture(page:Page,path:string){
 }
 async function themeControl(page:Page){
  await nav(page,'Мир');await page.locator('.inspector-workspace').getByRole('button',{name:'Настройки и сведения о мире',exact:true}).click();
- return page.getByLabel('Тема мира',{exact:true}).filter({has:page.locator('option')});
+ return page.getByRole('combobox',{name:'Тема мира',exact:true});
 }
 
 test('world themes persist across reload and devices; portals inherit theme; all palettes remain playable',async({page,request,browser},info)=>{
@@ -31,7 +32,7 @@ test('world themes persist across reload and devices; portals inherit theme; all
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.choices button')).toHaveCount(6);
  for(const id of palette){
-  await themeControl(page);await page.locator('.theme-selector select').selectOption(id);
+  await chooseOption(await themeControl(page), id);
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
   expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('.inspector-workspace').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
   const contrast=await page.locator('html').evaluate(el=>{
@@ -80,7 +81,7 @@ test('legacy world defaults, auto selection, keyboard tabs and reduced motion re
  });
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');await expect(page.locator('html')).toHaveAttribute('data-theme','graphite');
- await themeControl(page);await page.locator('.theme-selector select').selectOption('auto');
+ await chooseOption(await themeControl(page), 'auto');
  await expect(page.locator('.theme-selector')).toContainText('Автовыбор закреплён');
  await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await page.locator('.inspector-workspace').getByRole('button',{name:'Закрыть',exact:true}).click();
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(1);

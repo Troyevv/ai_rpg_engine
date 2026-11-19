@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 
 test('camera, observer continuation, timeline and immutable playback',async({page,request,isMobile})=>{
@@ -30,7 +31,7 @@ test('camera, observer continuation, timeline and immutable playback',async({pag
  await expect(page.getByLabel('Своё действие или реплика',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Продолжить наблюдать',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
- await page.getByLabel('Участник фоновой сцены').selectOption('character_3');
+ await chooseOption(page.getByLabel('Участник фоновой сцены'), 'character_3');
  await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.choices button')).toHaveCount(0);
  await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();

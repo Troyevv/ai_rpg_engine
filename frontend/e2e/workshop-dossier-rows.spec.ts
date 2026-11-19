@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -61,10 +62,10 @@ test('author can publish a safe field or bind it to a secret in the same revisio
  const field=page.locator('.ww-field-dialog'),rule=field.getByLabel('Правило показа'),
  save=field.getByRole('button',{name:'Сохранить поле',exact:true});
  await field.getByText('Видимость для игрока',{exact:true}).click();
- await rule.selectOption('public');await expect(save).toBeEnabled();
+ await chooseOption(rule, 'public');await expect(save).toBeEnabled();
  await page.keyboard.press('Escape');await open();
  await field.getByText('Видимость для игрока',{exact:true}).click();
- await expect(rule).toHaveValue('public');await expect(field.locator('.ww-field-status')).toContainText('несохранённые');
+ await expect(rule).toHaveJSProperty('value', 'public');await expect(field.locator('.ww-field-status')).toContainText('несохранённые');
  const safe='Боится выступать перед большой аудиторией.';
  await field.getByRole('textbox',{name:label,exact:true}).fill(safe);
  const commit=async()=>{
@@ -80,7 +81,7 @@ test('author can publish a safe field or bind it to a secret in the same revisio
  };
  expect((await playerFields())[label]).toBe(safe);
  await open();await field.getByText('Видимость для игрока',{exact:true}).click();
- await expect(rule).toHaveValue('public');await rule.selectOption('after');
+ await expect(rule).toHaveJSProperty('value', 'public');await chooseOption(rule, 'after');
  await expect(save).toBeDisabled();
  await field.getByRole('checkbox',{name:/Максим тайно готовит продажу/}).check();
  expect(await commit()).toMatchObject({value:safe,field_visibility:['fact_maxim_sale']});

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {generateIdea} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -6,7 +7,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   const workspace=await(await request.post('/api/workspaces',{data:{name:'Large context recovery'}})).json();
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Настройки');
-  await page.getByLabel('Провайдер summary').selectOption('deepseek');
+  await chooseOption(page.getByLabel('Провайдер summary'), 'deepseek');
   await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
   for (const stage of ['idea','summary','game']) {
     const auto=page.getByLabel('Автоматические лимиты '+stage);

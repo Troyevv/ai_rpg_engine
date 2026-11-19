@@ -110,7 +110,7 @@ test('genealogy and narrative entry, partner return, draft and persisted next tu
  const s=await seed(page,request,'ui-family');
  const composer=page.getByLabel('Своё действие или реплика');await composer.fill('Сохранить мой черновик');
  await nav(page,'Родословная');const family=page.locator('.save-workspace');
- await expect(family.getByLabel('Семья персонажа')).toHaveValue('qa_kirill');
+ await expect(family.getByLabel('Семья персонажа')).toHaveJSProperty('value', 'qa_kirill');
  await family.getByRole('button',{name:'Список',exact:true}).click();
  await family.getByRole('button',{name:'Открыть досье: Кирилл Ларин',exact:true}).click();
  await partner(page,'qa_vera').click();await page.keyboard.press('Escape');

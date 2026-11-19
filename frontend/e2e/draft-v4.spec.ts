@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {chooseGenre} from './genre-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea,ideaGroup,closeIdeaGroup} from './idea-navigation';
@@ -12,10 +13,10 @@ test('creation settings and JSON continuation survive editor start and reload',a
   await ideaGroup(page,'Жанры истории');
   await chooseGenre(page,'Семейная сага');
   await ideaGroup(page,'Персонажи');
-  await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await chooseOption(page.getByLabel('Выразительность NPC',{exact:true}), 'hyperbolized');
   await ideaGroup(page,'Темп и последствия');
-  await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
-  await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
+  await chooseOption(page.getByLabel('Темп истории',{exact:true}), 'calm');
+  await chooseOption(page.getByLabel('Риск последствий',{exact:true}), 'safe');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
   await page.screenshot({path:`test-results/draft-v4-settings-${page.viewportSize()?.width}.png`,fullPage:true});
   await closeIdeaGroup(page);

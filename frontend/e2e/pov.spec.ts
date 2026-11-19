@@ -1,3 +1,4 @@
+import {chooseOption, openOptions} from './choice-navigation';
 import {creationMethod} from './idea-navigation';
 import {nav,actor} from "./navigation";
 import {test,expect} from '@playwright/test';
@@ -32,16 +33,19 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  const versions=page.getByRole('dialog').last();
  await expect(versions).toContainText('История версий');
  await expect(versions.getByLabel('Содержимое версии')).toBeEnabled();
- const initial=await versions.locator('select option').count();
+ const field=versions.getByRole('combobox');
+ const initial=await (await openOptions(field)).count();
+ await page.keyboard.press('Escape');
  const text=await versions.getByLabel('Содержимое версии').inputValue();
  await versions.getByLabel('Содержимое версии').fill(text+'\nПроверка версии.');
  await versions.getByRole('button',{name:'Сохранить новую версию'}).click();
- await expect(versions.locator('select option')).toHaveCount(initial+1);
- const old=await versions.locator('select option').last().getAttribute('value');
- await versions.locator('select').selectOption(old!);
+ const options=await openOptions(field);
+ await expect(options).toHaveCount(initial+1);
+ await options.last().click();
  page.once('dialog',d=>d.accept());
  await versions.getByRole('button',{name:'Откатить к выбранной'}).click();
- await expect(versions.locator('select option')).toHaveCount(initial+2);
+ await expect(await openOptions(field)).toHaveCount(initial+2);
+ await page.keyboard.press('Escape');
  expect(await versions.getByLabel('Содержимое версии').inputValue()).toBe(text);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
  expect(errors).toEqual([]);
@@ -59,7 +63,7 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await page.goto('/');
  await nav(page,'Создать');
   await creationMethod(page,'Со Сценаристом');
- await page.getByLabel('Подготовка',{exact:true}).selectOption(w.id);
+ await chooseOption(page.getByLabel('Подготовка',{exact:true}), w.id);
  const summaryBefore=await(await request.get(`/api/documents/summary/${w.id}`)).json();
  const deleteTrigger=page.locator('.preparation').getByRole('button',{name:'Удалить выжимку',exact:true});
  const confirmation=page.getByRole('dialog',{name:'Удалить текущую выжимку?',exact:true});
@@ -77,7 +81,7 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await expect(dialog.getByLabel('Содержимое версии')).toBeEnabled();
  const h=await (await request.get(`/api/documents/summary/${w.id}`)).json();
  const completed=h.versions.find((v:{content:string})=>v.content.length>0);
- await dialog.getByRole('combobox').selectOption(String(completed.id));
+ await chooseOption(dialog.getByRole('combobox'), String(completed.id));
  page.once('dialog',d=>d.accept());
  const [restored]=await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' &&
@@ -85,7 +89,8 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
    dialog.getByRole('button',{name:'Откатить к выбранной'}).click(),
  ]);
  expect(restored.ok()).toBe(true);
- await expect(dialog.locator('select option')).toHaveCount(h.versions.length+1);
+ await expect(await openOptions(dialog.getByRole('combobox'))).toHaveCount(h.versions.length+1);
+ await page.keyboard.press('Escape');
  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toBeVisible();
  // Hold the successful deletion response while the user opens the global
@@ -101,7 +106,7 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await page.getByRole('button',{name:'Удалить сценарий',exact:true}).click();await committed;
  await page.getByText('Удалённые сценарии',{exact:true}).click();
  await page.getByRole('button',{name:'Обновить корзину'}).click();
- releaseDelete();await expect(page.getByLabel('Подготовка',{exact:true})).toHaveValue('');
+ releaseDelete();await expect(page.getByLabel('Подготовка',{exact:true})).toHaveJSProperty('value', '');
  const trash=page.locator('.preparation details').filter({has:page.locator('summary',{hasText:'Удалённые сценарии'})});
  await expect(trash).toHaveAttribute('open','');
  await trash.locator('div').filter({hasText:'Удаление и версии'}).getByRole('button',{name:'Восстановить',exact:true}).click();

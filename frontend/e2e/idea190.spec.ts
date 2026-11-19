@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {chooseGenre} from './genre-navigation';
 import {draftsMenu} from './workshop-navigation';
 import {test,expect,type Page,type TestInfo} from '@playwright/test';
@@ -34,11 +35,11 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
   if(skin==='graphite')await capture(page,info,'production-01-empty');
  await page.getByLabel('Название черновика').fill('Последняя вышка Валлора');
  await page.getByLabel('Описание мира или текст импорта').fill(idea);
- await page.getByLabel('Набор технологий связи',{exact:true}).selectOption('letters');
+ await chooseOption(page.getByLabel('Набор технологий связи',{exact:true}), 'letters');
  await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
  await expect(page.getByRole('checkbox',{name:'Письма',exact:true})).toBeChecked();
  await expect(page.getByRole('checkbox',{name:'Гонцы',exact:true})).toBeChecked();
- await expect(page.getByLabel('Набор технологий связи',{exact:true})).toHaveValue('custom');
+ await expect(page.getByLabel('Набор технологий связи',{exact:true})).toHaveJSProperty('value', 'custom');
  await page.evaluate(()=>document.fonts.ready);
  await expect.poll(()=>page.locator('.hero-art').evaluate(async el=>{const url=getComputedStyle(el).backgroundImage.match(/url\("?([^")]+)/)?.[1];if(!url)return 0;const image=new Image();image.src=url;await image.decode();return image.naturalWidth})).toBeGreaterThan(0);
  await page.locator('.ww-scroll, .atelier-editor textarea').evaluateAll(elements=>elements.forEach(el=>{el.scrollTop=0}));
@@ -65,7 +66,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
  await expect(page.getByRole('dialog').locator('textarea')).toBeFocused();
  expect(await(await request.get('/api/workspaces')).json()).toEqual(before);
  await page.getByRole('dialog').locator('textarea').fill('Драма и загадка');await done(page);
- await group(page,'Календарь и начало');await page.getByLabel('Календарь начала игры').selectOption('custom');
+ await group(page,'Календарь и начало');await chooseOption(page.getByLabel('Календарь начала игры'), 'custom');
  await page.getByLabel('Год начала',{exact:true}).pressSequentially('2026');await page.getByLabel('Месяц начала',{exact:true}).fill('01');await page.getByLabel('День начала',{exact:true}).fill('31');await done(page);
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await expect(page.getByRole('dialog').getByRole('alert').first()).toBeVisible();
  expect(await(await request.get('/api/workspaces')).json()).toEqual(before);
@@ -93,10 +94,10 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  await request.put('/api/credentials/deepseek',{data:{api_key:'offline-idea190'}});
  await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('ATELIER190. Компания друзей у моря.');
- await page.getByLabel('Набор технологий связи',{exact:true}).selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
+ await chooseOption(page.getByLabel('Набор технологий связи',{exact:true}), 'letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
  await group(page,'Персонажи');await page.getByRole('radio',{name:'Свой состав',exact:true}).check();await page.getByLabel('Важные NPC',{exact:true}).fill('4');await page.getByLabel('Второстепенные NPC',{exact:true}).fill('7');await done(page);
  await group(page,'Жанры истории');await chooseGenre(page,'Свой жанр');await page.getByRole('dialog').locator('textarea').fill('Драма');await done(page);
- await group(page,'Календарь и начало');await page.getByLabel('Календарь начала игры').selectOption('custom');
+ await group(page,'Календарь и начало');await chooseOption(page.getByLabel('Календарь начала игры'), 'custom');
  await page.getByLabel('Длины месяцев').fill('30, 40');await page.getByLabel('Названия месяцев').fill('Первый, Второй');
  await page.getByLabel('Год начала',{exact:true}).fill('2026');await page.getByLabel('Месяц начала',{exact:true}).fill('02');await page.getByLabel('День начала',{exact:true}).fill('30');
  await page.getByLabel('Время начала').fill('18:30');
@@ -180,7 +181,7 @@ test('idea190: approved reference at the same viewports and interaction states',
  await page.goto('/test/idea190/reference/workspace.html');
  await capture(page,info,'reference-01-empty');
  await page.locator('#draft-name').fill('Последняя вышка Валлора');await page.locator('#idea').fill(idea);
- await page.locator('#era').selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
+ await chooseOption(page.locator('#era'), 'letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
  await page.locator('.folio-scroll, #idea').evaluateAll(els=>els.forEach(el=>el.scrollTop=0));await capture(page,info,'reference-02-filled');
  for(const [key,title] of [['genre','Жанры истории'],['cast','Персонажи'],['world','Мир и география'],['calendar','Календарь и начало'],['narrative','Темп и последствия']]){
   await page.locator('.param').filter({hasText:title}).click();await capture(page,info,'reference-panel-'+key);await page.getByRole('button',{name:'Готово',exact:true}).click();
@@ -189,7 +190,7 @@ test('idea190: approved reference at the same viewports and interaction states',
  await page.getByRole('button',{name:'Развернуть редактор',exact:true}).click();await capture(page,info,'reference-expanded');await page.getByRole('button',{name:'К параметрам',exact:true}).click();
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'reference-communication');
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
- await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await page.getByLabel('Исход запуска').selectOption('error');
+ await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await chooseOption(page.getByLabel('Исход запуска'), 'error');
  await page.getByRole('button',{name:'Запустить демогенерацию'}).click();
  await expect(page.locator('.fl-stages li.current strong')).toHaveText('Смысловая проверка');await capture(page,info,'reference-running');
  await expect(page.getByRole('heading',{name:'Проверка не получила ответ'})).toBeVisible();await capture(page,info,'reference-error');

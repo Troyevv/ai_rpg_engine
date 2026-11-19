@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page,type Locator} from '@playwright/test';
 
 async function updateMemory(page:Page,next=true){
@@ -297,7 +298,7 @@ test('Chat: import Markdown or existing world through the creation chooser',asyn
   await dialog.getByLabel('Импорт первоначальной выжимки',{exact:true}).setInputFiles({name:'story.md',mimeType:'text/markdown',buffer:Buffer.from('# Выжимка\nЛена у маяка. Дата 9 октября.')});
   await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/Лена у маяка/);
   await dialog.getByRole('button',{name:'Импортировать существующий мир',exact:true}).click();
-  await dialog.getByRole('combobox',{name:'Исходный мир',exact:true}).selectOption(String(seed.world));
+  await chooseOption(dialog.getByRole('combobox',{name:'Исходный мир',exact:true}), String(seed.world));
   await dialog.getByRole('button',{name:'Подготовить снимок бесплатно',exact:true}).click();
   await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/ИСХОДНЫЙ СНИМОК/);
   await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-fixture');

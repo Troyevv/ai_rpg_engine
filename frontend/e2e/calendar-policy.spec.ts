@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {creationMethod} from './idea-navigation';
 import {ideaGroup,closeIdeaGroup} from './idea-navigation';
@@ -44,8 +45,8 @@ test('regional presets preview apply and custom edit preserve E5 authorship',asy
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Россия');
  await page.getByRole('button',{name:'Применить набор',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json()).candidate.world_clock.calendar.profile.regional?.country).toBe('RU');
- await page.getByLabel('Праздники',{exact:true}).selectOption('country');
- await page.getByLabel('Страна праздников',{exact:true}).selectOption('US');
+ await chooseOption(page.getByLabel('Праздники',{exact:true}), 'country');
+ await chooseOption(page.getByLabel('Страна праздников',{exact:true}), 'US');
  await page.getByRole('button',{name:'Применить набор',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json()).candidate.world_clock.calendar.profile.regional?.country).toBe('US');
  await page.getByRole('button',{name:'Добавить праздник',exact:true}).click();
@@ -59,20 +60,20 @@ test('regional presets preview apply and custom edit preserve E5 authorship',asy
 test('Quick and Scenario share independent presets and preview',async({page},info)=>{
  await page.goto('/');await nav(page,'Создать');
  await ideaGroup(page,'Мир и география');
- await page.getByLabel('Тип мира',{exact:true}).selectOption('real_world');
+ await chooseOption(page.getByLabel('Тип мира',{exact:true}), 'real_world');
  await page.getByLabel('География',{exact:true}).fill('Россия, Москва');
  await ideaGroup(page,'Календарь и начало');
  await page.getByLabel('Дата начала',{exact:true}).fill('2026-10-23');
  await page.getByRole('button',{name:'Предпросмотр календаря',exact:true}).click();
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Россия');
- await page.getByLabel('Праздники',{exact:true}).selectOption('country');
- await page.getByLabel('Страна праздников',{exact:true}).selectOption('BR');
- await page.getByLabel('Сезоны',{exact:true}).selectOption('south');
+ await chooseOption(page.getByLabel('Праздники',{exact:true}), 'country');
+ await chooseOption(page.getByLabel('Страна праздников',{exact:true}), 'BR');
+ await chooseOption(page.getByLabel('Сезоны',{exact:true}), 'south');
  await closeIdeaGroup(page);await page.locator('.atelier-method').click();
  await creationMethod(page,'Со Сценаристом');
  await page.getByText('Настройки генератора',{exact:true}).click();
- await expect(page.getByLabel('Страна праздников',{exact:true})).toHaveValue('BR');
- await expect(page.getByLabel('Сезоны',{exact:true})).toHaveValue('south');
+ await expect(page.getByLabel('Страна праздников',{exact:true})).toHaveJSProperty('value', 'BR');
+ await expect(page.getByLabel('Сезоны',{exact:true})).toHaveJSProperty('value', 'south');
  await page.getByRole('button',{name:'Предпросмотр календаря',exact:true}).click();
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Бразилия');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));

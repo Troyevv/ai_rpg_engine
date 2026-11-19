@@ -3,8 +3,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { dismissOpenChoice } from "./components/ui/choice";
-window.addEventListener("keydown", dismissOpenChoice, true);
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <MotionConfig reducedMotion="user"><App /></MotionConfig>

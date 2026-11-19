@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page} from '@playwright/test';
 import {nav,pickCharacter,searchCharacter} from './navigation';
 import {writeFile} from 'node:fs/promises';
@@ -54,7 +55,7 @@ test('public family opens dossier and returns to graph, no speculative nodes, bo
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
  if(info.project.name==='mobile')await page.setViewportSize({width:360,height:800});
  await page.goto('/');await page.getByLabel('Своё действие или реплика').fill('Сохранить мой черновик');await nav(page,'Родословная');
- const area=page.locator('.save-workspace');const start=Date.now();await area.getByLabel('Семья персонажа').selectOption('qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(80);
+ const area=page.locator('.save-workspace');const start=Date.now();await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(80);
  const metrics=await page.evaluate(()=>({nodes:document.querySelectorAll('.react-flow__node').length,heap:(performance as any).memory?.usedJSHeapSize||null}));
  if(capture)await writeFile(`${evidence}/performance-${info.project.name}.json`,JSON.stringify({...metrics,render_ms:Date.now()-start,viewport:page.viewportSize()},null,2));
  // Node rectangles have fixed geometry and cannot overlap, even with long names.
@@ -64,7 +65,7 @@ test('public family opens dossier and returns to graph, no speculative nodes, bo
  await expectFitted(page);if(capture)await page.screenshot({path:`${evidence}/after-family-dense-${info.project.name}.png`,animations:'disabled'});
  await area.getByRole('button',{name:'Список',exact:true}).click();await area.getByRole('button',{name:'Открыть досье: Тимур Серов',exact:true}).click();
  await expect(page.locator('.character-header')).toContainText('Тимур Серов');await page.keyboard.press('Escape');await expect(area).toBeVisible();
- await area.getByLabel('Семья персонажа').selectOption('qa_oleg');await area.getByRole('button',{name:'Дерево',exact:true}).click();await expect(area.locator('.react-flow__node')).toHaveCount(1);await expect(area.locator('.react-flow__edge')).toHaveCount(0);
+ await chooseOption(area.getByLabel('Семья персонажа'), 'qa_oleg');await area.getByRole('button',{name:'Дерево',exact:true}).click();await expect(area.locator('.react-flow__node')).toHaveCount(1);await expect(area.locator('.react-flow__edge')).toHaveCount(0);
  await area.locator('.react-flow__node').press('Enter');await expect(page.locator('.character-header')).toContainText('Олег');await page.keyboard.press('Escape');await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Сохранить мой черновик');
 });
 
@@ -105,7 +106,7 @@ test('family gestures, two skins, reduced motion and unchanged game state',async
  const touchSession=info.project.name==='mobile'?await page.context().newCDPSession(page):null;
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Родословная');
- const area=page.locator('.save-workspace');await area.getByLabel('Семья персонажа').selectOption('qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(5);
+ const area=page.locator('.save-workspace');await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(5);
  await expect(area).toContainText('Зоя');
  const pane=area.locator('.react-flow__pane');const viewport=area.locator('.react-flow__viewport');
  // Wait for the intentional fit transition to settle before measuring gestures.
@@ -146,5 +147,5 @@ test('search selection and local dossier scroll survive close, resize and reopen
  await page.setViewportSize({width:info.project.name==='mobile'?393:1000,height:850});await expect(d.getByLabel('Персонаж',{exact:true})).toHaveAttribute('data-value','qa_kirill');
  await page.keyboard.press('Escape');
  let failed=false;await page.route('**/genealogy?*',async route=>{if(!failed&&route.request().url().includes('root_id=qa_timur')){failed=true;await route.fulfill({status:503,json:{detail:'QA temporary failure'}})}else await route.continue()});
- await nav(page,'Родословная');await page.locator('.save-workspace').getByLabel('Семья персонажа').selectOption('qa_timur');await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await expect(page.locator('.react-flow__node')).toHaveCount(5);
+ await nav(page,'Родословная');await chooseOption(page.locator('.save-workspace').getByLabel('Семья персонажа'), 'qa_timur');await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await expect(page.locator('.react-flow__node')).toHaveCount(5);
 });

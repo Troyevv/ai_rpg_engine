@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test, expect} from '@playwright/test';
 import {gameAction, nav} from './navigation';
 
@@ -35,28 +36,28 @@ for (const [width, skin] of [[360,'graphite'], [393,'parchment'], [1280,'cyberpu
     const model=page.getByRole('combobox',{name:'Модель game',exact:true});
     await model.click();
     await page.keyboard.press('End');
-    await expect(model.locator('option').last()).toBeFocused();
-    const rect=await model.locator('option').last().boundingBox();
+    await expect(page.getByRole('option').last()).toBeFocused();
+    const rect=await page.getByRole('option').last().boundingBox();
     expect(rect).not.toBeNull();
     expect(rect!.x+rect!.width).toBeLessThanOrEqual(width);
     await page.screenshot({path:info.outputPath('long-list.png'),scale:'css',animations:'disabled'});
     await page.keyboard.press('Enter');
-    await expect(model).toHaveValue(names.at(-1)!);
+    await expect(model).toHaveJSProperty('value', names.at(-1)!);
     await expect(page.getByLabel('Контекст game',{exact:true})).toBeDisabled();
     await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
     await gameAction(page,'Политика истории');
     const detail=page.getByLabel('Подробность повествования',{exact:true});
-    await expect(detail).toHaveValue('balanced');
+    await expect(detail).toHaveJSProperty('value', 'balanced');
     await detail.click();
-    await expect(detail.locator('option:checked')).toBeFocused();
+    await expect(page.getByRole('option',{selected:true})).toBeFocused();
     await page.screenshot({path:info.outputPath('detail-picker.png'),scale:'css',animations:'disabled'});
     await page.keyboard.press('Escape');
     await expect(detail).toBeFocused();
-    await detail.selectOption('extended');
+    await chooseOption(detail, 'extended');
     await page.getByRole('button',{name:'Сохранить настройки истории'}).click();
     await page.reload();
     await gameAction(page,'Политика истории');
-    await expect(detail).toHaveValue('extended');
+    await expect(detail).toHaveJSProperty('value', 'extended');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   });
 }

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 test.use({video:'on'});
 test('direct calendar and family navigation preserves story draft',async({page,request},info)=>{
@@ -13,7 +14,7 @@ test('direct calendar and family navigation preserves story draft',async({page,r
  await page.screenshot({path:info.outputPath('year-after.png'),animations:'disabled'});
  await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Мой черновик');
  await open('Родословная');await expect(area.locator('.react-flow__node').first()).toBeVisible();
- await area.getByLabel('Семья персонажа').selectOption('qa_vera');await expect(area.locator('.react-flow__node').first()).toBeVisible();await page.screenshot({path:info.outputPath('family-after.png'),animations:'disabled'});
+ await chooseOption(area.getByLabel('Семья персонажа'), 'qa_vera');await expect(area.locator('.react-flow__node').first()).toBeVisible();await page.screenshot({path:info.outputPath('family-after.png'),animations:'disabled'});
  expect((await(await request.get(`/api/saves/${selected.save}`)).json()).revision).toBe(before.revision);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
