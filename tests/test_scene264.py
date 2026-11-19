@@ -209,3 +209,18 @@ def test_shared_final_leg_adds_new_companion_without_moving_observer():
     assert result.state['camera']['observed_character_ids'] == ['b']
     assert result.state['characters']['b']['location_id'] == 'home'
     assert len(result.history['movements']) == 3
+
+
+def test_uninterpreted_skip_keeps_prose_without_claiming_target_was_reached(game):
+    from test_published_narrative263 import play
+    repo, sid = game
+    before = repo.get_snapshot(sid)['world_state']['meta']['world_time']
+    prose = 'Стук в дверь разбудил его.'
+    job = play(repo, sid, prose, '{broken', time_skip=dict(duration=30, reason='Сон'))
+    assert job['status'] == 'saved'
+    fresh = Repository(repo.path)
+    turn = fresh.list_turns(sid)[-1]
+    changes = json.loads(turn['changes_json'])
+    assert turn['assistant_text'] == prose and changes['interpretation'] == 'partial'
+    assert fresh.get_snapshot(sid)['world_state']['meta']['world_time'] == before
+    assert not changes['time_skip']

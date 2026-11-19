@@ -442,7 +442,10 @@ def run_job(path, job_id, handle):
                     from backend.runtime_v3.call_continuity import sources as call_sources
                     from backend.runtime_v3.player_actions import resolver_options
                     def resolve(raw):
-                        if skip_result:
+                        if skip_result and version >= 11 and 'elapsed_minutes' not in raw.final_scene:
+                            raw.warnings.append(dict(section='scene', code='skip_endpoint_unknown',
+                                                     action='retain_clock', requested_target=skip_result['requested_target']))
+                        elif skip_result:
                             skip = skip_result
                             if version >= 11:
                                 skip = interpreted_skip(before['world_state'], skip_request, skip_result,
@@ -505,6 +508,8 @@ def run_job(path, job_id, handle):
                     state.pop('last_time_skip', None)
                     state.pop('_interaction_input_channel', None)
                     state['world_state']=resolved.state
+                    if version >= 11 and 'elapsed_minutes' not in raw.final_scene:
+                        skip_result = None
                     if skip_result:
                         changes_skip=deepcopy(skip_result)
                         if version >= 11:

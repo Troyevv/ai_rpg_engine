@@ -90,7 +90,7 @@ def plan_skip(state, request, *, version=1):
 
 def interpreted_skip(state, request, planned, elapsed):
     """Resolve the actual endpoint against the completed scene and objective processes."""
-    if elapsed is None or elapsed == planned['elapsed_minutes']:
+    if elapsed == planned['elapsed_minutes']:
         return planned
     if type(elapsed) is not int or not 0 <= elapsed <= 10080:
         from backend.runtime_v3.models import fatal
