@@ -109,7 +109,12 @@ test('Chat tools: delayed and lost acknowledgements preserve a newer draft witho
   await input.fill('Новый черновик до подтверждения отправки.');release();await expect(page.locator('.chat-assistant')).toHaveCount(2);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Новый черновик до подтверждения отправки.');
   await page.unroute('**/api/chat/campaigns/*/generate');
   await page.route('**/api/chat/campaigns/*/generate',async route=>{await route.fetch();await route.abort('failed')});
-  await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
+  const lostAcknowledgement = page.waitForEvent('requestfailed', {
+    predicate: req => req.method() === 'POST' && req.url().endsWith('/generate'),
+  });
+  await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await lostAcknowledgement;
+  await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
   await input.fill('Черновик после сетевой ошибки.');await page.unroute('**/api/chat/campaigns/*/generate');await page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true}).click();await expect(page.locator('.chat-assistant')).toHaveCount(3);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Черновик после сетевой ошибки.');
   const c=await campaign(page,request);expect(c.branch.head).toBe(5);await page.reload();await expect(input).toHaveValue('Черновик после сетевой ошибки.');expect((await campaign(page,request)).job.id).toBe(c.job.id);
 });

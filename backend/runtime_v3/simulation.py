@@ -1,5 +1,5 @@
 """Optional background uses exactly the same v3 resolver and current invariants."""
-from backend.services.token_budget import BudgetError, extraction_output, preflight_downstream
+from backend.services.token_budget import BudgetError, extraction_output, extraction_reserve, preflight_downstream
 from copy import deepcopy
 import json
 from backend.runtime_v3.camera import observe
@@ -136,7 +136,7 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     for attempt in range(2):
         unavailable = False
         try:
-            messages=background_context(camera,[],instruction,'background',context_length,update,max_input=max_input,extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
+            messages=background_context(camera,[],instruction,'background',context_length,extraction_reserve(config,update),max_input=max_input,extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
             payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,update,0.1,response_format={'type':'json_object'}))
         except BackgroundGenerationError:
             if contract_version < 10:

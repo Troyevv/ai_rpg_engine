@@ -575,7 +575,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 for message in messages:
                     if message['role'] == 'system':
                         message['content'] = message['content'].replace(PROSE_ONLY_OUTPUT, '')
-            from backend.services.token_budget import preflight_downstream, extraction_output
+            from backend.services.token_budget import preflight_downstream, extraction_output, extraction_reserve
             from context_builder import estimate
             preflight_downstream(config, lambda reserve: build_context(camera, [], instruction, 'background',
                 config['context_length'],reserve,max_input=max_input,extraction_text='',extraction_contract=version,prompts=config.get('_prompts'),
@@ -619,7 +619,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         instruction,
                         "background",
                         config.get("context_length", 32768),
-                        update,
+                        extraction_reserve(config, update),
                         max_input=max_input, extraction_text=narrative,
                         extraction_contract=config.get("_extraction_contract", 1),
                         validation_feedback=feedback,

@@ -127,6 +127,15 @@ def extraction_output(config, scene_size):
     return min(target, config['_budget_caps'].get('max_output') or target, config['context_length'] - MARGIN)
 
 
+def extraction_reserve(config, requested):
+    """Keep the structured baseline and reasoning; longer scenes need more room."""
+    if config.get('budget_mode') != 'auto':
+        return requested
+    baseline = 4096 + config['_reasoning_reserve']
+    growth = max(0, requested - baseline - 2048) // 2
+    return max(1024, min(requested, baseline + growth))
+
+
 def plan_request(config, stage, messages, requested, *, response_format=None, structured_schema=None,
                  structured_name='extraction_v6', expected_text=0, temperature=None):
     """Count the effective provider envelope after late blocks and transport selection."""
@@ -161,7 +170,7 @@ def plan_request(config, stage, messages, requested, *, response_format=None, st
     output = min(requested, ceiling, caps.get('max_output') or requested, window - consumed - MARGIN)
     minimum = min(requested, 256)
     if stage in ('extraction', 'extraction_repair', 'world_simulation_delta', 'world_simulation_repair', 'long_term_extraction', 'long_term_repair'):
-        minimum = max(requested, 1024) if config.get('budget_mode') == 'auto' else min(requested, 1024)
+        minimum = extraction_reserve(config, requested) if config.get('budget_mode') == 'auto' else min(requested, 1024)
     elif stage in ('narrative', 'world_simulation', 'long_term_narrative') and config.get('budget_mode') in ('auto', 'manual'):
         minimum = config['_visible_target'] + config['_reasoning_reserve']
         if output < minimum:
@@ -192,7 +201,9 @@ def preflight_downstream(config, build_projection, stage='extraction'):
         return
     visible = min(config['_visible_target'], config['max_tokens'])
     reserve = extraction_output(config, visible)
-    messages = build_projection(reserve)
+    # Let the existing selector trim optional material before accounting for
+    # the future prose. Required scene facts and the completed text remain whole.
+    messages = build_projection(extraction_reserve(config, reserve) + visible)
     from backend.services.structured_extraction import request_schema
     version = config.get('_extraction_contract', 1)
     structured = version >= 6 and config.get('_extraction_transport') == 'responses_json_schema'

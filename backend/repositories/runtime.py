@@ -384,7 +384,7 @@ class RuntimeStorage:
             after=deepcopy(prior);meta=after['world_state']['meta']
             previous={k:meta.get(k, 'balanced' if k == 'narrative_detail' else None) for k in validated}
             if previous==validated:return
-            meta.update(validated)
+            meta.update({key: value for key, value in validated.items() if previous[key] != value})
             batch=dict(state_changes=[dict(kind=kind,before=previous,after=validated,
                 turn_id=meta['turn_id'],minute=meta['world_time'])])
             after['history_head']=append_history(db,prior.get('history_head'),batch)

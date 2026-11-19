@@ -766,9 +766,6 @@ def generation_fixture(prep, jid, config, *args):
     return _generation_run(prep, jid, config, *args)
 draft_generation.run = generation_fixture
 
-engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536}.get(model, 32768)}
-}
 chat_cancel_next = False
 chat_markdown_release = threading.Event()
 CHAT_MARKDOWN = '''Лена ставит чашку на стол. За окном шумит дождь. «Кто-то стучал», — говорит она.
@@ -848,8 +845,22 @@ def authoring_stream(**kwargs):
 
 llm.chat_stream = authoring_stream
 llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture','chat-tools-fixture','chat-tools-summary-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('local-model',32768),('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
-llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model','config':{'context_length':32768}}]
+# Exercise the same loaded-instance discovery for Chat, game jobs and authoring.
+# Values are fixture allocations, shared by metadata and the local transport.
+fixture_windows = {
+    'local-model': 32768, 'test': 32768, 'test-model': 32768,
+    'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152,
+    'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536,
+    'lta250-test': 49152, 'policy252-test': 65536, 'scene263-test': 65536,
+    'frame263-test': 65536, 'blank263-test': 65536,
+    'chat-fixture': 65536, 'chat-summary-fixture': 65536, 'chat-small-fixture': 8192,
+    'chat-markdown-fixture': 65536, 'chat-mobile-fixture': 65536,
+    'chat-tools-fixture': 524288, 'chat-tools-summary-fixture': 524288,
+}
+llm.get_models_info = lambda: {'models': [
+    {'key': name, 'loaded_instances': [{'id': name, 'config': {'context_length': window}}]}
+    for name, window in fixture_windows.items()
+]}
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
 llm.unload_all_models = lambda: 1

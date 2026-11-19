@@ -136,7 +136,7 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
-            from backend.services.token_budget import prepare, snapshot, extraction_output, preflight_downstream
+            from backend.services.token_budget import prepare, snapshot, extraction_output, extraction_reserve, preflight_downstream
             before = json.loads(job['memory_before_json'] or job['before_json'])
             detail = before['world_state']['meta'].get('narrative_detail','balanced')
             def prepare_job(loaded=None):
@@ -440,7 +440,7 @@ def run_job(path, job_id, handle):
                 stage_started=time.perf_counter()
                 try:
                     messages = build_context(before, history, job['user_text'], job['kind'], context,
-                                             config['update_tokens'], max_input=max_input, extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
+                                             extraction_reserve(config, config['update_tokens']), max_input=max_input, extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
                                              suggestions=suggestions, validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     correction_grounds = config.get('_narrative_correction', {}).get('grounds', [])
                     calendar_grounds = [g for g in correction_grounds if g.get('kind') not in ('agency','birth','birth_boundary')]
@@ -449,12 +449,12 @@ def run_job(path, job_id, handle):
                                     reference_minute=g.get('current_minute')) for g in calendar_grounds]
                         messages.append({'role':'system', 'content':'Corrected candidate: recheck objective assertions for '
                             + json.dumps(ids) + ' in chronology_claims against the NEW prose; never omit or downgrade them.'})
-                        if estimate(messages)>context-config['update_tokens']-256:
+                        if estimate(messages)>context-extraction_reserve(config, config['update_tokens'])-256:
                             raise ValueError('Контекст повторной проверки хронологии не помещается в выбранную модель.')
                     if legacy_letter_sources:
                         from backend.services.letter_sources import extraction_context
                         messages.append(extraction_context(legacy_letter_sources))
-                        if estimate(messages)>context-config['update_tokens']-256:
+                        if estimate(messages)>context-extraction_reserve(config, config['update_tokens'])-256:
                             raise ValueError('Контекст восстановления старого письма не помещается в выбранную модель.')
                     stage_started=time.perf_counter()
                     result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,

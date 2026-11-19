@@ -174,3 +174,16 @@ def test_scene_selector_observes_independent_input_cap():
     messages = build_context(state, turns, 'Жду ответа.', 'turn', 131072, 2000,
                              world_history=history, max_input=32768, extraction_contract=11)
     assert messages.selection['hard_context_limit'] == 32768 - 256
+
+def test_downstream_keeps_required_structured_capacity_in_a_tight_scene():
+    from backend.services.token_budget import extraction_reserve, preflight_downstream
+    config = prepare(ModelConfig(**MODEL).model_dump(), 'turn')
+    config['context_length'] = 32768
+    requests = []
+    def project(reserve):
+        requests.append(reserve)
+        return [dict(role='user', content='я' * 26900)]
+    preflight_downstream(config, project)
+    assert requests == [extraction_reserve(config, 5096) + 1000]
+    result = plan_request(config, 'extraction', project(0), 5096, expected_text=1000)
+    assert 4096 <= result['output_allowance'] < 5096
