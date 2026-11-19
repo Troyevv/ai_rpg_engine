@@ -201,6 +201,10 @@ def project_schema(schema, *, version=6, camera_mode=None):
         scene['properties']['ending'] = dict(type='object', additionalProperties=False,
             required=['location_id','present_ids'], properties=dict(location_id={'type':'string','minLength':1},
             present_ids={'type':'array','items':{'type':'string','minLength':1},'uniqueItems':True,'maxItems':64}))
+        if version >= 11:
+            scene['properties']['end_time'] = dict(type='object', additionalProperties=False,
+                required=['day_offset', 'time'], properties=dict(day_offset=dict(type='integer', minimum=0),
+                time=dict(type='string', pattern=r'^([01][0-9]|2[0-3]):[0-5][0-9]$')))
         props.pop('agency_findings', None)
         props.pop('chronology_claims', None)
         for step in schema['$defs'].values():
@@ -652,6 +656,15 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         bind_profile_baselines(records, state)
     normalize_facts(records, p, state)
     scene, camera = deepcopy(p['scene']), state['camera']
+    if version >= 11 and 'end_time' in scene:
+        from backend.runtime_v3.calendar import scheduled_due
+        start = state['meta']['world_time']
+        end = scheduled_due(state, dict(temporal=scene.pop('end_time'), time_reference_minute=start))
+        if end < start:
+            fatal('Конец сцены предшествует началу.', 'end_time_before_start', section='scene')
+        if 'elapsed_minutes' in scene and scene['elapsed_minutes'] != end - start:
+            warnings.append(dict(section='scene', code='duration_disagrees_with_clock', action='use_end_time'))
+        scene['elapsed_minutes'] = end - start
     minute_origin = scene_minute_origin(p['scene_steps'], state['meta']['world_time'],
                                         scene.get('elapsed_minutes')) if version >= 9 else 0
     if minute_origin:
@@ -753,6 +766,16 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         if camera['mode'] == 'actor' and subject not in visible:
             fatal('Итоговый физический состав должен включать управляемого героя.',
                   'camera_actor_missing', section='scene', field='ending')
+    if version >= 11:
+        moved = {move['actor_id'] for move in records['movements']}
+        if subject in moved and camera['mode'] == 'actor' and location != positions[subject]:
+            location = positions[subject]
+            warnings.append(dict(section='scene', code='ending_disagrees_with_route', action='use_route'))
+        if visible is not None:
+            excluded = [cid for cid in visible if cid in moved and positions[cid] != location]
+            if excluded:
+                warnings.append(dict(section='scene', code='cast_disagrees_with_route', actor_ids=excluded, action='use_route'))
+                visible = [cid for cid in visible if cid not in excluded]
     if visible is None:
         visible = ([subject] if camera['mode']=='actor' and subject in local_exits else
                    [cid for cid in camera['present_character_ids'] if positions.get(cid)==location and cid not in local_exits])

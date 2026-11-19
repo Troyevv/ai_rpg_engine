@@ -246,6 +246,11 @@ def invalidate_dead_commitments(resolver, dead_ids):
             event.update(status='cancelled',outcome='cancelled',evidence='canonical:participant_dead',source_turn=resolver.turn_id)
 
 
+def clock_barrier(event, version):
+    """An unresolved appointment is context. Only an objective process owns a hard boundary."""
+    return version < 11 or event['boundary_kind'] == 'pregnancy_due'
+
+
 def temporal_boundaries(state):
     """Read-only clock projection; the process owns a birth's time and participants.
 

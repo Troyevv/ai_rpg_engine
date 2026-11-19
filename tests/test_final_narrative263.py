@@ -86,7 +86,8 @@ def test_malformed_action_does_not_hide_independent_choices_or_ending():
     assert warnings[0]['received'] == 6 and warnings[0]['available'] == 3
 
 
-def test_frame_survives_failed_extraction_and_reload(game):
+def test_recorded_v10_frame_survives_failed_extraction_and_reload(game, monkeypatch):
+    monkeypatch.setattr('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 10)
     from backend.repositories.preparation import Repository
     repo,sid=game
     before=repo.get_snapshot(sid)['world_state']

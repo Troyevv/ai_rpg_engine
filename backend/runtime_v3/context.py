@@ -741,7 +741,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.pacing import development_sources, evaluate, extraction_policy
     scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'), world_history)
     from backend.runtime_v3.continuity import project as continuity_project
-    scope.continuity_decision = deepcopy(continuity_decision) if continuity_decision is not None else continuity_project(state, scope, world_history)
+    scope.continuity_decision = deepcopy(continuity_decision) if continuity_decision is not None else continuity_project(state, scope, world_history, version=extraction_contract)
     if snapshot.get('_time_skip') or kind == 'background': scope.continuity_decision['compression'] = {'max_minutes':0,'boundary_ids':[]}
     scope.pacing_decision = deepcopy(pacing_decision) if pacing_decision is not None else evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan

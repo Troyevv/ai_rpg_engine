@@ -178,10 +178,6 @@ class EngineStorage:
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
-                if EXTRACTION_VERSION >= 10 and last['kind'] in ('start','turn','pov','background'):
-                    config['_extraction_contract'] = EXTRACTION_VERSION
-                    config['_extraction_transport'] = transport(config)
-                    config.get('_prompts',{}).pop('_scene_rules',None)
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before_snapshot=json.loads(before)
@@ -198,7 +194,7 @@ class EngineStorage:
                 raise ValueError('В старом сохранении нет персонажей. Сначала подготовь мир для игры.')
             if kind == 'long_term':
                 from backend.runtime_v3.long_term import plan
-                plan(before_snapshot, config.get('long_term_advance', {}))
+                plan(before_snapshot, config.get('long_term_advance', {}), version=config['_extraction_contract'])
             if kind == 'communication':
                 from backend.runtime_v3.communication import validate
                 validate(before_snapshot, config.get('communication', {}))
@@ -391,9 +387,10 @@ class EngineStorage:
         job = self.get_job(job_id)
         config = json.loads(job['config_json'])
         frame = config.get('_authored_frame')
-        scene = narrative_frame.scene_fields(frame or {})
+        legacy_ending = config.get('_extraction_contract', 1) == 10
+        scene = narrative_frame.scene_fields(frame or {}) if legacy_ending else {}
         skip = before.get('_time_skip')
-        if skip:
+        if skip and legacy_ending:
             scene['elapsed_minutes'] = skip['elapsed_minutes']
             state['last_time_skip'] = skip
         warnings = []
@@ -426,7 +423,7 @@ class EngineStorage:
         changes = {'interpretation':'pending' if recovery is None else 'deferred'}
         if any(w.get('code')=='narrative_menu_count' for w in warnings):
             changes['menu_available'] = len(choices)
-        if skip:
+        if skip and legacy_ending:
             changes['time_skip'] = skip
         if recovery is not None:
             warnings.append(dict(section='extraction',code='player_saved_prose',action='preserve_scene'))

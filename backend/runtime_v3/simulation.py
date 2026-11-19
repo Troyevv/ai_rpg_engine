@@ -115,7 +115,7 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
         'elapsed_minutes=0. Не действуй за управляемого персонажа '+str(protected)+'. Не добавляй его в сцену. '
         'Намерение может остаться незавершённым. Не выдумывай события без причины.')
     if batch: instruction+=' Обработай одной группой только причинно обусловленные изменения интервала: '+json.dumps(batch,ensure_ascii=False)+'. Не обязаны завершиться все намерения.'
-    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'),world_history=world_history)
+    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],extraction_contract=contract_version,prompts=config.get('_prompts'),world_history=world_history)
     pacing_decision=messages.selection['pacing']
     initiative_decision=messages.selection['initiative']
     from backend.services.letter_sources import generate_result
@@ -144,7 +144,7 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(raw)
             if contract_version >= 10:
                 from backend.runtime_v3.consequences import resolve_consequences
-                _, resolved = resolve_consequences(payload,camera['world_state'],narrative,state['meta']['turn_id'],[],resolve)
+                _, resolved = resolve_consequences(payload,camera['world_state'],narrative,state['meta']['turn_id'],[],resolve,version=contract_version)
                 if unavailable:
                     resolved.warnings.append(dict(section='extraction',code='extraction_unavailable',action='preserve_scene'))
             else:

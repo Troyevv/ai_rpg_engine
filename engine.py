@@ -195,7 +195,7 @@ def run_job(path, job_id, handle):
                 now = before['world_state']['meta']['world_time']
                 manual_skip = config.get('time_skip')
                 skip_request = TimeSkipRequest(now, now+manual_skip['duration'], manual_skip.get('reason',''), 'manual') if manual_skip else parse_skip(job['user_text'], now, before['character_cards'])
-            skip_result = plan_skip(before['world_state'], skip_request) if skip_request else None
+            skip_result = plan_skip(before['world_state'], skip_request, version=version) if skip_request else None
             if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
             suggestions = config.get('_narrative_suggestions', []) if version >= 9 else []
@@ -434,7 +434,14 @@ def run_job(path, job_id, handle):
                     from backend.runtime_v3.player_actions import resolver_options
                     def resolve(raw):
                         if skip_result:
-                            raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
+                            planned = skip_result['elapsed_minutes']
+                            if version < 11:
+                                raw.final_scene['elapsed_minutes'] = planned
+                            else:
+                                elapsed = raw.final_scene.setdefault('elapsed_minutes', planned)
+                                if (skip_result['interrupted'] or manual_skip) and elapsed > planned:
+                                    raw.final_scene['elapsed_minutes'] = planned
+                                    raw.warnings.append(dict(section='scene', code='end_time_after_skip_target', action='use_target'))
                         return StateResolver(
                             before['world_state'], narrative, job['user_text'], turn_id=sequence+1,
                             chronology_events=world_history.get('events', []),
@@ -453,7 +460,7 @@ def run_job(path, job_id, handle):
                         ).resolve(raw)
                     if version >= 10:
                         from backend.runtime_v3.consequences import resolve_consequences
-                        raw, resolved = resolve_consequences(result,before['world_state'],narrative,sequence+1,suggestions,resolve, authored_scene=narrative_frame.scene_fields(frame or {}))
+                        raw, resolved = resolve_consequences(result,before['world_state'],narrative,sequence+1,suggestions,resolve, version=version, authored_scene=narrative_frame.scene_fields(frame or {}))
                         if provider_warning:
                             resolved.warnings.append(provider_warning)
                     else:
@@ -492,6 +499,11 @@ def run_job(path, job_id, handle):
                     state['world_state']=resolved.state
                     if skip_result:
                         changes_skip=deepcopy(skip_result)
+                        if version >= 11:
+                            end = resolved.state['meta']['world_time']
+                            changes_skip.update(actual_target=end, elapsed_minutes=end-before['world_state']['meta']['world_time'])
+                            if end < skip_result['actual_target']:
+                                changes_skip.update(interrupted=True, interruption_event_id=None)
                         state['last_time_skip']=changes_skip
                     from backend.services.npc_review import publish_cards
                     publish_cards(state, resolved)

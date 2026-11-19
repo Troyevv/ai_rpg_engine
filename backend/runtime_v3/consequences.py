@@ -93,9 +93,9 @@ def scene_with_authored_ending(proposal, authored, before):
     return scene
 
 
-def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None, authored_scene=None, birth_causes=None):
+def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, version=10, namespace=None, authored_scene=None, birth_causes=None):
     def evaluate(candidate):
-        raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=10, suggestions=suggestions)
+        raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=version, suggestions=suggestions)
         return raw, resolve(raw)
 
     try:
@@ -104,6 +104,13 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         proposal, normalization = {}, None
         decoding_warnings = [dict(section='extraction', code='raw_root_invalid', action='preserve_scene')]
     extracted_scene = proposal.get('scene', {})
+    if authored_scene and isinstance(extracted_scene, dict):
+        conflicts = [k for k in authored_scene.keys() & extracted_scene.keys() if authored_scene[k] != extracted_scene[k]]
+        if conflicts:
+            decoding_warnings.append(dict(section='scene', code='scene_sources_disagree', fields=sorted(conflicts),
+                                          action='use_extraction' if version >= 11 else 'use_recorded_narrative'))
+    if version >= 11:
+        authored_scene = None
     if authored_scene:
         proposal['scene'] = scene_with_authored_ending(proposal, authored_scene, before)
     if not suggestions and 'choices' in proposal:
@@ -113,7 +120,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
     # Stabilize server-owned step IDs before isolating any rejected records.
     valid_shape = isinstance(proposal.get('scene_steps', []), list) and isinstance(proposal.get('scene', {}), dict)
     if valid_shape:
-        proposal = decode(proposal, version=10)
+        proposal = decode(proposal, version=version)
         # LTA may receive its own due-process ID where a scene-local event ID
         # would normally go. Bind before partitioning so unrelated failures
         # cannot separate a birth from its occurrence.
@@ -136,7 +143,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         accepted = {}
         raw, result = evaluate(accepted)
         warnings = []
-        limits = state_input_schema(10, before)['properties']
+        limits = state_input_schema(version, before)['properties']
         # A broken envelope must not turn an over-budget array into thousands
         # of independent resolver runs or circumvent the section limit.
         bounded = {}

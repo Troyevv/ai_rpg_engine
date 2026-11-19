@@ -2,7 +2,7 @@
 from dataclasses import dataclass, asdict
 import re
 from backend.runtime_v3.calendar import calendar_label
-from backend.runtime_v3.commitments import temporal_boundaries
+from backend.runtime_v3.commitments import temporal_boundaries, clock_barrier
 
 
 @dataclass(frozen=True)
@@ -73,13 +73,13 @@ def parse_skip(text, now, cards=()):
     return TimeSkipRequest(now,target,reason,source,waiting) if target is not None else None
 
 
-def plan_skip(state, request):
+def plan_skip(state, request, *, version=1):
     candidates = [e for e in temporal_boundaries(state) if e['due_minute'] <= request.target_minute]
     controlled = state['camera']['controlled_actor_id']
     def interrupts_actor(e):
         arrival=(request.wait_for_actor_id is not None and request.wait_for_actor_id in e['character_ids'] and e.get('type')=='arrival' and e.get('location_id') is not None and e['location_id']==state['camera']['location_id'])
         return bool(controlled is not None and controlled in e['character_ids'] or arrival)
-    interrupts = sorted((e for e in candidates if interrupts_actor(e)), key=lambda e:(e['due_minute'],e['id']))
+    interrupts = sorted((e for e in candidates if clock_barrier(e, version) and interrupts_actor(e)), key=lambda e:(e['due_minute'],e['id']))
     event = interrupts[0] if interrupts else None
     target = max(request.start_minute, event['due_minute']) if event else request.target_minute
     return dict(requested_target=request.target_minute, actual_target=target, elapsed_minutes=target-request.start_minute,

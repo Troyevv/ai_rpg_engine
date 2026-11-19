@@ -14,7 +14,7 @@ from backend.runtime_v3.models import (
     assert_world_state_v3_invariants,
     identity,
 )
-from backend.runtime_v3.commitments import temporal_boundaries
+from backend.runtime_v3.commitments import temporal_boundaries, clock_barrier
 from backend.runtime_v3.calendar import (
     current_time,
     age_on,
@@ -126,8 +126,8 @@ def relevance(snapshot, scope):
     }
 
 
-def player_interruption(boundaries, controlled, start):
-    event = min((e for e in boundaries if controlled in e["character_ids"]),
+def player_interruption(boundaries, controlled, start, version):
+    event = min((e for e in boundaries if clock_barrier(e, version) and controlled in e["character_ids"]),
                 key=lambda e: (e["due_minute"], e["id"]),
                 default=None)
     if event is None:
@@ -136,7 +136,7 @@ def player_interruption(boundaries, controlled, start):
                 minute=max(start, event["due_minute"]), source_id=event["id"])
 
 
-def plan(snapshot, request, history=None):
+def plan(snapshot, request, history=None, *, version=1):
     request = AdvanceRequest.model_validate(request)
     s = snapshot["world_state"]
     start = s["meta"]["world_time"]
@@ -158,7 +158,7 @@ def plan(snapshot, request, history=None):
         if call and call["status"] == "answered" and not call_incapacitation(s, call):
             interruption = dict(kind="remote_call", minute=start, source_id=call["id"])
     if interruption is None:
-        interruption = player_interruption(due, controlled, start)
+        interruption = player_interruption(due, controlled, start, version)
     actual = interruption["minute"] if interruption else target
     candidates = {}
 
@@ -407,7 +407,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
     remote_batch = WorldHistoryV3()
     reconcile_calls(result["world_state"], remote_batch)
     batch = remote_batch.to_dict()
-    projection = plan(result, request, history)
+    version = config.get("_extraction_contract", 1)
+    projection = plan(result, request, history, version=version)
     protected = original["camera"]["controlled_actor_id"]
     report = dict(
         start=projection.start,
@@ -733,7 +734,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                             except ValueError as exc:
                                 raise StructuralDeltaError(str(exc), 'long_term_outcome_invalid') from exc
                         raw, resolved = resolve_consequences(payload,resolution_state,narrative,turn,[],resolve_group,
-                            namespace=identity('advance-group', sorted(c.id for c in group)),
+                            version=version, namespace=identity('advance-group', sorted(c.id for c in group)),
                             birth_causes={c.id:c.source_id for c in group if c.kind == 'birth'})
                     else:
                         raw = semantic_candidate.parse(payload, defer_errors=True) if semantic_candidate else RawTurnResult.parse(payload)
@@ -800,7 +801,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 )
             )
             report["diagnostics"].extend(resolved.warnings)
-            stop = player_interruption(temporal_boundaries(resolved.state), protected, minute)
+            stop = player_interruption(temporal_boundaries(resolved.state), protected, minute, version)
             if stop and stop["minute"] <= report["actual_target"] and (
                 report["interruption"] is None or stop["minute"] < report["actual_target"]
             ):

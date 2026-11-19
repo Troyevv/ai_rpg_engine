@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field
 from backend.runtime_v3.models import StrictModel, fatal
 from backend.runtime_v3.calendar import scheduled_boundary
-from backend.runtime_v3.commitments import temporal_boundaries
+from backend.runtime_v3.commitments import temporal_boundaries, clock_barrier
 
 
 class ContinuityBeat(StrictModel):
@@ -79,7 +79,7 @@ def visible_event(state, observer, event):
     return bool(facts) and all(state['knowledge'].get(observer+':'+fid, {}).get('status') == 'known' for fid in facts)
 
 
-def project(state, scope, history=None):
+def project(state, scope, history=None, *, version=1):
     """Bounded tail, already limited to the active immutable History lineage."""
     history = history or {}
     rows = bases(state)
@@ -122,7 +122,7 @@ def project(state, scope, history=None):
                 if t['status'] in ('resolved', 'dormant', 'paused') and core.intersection(t['character_ids'])][:8]
     return dict(pressure=pressure, ordinary_scene_valid=True,
         recent_beats=list(beats.values())[-16:], pending_response_ids=pending,
-        closed_threads=terminal, compression=compression_limit(state, core), extra_llm_calls=0)
+        closed_threads=terminal, compression=compression_limit(state, core, version=version), extra_llm_calls=0)
 
 
 def scene_signature(state):
@@ -130,11 +130,13 @@ def scene_signature(state):
     return [camera['location_id'], sorted(camera['present_character_ids']), camera['controlled_actor_id']]
 
 
-def compression_limit(state, actors, max_minutes=30):
+def compression_limit(state, actors, max_minutes=30, *, version=1):
     now = state['meta']['world_time']
     limit = max_minutes
     boundaries = []
     for event in temporal_boundaries(state):
+        if not clock_barrier(event, version):
+            continue
         due = event['due_minute']
         relevant = bool(set(event['character_ids']) & actors or event.get('interrupts') or
                         event.get('location_id') and event['location_id'] == state['camera']['location_id'])
@@ -241,7 +243,7 @@ def validate_temporal_boundaries(resolver, elapsed):
         for pid, p in state['pregnancies'].items()
     }
     boundary = compression_limit(dict(state, scheduled_events=boundaries, pregnancies=pregnancies),
-                                 actors, elapsed)
+                                 actors, elapsed, version=resolver.scene_version)
     if elapsed > boundary['max_minutes']:
         rows = [event for event in temporal_boundaries(dict(state,
             scheduled_events=boundaries, pregnancies=pregnancies))
