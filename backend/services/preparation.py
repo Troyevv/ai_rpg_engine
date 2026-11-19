@@ -98,6 +98,8 @@ class Preparation:
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
                 if worker_epoch is not None and json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
+                from backend.services.token_budget import prepare
+                config = prepare(config, job['kind'], loaded=loaded, api_key=api_key)
                 if job['kind']=='draft_editor':
                     from backend.services.draft_editor import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)
@@ -121,7 +123,7 @@ class Preparation:
                         temperature=config['temperature'],max_tokens=limit,require_complete=True,
                         cancel_event=handle.cancel,on_stream=on_stream)
                 last = 0.0
-                for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel):
+                for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel,output_ceiling=config['max_tokens']):
                     if handle.cancel.is_set():return
                     narrative += chunk
                     if time.monotonic() - last > 0.1:

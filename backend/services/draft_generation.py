@@ -25,7 +25,7 @@ def messages_for(repo,job,config):
         instructions=idea_text(repo,job,config)
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(config.get('_creation_settings',{}))
-        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True),ensure_ascii=False)
+        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True,exclude={'narrative_detail'}),ensure_ascii=False)
         if settings.communication is not None:instructions+='\nТехнологии связи communication заданы явно: не меняй каналы, доставку и дату по жанру или эпохе. author_note — антураж, не разрешение включить канал.'
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
@@ -116,7 +116,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if config['_draft_task']!='world':
         repo.draft_phase(jid,'editing',reset_progress=True)
         result=''
-        for chunk in stream_document(messages_for(repo,job,config),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
+        for chunk in stream_document(messages_for(repo,job,config),context,config['max_tokens'],generate,handle.cancel,format_hint='json',output_ceiling=config['max_tokens']):
             result+=chunk;repo.preparation_progress(jid,result)
         if handle.cancel.is_set():return
         state=decode_result(result,original,config);report=domain.validate(state)

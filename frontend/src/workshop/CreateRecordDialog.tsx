@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useEffect,useRef,useState} from 'react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '../components/ui/dialog';
 import {Button} from '../components/ui/button';
@@ -14,7 +15,7 @@ export function CreateRecordDialog({wid,target,characters,facts,onClose,onCreate
  const [fact,setFact]=useState('');const [busy,setBusy]=useState(false),[error,setError]=useState('');const guard=useRef(false);
  const pair=kind==='relationship',belief=kind==='knowledge';
  const valid=pair?!!source&&!!destination&&source!==destination:belief?!!source&&!!fact:!!title.trim();
- const personSelect=(label:string,value:string,change:(value:string)=>void)=><label>{label}<select aria-label={label} value={value} onChange={e=>change(e.target.value)}><option value="">Выберите персонажа</option>{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>;
+ const personSelect=(label:string,value:string,change:(value:string)=>void)=><label>{label}<Choice aria-label={label} value={value} onValueChange={selectedValue => change(selectedValue)}><option value="">Выберите персонажа</option>{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>;
  async function save(){
   if(guard.current||!valid)return;guard.current=true;setBusy(true);setError('');
   const value:Item=pair?{source_id:source,target_id:destination,context:description}:belief?{actor_id:source,fact_id:fact,status:'unknown'}:
@@ -26,7 +27,7 @@ export function CreateRecordDialog({wid,target,characters,facts,onClose,onCreate
  return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose()}}><DialogContent className="ww-create-dialog"><DialogTitle>Добавить {names[kind]||'запись'}</DialogTitle><DialogDescription>Запись появится в мире только после создания. Все введённые поля сохраняются одной версией.</DialogDescription><fieldset disabled={busy}>
  {pair||belief?personSelect(pair?'От кого':'Кто знает',source,setSource):<label>{kind==='character'?'Имя':'Название или краткое описание'}<input autoFocus value={title} onChange={e=>setTitle(e.target.value)}/></label>}
  {pair&&personSelect('К кому',destination,setDestination)}
- {belief&&<label>Факт<select value={fact} onChange={e=>setFact(e.target.value)}><option value="">Выберите факт</option>{facts.map(([id,f])=><option key={id} value={id}>{String(f.text)}</option>)}</select></label>}
+ {belief&&<label>Факт<Choice value={fact} onValueChange={selectedValue => setFact(selectedValue)}><option value="">Выберите факт</option>{facts.map(([id,f])=><option key={id} value={id}>{String(f.text)}</option>)}</Choice></label>}
  {!belief&&<label>{pair?'Контекст отношения':'Описание'}<textarea rows={5} value={description} onChange={e=>setDescription(e.target.value)}/></label>}
  </fieldset>{error&&<p role="alert">{error}</p>}<footer className="workshop-dialog-actions"><Button variant="ghost" disabled={busy} onClick={onClose}>Отмена</Button><Button disabled={busy||!valid} onClick={()=>void save()}>{busy?'Создаём…':'Создать запись'}</Button></footer></DialogContent></Dialog>;
 }

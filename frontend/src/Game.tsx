@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
 import type {StoryNotice} from './types';
 import {NpcReview} from './NpcReview';
@@ -311,7 +312,7 @@ export function Game({
       {save&&<NpcReview key={save.id} save={save} locked={busy||turnLocked} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{recovery(false)}</>}</>}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||turnLocked} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
-        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
+        <label>Управляемый персонаж<Choice aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</Choice></label>
         {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
         <Button variant="ghost" size="sm" onClick={()=>setCameraOpen(true)}>Камера · Журнал</Button>
         <Button variant="outline" size="sm" disabled={busy||turnLocked||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
@@ -412,7 +413,7 @@ export function Game({
                   {actorId===null&&<div className="background-exit">
                     <Button variant="outline" disabled={busy||turnLocked} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
                     <Button disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
-                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+                    <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">

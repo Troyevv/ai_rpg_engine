@@ -1,6 +1,7 @@
 """Optional creation constraints; they never manufacture Runtime life events."""
 from typing import Literal
 from pydantic import Field, model_validator
+from backend.runtime_v3.narrative_policy_models import NarrativeDetail
 from backend.runtime_v3.models import StrictModel, NarrativePacingProfile, NarrativeRiskProfile, CalendarProfile
 
 from backend.runtime_v3.genre import GenreConfig
@@ -43,6 +44,7 @@ class CreationSettings(GenreConfig):
     communication: CommunicationCapabilities | None = None
     calendar_start: CalendarStart = Field(default_factory=CalendarStart)
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
+    narrative_detail: NarrativeDetail = 'balanced'
     narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
     npc_expressiveness: Expressiveness = 'expressive'
     cast_preset: Literal['small','medium','large','custom'] = 'medium'

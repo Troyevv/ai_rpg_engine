@@ -175,7 +175,7 @@ class ProtagonistPeriod(StrictModel):
     operation_id: str
 
 
-from backend.runtime_v3.narrative_policy_models import (NarrativePacingProfile, NarrativeRiskProfile, OutcomePreference, PacingRecord, FavorablePath)
+from backend.runtime_v3.narrative_policy_models import (NarrativeDetail, NarrativePacingProfile, NarrativeRiskProfile, OutcomePreference, PacingRecord, FavorablePath)
 
 
 from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact, Conversation, RemoteEvent
@@ -211,6 +211,7 @@ class Meta(StrictModel):
     interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
     narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
+    narrative_detail: NarrativeDetail = 'balanced'
     outcome_preference: OutcomePreference = "natural"
     pacing_recent: list[PacingRecord] = Field(default_factory=list, max_length=12)
     current_protagonist_id: str | None = None
@@ -766,6 +767,9 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('Некорректная схема WorldState: ' + json.dumps(details, ensure_ascii=False), 'current_state_schema_invalid')
     actors, locations = value['characters'], value['locations']
     meta = value['meta']
+    if 'narrative_detail' not in state.get('meta', {}):
+        # Legacy immutable snapshots retain their shape. Readers resolve balanced.
+        meta.pop('narrative_detail', None)
     if meta['current_protagonist_id'] is not None and meta['current_protagonist_id'] not in actors:
         fatal('неизвестный главный герой')
     open_periods = []

@@ -192,6 +192,7 @@ def migrate_v2(original):
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(old['creation_settings'])
         state['meta']['narrative_pacing']=settings.narrative_pacing.model_dump()
+        state['meta']['narrative_detail']=settings.narrative_detail
         state['meta']['narrative_risk']=settings.narrative_risk.model_dump()
         state['meta']['npc_expressiveness']=settings.npc_expressiveness
     initialize_calendar(state)

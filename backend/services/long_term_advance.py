@@ -10,8 +10,7 @@ from backend.services.usage import tracked_stream
 from context_builder import describe_context
 
 
-def execute(storage, job, handle, chat_stream):
-    config = json.loads(job["config_json"])
+def execute(storage, job, handle, chat_stream, config):
     before = json.loads(job["memory_before_json"] or job["before_json"])
     with storage.connect() as db:
         history, _ = read_history(db, before.get("history_head"))

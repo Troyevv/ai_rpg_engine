@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useState} from 'react';
 import {runtimeLabels,enumLabels} from '../runtimePresentation';
 type Schema=Record<string,any>;
@@ -14,8 +15,8 @@ export function StructuredValueEditor({value,onChange,schema,definitions={},labe
  const refs=references?.(field);
  if(value===null||value===undefined&&!required)return <div className="ww-unset"><span>{value===null?'Неизвестно':'Не задано'}</span><button type="button" onClick={()=>onChange(empty())}>Задать {label.toLowerCase()}</button></div>;
  const reset=<>{s.nullable&&<button type="button" className="ww-text-button" onClick={()=>onChange(null)}>Оставить неизвестным</button>}</>;
- if(s.enum||refs&&type!=='array')return <label>{label}<select aria-label={label} aria-required={required||undefined} value={String(value??'')} onChange={e=>onChange(e.target.value)}>{value===undefined&&<option value="">Выберите значение</option>}{(s.enum?s.enum.map((v:string)=>[v,enumLabels[v]||v]):refs!).map(([v,n]:[string,string])=><option key={v} value={v}>{n}</option>)}</select>{reset}</label>;
- if(type==='boolean')return <label>{label}<select aria-label={label} aria-required={required||undefined} value={String(value??'')} onChange={e=>onChange(e.target.value==='true')}>{value===undefined&&<option value="">Выберите значение</option>}<option value="true">Да</option><option value="false">Нет</option></select>{reset}</label>;
+ if(s.enum||refs&&type!=='array')return <label>{label}<Choice aria-label={label} aria-required={required||undefined} value={String(value??'')} onValueChange={selectedValue => onChange(selectedValue)}>{value===undefined&&<option value="">Выберите значение</option>}{(s.enum?s.enum.map((v:string)=>[v,enumLabels[v]||v]):refs!).map(([v,n]:[string,string])=><option key={v} value={v}>{n}</option>)}</Choice>{reset}</label>;
+ if(type==='boolean')return <label>{label}<Choice aria-label={label} aria-required={required||undefined} value={String(value??'')} onValueChange={selectedValue => onChange(selectedValue==='true')}>{value===undefined&&<option value="">Выберите значение</option>}<option value="true">Да</option><option value="false">Нет</option></Choice>{reset}</label>;
  if(type==='number'||type==='integer')return <label>{label}<input aria-label={label} aria-required={required||undefined} min={s.minimum} max={s.maximum} type="number" step={type==='integer'?1:'any'} value={String(value??'')} onChange={e=>{if(e.target.value!==''&&Number.isFinite(Number(e.target.value)))onChange(Number(e.target.value))}}/>{reset}</label>;
  if(type==='array'){
   const rows=Array.isArray(value)?value:[];

@@ -8,6 +8,11 @@ test('large per-task contexts persist and resume a world rejected before the fir
   await page.goto('/');await nav(page,'Настройки');
   await page.getByLabel('Провайдер summary').selectOption('deepseek');
   await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
+  for (const stage of ['idea','summary','game']) {
+    const auto=page.getByLabel('Автоматические лимиты '+stage);
+    await auto.uncheck();
+    await auto.locator('xpath=ancestor::section[1]').getByText('Расширенные настройки').click();
+  }
   await page.getByLabel('Контекст idea',{exact:true}).fill('262144');
   await page.getByLabel('Контекст summary',{exact:true}).fill('32768');
   await page.getByLabel('Контекст game',{exact:true}).fill('524288');
@@ -24,6 +29,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   expect(failed.job.error).toContain('Контекст 32768');
   expect(await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json()).toHaveLength(0);
   await nav(page,'Настройки');
+  await page.getByLabel('Автоматические лимиты summary').locator('xpath=ancestor::section[1]').getByText('Расширенные настройки').click();
   await page.getByLabel('Контекст summary',{exact:true}).fill('262144');
   await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);

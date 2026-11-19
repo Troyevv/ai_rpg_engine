@@ -67,8 +67,16 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
                 kwargs.update(structured_schema=schema, extraction_transport=selected)
             elif selected!='chat_json_object':
                 raise ValueError('Неизвестный записанный transport Extraction.')
+    diagnostics = dict(diagnostics or {'estimated_tokens':estimate(messages), 'parts':[]})
+    # Chat owns its own reply/summary context contract and has already run preflight.
+    if '_budget_caps' in config:
+        from backend.services.token_budget import plan_request
+        plan = plan_request(config, stage, messages, kwargs['max_tokens'],
+                            **{k:kwargs[k] for k in ('temperature','response_format','structured_schema','structured_name') if k in kwargs})
+        effective['max_tokens'] = kwargs['max_tokens'] = plan['output_allowance']
+        diagnostics.update(budget_plan=plan, estimated_tokens=plan['estimated_input'], token_method=plan['estimate_method'])
     from backend.services.provider_attempt import CURRENT, failed
-    rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
+    rid = storage.begin_request(job_id,stage,effective,messages,diagnostics)
     if hasattr(messages, '__dict__'):
         messages.request_id = rid  # Exact request identity for subsequent candidate audit.
     attempt = dict(request_id=rid, job_id=job_id, stage=stage, stream_complete=False, terminal_seen=False)

@@ -54,9 +54,10 @@ class ValidateWorld(Generate):
     name: str = Field(default='', max_length=120)
 
 class Resume(Credential):
+    budget_mode: Literal['auto','manual'] | None = None
     revision: int | None = None
-    max_tokens: int | None = Field(default=None,ge=256,le=65536)
-    context_length: int | None = Field(default=None,ge=8192)
+    max_tokens: int | None = Field(default=None,ge=256,le=1048576)
+    context_length: int | None = Field(default=None,ge=2048)
     acknowledge_unknown: bool = False
     retry_last_fragment: bool = False
     retry_empty_response: str | None = Field(default=None,pattern=r'^[0-9a-f]{64}$')
@@ -265,7 +266,7 @@ def install(app,repo,preparation,credentials,job):
         saved=repo.preparation_job(current['id'])
         provider=json.loads(saved['config_json'])['provider']
         preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
-            config_changes={k:getattr(body,k) for k in ('max_tokens','context_length') if getattr(body,k) is not None},
+            config_changes={k:getattr(body,k) for k in ('budget_mode','max_tokens','context_length') if getattr(body,k) is not None},
             acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment,
             retry_empty_response=body.retry_empty_response,expected_epoch=body.expected_epoch)
         return job(current['id'])

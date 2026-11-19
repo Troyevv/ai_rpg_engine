@@ -153,11 +153,12 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return enhanced
     except ValueError as exc:
         from backend.services.draft_response import TransportError
+        from backend.services.token_budget import BudgetError
         diagnostics=getattr(exc, 'diagnostic', None) or getattr(exc, 'errors', None)
         if diagnostics is None and getattr(exc, 'world_paths', None):
             diagnostics=[dict(path=p,category='server_metadata',message=str(exc)) for p in exc.world_paths]
         if callable(diagnostics):diagnostics=diagnostics(include_url=False,include_context=False,include_input=False)
-        record.update(status='interrupted' if isinstance(exc, TransportError) else 'rejected', reason=str(exc),
+        record.update(status='interrupted' if isinstance(exc, (TransportError, BudgetError)) else 'rejected', reason=str(exc),
                       diagnostics=diagnostics)
         save()
         raise

@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import type {State} from './types';
 import {Input} from './components/ui/input';
 
@@ -14,36 +15,36 @@ export function SocialCorrection({state,value,onChange}:{state:State;value:Socia
     r=>r.actor_id===value?.actor_id&&r.status==='active'&&(value?.action==='move'||r.kind==='employment'))||[];
   return <fieldset>
     <label>Исправить сведения о жизни персонажей
-      <select value={value?.action||''} onChange={e=>onChange(e.target.value?{
-        action:e.target.value as Action, actor_id:state.controlled_actor_id||'',other_id:'',location_id:'',phase_id:'',
-        title:'',description:e.target.value==='death_notice'?'Известие о смерти':'',known_by:state.controlled_actor_id?[state.controlled_actor_id]:[],
+      <Choice value={value?.action||''} onValueChange={selectedValue => onChange(selectedValue?{
+        action:selectedValue as Action, actor_id:state.controlled_actor_id||'',other_id:'',location_id:'',phase_id:'',
+        title:'',description:selectedValue==='death_notice'?'Известие о смерти':'',known_by:state.controlled_actor_id?[state.controlled_actor_id]:[],
       }:null)}>
         <option value="">Без изменения</option>
         {(Object.entries(actions) as [Action,string][]).map(([id,name])=><option key={id} value={id}>{name}</option>)}
-      </select>
+      </Choice>
     </label>
     {value&&<>
       <label>{value.action==='parent'?'Родитель':'Чья запись меняется'}
-        <select required value={value.actor_id} onChange={e=>onChange({...value,actor_id:e.target.value,phase_id:''})}>
+        <Choice required value={value.actor_id} onValueChange={selectedValue => onChange({...value,actor_id:selectedValue,phase_id:''})}>
           <option value="">Выберите персонажа</option>{people}
-        </select>
+        </Choice>
       </label>
       {relationship&&<label>{value.action==='parent'?'Ребёнок':'Второй участник связи'}
-        <select required value={value.other_id} onChange={e=>onChange({...value,other_id:e.target.value})}>
+        <Choice required value={value.other_id} onValueChange={selectedValue => onChange({...value,other_id:selectedValue})}>
           <option value="">Выберите персонажа</option>{people}
-        </select>
+        </Choice>
       </label>}
       {value.action==='move'&&<label>Новое постоянное место жительства
-        <select required value={value.location_id} onChange={e=>onChange({...value,location_id:e.target.value})}>
+        <Choice required value={value.location_id} onValueChange={selectedValue => onChange({...value,location_id:selectedValue})}>
           <option value="">Выберите место</option>{state.locations.filter(l=>l.id).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
+        </Choice>
       </label>}
       {value.action==='hire'&&<label>Новая должность<Input required maxLength={200} value={value.title} onChange={e=>onChange({...value,title:e.target.value})}/></label>}
       {!relationship&&value.action!=='death_notice'&&(phases.length>0||value.action==='leave_job')&&<label>Какую запись закрыть
-        <select required={value.action==='leave_job'} value={value.phase_id} onChange={e=>onChange({...value,phase_id:e.target.value})}>
+        <Choice required={value.action==='leave_job'} value={value.phase_id} onValueChange={selectedValue => onChange({...value,phase_id:selectedValue})}>
           <option value="">{value.action==='leave_job'?'Выберите место работы':'Сохранить прежние записи'}</option>
           {phases.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
-        </select>
+        </Choice>
       </label>}
       {value.action!=='death_notice'&&<label>Что произошло<Input required value={value.description} maxLength={1000} onChange={e=>onChange({...value,description:e.target.value})}/></label>}
       <fieldset><legend>Кому известно это изменение?</legend>

@@ -1,3 +1,5 @@
+import { ModelBudget } from "./ModelBudget";
+import { Choice } from "@/components/ui/choice";
 import {ThemeSelector} from "./ThemeProvider";
 import {Versions} from "./Versions";
 import { useState, useEffect } from "react";
@@ -29,13 +31,14 @@ export function Settings({
   setApiKey: (v: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
-  const [models, setModels] = useState<string[]>([]);
+  const [models, setModels] = useState<Partial<Record<ModelConfig["provider"],string[]>>>({});
   const [loaded, setLoaded] = useState<string[]>([]);
   const [promptNames,setPromptNames] = useState<string[]>([]);
   const [prompt,setPrompt] = useState("");
   const [stored, setStored] = useState(false);
   const [capabilities, setCapabilities] = useState<Record<string,{thinking_models:string[]}>>({});
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open) {
       setDraft(value);
@@ -62,6 +65,7 @@ export function Settings({
     <Dialog
       open={open}
       onOpenChange={(v) => {
+        if (saving) return;
         if (v) setDraft(value);
         onOpenChange(v);
       }}
@@ -100,99 +104,39 @@ export function Settings({
             <div className="form-grid">
               <label>
                 Провайдер
-                <select
+                <Choice
                   aria-label={`Провайдер ${key}`}
                   value={draft[key].provider}
-                  onChange={(e) =>
-                    update(key, {
-                      provider: e.target.value as ModelConfig["provider"],
+                  onValueChange={selectedValue => update(key, {
+                      provider: selectedValue as ModelConfig["provider"],
                       model:
-                        e.target.value === "deepseek"
+                        selectedValue === "deepseek"
                           ? "deepseek-flash"
                           : draft.local.model,
-                    })
-                  }
+                    })}
                 >
                   <option value="local">Локальная модель · LM Studio</option>
                   <option value="deepseek">DeepSeek API</option>
                   <option value="compatible">OpenAI-совместимый API · настройка сервера</option>
-                </select>
+                </Choice>
               </label>
               <label>
                 Модель
-                <Input
-                  aria-label={`Модель ${key}`}
-                  list="model-list"
-                  value={draft[key].model}
-                  onChange={(e) => update(key, { model: e.target.value })}
-                />
+                <ModelName label={`Модель ${key}`} options={models[draft[key].provider]} value={draft[key].model}
+                  onChange={model=>update(key,{model})}/>
               </label>
               {(capabilities[draft[key].provider]?.thinking_models || []).includes(draft[key].model) && <label>
                 Thinking
-                <select aria-label={`Thinking ${key}`} value={draft[key].thinking || "off"} onChange={e=>update(key,{thinking:e.target.value as ModelConfig["thinking"]})}>
+                <Choice aria-label={`Thinking ${key}`} value={draft[key].thinking || "off"} onValueChange={selectedValue => update(key,{thinking:selectedValue as ModelConfig["thinking"]})}>
                   <option value="off">Off</option><option value="low">Low</option><option value="high">High</option>
-                </select>
-                <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется.</span>
+                </Choice>
+                <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется. {key==='summary' && 'При проверке мира Thinking всегда выключен.'}</span>
               </label>}
-              <label>
-                Temperature
-                <Input
-                  type="number"
-                  min="0"
-                  max="1.5"
-                  step="0.05"
-                  value={draft[key].temperature}
-                  onChange={(e) =>
-                    update(key, { temperature: +e.target.value })
-                  }
-                />
-              </label>
-              {key==="game" && <label><input type="checkbox" checked={!!draft.game.auto_context} onChange={e=>update(key,{auto_context:e.target.checked})}/>Определять окно по модели</label>}
-              <label>
-                {key==="game" && draft.game.auto_context?"Резервная настройка для неизвестной модели":"Бюджет контекста"}
-                <Input
-                  aria-label={`Контекст ${key}`}
-                  type="number"
-                  min="8192"
-                  step="1"
-                  list="context-options"
-                  value={draft[key].context_length}
-                  onChange={(e) => update(key, { context_length: +e.target.value })}
-                />
-                <span className="muted small">Входной запрос и ответ вместе. Выбери значение в пределах возможностей модели.</span>
-              </label>
-              <label>
-                Лимит ответа
-                <Input
-                  type="number"
-                  min="256"
-                  max="32000"
-                  value={draft[key].max_tokens}
-                  onChange={(e) => update(key, { max_tokens: +e.target.value })}
-                />
-              </label>
-              {key === "game" && (
-                <>
-                  <details>
-                    <summary>Память истории</summary>
-                    <p className="muted">Движок подбирает события и знания из сохранения. Последние доступные сцены передаются целиком, пока помещаются в контекст.</p>
-                  <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
-                  </details>
-                  <label>
-                    Лимит обработки мира
-                    <Input
-                      type="number"
-                      min="1024"
-                      max="16000"
-                      value={draft.game.update_tokens}
-                      onChange={(e) =>
-                        update(key, { update_tokens: +e.target.value })
-                      }
-                    />
-                  </label>
-                </>
-              )}
             </div>
+            <ModelBudget stage={key} value={draft[key]} change={patch=>update(key,patch)}/>
+            {key==="game" && <details><summary>Память истории</summary>
+              <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
+            </details>}
             <Button
               variant="outline"
               size="sm"
@@ -206,9 +150,9 @@ export function Settings({
                     provider: draft[key].provider,
                     api_key: apiKey,
                   });
-                  setModels(r.models);
-                  setLoaded(r.loaded.map((m) => m.model_key));
-                  toast.success("Список моделей обновлён");
+                  setModels(previous=>({...previous,[draft[key].provider]:r.models}));
+                  if (draft[key].provider==="local") setLoaded(r.loaded.map((m) => m.model_key));
+                  toast.success(r.models.length ? "Список моделей обновлён" : "Провайдер вернул пустой список. Можно ввести имя модели.");
                 })
               }
             >
@@ -216,34 +160,13 @@ export function Settings({
             </Button>
           </fieldset>
         ))}
-        <datalist id="model-list">
-          {models.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-        <datalist id="context-options">
-          {[8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576].map((n) => (
-            <option key={n} value={n} />
-          ))}
-        </datalist>
-        {models.length > 0 && (
-          <p className="muted small">Доступны: {models.join(", ")}</p>
-        )}
         <fieldset>
           <legend>Загрузка локальной модели</legend>
           <div className="form-grid">
             <label>
               Модель
-              <Input
-                list="model-list"
-                value={draft.local.model}
-                onChange={(e) =>
-                  setDraft((d) => ({
-                    ...d,
-                    local: { ...d.local, model: e.target.value },
-                  }))
-                }
-              />
+              <ModelName label="Модель для загрузки" options={models.local} value={draft.local.model}
+                onChange={model=>setDraft(d=>({...d,local:{...d.local,model}}))}/>
             </label>
             <label>
               Контекст
@@ -252,7 +175,6 @@ export function Settings({
                 type="number"
                 min="8192"
                 step="1"
-                list="context-options"
                 value={draft.local.context_length}
                 onChange={(e) =>
                   setDraft((d) => ({
@@ -265,22 +187,20 @@ export function Settings({
             </label>
             <label>
               Eval Batch Size
-              <select
+              <Choice
                 value={draft.local.eval_batch_size}
-                onChange={(e) =>
-                  setDraft((d) => ({
+                onValueChange={selectedValue => setDraft((d) => ({
                     ...d,
                     local: {
                       ...d.local,
-                      eval_batch_size: +e.target.value as 512,
+                      eval_batch_size: +selectedValue as 512,
                     },
-                  }))
-                }
+                  }))}
               >
                 {[256, 512, 1024, 2048].map((n) => (
                   <option key={n}>{n}</option>
                 ))}
-              </select>
+              </Choice>
             </label>
           </div>
           <label className="check">
@@ -385,17 +305,20 @@ export function Settings({
             disabled={busy}
             onClick={() =>
               run(async () => {
-                if (apiKey.trim()) {
-                  await api("/credentials/deepseek",{api_key:apiKey},"PUT");
-                  setStored(true); setApiKey("");
-                }
-                await save(draft);
-                onOpenChange(false);
+                setSaving(true);
+                try {
+                  if (apiKey.trim()) {
+                    await api("/credentials/deepseek",{api_key:apiKey},"PUT");
+                    setStored(true); setApiKey("");
+                  }
+                  await save(draft);
+                  onOpenChange(false);
+                } finally { setSaving(false); }
                 toast.success("Настройки сохранены");
               })
             }
           >
-            Сохранить настройки
+            {saving ? 'Сохраняем…' : 'Сохранить настройки'}
           </Button>
           <Button variant="ghost" onClick={() => setDraft(defaults)}>
             По умолчанию
@@ -404,4 +327,20 @@ export function Settings({
       </DialogContent>
     </Dialog>
   );
+}
+
+function ModelName({label,options,value,onChange}:{label:string;options?:string[];value:string;onChange:(name:string)=>void}) {
+  const [custom,setCustom]=useState(false);
+  if (!options?.length || custom) return <>
+    <Input aria-label={label} value={value} onChange={e=>onChange(e.target.value)}/>
+    {!!options?.length && <button type="button" className="model-list-action" onClick={()=>setCustom(false)}>Выбрать из списка</button>}
+  </>;
+  const names=options.includes(value) || !value ? options : [value,...options];
+  return <>
+    <Choice aria-label={label} value={value} onValueChange={onChange}>
+      {!value && <option value="">Выберите модель</option>}
+      {names.map(name=><option key={name} value={name}>{name}</option>)}
+    </Choice>
+    <button type="button" className="model-list-action" onClick={()=>setCustom(true)}>Ввести имя вручную</button>
+  </>;
 }

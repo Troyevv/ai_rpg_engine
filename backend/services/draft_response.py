@@ -263,6 +263,9 @@ def stage_output_limit(slot, messages, config):
     # Output size follows candidate/scope size, bounded by the user's ceiling.
     size=estimate(messages)
     target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90,'creative':0.90}[stage])))
+    if stage=='world' and config.get('budget_mode')=='auto':
+        from backend.services.token_budget import world_output
+        target = world_output(config, messages)
     if stage=='review':target=min(8192,max(2048,int(size*0.30)))
     override=config.get('_draft_stage_output_limits',{}).get(stage)
     return min(config['max_tokens'],target if override is None else override)
@@ -275,14 +278,44 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     while slot in redirects:
         if slot in seen:raise TransportError('Повреждена история повторных проверок.')
         seen.add(slot);slot=redirects[slot]
-    # Provider capability is distinct from the app's intentionally smaller context.
-    # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
-    capabilities=config.get('_model_capabilities',{})
-    from llm import DEEPSEEK_WINDOWS
-    if config.get('provider')=='deepseek' and config.get('model') in DEEPSEEK_WINDOWS:
-        capabilities=dict(context_window=DEEPSEEK_WINDOWS[config['model']],max_output_tokens=393216)
-    context=min(context,capabilities.get('context_window',context))
-    output_limit=min(stage_output_limit(logical_slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
+    capabilities = config.get('_model_capabilities', {})
+    context = min(context, capabilities.get('context_window',context))
+    output_limit = min(stage_output_limit(logical_slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
+
+    # An epoch may change the per-request limits; it never grants a new total.
+    budget = journal.setdefault('token_budget', config.get('_draft_token_budget',
+        3*MAX_FRAGMENTS*(context+config['max_tokens'])))
+    budget = min(budget, config.get('_draft_token_budget', budget))
+
+    def envelope(request):
+        bound = estimate(request) + 512
+        reservation = bound
+        limit = min(output_limit, context-bound)
+        if '_budget_caps' in config:
+            from backend.services.token_budget import plan_request
+            structured = config['provider']=='deepseek' and not any(m['role']=='assistant' for m in request)
+            plan = plan_request(config,logical_slot,request,output_limit,temperature=config['temperature'],
+                                response_format={'type':'json_object'} if structured else None)
+            limit = min(limit,plan['output_allowance'])
+            reservation = max(bound,plan['estimated_input']+plan['safety_margin'])
+            if config.get('budget_mode') == 'auto':
+                reservation = max(reservation,plan['reservation_input'])
+                remaining = budget-journal.get('actual_tokens',0)-journal.get('reserved_tokens',0)-reservation
+                if remaining < 256:
+                    raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
+                limit = min(limit,remaining)
+                cap = config.get('_draft_cost_budget_usd')
+                if cap is not None:
+                    from backend.services.usage import price_snapshot
+                    from datetime import datetime, timezone
+                    price = price_snapshot(config, datetime.now(timezone.utc))
+                    if price is None: raise TransportError('Тариф неизвестен: нельзя гарантировать бюджет расходов.')
+                    if price['version'] != 'local':
+                        funds = Decimal(str(cap))-Decimal(journal.get('actual_cost','0'))-Decimal(journal.get('reserved_cost','0'))
+                        affordable = int((funds*1000000-reservation*Decimal(price['input']))/Decimal(price['output']))
+                        if affordable < 256: raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
+                        limit = min(limit,affordable)
+        return reservation, limit
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
     if not record['complete'] and not record.get('failure'):record['output_limit']=output_limit
     schema=None
@@ -317,7 +350,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         request=deepcopy(messages)
         if text:request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
         from llm import thinking_options
-        limit=min(output_limit,context-estimate(request)-512)
+        _, limit = envelope(request)
         effective=dict(provider=config.get('provider'),model=config.get('model'),
             thinking=thinking_options(config.get('provider'),config.get('model'),config.get('thinking','off'))[0],
             max_tokens=limit)
@@ -364,8 +397,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         if text:
             request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
             repo.draft_phase(jid,'reviewing' if slot.startswith(('completeness','quality_review')) else 'developing' if slot.startswith('creative_') else 'continuing')
-        input_bound = estimate(request)+512
-        limit = min(output_limit,context-input_bound)
+        input_bound, limit = envelope(request)
         if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')
         from llm import thinking_options
         record['effective_config'] = dict(provider=config.get('provider'),model=config.get('model'),
@@ -390,7 +422,6 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             raise TransportError(record['failure']['message'])
         # A conservative reserved token envelope bounds even calls with missing
         # provider usage. Accounting remains actual usage in llm_requests.
-        budget = config.get('_draft_token_budget',3*MAX_FRAGMENTS*(context+config['max_tokens']))
         reserved = journal.get('reserved_tokens',0)
         if reserved+journal.get('actual_tokens',0)+input_bound+limit > budget: raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
         previous_cost=journal.get('reserved_cost','0')

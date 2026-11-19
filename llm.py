@@ -102,21 +102,6 @@ def get_models_info() -> dict:
     return response.json()
 
 
-# Published DeepSeek capabilities also used by draft generation.
-DEEPSEEK_WINDOWS = dict.fromkeys(
-    ('deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp', 'deepseek-v4-pro'), 1048576)
-
-
-def game_context_limit(config, loaded=None):
-    manual = config['context_length']
-    provider = config.get('provider', 'local')
-    available = ((loaded or {}).get('config', {}).get('context_length') if provider == 'local'
-                 else DEEPSEEK_WINDOWS.get(config['model']) if provider == 'deepseek' else None)
-    if type(available) is not int or available <= 0:
-        return manual
-    return available if config.get('auto_context') else min(available, manual)
-
-
 def get_loaded_models() -> list[dict]:
     data = get_models_info()
 
@@ -167,11 +152,9 @@ def find_loaded_model(
     model_key: str,
 ) -> dict | None:
 
-    for model in get_loaded_models():
-        if model["model_key"] == model_key:
-            return model
-
-    return None
+    matches = [m for m in get_loaded_models() if model_key in (m['model_key'],m.get('instance_id'))]
+    # A model-key request can be routed to any matching loaded instance.
+    return min(matches, key=lambda m: m.get('config',{}).get('context_length') or 0, default=None)
 
 
 # =========================================================
@@ -313,6 +296,26 @@ class OutputLimitReached(ProviderGenerationError):
     """A valid streamed prefix reached the provider output/context limit."""
 
 
+def request_payload(provider, model, messages, max_tokens, temperature, thinking, response_format=None,
+                    structured_schema=None, structured_name='extraction_v6'):
+    spec = PROVIDERS[provider]
+    effective, options = thinking_options(provider, model, thinking)
+    params = dict(model=model, stream=True)
+    if effective == 'off':
+        params['temperature'] = temperature
+    if structured_schema is not None:
+        return dict(params, input=[m for m in messages if not m['content'].startswith('JSON Schema\n')],
+                    text={'format':{'type':'json_schema','name':structured_name,'schema':structured_schema}},
+                    reasoning={'effort':'none' if effective=='off' else effective}, max_output_tokens=max_tokens)
+    if response_format:
+        params['response_format'] = response_format
+    if spec.extra_body:
+        params['extra_body'] = spec.extra_body
+    if provider != 'local':
+        params['stream_options'] = {'include_usage': True}
+    return params | options | dict(messages=messages, max_tokens=max_tokens)
+
+
 def chat_stream(
     model: str,
     messages: list[dict],
@@ -346,44 +349,23 @@ def chat_stream(
     finish_reason = None
     from backend.services.answer_stream import AnswerStream
     answer = AnswerStream()
+    payload = request_payload(provider, model, messages, max_tokens, temperature, thinking, response_format, structured_schema, structured_name)
     try:
         if structured_schema is not None:
             from backend.services.structured_extraction import RESPONSES_MODELS, response_events
             if extraction_transport != 'responses_json_schema' or provider != 'deepseek' or model not in RESPONSES_MODELS:
                 raise ValueError('Этот провайдер/модель не поддерживает выбранный schema transport.')
             if cancel_event is not None and cancel_event.is_set():raise RuntimeError('Генерация остановлена.')
-            effective_thinking = thinking_options(provider,model,thinking)[0]
-            # Schema occupies one context slot, not both prompt text and API schema.
-            wire_messages=[m for m in messages if not m.get('content','').startswith('JSON Schema\n')]
             emit(phase='responses_create')
-            stream=client.responses.create(model=model,input=wire_messages,
-                text={'format':{'type':'json_schema','name':structured_name,'schema':structured_schema}},
-                reasoning={'effort':'none' if effective_thinking=='off' else effective_thinking},
-                max_output_tokens=max_tokens,stream=True,
-                **({'temperature':temperature} if effective_thinking=='off' else {}))
+            stream=client.responses.create(**payload)
             emit(phase='responses_stream', provider_request_id=identifier((getattr(getattr(stream,'response',None),'headers',{}) or {}).get('x-request-id')))
             if on_stream:on_stream(stream)
             yield from response_events(stream,cancel_event,on_usage,on_finish)
             return
-        extra = {"response_format": response_format} if response_format else {}
-        if spec.extra_body:
-            extra['extra_body'] = spec.extra_body
-        effective_thinking, thinking_args = thinking_options(provider,model,thinking)
-        extra.update(thinking_args)
-        if remote:
-            extra['stream_options'] = {'include_usage': True}
-        if effective_thinking == 'off':
-            extra['temperature'] = temperature
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
         emit(phase='chat_create')
-        stream = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            stream=True,
-            **extra,
-        )
+        stream = client.chat.completions.create(**payload)
         emit(phase='chat_stream')
         if on_stream is not None:
             on_stream(stream)

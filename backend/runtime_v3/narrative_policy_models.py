@@ -3,6 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+NarrativeDetail = Literal['brief', 'balanced', 'detailed', 'extended']
+
+
 class PolicyModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, allow_inf_nan=False)
 

@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,Bookmark,Search,Users,History,Pencil,ArrowUpRight,RefreshCw} from 'lucide-react';
 import {api} from './api';
@@ -68,7 +69,7 @@ function BookmarksPanel({campaign,disabled,backRef,onRefresh,initial,onBookmark,
     <h3>{existing?'Заметка к закладке':'Новая закладка'}</h3><p className="muted small">{editing.chapter_name} · сообщение № {editing.seq} · {editing.role==='user'?'Игрок':'История'}</p>
     <blockquote className="chat-source-excerpt">{editing.excerpt}{editing.excerpt.length===400?'…':''}</blockquote>
     <label htmlFor="chat-bookmark-note">Заметка автора</label><Textarea id="chat-bookmark-note" value={note} maxLength={2000} rows={4} onChange={e=>change(e.target.value,priority)}/>
-    <label htmlFor="chat-bookmark-priority">Приоритет при обновлении выжимки</label><select id="chat-bookmark-priority" value={priority} onChange={e=>change(note,Number(e.target.value))}><option value={2}>Высокий — передать модели</option><option value={1}>Обычный — передать модели</option><option value={0}>Только навигация — не передавать</option></select>
+    <label htmlFor="chat-bookmark-priority">Приоритет при обновлении выжимки</label><Choice id="chat-bookmark-priority" value={priority} onValueChange={selectedValue => change(note,Number(selectedValue))}><option value={2}>Высокий — передать модели</option><option value={1}>Обычный — передать модели</option><option value={0}>Только навигация — не передавать</option></Choice>
     <p className="muted small">Закладка относится к исходному сообщению и общему префиксу веток. Заметка не делает предложенные варианты совершёнными действиями. Удаление уберёт закладку во всех ветках, где есть это же сообщение.</p>
     {error&&<div className="chat-error" role="alert"><p>{error}</p><Button variant="outline" onClick={()=>void onRefresh().then(()=>setError('Состояние обновлено. Проверьте заметку и сохраните её явно.')).catch(e=>setError(e.message))}>Обновить состояние, сохранив правку</Button></div>}
     <div className="actions"><Button disabled={busy||disabled} onClick={()=>void persist(true)}>Сохранить закладку</Button>{existing&&<Button disabled={busy||disabled} variant="outline" onClick={()=>void persist(false)}>Удалить закладку</Button>}<Button disabled={busy} variant="ghost" onClick={()=>void onJump(editing.message_id).catch(e=>setError(e.message))}>Открыть сообщение<ArrowUpRight size={16}/></Button></div>

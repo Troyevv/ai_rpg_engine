@@ -185,6 +185,11 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 if previous:journal.setdefault('empty_retry_history',[]).append(dict(previous,fingerprint=retry_empty_response))
                 journal.setdefault('empty_retries',{})[retry_empty_response]=dict(slot=new_slot,epoch=expected_epoch+1,used=False,previous_slot=old_slot)
             config=json.loads(job['config_json'])
+            if 'token_budget' not in journal:
+                from backend.services.draft_response import MAX_FRAGMENTS
+                original = next(iter(journal.get('config_history') or [config]))
+                journal['token_budget'] = original.get('_draft_token_budget',
+                    3*MAX_FRAGMENTS*(original['context_length']+original['max_tokens']))
             proposed=dict(config,**(config_changes or {}))
             if revision is None or revision==job['revision']:
                 if self.review_exhausted(journal,proposed):raise ValueError('Стратегии проверки этого кандидата исчерпаны. Повтор запроса не разрешён; сохранённые замечания доступны в редакторе.')

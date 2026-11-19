@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useEffect,useState} from "react";
 import {toast} from "sonner";
 import {api} from "./api";
@@ -15,7 +16,7 @@ export function Versions({kind,owner,open,close,changed}:{kind:string;owner:stri
  useEffect(()=>{if(open){setLoading(true);void load().catch(e=>toast.error(e.message)).finally(()=>setLoading(false))}},[open,kind,owner]);
  const commit=async(source?:number)=>{setBusy(true);try{await api(`/documents/${kind}/${owner}`,{content,expected_head:history.active_id,source_id:source});await load();changed?.();toast.success("Новая версия сохранена")}catch(e){toast.error((e as Error).message)}finally{setBusy(false)}};
  return <Dialog open={open} onOpenChange={v=>{if(!v)close()}}><DialogContent className="settings-dialog"><DialogHeader><DialogTitle>История версий · {kind==="prompt"?owner:kind==="idea"?"Сценарий":"Выжимка"}</DialogTitle><DialogDescription>Сохранение и откат создают новую версию. Старые записи остаются в истории. Новые промпты применяются к следующим запросам.</DialogDescription></DialogHeader>
- <label>Версия<select disabled={loading||busy} value={selected||""} onChange={e=>{const id=+e.target.value;setSelected(id);setContent(history.versions.find(v=>v.id===id)?.content||"")}}>{history.versions.map(v=><option key={v.id} value={v.id}>#{v.id} · {v.created_at} · {v.reason}{v.id===history.active_id?" · активная":""}{!v.complete?" · черновик/удалено":""}</option>)}</select></label>
+ <label>Версия<Choice disabled={loading||busy} value={selected||""} onValueChange={selectedValue => {const id=+selectedValue;setSelected(id);setContent(history.versions.find(v=>v.id===id)?.content||"")}}>{history.versions.map(v=><option key={v.id} value={v.id}>#{v.id} · {v.created_at} · {v.reason}{v.id===history.active_id?" · активная":""}{!v.complete?" · черновик/удалено":""}</option>)}</Choice></label>
  <details><summary>Просмотр выбранной версии</summary><Markdown text={content||"Документ пуст"}/></details>
  {history.template && <div><p>Технический контракт новых ходов задаёт Runtime. Авторские дополнения редактируются в extraction_author.md. Старые версии доступны ниже.</p><details><summary>Актуальный шаблон Extraction</summary><Markdown text={history.template}/></details>{content!==history.template&&<Button variant="outline" onClick={()=>setContent(history.template!)}>Подставить актуальный шаблон для сохранения</Button>}</div>}
  <Textarea readOnly={!!history.template} disabled={loading||busy} aria-label="Содержимое версии" value={content} onChange={e=>setContent(e.target.value)} style={{minHeight:260}}/>

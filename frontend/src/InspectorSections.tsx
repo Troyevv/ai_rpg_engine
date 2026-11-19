@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {CharacterPeople as People} from "./CharacterPeople";
 import {StorySecretBrowser} from './StorySecretBrowser';
 import {genreLabels} from './GenreSettings';
@@ -186,11 +187,11 @@ function PersonFilter({
   onChange: (v: string) => void;
 }) {
   return (
-    <select
+    <Choice
       className="inspector-filter"
       aria-label={it("participant")}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onValueChange={selectedValue => onChange(selectedValue)}
     >
       <option value="">{it("allPeople")}</option>
       {state.characters.map((c) => (
@@ -198,7 +199,7 @@ function PersonFilter({
           {c.name}
         </option>
       ))}
-    </select>
+    </Choice>
   );
 }
 function Segments<T extends string>({

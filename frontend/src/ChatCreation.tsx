@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useEffect,useRef,useState} from 'react';
 import {api,download} from './api';
 import {Button} from './components/ui/button';
@@ -78,7 +79,7 @@ export function ChatCreationEditor({defaults,source,onCreated,onConnections}:{de
     <details className="chat-creation-setup" open={!job}><summary>Идея и параметры кампании</summary><div className="chat-form-stack">
     <label>Название кампании<Input value={name} disabled={active||busy} onChange={e=>setName(e.target.value)}/></label>
     {mode==='idea'&&<><label>Идея игры<Textarea rows={6} disabled={active||busy} placeholder="Мир, персонажи, жанр, обстоятельства и сюжетные предпосылки…" value={idea} onChange={e=>{setIdea(e.target.value);write('chat-create-idea',e.target.value)}}/></label><p className="muted">Один отдельный вызов создаст полный авторский документ. Кампания появится только после вашей проверки и подтверждения.</p></>}
-    {mode==='source'&&<div className="chat-notice"><p>Отдельная копия исходного мира или принятого состояния Narrative. Оригинал не изменится.</p>{!source&&!d?.source?.save_id&&<label>Исходный мир<select disabled={!!d||active||busy} value={world||''} onChange={e=>setWorld(Number(e.target.value))}><option value="">Выберите мир</option>{worlds.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}<Button disabled={active||busy||(!source&&!world)||!!d} onClick={()=>void run(async()=>{const next=await save();adopt(next)})}>Подготовить снимок бесплатно</Button>{d&&<span>Снимок подготовлен</span>}</div>}
+    {mode==='source'&&<div className="chat-notice"><p>Отдельная копия исходного мира или принятого состояния Narrative. Оригинал не изменится.</p>{!source&&!d?.source?.save_id&&<label>Исходный мир<Choice disabled={!!d||active||busy} value={world||''} onValueChange={selectedValue => setWorld(Number(selectedValue))}><option value="">Выберите мир</option>{worlds.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</Choice></label>}<Button disabled={active||busy||(!source&&!world)||!!d} onClick={()=>void run(async()=>{const next=await save();adopt(next)})}>Подготовить снимок бесплатно</Button>{d&&<span>Снимок подготовлен</span>}</div>}
     <fieldset className="chat-creation-settings" disabled={active||busy}><ChatSettingsEditor value={settings} onChange={setSettings}/></fieldset>
     <Button variant="ghost" onClick={onConnections}>Подключения и серверный ключ</Button>
     {mode==='idea'&&!job&&<Button disabled={active||busy||!idea.trim()} onClick={()=>generate('initial')}>Сгенерировать первоначальную выжимку</Button>}

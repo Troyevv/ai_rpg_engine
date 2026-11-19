@@ -13,6 +13,7 @@ export interface ModelConfig {
   update_tokens: number;
   thinking: "off" | "low" | "high";
   recent_turns: number;
+  budget_mode?: "auto" | "manual" | null;
   auto_context?: boolean;
 }
 export interface LocalConfig {
@@ -205,6 +206,7 @@ export interface Workspace {
   job: Job | null;
 }
 const config: ModelConfig = {
+  budget_mode: "auto",
   provider: "local",
   model: "local-model",
   context_length: 32768,

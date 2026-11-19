@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { Save } from "./types";
@@ -92,11 +93,11 @@ export function WeatherSettings({
           </p>
           <label>
             Регион
-            <select
+            <Choice
               aria-label="Регион климата"
               required
               value={region}
-              onChange={(e) => setRegion(e.target.value)}
+              onValueChange={selectedValue => setRegion(selectedValue)}
             >
               <option value="">Выбрать место</option>
               {save.state.locations
@@ -106,13 +107,13 @@ export function WeatherSettings({
                     {l.name || l.text}
                   </option>
                 ))}
-            </select>
+            </Choice>
           </label>
           <label>
             Климат
-            <select
+            <Choice
               value={climate}
-              onChange={(e) => setClimate(e.target.value)}
+              onValueChange={selectedValue => setClimate(selectedValue)}
             >
               {[
                 ["temperate", "Умеренный"],
@@ -124,25 +125,25 @@ export function WeatherSettings({
                   {l}
                 </option>
               ))}
-            </select>
+            </Choice>
           </label>
           <label>
             Полушарие
-            <select
+            <Choice
               value={hemisphere}
-              onChange={(e) => setHemisphere(e.target.value)}
+              onValueChange={selectedValue => setHemisphere(selectedValue)}
             >
               <option value="">Не задано</option>
               <option value="north">Северное</option>
               <option value="south">Южное</option>
-            </select>
+            </Choice>
           </label>
           <label>
             Температура
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <Choice value={unit} onValueChange={selectedValue => setUnit(selectedValue)}>
               <option>C</option>
               <option>F</option>
-            </select>
+            </Choice>
           </label>
           <button disabled={busy || disabled || !region}>
             {busy ? "Сохранение…" : "Установить климат"}

@@ -6,8 +6,7 @@ from backend.services.usage import tracked_stream
 from context_builder import describe_context, estimate
 
 
-def execute(storage, job, handle, chat_stream):
-    config = json.loads(job["config_json"])
+def execute(storage, job, handle, chat_stream, config):
     before = json.loads(job["memory_before_json"] or job["before_json"])
     journal = json.loads(job["context_json"] or "[]")
     # Pre-stage journals contain decision frames without a stage tag. Normalize

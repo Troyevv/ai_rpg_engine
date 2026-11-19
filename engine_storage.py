@@ -170,6 +170,15 @@ class EngineStorage:
                 if v and v['job_id']:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original:
+                        pinned = json.loads(original[0])
+                        for key in ('provider','model','temperature','thinking','max_tokens','context_length','update_tokens','auto_context','budget_mode'):
+                            if key in pinned:
+                                config[key] = pinned[key]
+                            else:
+                                config.pop(key,None)
+                        request = db.execute("SELECT diagnostics_json FROM llm_requests WHERE job_id=? AND stage='narrative' AND status='complete' ORDER BY rowid DESC LIMIT 1",(v['job_id'],)).fetchone()
+                        if request:
+                            config['_recorded_budget'] = json.loads(request[0]).get('budget_plan')
                         config['_extraction_contract'] = json.loads(original[0]).get('_extraction_contract', 1)
                         config['_extraction_transport'] = json.loads(original[0]).get('_extraction_transport', 'chat_json_object')
                     if original and '_prompts' in json.loads(original[0]):
@@ -324,6 +333,9 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             previous_provider = (settings.get('provider','local'), settings.get('model'))
             if config:
+                if any(k in config and config[k] != settings.get(k) for k in
+                       ('model','provider','budget_mode','context_length','max_tokens','update_tokens','thinking')):
+                    settings.pop('_recorded_budget',None)
                 settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','_extraction_contract','_extraction_transport','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             if settings.get('_extraction_contract',1) >= 6 and previous_provider != (settings.get('provider','local'),settings.get('model')):
                 from backend.services.structured_extraction import transport

@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
 import { BookOpen, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -130,7 +131,7 @@ export function Library({
             >
               Посмотреть исходный мир
             </Button>
-            <label>Режим нового прохождения<select aria-label="Режим нового прохождения" value={mode} onChange={e=>setMode(e.target.value)}><option value="narrative">Narrative</option><option value="chat">RP-чат</option></select></label>
+            <label>Режим нового прохождения<Choice aria-label="Режим нового прохождения" value={mode} onValueChange={selectedValue => setMode(selectedValue)}><option value="narrative">Narrative</option><option value="chat">RP-чат</option></Choice></label>
             <div className="actions">
               <Input
                 aria-label="Название прохождения"
