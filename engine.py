@@ -189,12 +189,21 @@ def run_job(path, job_id, handle):
                     history = [t for t in history if t['sequence'] < target['sequence']]
                 sequence = history[-1]['sequence'] + 1 if history else 0
             before['_resolver_turn_id']=sequence+1
-            from backend.runtime_v3.time_skip import TimeSkipRequest, parse_skip, plan_skip
+            from backend.runtime_v3.time_skip import TimeSkipRequest, parse_skip, plan_skip, interpreted_skip
             skip_request = None
             if job['kind'] == 'turn':
                 now = before['world_state']['meta']['world_time']
                 manual_skip = config.get('time_skip')
-                skip_request = TimeSkipRequest(now, now+manual_skip['duration'], manual_skip.get('reason',''), 'manual') if manual_skip else parse_skip(job['user_text'], now, before['character_cards'])
+                if manual_skip:
+                    skip_request = TimeSkipRequest(now, now+manual_skip['duration'], manual_skip.get('reason',''), 'manual')
+                else:
+                    try:
+                        skip_request = parse_skip(job['user_text'], now, before['character_cards'])
+                    except ValueError:
+                        if version < 11:
+                            raise
+                        # An unrepresentable free-text hint is still ordinary player input.
+                        skip_request = None
             skip_result = plan_skip(before['world_state'], skip_request, version=version) if skip_request else None
             if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
@@ -434,14 +443,13 @@ def run_job(path, job_id, handle):
                     from backend.runtime_v3.player_actions import resolver_options
                     def resolve(raw):
                         if skip_result:
-                            planned = skip_result['elapsed_minutes']
-                            if version < 11:
-                                raw.final_scene['elapsed_minutes'] = planned
-                            else:
-                                elapsed = raw.final_scene.setdefault('elapsed_minutes', planned)
-                                if (skip_result['interrupted'] or manual_skip) and elapsed > planned:
-                                    raw.final_scene['elapsed_minutes'] = planned
+                            skip = skip_result
+                            if version >= 11:
+                                skip = interpreted_skip(before['world_state'], skip_request, skip_result,
+                                                        raw.final_scene.get('elapsed_minutes'))
+                                if raw.final_scene.get('elapsed_minutes', skip['elapsed_minutes']) != skip['elapsed_minutes']:
                                     raw.warnings.append(dict(section='scene', code='end_time_after_skip_target', action='use_target'))
+                            raw.final_scene['elapsed_minutes'] = skip['elapsed_minutes']
                         return StateResolver(
                             before['world_state'], narrative, job['user_text'], turn_id=sequence+1,
                             chronology_events=world_history.get('events', []),
@@ -500,10 +508,8 @@ def run_job(path, job_id, handle):
                     if skip_result:
                         changes_skip=deepcopy(skip_result)
                         if version >= 11:
-                            end = resolved.state['meta']['world_time']
-                            changes_skip.update(actual_target=end, elapsed_minutes=end-before['world_state']['meta']['world_time'])
-                            if end < skip_result['actual_target']:
-                                changes_skip.update(interrupted=True, interruption_event_id=None)
+                            changes_skip = interpreted_skip(before['world_state'], skip_request, skip_result,
+                                                           resolved.state['meta']['world_time'] - now)
                         state['last_time_skip']=changes_skip
                     from backend.services.npc_review import publish_cards
                     publish_cards(state, resolved)

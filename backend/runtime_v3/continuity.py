@@ -122,7 +122,7 @@ def project(state, scope, history=None, *, version=1):
                 if t['status'] in ('resolved', 'dormant', 'paused') and core.intersection(t['character_ids'])][:8]
     return dict(pressure=pressure, ordinary_scene_valid=True,
         recent_beats=list(beats.values())[-16:], pending_response_ids=pending,
-        closed_threads=terminal, compression=compression_limit(state, core, version=version), extra_llm_calls=0)
+        closed_threads=terminal, compression=compression_limit(state, core, 10080 if version >= 11 else 30, version=version), extra_llm_calls=0)
 
 
 def scene_signature(state):

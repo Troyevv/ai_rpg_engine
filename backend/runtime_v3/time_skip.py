@@ -86,3 +86,20 @@ def plan_skip(state, request, *, version=1):
                 requested_duration=request.target_minute-request.start_minute, interrupted=bool(event),
                 interruption_event_id=event['id'] if event else None, source=request.source,
                 background_results=[], background_candidates=len(candidates))
+
+
+def interpreted_skip(state, request, planned, elapsed):
+    """Resolve the actual endpoint against the completed scene and objective processes."""
+    if elapsed is None or elapsed == planned['elapsed_minutes']:
+        return planned
+    if type(elapsed) is not int or not 0 <= elapsed <= 10080:
+        from backend.runtime_v3.models import fatal
+        fatal('Некорректная длительность пропуска времени.', 'invalid_time', section='scene')
+    end = request.start_minute + elapsed
+    if request.source == 'manual':
+        end = min(end, request.target_minute)
+    actual = plan_skip(state, TimeSkipRequest(request.start_minute, end), version=11) if end > request.start_minute else {}
+    target = actual.get('actual_target', end)
+    return dict(planned, actual_target=target, elapsed_minutes=target-request.start_minute,
+                interrupted=bool(actual.get('interrupted') or target < request.target_minute),
+                interruption_event_id=actual.get('interruption_event_id'))

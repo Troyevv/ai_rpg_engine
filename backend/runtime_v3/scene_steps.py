@@ -778,6 +778,16 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             if excluded:
                 warnings.append(dict(section='scene', code='cast_disagrees_with_route', actor_ids=excluded, action='use_route'))
                 visible = [cid for cid in visible if cid not in excluded]
+    if version >= 11 and visible is None and location is not None:
+        # Include newly joined travellers on the subject's final shared leg.
+        # Neither a remote contact nor someone seen across the boundary is present.
+        leg = next((row for row in reversed(records['movements']) if row['actor_id'] == subject), None)
+        if leg:
+            elsewhere = set(scene.get('observed_character_ids', []))
+            elsewhere.update(row['actor_id'] for row in scene.get('remote_interactions', []))
+            party = [row['actor_id'] for row in records['movements'] if row['source_event_id'] == leg['source_event_id']]
+            visible = [cid for cid in dict.fromkeys([*camera['present_character_ids'], *party])
+                       if positions.get(cid) == location and cid not in local_exits and cid not in elsewhere]
     if visible is None:
         visible = ([subject] if camera['mode']=='actor' and subject in local_exits else
                    [cid for cid in camera['present_character_ids'] if positions.get(cid)==location and cid not in local_exits])

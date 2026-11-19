@@ -33,6 +33,11 @@ def test_unresolved_appointment_is_context_across_all_clocks():
     assert plan_skip(world, request, version=11)['actual_target'] == 1860
     interval = plan(snapshot(world), dict(amount=2, unit='weeks'), version=11)
     assert interval.actual_target == interval.requested_target
+    from backend.runtime_v3.long_term import run
+    advanced, _, report = run(snapshot(world), dict(amount=2,unit='weeks'), config={'_extraction_contract':11})
+    assert advanced['world_state']['meta']['world_time'] == interval.requested_target
+    assert advanced['world_state']['scheduled_events']['tea'] == world['scheduled_events']['tea']
+    assert report['llm_calls'] == 0
     after = apply(world, {'scene': {'end_time': {'day_offset': 1, 'time': '07:00'}}}).state
     assert after['meta']['world_time'] == 1860
     tea = after['scheduled_events']['tea']
@@ -177,3 +182,30 @@ def test_malformed_inline_action_does_not_consume_following_actions():
     assert prose == 'Листок лежит на столе.'
     assert [c['action'] for c in choices] == ['Прочитать','Отойти']
     assert warnings[0]['received'] == 3 and warnings[0]['available'] == 2
+
+
+def test_free_text_target_is_a_hint_and_structured_skip_keeps_its_bound():
+    from backend.runtime_v3.time_skip import interpreted_skip
+    world = state()
+    start = world['meta']['world_time']
+    for source, expected in [('sleep',90), ('manual',60)]:
+        request = TimeSkipRequest(start, start+60, source=source)
+        planned = plan_skip(world, request, version=11)
+        assert interpreted_skip(world, request, planned, 90)['elapsed_minutes'] == expected
+        stopped = interpreted_skip(world, request, planned, 20)
+        assert stopped['elapsed_minutes'] == 20 and stopped['interrupted']
+        assert stopped['interruption_event_id'] is None
+
+
+def test_shared_final_leg_adds_new_companion_without_moving_observer():
+    world = state()
+    for lid in ('station','park'):
+        world['locations'][lid] = dict(world['locations']['home'], id=lid, name=lid)
+    world['characters']['c']['location_id'] = 'station'
+    result = apply(world, dict(scene=dict(observed_character_ids=['b']),scene_steps=[
+        dict(kind='movement',actor_ids=['a'],endpoint='station'),
+        dict(kind='movement',actor_ids=['a','c'],endpoint='park')]))
+    assert result.state['camera']['present_character_ids'] == ['a','c']
+    assert result.state['camera']['observed_character_ids'] == ['b']
+    assert result.state['characters']['b']['location_id'] == 'home'
+    assert len(result.history['movements']) == 3

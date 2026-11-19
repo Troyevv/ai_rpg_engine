@@ -774,7 +774,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'), world_history)
     from backend.runtime_v3.continuity import project as continuity_project
     scope.continuity_decision = deepcopy(continuity_decision) if continuity_decision is not None else continuity_project(state, scope, world_history, version=extraction_contract)
-    if snapshot.get('_time_skip') or kind == 'background': scope.continuity_decision['compression'] = {'max_minutes':0,'boundary_ids':[]}
+    if extraction_contract >= 11:
+        if not scope.continuity_decision.get('compression', {}).get('boundary_ids'):
+            scope.continuity_decision.pop('compression', None)
+    elif snapshot.get('_time_skip') or kind == 'background':
+        scope.continuity_decision['compression'] = {'max_minutes':0,'boundary_ids':[]}
     scope.pacing_decision = deepcopy(pacing_decision) if pacing_decision is not None else evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan
     scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
@@ -987,6 +991,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False)
         if builder.extraction and extraction_contract >= 11:
             rules += '. Учитывай цель и фактическое время завершённой сцены.'
+        elif extraction_contract >= 11 and snapshot['_time_skip'].get('source') != 'manual' and not snapshot['_time_skip'].get('interrupted'):
+            rules += '. Цель оценена по вводу. Следуй указанному игроком времени и ходу событий.'
         else:
             rules += '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback:
