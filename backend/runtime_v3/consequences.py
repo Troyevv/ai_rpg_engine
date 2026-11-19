@@ -2,7 +2,7 @@
 from collections import defaultdict
 from copy import deepcopy
 
-from backend.runtime_v3.scene_steps import compile_scene, decode, input_schema
+from backend.runtime_v3.scene_steps import compile_scene, decode, state_input_schema
 from backend.runtime_v3.structured_payload import consequence_payload
 from backend.runtime_v3.raw import SECTIONS
 from backend.services.world_delta_errors import StructuralDeltaError
@@ -120,7 +120,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         accepted = {}
         raw, result = evaluate(accepted)
         warnings = []
-        limits = input_schema(10, before['camera']['mode'])['properties']
+        limits = state_input_schema(10, before)['properties']
         # A broken envelope must not turn an over-budget array into thousands
         # of independent resolver runs or circumvent the section limit.
         bounded = {}

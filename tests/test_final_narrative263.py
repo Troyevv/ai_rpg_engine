@@ -28,6 +28,23 @@ def test_physical_ending_and_disclosure_do_not_require_a_route():
     assert {k['actor_id'] for k in result.state['knowledge'].values()}=={'b'}
 
 
+def test_answered_call_accepts_the_scheduling_fields_offered_to_extraction():
+    from backend.runtime_v3.scene_steps import validate
+    world = state()
+    actor = world['camera']['controlled_actor_id']
+    call = dict(channel='VOICE_CALL', status='answered', sender_id=actor, recipient_ids=['b'])
+    world['remote_events']['call'] = call
+    row = dict(id='appointment', assertion='agreed', temporal={'day_offset':1, 'time':'08:30'},
+               player_source_id='proposal', call_time_source_id='proposal',
+               call_evidence=[dict(source_id='proposal', actor_id=actor, quote='До девяти?', assertion='proposal')])
+    payload = {'scheduled_event_changes':[row]}
+    _, errors = validate(payload, world, version=10, collect=True)
+    assert not errors
+    call['status'] = 'ended'
+    _, errors = validate(payload, world, version=10, collect=True)
+    assert any(error.path.get('section')=='scheduled_event_changes' for error in errors)
+
+
 def test_stream_chunks_prose_and_partial_menu():
     scene='  Строка\n«Цитата» \\ "🌅"  '
     wire=json.dumps(dict(scene=scene,actions=[dict(text=str(i),facts=[]) for i in range(6)]))

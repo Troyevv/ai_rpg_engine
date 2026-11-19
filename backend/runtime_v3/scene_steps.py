@@ -218,11 +218,19 @@ def project_schema(schema, *, version=6, camera_mode=None):
     return schema
 
 
-@lru_cache(maxsize=8)
-def input_schema(version=6, camera_mode=None):
+@lru_cache(maxsize=16)
+def input_schema(version=6, camera_mode=None, *, voice=False):
     from backend.runtime_v3.raw import prompt_schema
     return prompt_schema(semantic_slice=True, scene_sequence=True, spatial_version=version, camera_mode=camera_mode, consequence_first=True,
-                         explicit_departures=True, grounded_choices=True, player_agency_required=True)
+                         explicit_departures=True, grounded_choices=True, player_agency_required=True,
+                         communication=True if voice else None, voice=voice)
+
+
+def state_input_schema(version, state):
+    from backend.runtime_v3.remote import active_call
+    camera = state['camera'] if state else {}
+    call = active_call(state, camera.get('controlled_actor_id')) if version >= 10 and state else None
+    return input_schema(version, camera.get('mode'), voice=bool(call and call['status'] == 'answered'))
 
 
 def decode(payload, *, version=6):
@@ -321,7 +329,7 @@ def validate(payload, state=None, *, version=6, collect=False, warnings=None):
                 row['fields'] = kept
                 warnings.append(dict(section='promotions',index=index,field='fields',code='optional_metadata_invalid',action='omit_invalid_fields'))
     errors = []
-    for error in Draft202012Validator(input_schema(version, state['camera']['mode'] if state else None)).iter_errors(p):
+    for error in Draft202012Validator(state_input_schema(version, state)).iter_errors(p):
         path = list(error.absolute_path)
         if version < 10 and path and path[0] in OPTIONAL_SECTIONS | {'choices'}:
             continue  # Existing optional-domain owners still isolate annotation errors.
