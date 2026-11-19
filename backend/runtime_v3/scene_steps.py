@@ -106,6 +106,9 @@ STEP_V8 = TypeAdapter(Annotated[MovementV8 | TravellingInteraction | TravellingI
                                 Field(discriminator='kind')])
 
 
+MAX_SCENE_STEPS = 64
+
+
 def step_adapter(version):
     return STEP_V8 if version >= 8 else GROUP_STEP if version >= 7 else STEP
 
@@ -166,7 +169,7 @@ def project_schema(schema, *, version=6, camera_mode=None):
 
 
     schema.setdefault('$defs', {}).update(steps.pop('$defs', {}))
-    props.update(scene=scene, scene_steps={'type':'array', 'maxItems':64, 'items':steps},
+    props.update(scene=scene, scene_steps={'type':'array', 'maxItems':MAX_SCENE_STEPS, 'items':steps},
         agency_findings={'type':'array','items':{'type':'object','additionalProperties':False,
             'properties':{'narrative_evidence':{'type':'string'},
                 'classification':{'enum':['unauthorized_choice','uncertain','incidental_detail']}},
@@ -231,6 +234,22 @@ def decode(payload, *, version=6):
             fatal('Некорректный JSON Extraction/6.', 'raw_root_invalid', repairable=True)
     if version >= 10 and isinstance(payload, dict):
         payload = {'scene': {}, 'scene_steps': [], **payload}
+        # Some live replies place explicit information steps in their own array.
+        # Keep the same identity, recipient, dependency and section-budget rules.
+        misplaced = payload.get('information')
+        steps = payload['scene_steps']
+        if isinstance(steps, list) and isinstance(misplaced, list) and len(steps)+len(misplaced) <= MAX_SCENE_STEPS:
+            accepted, unknown = [], []
+            for row in misplaced:
+                if isinstance(row, dict) and row.get('kind') == 'information':
+                    accepted.append(row)
+                else:
+                    unknown.append(row)
+            payload['scene_steps'] = [*steps, *accepted]
+            if unknown:
+                payload['information'] = unknown
+            else:
+                del payload['information']
         for field in ('agency_findings','chronology_claims'):
             payload.pop(field, None)
     if not isinstance(payload, dict) or not isinstance(payload.get('scene_steps'), list) or not isinstance(payload.get('scene'), dict):

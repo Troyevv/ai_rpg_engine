@@ -200,3 +200,18 @@ def test_extraction_names_a_host_already_at_the_authored_endpoint():
     departure = resolve(extra, [dict(kind='movement',actor_ids=['b'],assertion='departure',endpoint=None)])
     assert 'b' not in departure.state['camera']['present_character_ids']
     assert departure.state['characters']['b']['location_id'] is None
+
+
+def test_misplaced_information_steps_keep_individual_recipients_and_budget():
+    from backend.runtime_v3.consequences import resolve_consequences
+    from backend.runtime_v3.scene_steps import decode
+    before = state()
+    fact = dict(id='school', text='Снимок из выпускного альбома.')
+    step = dict(kind='information',source_actor_id='b',target_ids=['a'],medium='conversation',
+                claims=[dict(fact_id='school',perceived_by=['a'],assertion='observation',status='known')])
+    payload = dict(facts=[fact],information=[step,'bad independent record'])
+    _,result = resolve_consequences(payload,before,'Разговор о школе.',1,[],lambda raw:apply(before,raw))
+    assert result.state['facts']['school']['text'] == fact['text']
+    assert {k['actor_id'] for k in result.state['knowledge'].values() if k['fact_id']=='school'} == {'a'}
+    assert 'information' in decode(dict(scene_steps=[step]*64,information=[step]),version=10)
+    assert 'information' in decode(dict(information=[dict(kind='movement')]),version=10)
