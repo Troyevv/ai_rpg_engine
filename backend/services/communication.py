@@ -24,7 +24,7 @@ def execute(storage, job, handle, chat_stream, config):
         # optional background Knowledge before the source message/path itself.
         group_reaction = messages[0]['content'].startswith('Group communication reaction/')
         limit = min(2400 if group_reaction else 1200, config['update_tokens'])
-        budget = config['context_length'] - limit - 512
+        budget = min(config['context_length'] - limit, config.get('_budget_caps', {}).get('max_input') or config['context_length']) - 512
         data = json.loads(messages[1]['content'])
         while estimate(messages) > budget:
             if group_reaction:

@@ -726,7 +726,7 @@ from backend.services.token_budget import INPUT_TARGET
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=INPUT_TARGET, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False):
+                  target_context_budget=INPUT_TARGET, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False, max_input=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:
@@ -1068,6 +1068,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         letter_context_index = len(messages)
         messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
+    if max_input is not None:
+        hard_context_limit = min(hard_context_limit, max_input - 256)
     target = min(target_context_budget, hard_context_limit)
     if builder.extraction and not validation_feedback:
         # Leave soft headroom for the previous JSON plus diagnostic feedback.

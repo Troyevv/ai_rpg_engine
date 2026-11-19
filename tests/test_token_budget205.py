@@ -165,3 +165,12 @@ def test_resume_pins_policy_and_checks_reloaded_local_capacity():
     assert snapshot(larger) == snapshot(original)
     with pytest.raises(ValueError, match='Сохранённый план несовместим'):
         prepare(recorded, 'turn', loaded={'config': {'context_length': 8192}})
+
+
+def test_scene_selector_observes_independent_input_cap():
+    from long_world_fixture import long_world
+    from context_builder import build_context
+    state, turns, history = long_world(4)
+    messages = build_context(state, turns, 'Жду ответа.', 'turn', 131072, 2000,
+                             world_history=history, max_input=32768, extraction_contract=11)
+    assert messages.selection['hard_context_limit'] == 32768 - 256

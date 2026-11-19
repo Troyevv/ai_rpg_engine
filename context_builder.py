@@ -28,7 +28,7 @@ def describe_context(messages):
 
 
 def build_context(state, history, user_text, kind, context_length, reserve, extraction_text=None,
-                  validation_feedback=None, recent_turns=6, prompts=None, world_history=None, target_context_budget=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False):
+                  validation_feedback=None, recent_turns=6, prompts=None, world_history=None, target_context_budget=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False, max_input=None):
     from backend.runtime_v3.context import build_context as build_v3
     if state.get('schema_version') != 3:
         # Explicit read-only draft preview boundary. Saved runtime jobs enter as v3.
@@ -37,4 +37,4 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     from backend.services.token_budget import INPUT_TARGET
     if target_context_budget is None: target_context_budget = INPUT_TARGET
     return build_v3(state, history, user_text, kind, context_length, reserve,
-                    extraction_text, validation_feedback, recent_turns, prompts, world_history, target_context_budget, pacing_decision, initiative_decision, continuity_decision, extraction_contract, suggestions, public_observation)
+                    extraction_text, validation_feedback, recent_turns, prompts, world_history, target_context_budget, pacing_decision, initiative_decision, continuity_decision, extraction_contract, suggestions, public_observation, max_input)

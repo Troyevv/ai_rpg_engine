@@ -116,13 +116,14 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
         'elapsed_minutes=0. Не действуй за управляемого персонажа '+str(protected)+'. Не добавляй его в сцену. '
         'Намерение может остаться незавершённым. Не выдумывай события без причины.')
     if batch: instruction+=' Обработай одной группой только причинно обусловленные изменения интервала: '+json.dumps(batch,ensure_ascii=False)+'. Не обязаны завершиться все намерения.'
-    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],extraction_contract=contract_version,prompts=config.get('_prompts'),world_history=world_history)
+    max_input = config.get('_budget_caps', {}).get('max_input')
+    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],max_input=max_input,extraction_contract=contract_version,prompts=config.get('_prompts'),world_history=world_history)
     pacing_decision=messages.selection['pacing']
     initiative_decision=messages.selection['initiative']
     from backend.services.letter_sources import generate_result
     from context_builder import estimate
     preflight_downstream(config, lambda reserve: background_context(camera,[],instruction,'background',
-        context_length,reserve,extraction_text='',extraction_contract=contract_version,prompts=config.get('_prompts'),
+        context_length,reserve,max_input=max_input,extraction_text='',extraction_contract=contract_version,prompts=config.get('_prompts'),
         world_history=world_history,pacing_decision=pacing_decision,initiative_decision=initiative_decision), 'world_simulation_delta')
     narrative, artifacts = generate_result(generate, 'world_simulation',messages,config['max_tokens'],config.get('temperature',0.8), camera['world_state'])
     if cancelled.is_set():return snapshot,history_batch
@@ -135,7 +136,7 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     for attempt in range(2):
         unavailable = False
         try:
-            messages=background_context(camera,[],instruction,'background',context_length,update,extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
+            messages=background_context(camera,[],instruction,'background',context_length,update,max_input=max_input,extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
             payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,update,0.1,response_format={'type':'json_object'}))
         except BackgroundGenerationError:
             if contract_version < 10:

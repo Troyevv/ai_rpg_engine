@@ -557,6 +557,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 'открытой сцены, каждое {"text":"…","facts":[]} с ID ранее известных POV сведений, '
                 'либо пустым списком для непосредственно видимой сцены.')
         narrative = ""
+        max_input = config.get("_budget_caps", {}).get("max_input")
         try:
             messages = build_context(
                 camera,
@@ -565,7 +566,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 "background",
                 config.get("context_length", 32768),
                 config.get("max_tokens", 2000),
-                prompts=config.get("_prompts"),
+                max_input=max_input, prompts=config.get("_prompts"),
                 world_history=history,
                 pacing_decision=group_policy, extraction_contract=version,
             )
@@ -577,7 +578,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             from backend.services.token_budget import preflight_downstream, extraction_output
             from context_builder import estimate
             preflight_downstream(config, lambda reserve: build_context(camera, [], instruction, 'background',
-                config['context_length'],reserve,extraction_text='',extraction_contract=version,prompts=config.get('_prompts'),
+                config['context_length'],reserve,max_input=max_input,extraction_text='',extraction_contract=version,prompts=config.get('_prompts'),
                 world_history=history,pacing_decision=messages.selection['pacing'],initiative_decision=messages.selection['initiative']),
                 'long_term_extraction')
             report["llm_calls"] += 1
@@ -619,7 +620,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         "background",
                         config.get("context_length", 32768),
                         update,
-                        extraction_text=narrative,
+                        max_input=max_input, extraction_text=narrative,
                         extraction_contract=config.get("_extraction_contract", 1),
                         validation_feedback=feedback,
                         pacing_decision=messages.selection["pacing"],

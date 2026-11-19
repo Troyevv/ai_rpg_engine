@@ -162,6 +162,7 @@ def run_job(path, job_id, handle):
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
             config = prepare_job(model)
             context = config['context_length']
+            max_input = config['_budget_caps'].get('max_input')
             recorded = config.get('_recorded_budget')
             if recorded:
                 original_endpoint = recorded.get('capabilities',{}).get('endpoint_id')
@@ -291,7 +292,7 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         from llm import ProviderGenerationError
                         before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, cancelled=handle.cancelled, provider_errors=(ProviderGenerationError,), history_events=world_history.get('events', []))
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], extraction_contract=version, public_observation=job['kind']=='background', recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], max_input=max_input, extraction_contract=version, public_observation=job['kind']=='background', recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
                 if agency_required(before['world_state'], job['user_text'], job['kind']) and not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
                     from copy import copy
@@ -317,7 +318,7 @@ def run_job(path, job_id, handle):
                     from backend.runtime_v3.initiative import recorded_plan
                     from backend.runtime_v3.continuity import recorded as recorded_continuity
                     preflight_downstream(config, lambda reserve: build_context(
-                        before, history, job['user_text'], job['kind'], context, reserve, extraction_text='',
+                        before, history, job['user_text'], job['kind'], context, reserve, max_input=max_input, extraction_text='',
                         extraction_contract=version, recent_turns=config.get('recent_turns',6), prompts=config.get('_prompts'),
                         world_history=world_history, pacing_decision=recorded_policy(messages,before['world_state']),
                         initiative_decision=recorded_plan(messages), continuity_decision=recorded_continuity(messages)))
@@ -384,7 +385,7 @@ def run_job(path, job_id, handle):
                 # A new, explicitly linked candidate uses corrected current canon.
                 # No Narrative request; old context/hash belongs to the old branch.
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
-                    config['max_tokens'], extraction_contract=version, recent_turns=config.get('recent_turns',6),
+                    config['max_tokens'], max_input=max_input, extraction_contract=version, recent_turns=config.get('recent_turns',6),
                     prompts=config.get('_prompts'), world_history=world_history)
                 storage.save_context(job_id, messages, before)
             # Use exactly the policy supplied to this narrative, including retry /
@@ -439,7 +440,7 @@ def run_job(path, job_id, handle):
                 stage_started=time.perf_counter()
                 try:
                     messages = build_context(before, history, job['user_text'], job['kind'], context,
-                                             config['update_tokens'], extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
+                                             config['update_tokens'], max_input=max_input, extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
                                              suggestions=suggestions, validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     correction_grounds = config.get('_narrative_correction', {}).get('grounds', [])
                     calendar_grounds = [g for g in correction_grounds if g.get('kind') not in ('agency','birth','birth_boundary')]
