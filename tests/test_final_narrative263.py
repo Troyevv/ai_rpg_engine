@@ -177,3 +177,26 @@ def test_call_frame_scopes_actions_to_the_current_call_only():
     assert [c['action'] for c in choices] == [o['text'] for o in options]
     assert all(c['interaction_channel']=='call' for c in choices)
     assert warnings[0]['received']==7 and warnings[0]['available']==6
+
+
+def test_extraction_names_a_host_already_at_the_authored_endpoint():
+    from backend.runtime_v3.consequences import resolve_consequences
+    before = state()
+    before['locations']['cafe'] = dict(before['locations']['home'], id='cafe', name='Кафе')
+    before['characters']['b']['location_id'] = 'cafe'
+    before['camera']['present_character_ids'].remove('b')
+    authored = dict(ending=dict(location_id='cafe',present_ids=['a']))
+    extra = dict(ending=dict(location_id='cafe',present_ids=['a','b','c']))
+    def resolve(scene, steps=()):
+        return resolve_consequences(dict(scene=scene,scene_steps=list(steps)),before,'Хозяйка приветствует гостя.',1,[],
+            lambda raw:apply(before,raw),authored_scene=authored)[1]
+    result = resolve(extra)
+    assert result.state['camera']['present_character_ids'] == ['a','b']
+    assert result.state['characters']['c']['location_id'] == before['characters']['c']['location_id']
+    assert all(row['actor_id'] != 'b' for row in result.history['movements'])
+    observed = resolve(dict(extra, observed_character_ids=['b']))
+    assert observed.state['camera']['present_character_ids'] == ['a']
+    assert observed.state['camera']['observed_character_ids'] == ['b']
+    departure = resolve(extra, [dict(kind='movement',actor_ids=['b'],assertion='departure',endpoint=None)])
+    assert 'b' not in departure.state['camera']['present_character_ids']
+    assert departure.state['characters']['b']['location_id'] is None

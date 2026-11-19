@@ -28,6 +28,12 @@ def parse_skip(text, now, cards=()):
     text = text.strip().casefold().rstrip('.!')
     # Only a direct player action, never quoted dialogue, negation or a hypothetical.
     if re.search(r'[«»"?]|\b(?:не|если|бы|возможно)\b', text): return None
+    reason = text
+    # An explicit sleep action can follow preparations in the same player input.
+    # Restrict the clock calculation to that clause (not e.g. time spent packing).
+    sleep = re.search(r'(?:^|[.,!]\s*|\s+(?:и|затем|потом)\s+)(?:я\s+)?(?P<action>(?:ложусь спать|сплю)\b.*)$', text)
+    if sleep:
+        text = sleep['action']
     match = re.match(r'^(?:я )?(сплю|ложусь спать|жду|ожидаю|еду|иду|путешествую|следующие|пропускаю)\b', text)
     if not match: return None
     source = {'сплю':'sleep','ложусь спать':'sleep','жду':'wait','ожидаю':'wait','еду':'travel','иду':'travel','путешествую':'travel','следующие':'long_action','пропускаю':'narrative'}[match[1]]
@@ -37,7 +43,7 @@ def parse_skip(text, now, cards=()):
         number = int(duration[1]) if duration[1].isdigit() else NUMBERS[duration[1]]
         target = now+number*(1 if duration[2].startswith('минут') else 60 if duration[2].startswith('час') else 1440)
     else:
-        until = re.search(r'\bдо\s+(?:(следующего)\s+|(завтра)\s+в\s+)?(\d{1,2}:\d{2}|вечера|утра|полуночи)\b', text)
+        until = re.search(r'\bдо\s+(?:(следующего|завтрашнего)\s+|(завтра)\s+в\s+)?(\d{1,2}:\d{2}|вечера|утра|полуночи)\b', text)
         if until:
             clock = {'вечера':1080,'утра':420,'полуночи':0}.get(until[3])
             if clock is None:
@@ -64,7 +70,7 @@ def parse_skip(text, now, cards=()):
                     else:forms.add(first+'а')
                 if who[1] in forms:matches.append(card['id'])
             if len(matches)==1:waiting=matches[0]
-    return TimeSkipRequest(now,target,text,source,waiting) if target is not None else None
+    return TimeSkipRequest(now,target,reason,source,waiting) if target is not None else None
 
 
 def plan_skip(state, request):

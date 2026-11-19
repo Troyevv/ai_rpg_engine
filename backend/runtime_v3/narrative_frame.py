@@ -2,10 +2,13 @@
 import json
 import re
 
-FORMAT = ('JSON object: "scene": full literary prose first; "actions": six distinct, specific open choices '
-          'in the story language, each {"text":"…","facts":[]}. Cite known POV fact IDs for prior knowledge. '
-          'No secrets or predetermined outcomes. Optional "ending": {"location_id":"ID","present_ids":["ID"],'
-          '"elapsed_minutes":30}. Only final physical participants, including the player in actor mode. Omit unknown fields.')
+# Keep the historical prefix for jobs whose original messages are replayed on retry.
+_FRAME_PREFIX = 'JSON object: "scene": full literary prose first;'
+FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open choices in the story language, '
+          'each {"text":"…","facts":[]}. Use [] for this scene and personal decisions; cite only exact known '
+          'fact IDs when recalling prior information. No secrets or predetermined outcomes. Optional "ending": '
+          'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
+          'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
 _DECODER = json.JSONDecoder()
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
 
@@ -15,7 +18,7 @@ def requested(messages):
         content = msg.get('content', '')
         if content.startswith('Текущий ввод\n'):
             try:
-                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((FORMAT, 'JSON: сначала "scene"'))
+                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((_FRAME_PREFIX, 'JSON: сначала "scene"'))
             except (ValueError, AttributeError):
                 return False
     return False

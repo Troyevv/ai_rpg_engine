@@ -63,6 +63,36 @@ def components(proposal, before):
         yield [choice]
 
 
+def scene_with_authored_ending(proposal, authored, before):
+    extracted = proposal.get('scene', {})
+    scene = {**extracted, **authored} if isinstance(extracted, dict) else dict(authored)
+    ending = scene.get('ending')
+    second = extracted.get('ending') if isinstance(extracted, dict) else None
+    if not isinstance(ending, dict) or not isinstance(second, dict):
+        return scene
+    location = ending.get('location_id')
+    cast, extracted_cast = ending.get('present_ids'), second.get('present_ids')
+    if (not isinstance(location, str) or second.get('location_id') != location
+            or not isinstance(cast, list) or not isinstance(extracted_cast, list) or len(extracted_cast)>64):
+        return scene
+    # Extraction can name a host omitted from the author's cast. Enrich the cast
+    # only at the same endpoint, without relocating anyone on a disagreement.
+    steps = proposal.get('scene_steps', [])
+    moving = set()
+    if isinstance(steps, list):
+        for step in steps:
+            if isinstance(step, dict) and step.get('kind') == 'movement' and isinstance(step.get('actor_ids'), list):
+                moving.update(cid for cid in step['actor_ids'] if isinstance(cid, str))
+    present = list(cast)
+    for cid in extracted_cast:
+        if len(present) >= 64:
+            break
+        if isinstance(cid, str) and cid not in present and cid not in moving and before['characters'].get(cid, {}).get('location_id') == location:
+            present.append(cid)
+    scene['ending'] = {**ending, 'present_ids': present}
+    return scene
+
+
 def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None, authored_scene=None):
     def evaluate(candidate):
         raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=10, suggestions=suggestions)
@@ -75,8 +105,7 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
         decoding_warnings = [dict(section='extraction', code='raw_root_invalid', action='preserve_scene')]
     extracted_scene = proposal.get('scene', {})
     if authored_scene:
-        scene = extracted_scene
-        proposal['scene'] = {**(scene if isinstance(scene, dict) else {}), **authored_scene}
+        proposal['scene'] = scene_with_authored_ending(proposal, authored_scene, before)
     if not suggestions and 'choices' in proposal:
         # No author-provided menu exists to annotate. Ignore unsolicited
         # indexes, including malformed ones, before grouping consequences.
