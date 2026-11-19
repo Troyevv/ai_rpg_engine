@@ -32,10 +32,12 @@ def create_app(db_path=None, recover=True):
     repo = Repository(db_path)
     preparation = Preparation(repo)
     credentials = Credentials(repo)
+    from backend.api.chat import install as install_chat
 
     @asynccontextmanager
     async def lifespan(app):
         if recover:
+            app.state.chat.recover()
             with repo.connect() as db:
                 stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
                 interrupted = [r[0] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
@@ -46,6 +48,7 @@ def create_app(db_path=None, recover=True):
             for jid in stale:
                 preparation.stop(jid)
         yield
+        app.state.chat.shutdown()
         with repo.connect() as db:
             games = [r['id'] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
             drafts = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
@@ -55,6 +58,7 @@ def create_app(db_path=None, recover=True):
             preparation.stop(jid)
 
     app = FastAPI(title='AI RPG Engine', version='2.0.0', lifespan=lifespan)
+    install_chat(app, repo, credentials)
     from backend.api.protagonist import install as install_protagonist
     install_protagonist(app,repo,credentials)
     from backend.api.narrative_policy import install as install_narrative_policy

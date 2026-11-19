@@ -115,7 +115,16 @@ class RuntimeStorage:
             job = db.execute('SELECT save_id,session_id,attempt_epoch,revision FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             workspace = None
             if not job and save_id is None:
-                workspace = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()[0]
+                preparation = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()
+                # Chat jobs share the usage ledger, but never a Narrative save/workspace.
+                if not preparation:
+                    chat_table = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_jobs'").fetchone()
+                    creation_table = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chat_creation_jobs'").fetchone()
+                    chat_job = chat_table and db.execute('SELECT 1 FROM chat_jobs WHERE id=?',(job_id,)).fetchone()
+                    creation_job = creation_table and db.execute('SELECT 1 FROM chat_creation_jobs WHERE id=?',(job_id,)).fetchone()
+                    if not chat_job and not creation_job:
+                        raise ValueError('Задача генерации не найдена.')
+                workspace = preparation[0] if preparation else None
             diagnostics = dict(diagnostics)
             diagnostics['provider_attempt'] = dict(request_id=rid, job_id=job_id, stage=stage,
                 **(dict(attempt_epoch=getattr(self,'worker_epoch',None) if getattr(self,'worker_epoch',None) is not None else job['attempt_epoch'], revision=job['revision']) if job else {}))

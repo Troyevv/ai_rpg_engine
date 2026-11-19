@@ -49,6 +49,7 @@ jobs:
           retention-days: 7
   backend-tests:
     runs-on: ubuntu-latest
+    # Keep setup, the combined Chat/Narrative tests and report upload within each shard's budget.
     timeout-minutes: 35
     strategy:
       fail-fast: false

@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -768,14 +769,86 @@ draft_generation.run = generation_fixture
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
     'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536}.get(model, 32768)}
 }
+chat_cancel_next = False
+chat_markdown_release = threading.Event()
+CHAT_MARKDOWN = '''Лена ставит чашку на стол. За окном шумит дождь. «Кто-то стучал», — говорит она.
+
+---
+
+### Варианты действий
+
+1. **Спросить Лену:** «Ты ждёшь гостей?»
+2. **Осмотреть дверь:** проверить замок, не открывая.
+3. **Позвать гостя:** «Кто там?»
+4. **Подождать:** остаться у стола.
+
+**Свободный ввод:** свой вариант.
+
+---
+
+### Текущая сцена
+
+**Время:** 9 октября, точное время не установлено.
+
+**Место:** комната у маяка.
+
+**Рядом:** Лена, чашка, закрытая дверь; за окном дождь.
+'''
+
 def authoring_stream(**kwargs):
+    global chat_cancel_next
+    if kwargs.get('model') in ('chat-tools-fixture','chat-tools-summary-fixture'):
+        from chat_tools_fixture import memory
+        if 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content']:
+            text=memory()
+        elif kwargs['model']=='chat-tools-summary-fixture':
+            text=kwargs['messages'][1]['content'].split('\n',1)[1].replace('· Обязательства / обещания: вернуть книгу.','· Обязательства / обещания: книга возвращена.')
+            text+='\nАвторская запись: Лена закрыла дверь. Причина не установлена.\n'
+        else:
+            text=NARRATIVE*2+'\n\n'+CHAT_MARKDOWN
+        kwargs['on_usage']({'prompt_tokens':420,'completion_tokens':180,'prompt_cache_hit_tokens':80})
+        for offset in range(0,len(text),90):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield text[offset:offset+90];time.sleep(.02)
+        kwargs['on_finish']('stop');return
+    if kwargs.get('model') == 'chat-markdown-fixture':
+        # Hold the external stream after Markdown has arrived, so the browser can
+        # assert formatting before the job completes and /markdown is requested.
+        chat_markdown_release.clear()
+        kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
+        for offset in range(0,len(CHAT_MARKDOWN),37):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield CHAT_MARKDOWN[offset:offset+37]
+            time.sleep(.025)
+        if not chat_markdown_release.wait(30): raise RuntimeError('fixture: expected Markdown stream release')
+        kwargs['on_finish']('stop')
+        return
+    if kwargs.get('model') in ('chat-fixture', 'chat-summary-fixture', 'chat-mobile-fixture'):
+        # Chat production service/context/API/SQLite; substitute external provider IO only.
+        from backend.chat.context import TEMPLATE
+        text = (TEMPLATE + '\n12 мая 2010 — рождение Лены. Тайну знает только Лена. Обещание выполнено.\nНезавершённый разговор: «Ты хотел сказать…»') if kwargs['model']=='chat-summary-fixture' or 'первоначальную авторскую выжимку' in kwargs['messages'][0]['content'] else ('— Ты хотел сказать? — Лена ставит чашку на стол.\n\n'+NARRATIVE)*3
+        if kwargs['model']=='chat-mobile-fixture' and 'первоначальную авторскую выжимку' not in kwargs['messages'][0]['content']:
+            text = NARRATIVE*6+'\n\n'+CHAT_MARKDOWN
+        kwargs['on_usage']({'prompt_tokens':321,'completion_tokens':120,'prompt_cache_hit_tokens':80})
+        if chat_cancel_next:
+            chat_cancel_next = False
+            yield 'Лена ставит чашку. Незавершённый ответ…'
+            if not kwargs['cancel_event'].wait(30): raise RuntimeError('fixture: expected explicit cancellation')
+            raise RuntimeError('stopped')
+        for offset in range(0,len(text),80):
+            if kwargs['cancel_event'].is_set(): raise RuntimeError('stopped')
+            yield text[offset:offset+80]
+            time.sleep(.025)
+        kwargs['on_finish']('stop')
+        return
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
         yield json.dumps({"value":"Выросла у моря. Работала в мастерской, затем открыла своё дело."},ensure_ascii=False)
         return
     yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
-llm.get_available_models = lambda: ['local-model']
+llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture','chat-tools-fixture','chat-tools-summary-fixture']
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
@@ -1433,6 +1506,67 @@ if __name__ == '__main__':
         from test_npc_review_revision import evolve
         evolve(app.state.repository,sid)
         return app.state.repository.get_save(sid)
+
+    @app.post('/test/chat-cancel-window')
+    def chat_cancel_window():
+        global chat_cancel_next
+        chat_cancel_next = True
+        return {'armed':True}
+
+    @app.post('/test/chat-markdown-release')
+    def release_chat_markdown():
+        chat_markdown_release.set()
+        return {'released':True}
+
+    @app.post('/test/chat-history')
+    def chat_history():
+        # Synthetic storage/rendering fixture, not 1000 played turns.
+        from backend.chat.models import Create, Settings, Generate, Confirm
+        from backend.chat.context import RP_PROMPT, TEMPLATE
+        from uuid import uuid4
+        r=app.state.chat.repo
+        settings=Settings(prompt=RP_PROMPT)
+        settings.reply.model='chat-fixture';settings.summary.model='chat-summary-fixture'
+        settings.reply.auto_context=False;settings.reply.auto_output=False
+        settings.summary.auto_context=False;settings.summary.auto_output=False
+        settings.summary.context_length=65536
+        cid=r.create(Create(token=uuid4().hex,name='Архив 1000 сообщений',memory=TEMPLATE,settings=settings).model_dump())
+        for chapter in range(4):
+            with r.transaction() as db:
+                b=r.branch(db,cid)
+                for i in range(250):
+                    r.add_message(db,cid,b,'user' if i%2==0 else 'assistant',f'Глава {chapter+1}, сообщение {i+1}.')
+            c=r.state(cid)
+            job=app.state.chat.start(cid,Generate(revision=c['revision'],token=uuid4().hex,kind='summary',next_chapter=True).model_dump())
+            for _ in range(1000):
+                job=r.job(cid,job['id'])
+                if job['status']!='running':break
+                time.sleep(.01)
+            if job['status']!='complete':raise ValueError('Synthetic summary did not complete')
+            c=r.state(cid)
+            r.confirm(cid,job['output_id'],Confirm(revision=c['revision'],token=uuid4().hex,text=job['response'],next_chapter=True).model_dump())
+        return r.state(cid)
+
+    @app.post('/test/chat-tools-history')
+    def chat_tools_history():
+        from chat_tools_fixture import memory
+        from uuid import uuid4
+        r=app.state.chat.repo;c=chat_history();cid=c['id']
+        settings=c['settings']
+        for stage,model in [('reply','chat-tools-fixture'),('summary','chat-tools-summary-fixture')]:
+            settings[stage].update(model=model,context_length=524288)
+        r.configure(cid,dict(revision=c['revision'],token=uuid4().hex,settings=settings))
+        c=r.state(cid)
+        d=r.manual_memory(cid,dict(revision=c['revision'],token=uuid4().hex,text=memory(95)))
+        c=r.state(cid)
+        r.confirm(cid,d['draft'],dict(revision=c['revision'],token=uuid4().hex,text=memory(95),next_chapter=False,accept_partial=False))
+        with r.transaction() as db:
+            b=r.branch(db,cid);messages=r.messages(db,b['id'])
+            for index in range(0,1000,11):
+                db.execute('INSERT INTO chat_bookmarks(campaign_id,message_id,note,priority) VALUES(?,?,?,?)',
+                           (cid,messages[index]['id'],f'Закладка {index:04d} — важный разговор у маяка',1))
+            for i in range(50):r.add_message(db,cid,b,'assistant',f'Продолжение в главе 5, сообщение {i+1}.\n\n'+CHAT_MARKDOWN)
+        return dict(campaign=r.state(cid),target=messages[11]['id'])
 
     @app.post('/test/seed')
     def seed():

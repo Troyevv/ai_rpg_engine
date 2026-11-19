@@ -19,15 +19,18 @@ export function Library({
   onOpenChange,
   choose,
   prepare,
+  chat,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   choose: (world: number, save?: number) => void;
   prepare: () => void;
+  chat?: (source?: {world_id:number}) => void;
 }) {
   const [worlds, setWorlds] = useState<WorldItem[]>([]);
   const [selected, setSelected] = useState<number>();
   const [saves, setSaves] = useState<SaveItem[]>([]);
+  const [mode,setMode]=useState("narrative");
   const [name, setName] = useState("Новое прохождение");
   const [worldName, setWorldName] = useState("");
   const [markdown, setMarkdown] = useState("");
@@ -70,6 +73,7 @@ export function Library({
           </DialogDescription>
         </DialogHeader>
         <div className="actions">
+          {chat&&<Button variant="outline" onClick={()=>chat()}>RP-чат · кампании</Button>}
           <Button
             onClick={() => {
               onOpenChange(false);
@@ -113,7 +117,7 @@ export function Library({
                   onOpenChange(false);
                 }}
               >
-                <span>{s.name}</span>
+                <span>{s.name} · Narrative</span>
                 <span>Продолжить →</span>
               </button>
             ))}
@@ -126,6 +130,7 @@ export function Library({
             >
               Посмотреть исходный мир
             </Button>
+            <label>Режим нового прохождения<select aria-label="Режим нового прохождения" value={mode} onChange={e=>setMode(e.target.value)}><option value="narrative">Narrative</option><option value="chat">RP-чат</option></select></label>
             <div className="actions">
               <Input
                 aria-label="Название прохождения"
@@ -136,6 +141,7 @@ export function Library({
                 disabled={busy || !name.trim()}
                 onClick={() =>
                   run(async () => {
+                    if(mode==="chat"&&chat){chat({world_id:selected});return;}
                     const s = await api<Save>(`/worlds/${selected}/saves`, {
                       name,
                     });

@@ -23,11 +23,16 @@ import {inspectorSections,it,panelLabel} from "./lib/inspector";
 import { Library } from "./Library";
 import { WorldWorkshop } from "./WorldWorkshop";
 import { Game } from "./Game";
+import {ChatMode} from "./ChatMode";
+import type {ChatSource} from "./chatTypes";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
 const GameCalendar=lazy(()=>import('./GameCalendar').then(m=>({default:m.GameCalendar})));
 const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
 export default function App() {
+  const [chatOpen,setChatOpen]=useState(()=>localStorage.getItem("active-mode")==="chat");
+  const [chatSource,setChatSource]=useState<ChatSource|undefined>();
+  const openChat=(source?:ChatSource)=>{setChatSource(source);setChatOpen(true);localStorage.setItem("active-mode","chat")};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
   const mobileMenuVisible=useRef(mobileMenu);mobileMenuVisible.current=mobileMenu;
@@ -208,6 +213,7 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
+  if(chatOpen)return <ThemeProvider world={null} preview><ThemedToaster/><ChatMode source={chatSource} onBack={()=>{setChatOpen(false);localStorage.setItem("active-mode","narrative")}} onConnections={()=>setSettings(true)}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,"PUT");setPrefs(p)}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
   return (
     <ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
       <ThemedToaster />
@@ -246,49 +252,58 @@ export default function App() {
       </nav>}
       <div className="app-main">
         <header className="topbar" hidden={inspector}>
-          <button className="breadcrumb" onClick={() => setLibrary(true)}>
-            <LibraryIcon size={17} />
-            <span>
-              {view === "prepare"
-                ? "Мастерская"
-                : world?.name || "Твои истории"}
-            </span>
-            <span className="muted">⌄</span>
-          </button>
-          {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<div className="topbar-actions">
-            {view === "game" && (
+          <div className="topbar-start">
+            <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
+          </div>
+          <div className="topbar-title">
+            <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
+              <LibraryIcon size={17} />
+              <span>
+                {view === "prepare"
+                  ? "Мастерская"
+                  : world?.name || "Твои истории"}
+              </span>
+              <span className="muted">⌄</span>
+            </button>
+          </div>
+          <div className="topbar-actions">
+            {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<>
+              {view === "game" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={reading ? "Выйти из чтения" : "Режим чтения"}
+                  onClick={() => {
+                    setReading(!reading);
+                    setInspector(false);
+                  }}
+                >
+                  {reading ? <EyeOff size={19} /> : <Eye size={19} />}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={reading ? "Выйти из чтения" : "Режим чтения"}
-                onClick={() => {
-                  setReading(!reading);
-                  setInspector(false);
-                }}
+                disabled={prefsLoading}
+                aria-label="Настройки"
+                onClick={() => setSettings(true)}
               >
-                {reading ? <EyeOff size={19} /> : <Eye size={19} />}
+                <Settings2 size={18} />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={prefsLoading}
-              aria-label="Настройки"
-              onClick={() => setSettings(true)}
-            >
-              <Settings2 size={18} />
-            </Button>
-            {world && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => inspect(panel)}
-              >
-                <PanelRight size={16} />
-                <span className="desktop-label">О мире</span>
-              </Button>
-            )}
-          </div>}
+              {world && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="О мире"
+                  title="О мире"
+                  onClick={() => inspect(panel)}
+                >
+                  <PanelRight size={16} />
+                  <span className="desktop-label">О мире</span>
+                </Button>
+              )}
+            </>}
+          </div>
         </header>
         {view === "prepare" && (
           <WorldWorkshop
@@ -342,6 +357,7 @@ export default function App() {
         onOpenChange={setLibrary}
         choose={choose}
         prepare={() => setView("prepare")}
+        chat={(source)=>{setLibrary(false);openChat(source)}}
       />
       <Inspector
         storyTarget={storyTarget}
