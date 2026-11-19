@@ -117,7 +117,7 @@ def test_world_low_policy_scale_and_frozen_legacy_snapshot():
 
 
 @pytest.mark.skipif(not os.getenv('RPG_GENERATION266_EXPORT'),reason='private original supplied separately')
-def test_original_export_exact_bases():
+def test_original_export_exact_bases(tmp_path):
     raw=Path(os.environ['RPG_GENERATION266_EXPORT']).read_bytes()
     assert hashlib.sha256(raw).hexdigest()=='fa6f113176acebdb100a2302ee005437cc2b5ba35eec9eb3db57e1cb36d9503a'
     archive=json.loads(raw);final=archive['candidate_snapshot'];jid=archive['job_id']
@@ -133,10 +133,14 @@ def test_original_export_exact_bases():
     with patch.object(draft_response,'response',return_value=''.join(p['text'] for p in parts)),patch.object(draft_creative,'develop',return_value=None):
         draft_generation.run(SimpleNamespace(repo=repo),jid,cfg,None,SimpleNamespace(cancel=Event()),None,None)
     base=states[-1]
+    repo=Repository(tmp_path/'exact.sqlite')
+    wid=repo.create_workspace('Приватный повтор')['id']
+    local=repo.begin_preparation(wid,'draft_world','',dict(_draft_task='world',_draft_input=cfg['_draft_source']),0)
     second=deepcopy(base)
     second['world']['characters']=final['world']['characters']
     second['authoring']['calendar_completion']=final['authoring']['calendar_completion']
     for state,record,expected in zip((base,second),[*archive['creative_history'],archive['creative']],[(88,12,9),(22,8,3)]):
+        repo.save_draft_candidate(local,state,[],review=dict(status='not_started',issues=[]))
         assert candidate_hash(state)==record['before_hash']
         clean,why=draft_creative.proposal_text(record['current_reply'])
         restored,batch=apply_proposal(state,clean)
@@ -144,3 +148,47 @@ def test_original_export_exact_bases():
         assert why==('extra_outer_brace' if expected[0]==88 else None)
         if why:assert any('Тимур' in c['name'] and 'Внешность' in c['fields'] for c in draft_creative.npc_gaps(restored))
     assert final['locations'][1]!=restored['locations'][1]
+    repo.save_draft_candidate(local,final,[],review=archive['recovery']['review'])
+    keys=('responses','creative','creative_history','actual_cost','actual_tokens','reserved_tokens')
+    repo.save_response_journal(local,{key:archive[key] for key in keys})
+    repo.draft_phase(local,'reviewing')
+    repo.preparation_progress(local,'','error',archive['application']['error'])
+    original=repo.draft(wid,True)
+    for package,count in zip(original['creative_packages'],[88,22]):
+        base_hash=package['base_hash']
+        preview=repo.creative_recovery(wid,local,base_hash)
+        assert preview['mode']=='copy' and len(preview['changes'])==count
+        receipt=repo.creative_recovery(wid,local,base_hash,revision=original['revision'],destination='copy')
+        assert receipt==repo.creative_recovery(wid,local,base_hash)
+        assert repo.draft(receipt['workspace_id'],True)['technical_valid']
+    assert repo.draft(wid,True)['version_id']==original['version_id']
+    archived=json.loads(repo.preparation_job(local)['response_journal'])
+    assert all(archived[key]==archive[key] for key in keys)
+
+
+def test_one_advisory_preserves_findings_and_witnesses():
+    from backend.services.draft_completeness import read_advisory
+    state=candidate()
+    before=deepcopy(state);journal={};calls=[]
+    def read(slot,messages):
+        calls.append(slot)
+        return json.dumps({'issues':[None,dict(message='Проверьте основание свидетельства.',severity='blocker',
+                patch_paths=['/world/events/e/witnesses']),dict(message='Дом не указан.',severity='recommendation',resolution='unresolved')]})
+    notes=read_advisory(state,'Сезоны южного полушария.',journal,read)
+    assert notes['status']=='failed' and len(notes['issues'])==2 and all(not i['patch_paths'] for i in notes['issues'])
+    assert read_advisory(state,'Сезоны южного полушария.',journal,read)==notes
+    state['campaign']['title']='Новая редакция'
+    assert read_advisory(state,'Сезоны южного полушария.',journal,read)['status']=='stale'
+    assert state['world']==before['world'] and len(calls)==1
+
+
+def test_duplicate_identity_and_controlled_actor_gap():
+    state=candidate();card=state['characters'][1];state['characters'].append(deepcopy(card))
+    with pytest.raises(ValueError,match='Операция 0.*Неоднозначный ID'):
+        apply_proposal(state,proposal(state,[change('/characters/'+card['id']+'/fields/Возраст','31','replace')]))
+    state['characters'].pop()
+    card['fields']['Возраст']='Не задано.'
+    state['authoring']={'manual_paths':['/characters/1/fields/Биография']}
+    gaps={c['id']:c['fields'] for c in draft_creative.npc_gaps(state)}
+    assert 'Возраст' in gaps[card['id']] and 'Биография' not in gaps[card['id']]
+    assert state['controlled_actor_id'] not in gaps

@@ -42,8 +42,8 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  const options=await openOptions(field);
  await expect(options).toHaveCount(initial+1);
  await options.last().click();
- page.once('dialog',d=>d.accept());
  await versions.getByRole('button',{name:'Откатить к выбранной'}).click();
+ await page.getByRole('button',{name:'Восстановить версию',exact:true}).click();
  await expect(await openOptions(field)).toHaveCount(initial+2);
  await page.keyboard.press('Escape');
  expect(await versions.getByLabel('Содержимое версии').inputValue()).toBe(text);
@@ -82,11 +82,11 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  const h=await (await request.get(`/api/documents/summary/${w.id}`)).json();
  const completed=h.versions.find((v:{content:string})=>v.content.length>0);
  await chooseOption(dialog.getByRole('combobox'), String(completed.id));
- page.once('dialog',d=>d.accept());
+ await dialog.getByRole('button',{name:'Откатить к выбранной'}).click();
  const [restored]=await Promise.all([
    page.waitForResponse(response=>response.request().method()==='POST' &&
      new URL(response.url()).pathname===`/api/documents/summary/${w.id}`),
-   dialog.getByRole('button',{name:'Откатить к выбранной'}).click(),
+   page.getByRole('button',{name:'Восстановить версию',exact:true}).click(),
  ]);
  expect(restored.ok()).toBe(true);
  await expect(await openOptions(dialog.getByRole('combobox'))).toHaveCount(h.versions.length+1);

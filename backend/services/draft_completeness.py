@@ -514,10 +514,13 @@ def read_advisory(state, source, journal, call):
         report=strict_loads(reply)
         if not isinstance(report,dict) or not isinstance(report.get('issues'),list):
             raise ValueError('В отчёте отсутствует список замечаний.')
+        incomplete=False
         for item in report['issues']:
             if not isinstance(item,dict) or not isinstance(item.get('message'),str) or not item['message'].strip():
-                raise ValueError('Часть замечаний не удалось прочитать.')
+                incomplete=True
+                continue
             result['issues'].append(dict(message=item['message'],severity='recommendation' if item.get('severity')=='recommendation' else 'warning',patch_paths=[]))
+        if incomplete:raise ValueError('Часть замечаний не удалось прочитать.')
         result['status']='completed'
     except ValueError as exc:
         result.update(status='failed',reason=str(exc))

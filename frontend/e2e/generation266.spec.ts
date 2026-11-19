@@ -39,3 +39,22 @@ for(const width of [360,393,1280])test(`saved creative recovery at ${width}px`,a
  await page.reload();await nav(page,'Создать');
  await expect(page.locator('.ww-hero h1')).toBeVisible();
 });
+
+test('author can compare and restore the world prompt without losing history',async({page,request})=>{
+ const endpoint='/api/documents/prompt/draft_world_prompt.md';
+ const initial=await(await request.get(endpoint)).json();
+ const override=initial.template+'\nЭтот мир начинается летом.';
+ const edit=await request.post(endpoint,{data:{content:override,expected_head:initial.active_id}});
+ expect(edit.ok()).toBeTruthy();
+ await page.goto('/');await nav(page,'Настройки');
+ await page.getByText('Основные промпты и версии',{exact:true}).click();
+ await page.getByRole('button',{name:'draft_world_prompt.md',exact:true}).click();
+ const modal=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:/История версий/})});
+ await expect(modal).toContainText('Активен авторский промпт');
+ await modal.getByRole('button',{name:'Подставить актуальный шаблон для сохранения'}).click();
+ await expect(modal.getByLabel('Содержимое версии')).toHaveValue(initial.template);
+ await modal.getByRole('button',{name:'Сохранить новую версию'}).click();
+ await expect(modal).toContainText('Активен актуальный встроенный промпт');
+ const current=await(await request.get(endpoint)).json();
+ expect(current.versions.some((v:{content:string})=>v.content===override)).toBeTruthy();
+});
