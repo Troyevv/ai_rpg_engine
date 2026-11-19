@@ -2,11 +2,13 @@
 from backend.runtime_v3.models import identity, fatal
 
 
-def wire_schema(props):
+def wire_schema(props, version):
     ids = dict(type='array', items=dict(type='string', minLength=1), minItems=1, maxItems=16, uniqueItems=True)
     for name in ('residence_changes', 'role_changes', 'social_relation_changes'):
         item = props[name]['items']
         item['required'] = []
+        if version >= 11:
+            item['properties']['perceived_by'] = dict(type='array', items=dict(type='string'), maxItems=64)
         if name == 'social_relation_changes':
             item['properties']['kind']['enum'] = [*item['properties']['kind']['enum'], 'divorce']
         else:
@@ -57,6 +59,45 @@ def phase_changes(records, state, turn_id, namespace):
                         row.get('title'),row.get('organization_id'))
                 phases.append(row)
         records[name] = phases
+
+
+def bind_phase_observers(records, state, turn_id, namespace, order, warnings):
+    """Use the same private fact for the phase transition and its actual recipients."""
+    actors = set(state['characters']) | {row['id'] for row in records['promotions']}
+    for section, collection in (('role_changes', 'roles'), ('residence_changes', 'residences'),
+                                ('social_relation_changes', 'objective_relations')):
+        for index, row in enumerate(records[section]):
+            observers = row.pop('perceived_by', [])
+            recipients = list(dict.fromkeys(cid for cid in observers if cid in actors))
+            if set(observers) - actors:
+                warnings.append(dict(section=section, index=index, code='invalid_phase_recipient',
+                                     action='omit_invalid_recipients'))
+            previous = state[collection].get(row['id'], {})
+            phase = {**previous, **row}
+            closed = phase.get('status') == 'closed'
+            link = 'closure_fact_id' if closed else 'fact_id'
+            fid = phase.get(link)
+            # An already established unlinked opening is historical; never change its identity.
+            if previous and not closed and not fid:
+                continue
+            affected = ([phase.get('source_id'), phase.get('target_id')] if collection == 'objective_relations'
+                        else [phase.get('actor_id')])
+            if any(cid not in actors for cid in affected):
+                continue  # The phase owner diagnoses an invalid identity.
+            label = phase.get('title') or phase.get('kind')
+            if collection == 'residences':
+                location = phase.get('location_id')
+                label = state['locations'].get(location, {}).get('name') or location
+            names = ', '.join(state['characters'].get(cid, {}).get('display_name') or cid for cid in affected)
+            text = f"{names} — {label} ({'завершено' if closed else 'установлено'})."
+            if not fid:
+                fid = row[link] = identity('phase-fact', namespace, turn_id, collection, row['id'], link)
+                records['facts'].append(dict(id=fid, text=text, character_ids=affected, visibility='secret'))
+            if recipients:
+                records['information_events'].append(dict(
+                    id=identity('phase-notice', namespace, turn_id, collection, row['id'], link),
+                    text=text, source_actor_id=None, medium='discovery', order=order+1,
+                    claims=[dict(fact_id=fid, perceived_by=recipients, assertion='observation', status='known')]))
 
 
 def consolidate_experience(records, state, turn_id, namespace):

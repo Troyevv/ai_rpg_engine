@@ -86,3 +86,38 @@ def test_one_endpoint_across_publication_extraction_and_reload(game):
     assert all(after['characters'][cid]['location_id'] == dest for cid in cast)
     changes = json.loads(repo.list_turns(sid)[-1]['changes_json'])
     assert 'ending_disagrees_with_route' in {r['code'] for r in changes['interpretation_warnings']}
+
+
+def test_observers_follow_replaced_and_concurrent_phases():
+    from backend.runtime_v3.residence import visible_social_state
+    world = state()
+
+    def job(title, **extra):
+        return dict(kind='employment', actor_id='b', title=title, perceived_by=['b'], **extra)
+    world = apply(world, dict(role_changes=[job('Архивариус')])).state
+    result = apply(world, dict(role_changes=[job('Хранитель', replaces='current')],
+                               residence_changes=[dict(actor_ids=['a','b'], location_id='home',
+                                                       perceived_by=['a','missing'])]), 2)
+    assert 'invalid_phase_recipient' in {w['code'] for w in result.warnings}
+    world = apply(result.state, dict(role_changes=[job('Лектор')]), 3).state
+    known = visible_social_state(world, 'b')
+    assert {(r['label'],r['status']) for r in known['roles']} == {
+        ('Архивариус','closed'), ('Хранитель','active'), ('Лектор','active')}
+    assert not known['residences']
+    assert {r['actor_id'] for r in visible_social_state(world,'a')['residences']} == {'a','b'}
+    assert visible_social_state(world,'c') == {'residences':[], 'roles':[]}
+
+
+def test_relation_observer_sees_established_divorce_only():
+    from backend.runtime_v3.kinship import visible_relations
+    world = state()
+    pair = dict(source_id='b', target_id='c')
+    world = apply(world, dict(social_relation_changes=[dict(**pair, kind='spouse', perceived_by=['d'])])).state
+    world = apply(world, {}, 2).state
+    assert next(iter(world['objective_relations'].values()))['status'] == 'active'
+    world = apply(world, dict(social_relation_changes=[dict(**pair, kind='divorce', perceived_by=['d'])]), 3).state
+    marriage, = world['objective_relations'].values()
+    assert marriage['status'] == 'closed'
+    assert {row['fact_id'] for row in world['knowledge'].values() if row['actor_id']=='d'} == {
+        marriage['fact_id'],marriage['closure_fact_id']}
+    assert not visible_relations(world,'a')

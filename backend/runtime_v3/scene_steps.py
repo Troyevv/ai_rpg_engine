@@ -197,7 +197,7 @@ def project_schema(schema, *, version=6, camera_mode=None):
             'type':'array', 'items':{'type':'string'}, 'maxItems':16,
             'description':'Кому стало известно об указанном жизненном статусе.'}
         from backend.runtime_v3.life_operations import wire_schema
-        wire_schema(props)
+        wire_schema(props, version)
         scene['properties']['ending'] = dict(type='object', additionalProperties=False,
             required=['location_id','present_ids'], properties=dict(location_id={'type':'string','minLength':1},
             present_ids={'type':'array','items':{'type':'string','minLength':1},'uniqueItems':True,'maxItems':64}))
@@ -820,6 +820,9 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             if provenance and provenance['meaning']=='preserved' and source.get('outcome','completed') in ('completed','partial'):
                 item.update(player_evidence=provenance['quote'],player_assertion=assertion)
     if version >= 10:
+        if version >= 11:
+            from backend.runtime_v3.life_operations import bind_phase_observers
+            bind_phase_observers(records, state, turn_id, namespace, order, warnings)
         bind_life_status_observers(records, state, turn_id, namespace, order, warnings)
         bind_domain_sources(records, state, turn_id, namespace, order)
     raw = RawTurnResult(scene, refs(records), deepcopy(choices), warnings,
