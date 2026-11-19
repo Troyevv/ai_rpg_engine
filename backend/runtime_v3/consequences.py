@@ -63,7 +63,7 @@ def components(proposal, before):
         yield [choice]
 
 
-def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None):
+def resolve_consequences(payload, before, narrative, turn_id, suggestions, resolve, *, namespace=None, authored_scene=None):
     def evaluate(candidate):
         raw = compile_scene(candidate, before, narrative, turn_id, namespace=namespace, version=10, suggestions=suggestions)
         return raw, resolve(raw)
@@ -71,9 +71,12 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
     try:
         proposal, normalization, decoding_warnings = consequence_payload(payload, (*SECTIONS,'scene_steps','choices'))
     except (TypeError, ValueError):
-        raw, result = evaluate({})
-        result.warnings.append(dict(section='extraction', code='raw_root_invalid', action='preserve_scene'))
-        return raw, result
+        proposal, normalization = {}, None
+        decoding_warnings = [dict(section='extraction', code='raw_root_invalid', action='preserve_scene')]
+    extracted_scene = proposal.get('scene', {})
+    if authored_scene:
+        scene = extracted_scene
+        proposal['scene'] = {**(scene if isinstance(scene, dict) else {}), **authored_scene}
     if not suggestions and 'choices' in proposal:
         # No author-provided menu exists to annotate. Ignore unsolicited
         # indexes, including malformed ones, before grouping consequences.
@@ -113,6 +116,19 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
             try:
                 accepted, raw, result = include(group)
             except StructuralDeltaError as exc:
+                # The optional Narrative ending can refer to an ID that neither
+                # source declared. Retain a valid endpoint supplied by Extraction.
+                fallback = [(s,k,extracted_scene[k]) if s=='scene' and k in (authored_scene or {})
+                            and isinstance(extracted_scene,dict) and k in extracted_scene else (s,k,v)
+                            for s,k,v in group]
+                if fallback != group:
+                    try:
+                        accepted, raw, result = include(fallback)
+                    except StructuralDeltaError:
+                        pass
+                    else:
+                        warnings.append(dict(section='scene',code=exc.code,action='used_extracted_scene'))
+                        continue
                 # Perceptions in a single utterance may have different recipients.
                 # Keep independently resolvable claims together in the same event.
                 section, key, step = group[0]

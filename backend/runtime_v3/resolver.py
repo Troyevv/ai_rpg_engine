@@ -382,6 +382,9 @@ class StateResolver:
         camera.update(location_id=lid,present_character_ids=present,observed_character_ids=observed,situation=situation)
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
+        if self.scene_version >= 10 and s['meta']['world_time']//1440 != self.before['meta']['world_time']//1440:
+            from backend.runtime_v3.calendar import update_developmental_stages
+            update_developmental_stages(s, self.history.state_changes)
         moves = {}
         movement_errors, invalid_moves, invalid_route_actors = [], set(), set()
         for i, item in self.records(raw,'movements'):
@@ -430,7 +433,7 @@ class StateResolver:
                     if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
                         fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
                     route.sort(key=lambda r:r[0])
-                if cid in present:
+                if cid in present and not getattr(raw, 'explicit_ending', False):
                     if route[-1][1] != lid:
                         fatal('конечное перемещение участника противоречит final_scene',
                               'scene_movement_conflict', repairable=True, entity=cid,

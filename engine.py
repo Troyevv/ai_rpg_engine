@@ -200,6 +200,8 @@ def run_job(path, job_id, handle):
             narrative = job['narrative']
             suggestions = config.get('_narrative_suggestions', []) if version >= 9 else []
             from backend.runtime_v3.suggestions import split_suggestions
+            from backend.runtime_v3 import narrative_frame
+            frame = config.get('_authored_frame')
             legacy_letter_sources = json.loads(job.get('private_artifacts_json') or '[]')
             letter_sources = legacy_letter_sources
 
@@ -256,7 +258,7 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         from llm import ProviderGenerationError
                         before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, cancelled=handle.cancelled, provider_errors=(ProviderGenerationError,), history_events=world_history.get('events', []))
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], extraction_contract=version, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], extraction_contract=version, public_observation=job['kind']=='background', recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
                 if agency_required(before['world_state'], job['user_text'], job['kind']) and not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
                     from copy import copy
@@ -296,18 +298,26 @@ def run_job(path, job_id, handle):
                     narrative = corrected_candidate(correction['original'], correction_payload, correction['grounds'])
                     chunks = []
                 else:
-                    chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8))
+                    structured_menu = version >= 10 and narrative_frame.requested(messages)
+                    options = {'response_format': {'type':'json_object'}} if structured_menu and common['provider']=='deepseek' else {}
+                    chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8),**options)
                 authored = narrative
                 for chunk in chunks:
                     if handle.cancelled.is_set():
                         return
                     authored += chunk
-                    narrative = split_suggestions(authored, verbatim=version>=10)[0] if version >= 9 else authored
+                    decoded = narrative_frame.read(authored, complete=False) if structured_menu else None
+                    narrative = decoded[0] if decoded else split_suggestions(authored, verbatim=version>=10)[0] if version >= 9 else authored
                     if time.monotonic() - last_write > 0.2:
                         storage.job_progress(job_id, 'generating', narrative=narrative)
                         last_write = time.monotonic()
                 if version >= 9 and not correction:
-                    narrative, suggestions = split_suggestions(authored, complete=True, verbatim=version>=10)
+                    decoded = narrative_frame.read(authored, complete=True) if structured_menu else None
+                    if decoded:
+                        narrative, frame = decoded
+                        suggestions = []
+                    else:
+                        narrative, suggestions = split_suggestions(authored, complete=True, verbatim=version>=10)
                 timings['narrative']=time.perf_counter()-stage_started
                 if not narrative.strip():
                     raise ValueError('Модель вернула пустую сцену.')
@@ -315,7 +325,7 @@ def run_job(path, job_id, handle):
                 # Keep the old column only for pre-change completed job recovery.
                 with storage.connect() as db:
                     db.execute("UPDATE game_jobs SET status='extracting', narrative=?, narrative_complete=1, config_json=json_patch(config_json,?) WHERE id=? AND status='generating' AND attempt_epoch=?",
-                        (narrative, json.dumps({'_narrative_suggestions': suggestions} if version >= 9 else {}, ensure_ascii=False), job_id, job['attempt_epoch']))
+                        (narrative, json.dumps({'_narrative_suggestions': suggestions, '_authored_frame':frame} if version >= 9 else {}, ensure_ascii=False), job_id, job['attempt_epoch']))
             if version >= 10 and not config.get('_published_scene'):
                 if handle.cancelled.is_set():
                     return
@@ -442,7 +452,7 @@ def run_job(path, job_id, handle):
                         ).resolve(raw)
                     if version >= 10:
                         from backend.runtime_v3.consequences import resolve_consequences
-                        raw, resolved = resolve_consequences(result,before['world_state'],narrative,sequence+1,suggestions,resolve)
+                        raw, resolved = resolve_consequences(result,before['world_state'],narrative,sequence+1,suggestions,resolve, authored_scene=narrative_frame.scene_fields(frame or {}))
                         if provider_warning:
                             resolved.warnings.append(provider_warning)
                     else:
@@ -485,6 +495,10 @@ def run_job(path, job_id, handle):
                     from backend.services.npc_review import publish_cards
                     publish_cards(state, resolved)
                     choices=resolved.choices if job['kind']!='background' else []
+                    if frame is not None:
+                        choices, menu_warnings = narrative_frame.menu(frame, state['world_state'])
+                        for warning in menu_warnings:
+                            if warning not in resolved.warnings: resolved.warnings.append(warning)
                     changes={'time_skip':skip_result, 'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
                     audience=list(resolved.state['camera']['present_character_ids'])
                     warnings=resolved.warnings

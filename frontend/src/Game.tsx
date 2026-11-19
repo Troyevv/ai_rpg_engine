@@ -150,7 +150,8 @@ export function Game({
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const generating = running || !!revealingCommit;
   const turnLocked = generating || (rejected && !!job.narrative_complete);
-  const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
+  const observer = save?.state.camera?.mode==='observer';
+  const canAct = !!save && !save.state.protagonist_required && (observer || (!!actorId && save.state.actor_capabilities?.can_act!==false));
   const canSubmit = canAct && !busy && !turnLocked && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
@@ -177,6 +178,7 @@ export function Game({
         text,
         target_turn_id: target,
         time_skip: timeSkip,
+        observer_direction: kind==='turn' && observer,
         interaction_channel: kind==='turn'?channel:undefined,
         rollback_following: rollback,
         config: prefs.game,
@@ -408,7 +410,7 @@ export function Game({
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
-                    {(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
+                    {(save.state.camera?.mode==='observer'||(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId)?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
@@ -496,7 +498,7 @@ export function Game({
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
               disabled={!canAct}
-              placeholder={activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
+              placeholder={activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&

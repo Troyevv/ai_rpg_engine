@@ -67,3 +67,30 @@ for (const width of [360,393,1280]) {
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   });
 }
+
+test('six authored actions survive reload and keep the editable draft', async ({page, request}) => {
+  const selection = await (await request.post('/test/scene263-seed')).json();
+  const profile = 'frame263-' + selection.save;
+  await request.put('/api/settings/' + profile, {data: {...defaults, game: {...defaults.game, model:'frame263-test', context_length:65536}}});
+  await page.addInitScript(({selection, profile}) => {
+    localStorage.setItem('selection',JSON.stringify(selection));
+    localStorage.setItem('profile',profile);
+  }, {selection, profile});
+  await page.goto('/');
+  const input = page.getByLabel('Своё действие или реплика');
+  await input.fill('Что видно у окна?');
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  const choices = page.locator('.choices button');
+  await expect(choices).toHaveCount(6);
+  const read = async () => (await request.get('/api/saves/' + selection.save)).json();
+  await expect.poll(async () => (await read()).job.status).toBe('saved');
+  const revision = (await read()).revision;
+  await input.fill('Мой черновик');
+  await page.reload();
+  await expect(choices).toHaveCount(6);
+  await choices.filter({hasText:'Открыть альбом'}).click();
+  await page.getByRole('button',{name:'Добавить к черновику'}).click();
+  await expect(input).toHaveValue('Мой черновик\nОткрыть альбом');
+  await input.fill('Открываю альбом на первой странице.');
+  expect((await read()).revision).toBe(revision);
+});

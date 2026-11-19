@@ -168,6 +168,8 @@ def apply_life(resolver, raw):
                                 (years<18 and actor['developmental_stage']=='adult')):
                             raise ValueError('developmental stage contradicts established birth date')
                     if 'life_status' in item:
+                        if old['life_status'] != 'dead' and item['life_status'] == 'dead':
+                            actor.update(death_minute=now, death_date=date)
                         if old['life_status'] == 'dead' and item['life_status'] != 'dead':
                             raise ValueError('death cannot be undone by ordinary extraction; use rollback')
                         if 'fact_id' in item or old['life_status'] != item['life_status']:
@@ -248,6 +250,15 @@ def apply_life(resolver, raw):
                     fields.update(evidence=item['evidence'],source_turn=resolver.turn_id)
                     after = ObjectiveRelation.model_validate(fields).model_dump()
                     s['objective_relations'][key] = after
+                    if resolver.scene_version >= 10 and after['kind']=='spouse' and after['status']=='active':
+                        explicit_closures = {r.get('id') for r in raw.records[section] if r.get('status')=='closed'}
+                        for phase in s['objective_relations'].values():
+                            if (phase['id'] not in explicit_closures and phase['kind']=='engaged'
+                                    and phase['status']=='active' and (phase['source_id'],phase['target_id'])==ids):
+                                prior = deepcopy(phase)
+                                phase.update(status='closed', outcome='superseded', until=now, until_date=date,
+                                             closure_fact_id=after['fact_id'])
+                                _transition(resolver,section,phase['id'],prior,phase,item)
                 validate_life_state(s)
                 _transition(resolver,section,key,old,after,item)
             except (ValueError,TypeError,KeyError,ValidationError) as exc:

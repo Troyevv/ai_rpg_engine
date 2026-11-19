@@ -37,7 +37,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
  const deceased=knownLife==='dead';
  const statusLine=knownLife==='dead'||knownLife==='missing'?lifeLabel(knownLife):card.fields['Статус'];
  const partners=new Map(state.characters.map(c=>[c.id,c]));
- const age=c?.age??card.fields['Возраст'];
+ const age=knownLife==='dead'?card.dossier?.age_at_death:(c?.age??card.fields['Возраст']);
  const special=new Set(['Возраст','Пол','Статус','Место','Время','Сейчас','Чего хочет','Намерения','Обязательства','Физическое состояние']);
  const fields=Object.entries(card.fields).filter(([k])=>!special.has(k)&&!k.startsWith('Отношение к '));
  const items=([['overview',UserRound],['personality',Brain],['relationships',HeartHandshake],['family',Users],['history',BookOpen],['secrets',LockKeyhole]] as const).map(([id,Icon])=>({id,label:t(id),icon:<Icon className={`dossier-icon-${id}`} size={16} aria-hidden="true"/>}));
@@ -65,7 +65,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     <DossierSection title={t('current')}><Prose text={c?.situation||card.fields['Сейчас']}/>{c?.emotion&&<p className="dossier-emotion">{card.id===actor?'Последняя заявленная эмоция: ':''}{c.emotion}{card.id===actor&&c.emotion_source_sequence!=null?` · ход ${c.emotion_source_sequence+1}`:''}</p>}
      <dl><DossierFact label={t('birth')}>{c?.birth_date?calendarDate(c.birth_date):null}</DossierFact><DossierFact label={t('lastPoint')}>{c?.minute!=null?worldTime(c.minute,state.world_clock?.calendar):card.fields['Время']}</DossierFact></dl>
     </DossierSection>
-    <DossierSection title={t('physical')}>{card.id===actor&&state.life_state&&<p className="muted small">{lifeLabel(state.life_state.life_status)}</p>}<Prose text={c?.physical_state||card.fields['Физическое состояние']}/><h4>{t('conditions')}</h4>{activeConditions.length?conditionRows(activeConditions):<DossierEmpty>{t('emptyConditions')}</DossierEmpty>}{card.dossier?.restrictions.map(k=><p key={k}>{capabilityLabel(k)}</p>)}</DossierSection>
+    <DossierSection title={t('physical')}>{card.dossier?.death_date&&<p>Дата смерти · {card.dossier.death_date}</p>}{card.id===actor&&state.life_state&&<p className="muted small">{lifeLabel(state.life_state.life_status)}</p>}<Prose text={c?.physical_state||card.fields['Физическое состояние']}/><h4>{t('conditions')}</h4>{activeConditions.length?conditionRows(activeConditions):<DossierEmpty>{t('emptyConditions')}</DossierEmpty>}{card.dossier?.restrictions.map(k=><p key={k}>{capabilityLabel(k)}</p>)}</DossierSection>
     </div><div className="dossier-column">
     {fields.filter(([k,v])=>v.trim()&&!personalityFields.has(k)&&!['Тайны','Знания','Заметки','История'].includes(k)).map(([k,v])=><DossierSection key={k} title={k}><Prose text={v}/></DossierSection>)}
     <SocialStateView state={state} actor={card.id} saveId={save?.id} mode="context"/>

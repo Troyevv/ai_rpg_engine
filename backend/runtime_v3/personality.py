@@ -18,6 +18,7 @@ MAX_EVIDENCE = 32
 
 
 class EvidenceClaim(StrictModel):
+    theme: str | None = Field(default=None, max_length=100)
     id: str = Field(min_length=1, max_length=100)
     actor_id: str
     source_event_id: str
@@ -158,7 +159,7 @@ def apply_personality(resolver, raw, events):
         if eid in profile['evidence'] or eid in profile['seen_sources']:
             continue
         profile['seen_sources'].append(eid)
-        entry = DevelopmentEvidence(id=eid, source_event_id=event['id'], source_turn=resolver.turn_id,
+        entry = DevelopmentEvidence(theme=claim.get('theme'), id=eid, source_event_id=event['id'], source_turn=resolver.turn_id,
             minute=resolver.state['meta']['world_time'], meaning=claim['meaning'], kind=claim['kind'],
             player_owned=owned, evidence=claim['evidence'] or claim['meaning'],
             witnesses=event['witnesses'] if observers is None else [a for a in dict.fromkeys(observers)
@@ -263,6 +264,7 @@ def context_profile(actor, *, evaluation=False):
         result['evidence'] = []; budget += 1400
         for entry in reversed(list(profile['evidence'].values())):
             record = {k:entry[k] for k in ('id','source_event_id','source_turn','meaning','kind','player_owned')}
+            if entry.get('theme'): record['theme'] = entry['theme']
             if len(str(record)) > budget: continue
             result['evidence'].append(record); budget -= len(str(record))
             if len(result['evidence']) == 8: break

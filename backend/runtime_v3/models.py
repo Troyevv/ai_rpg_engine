@@ -309,6 +309,7 @@ class PersonalityItem(StrictModel):
 
 
 class DevelopmentEvidence(StrictModel):
+    theme: str | None = Field(default=None, max_length=100)
     id: str
     source_event_id: str
     source_turn: int = Field(ge=0)
@@ -511,6 +512,8 @@ class Character(StrictModel):
     situation: str = ''
     birth_date: str | None = None
     life_status: Literal['alive', 'dead', 'missing', 'unknown'] = 'unknown'
+    death_date: str | None = None
+    death_minute: int | None = Field(default=None, ge=0)
     life_fact_id: str | None = None
     display_name: str | None = Field(default=None, min_length=1)
     name_history: list[NameChange] = Field(default_factory=list)

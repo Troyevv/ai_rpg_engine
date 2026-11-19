@@ -666,6 +666,14 @@ def scripted_stream(**kwargs):
 
 def stream(**kwargs):
     global scene255_attempts
+    if kwargs.get('model') == 'frame263-test':
+        from backend.services.provider_attempt import identity
+        if identity()['stage'] == 'narrative':
+            actions = ['Открыть альбом','Выйти во двор','Позвать хозяйку','Заварить чай','Осмотреть окно','Послушать радио']
+            yield json.dumps(dict(scene='У окна лежит альбом.', actions=[dict(text=t,facts=[]) for t in actions]), ensure_ascii=False)
+        else:
+            yield '{}'
+        return
     if kwargs.get('model') == 'scene263-test':
         conflict = 'Кирилл отказывается от чая.'
         if kwargs.get('response_format'):

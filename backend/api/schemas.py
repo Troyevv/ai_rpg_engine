@@ -34,6 +34,7 @@ class TimeSkip(DTO):
 
 class Turn(Credential):
     interaction_channel: Literal["physical", "call"] | None = None
+    observer_direction: bool = False
     time_skip: TimeSkip | None = None
     recovery_source_job_id: str | None = None
     target_turn_id: int | None = None

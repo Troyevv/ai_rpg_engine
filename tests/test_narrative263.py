@@ -134,7 +134,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
     assert json.loads(repo.get_job(jid)['config_json'])['_extraction_contract']==10
     with patch('llm.OpenAI') as sdk:
         def chat(**kwargs):
-            if kwargs.get('response_format'):
+            if not any(m.get('content','').startswith('Текущий ввод\n') and '"response_format"' in m['content'] for m in kwargs['messages']):
                 return reply('{"action":null}')
             return reply(recorded['narrative']+'\n'+MARKER+json.dumps([proposal,hidden],ensure_ascii=False))
         sdk.return_value.chat.completions.create.side_effect=chat
@@ -282,7 +282,9 @@ def test_current_menu_owner_and_actor_availability(mode):
     kind = 'background' if mode == 'background' else 'turn'
     messages = build_context(snapshot,[],'Осматриваюсь.',kind,65536,4096)
     last_input = json.loads(messages[-1]['content'].split('\n', 1)[1])
-    assert ('<action_suggestions>' in last_input.get('response_format', '')) == (mode=='ordinary')
+    from backend.runtime_v3.narrative_frame import FORMAT
+    assert last_input.get('response_format','').startswith(FORMAT) == (mode!='background')
+    if mode=='observer': assert 'наблюдателя' in last_input['response_format']
     if mode == 'ordinary':
         assert 'output only literary prose' not in messages[0]['content']
         from backend.services.structured_extraction import request_schema

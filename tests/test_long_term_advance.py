@@ -337,14 +337,18 @@ def test_real_jobs_reload_regenerate_rollback_branch_and_ordinary_turn(tmp_path)
     assert repo.get_job(jid)["status"] == "saved", repo.get_job(jid)["error"]
 
 
-def test_accepted_birth_then_child_ages_without_adult_personality():
-    before = snap(conceive().state)
+@pytest.mark.parametrize(('years','stage','age'), [(5,'child',4),(10,'child',9),(15,'adolescent',14)])
+def test_accepted_birth_then_child_ages_without_adult_personality(years, stage, age):
+    from backend.runtime_v3.calendar import age_on, current_time
+    initial = state()
+    initial['reproduction_policy']['gestation_days'] = 280
+    before = snap(conceive(initial).state)
     s = before["world_state"]
     s["camera"].update(controlled_actor_id="c", present_character_ids=["c"])
     p = next(iter(s["pregnancies"].values()))
     candidate = next(
         c
-        for c in plan(before, dict(amount=15, unit="years")).candidates
+        for c in plan(before, dict(amount=years, unit="years")).candidates
         if c.kind == "birth"
     )
     text = "Роды завершились."
@@ -377,13 +381,14 @@ def test_accepted_birth_then_child_ages_without_adult_personality():
         return iter([json.dumps(raw) if "extraction" in stage else text])
 
     after, batch, report = run(
-        before, dict(amount=15, unit="years", max_llm_calls=2), generate=generate
+        before, dict(amount=years, unit="years", max_llm_calls=2), generate=generate
     )
     assert report["accepted"], report["diagnostics"]
     process = after["world_state"]["pregnancies"][p["id"]]
     assert process["status"] == "born" and process["birth_minute"] == p["due_minute"]
     child = after["world_state"]["characters"][p["children"][0]["id"]]
-    assert child["developmental_stage"] == "adolescent"
+    assert child["developmental_stage"] == stage
+    assert age_on(child['birth_date'],current_time(after['world_state'])['date']) == age
     assert set(child["personality"]["items"]) == {"early_temperament"}
     assert not any(
         k["actor_id"] == "c" for k in after["world_state"]["knowledge"].values()

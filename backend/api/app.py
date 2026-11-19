@@ -235,6 +235,8 @@ def create_app(db_path=None, recover=True):
         settings = body.config.model_dump()
         if body.interaction_channel is not None:
             settings['interaction_channel'] = body.interaction_channel
+        if body.observer_direction:
+            settings['observer_direction'] = True
         if body.time_skip:
             if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
             settings['time_skip'] = body.time_skip.model_dump()

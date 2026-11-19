@@ -320,3 +320,41 @@ def scheduled_range(state, start_date, end_date, relevant_ids=None, limit=500):
                           context_category=view['context_category'], window=window))
     items.sort(key=lambda e:(e['window']['start_minute'], e['id']))
     return dict(items=items[:limit], truncated=len(items)>limit, limit=limit)
+
+
+def update_developmental_stages(s, changes):
+    minute = s["meta"]["world_time"]
+    today = current_time(s)["date"]
+    # Age is a date projection; this never creates traits, schooling or employment.
+    for cid, actor in sorted(s["characters"].items()):
+        if actor["life_status"] == "dead":
+            continue
+        age = age_on(actor.get("birth_date"), today, profile_of(s))
+        if age is None:
+            continue
+        stage = (
+            "infant"
+            if age < 1
+            else "child"
+            if age < 12
+            else "adolescent"
+            if age < 18
+            else "adult"
+        )
+        old = actor["developmental_stage"]
+        if stage != old:
+            actor["developmental_stage"] = stage
+            changes.append(
+                dict(
+                    kind="developmental_stage",
+                    entity=cid,
+                    before=old,
+                    after=stage,
+                    minute=minute,
+                    turn_id=s["meta"]["turn_id"],
+                    source_ids=[actor.get("life_fact_id")]
+                    if actor.get("life_fact_id")
+                    else [],
+                    basis=dict(birth_date=actor["birth_date"], date=today),
+                )
+            )

@@ -85,7 +85,7 @@ class EngineStorage:
                     source_revision=recovery['revision'], source_contract=json.loads(recovery['config_json']).get('_extraction_contract',1),
                     narrative_sha256=sha256(recovery['narrative'].encode()).hexdigest())
                 source_config = json.loads(recovery['config_json'])
-                for key in ('interaction_channel','time_skip','_narrative_suggestions'):
+                for key in ('interaction_channel','time_skip','_narrative_suggestions','_authored_frame'):
                     config.pop(key, None)
                     if key in source_config: config[key] = source_config[key]
                 user_text = recovery['user_text']
@@ -203,9 +203,10 @@ class EngineStorage:
                 from backend.runtime_v3.communication import validate
                 validate(before_snapshot, config.get('communication', {}))
             from backend.runtime_v3.camera import controlled
-            if kind == 'turn' and controlled(json.loads(before)) is None and not config.get('time_skip'):
+            directing = kind == 'turn' and config.get('observer_direction') and validated_state['camera']['mode']=='observer'
+            if kind == 'turn' and not directing and controlled(json.loads(before)) is None and not config.get('time_skip'):
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
-            if kind == 'turn' and user_text.strip():
+            if kind == 'turn' and user_text.strip() and not directing:
                 from backend.runtime_v3.life import capabilities
                 if not capabilities(validated_state,controlled(json.loads(before)))['can_act']:
                     raise ValueError('Персонаж сейчас не может действовать. Продолжи наблюдение или течение времени.')
@@ -357,11 +358,19 @@ class EngineStorage:
                 if not row or not row[0]:
                     return
                 from backend.runtime_v3.suggestions import split_suggestions
-                prose, choices = split_suggestions(row[0], complete=True, verbatim=True)
+                from backend.runtime_v3 import narrative_frame
+                decoded = (narrative_frame.read(row[0], complete=True)
+                           if narrative_frame.requested(json.loads(job.get('context_json') or '[]')) else None)
+                frame = None
+                if decoded:
+                    prose, frame = decoded
+                    choices = []
+                else:
+                    prose, choices = split_suggestions(row[0], complete=True, verbatim=True)
                 if not prose.strip():
                     return
-                db.execute("UPDATE game_jobs SET narrative=?,narrative_complete=1,config_json=json_set(config_json,'$._narrative_suggestions',json(?)) WHERE id=? AND status='stopped' AND attempt_epoch=?",
-                           (prose,json.dumps(choices),job_id,job['attempt_epoch']))
+                db.execute("UPDATE game_jobs SET narrative=?,narrative_complete=1,config_json=json_set(config_json,'$._narrative_suggestions',json(?),'$._authored_frame',json(?)) WHERE id=? AND status='stopped' AND attempt_epoch=?",
+                           (prose,json.dumps(choices),json.dumps(frame),job_id,job['attempt_epoch']))
         try:
             self.save_completed_scene(job_id, job['revision'], job['attempt_epoch'])
         except ValueError as conflict:
@@ -378,16 +387,50 @@ class EngineStorage:
         for key in ('_resolver_turn_id', '_time_skip', '_interaction_input_channel', 'last_time_skip'):
             state.pop(key, None)
         world = state['world_state']
-        world['meta']['turn_id'] = sequence + 1
-        minute = world['meta']['world_time']
-        history.setdefault('turns', []).append(dict(id=identity('record',sequence+1,narrative,True),
-            sequence=sequence, turn_id=sequence+1, narrative=narrative, player_input=user_text,
-            camera_before=world['camera'], camera=world['camera'], game_time_before=minute,
-            world_time=minute, player_observed=True))
+        from backend.runtime_v3 import narrative_frame
+        job = self.get_job(job_id)
+        config = json.loads(job['config_json'])
+        frame = config.get('_authored_frame')
+        scene = narrative_frame.scene_fields(frame or {})
+        skip = before.get('_time_skip')
+        if skip:
+            scene['elapsed_minutes'] = skip['elapsed_minutes']
+            state['last_time_skip'] = skip
+        warnings = []
+        if scene:
+            from backend.runtime_v3.consequences import resolve_consequences
+            from backend.runtime_v3.player_actions import resolver_options
+            from backend.runtime_v3.resolver import StateResolver
+            def resolve(raw):
+                return StateResolver(world, narrative, user_text, turn_id=sequence+1,
+                    **resolver_options(world, user_text, job['kind'], 10, time_skip=bool(skip)),
+                    runtime_time_skip=bool(skip)).resolve(raw)
+            _, result = resolve_consequences({'scene':scene}, world, narrative, sequence+1, [], resolve)
+            state['world_state'] = result.state
+            for name, rows in result.history.items():
+                history.setdefault(name, []).extend(rows)
+            warnings.extend(result.warnings)
+        else:
+            world['meta']['turn_id'] = sequence + 1
+            minute = world['meta']['world_time']
+            history.setdefault('turns', []).append(dict(id=identity('record',sequence+1,narrative,True),
+                sequence=sequence, turn_id=sequence+1, narrative=narrative, player_input=user_text,
+                camera_before=world['camera'], camera=world['camera'], game_time_before=minute,
+                world_time=minute, player_observed=True))
+        choices = []
+        if frame is not None:
+            choices, issues = narrative_frame.menu(frame, state['world_state'])
+            warnings.extend(issues)
+        elif not config.get('_narrative_suggestions') and narrative_frame.requested(json.loads(job.get('context_json') or '[]')):
+            warnings.extend(narrative_frame.menu({}, world)[1])
         changes = {'interpretation':'pending' if recovery is None else 'deferred'}
+        if skip:
+            changes['time_skip'] = skip
         if recovery is not None:
-            changes['interpretation_warnings'] = [dict(section='extraction',code='player_saved_prose',action='preserve_scene')]
-        self.commit_job(job_id, state, [], changes, timing, history, publish=True, recovery=recovery)
+            warnings.append(dict(section='extraction',code='player_saved_prose',action='preserve_scene'))
+        if warnings:
+            changes['interpretation_warnings'] = warnings
+        self.commit_job(job_id, state, choices, changes, timing, history, publish=True, recovery=recovery)
 
     def save_completed_scene(self, job_id, revision, attempt_epoch):
         job = self.get_job(job_id)
@@ -430,7 +473,7 @@ class EngineStorage:
             warning = dict(section='extraction', code=reason, action='preserve_scene')
             turn = dict(db.execute('SELECT * FROM turns WHERE id=?',(publication['turn_id'],)).fetchone())
             changes = json.loads(turn['changes_json'])
-            changes.update(interpretation='deferred', interpretation_warnings=[warning])
+            changes.update(interpretation='deferred', interpretation_warnings=[*changes.get('interpretation_warnings', []), warning])
             turn['changes_json'] = json.dumps(changes, ensure_ascii=False)
             db.execute('UPDATE turns SET changes_json=? WHERE id=?',(turn['changes_json'],turn['id']))
             db.execute('UPDATE response_variants SET payload=? WHERE id=?',

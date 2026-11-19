@@ -357,40 +357,8 @@ def advance_clock(snapshot, minute, batch):
                 source_ids=[p["event_id"]],
             )
         )
-    today = current_time(s)["date"]
-    # Age is a date projection; this never creates traits, schooling or employment.
-    for cid, actor in sorted(s["characters"].items()):
-        if actor["life_status"] == "dead":
-            continue
-        age = age_on(actor.get("birth_date"), today, profile_of(s))
-        if age is None:
-            continue
-        stage = (
-            "infant"
-            if age < 1
-            else "child"
-            if age < 12
-            else "adolescent"
-            if age < 18
-            else "adult"
-        )
-        old = actor["developmental_stage"]
-        if stage != old:
-            actor["developmental_stage"] = stage
-            batch["state_changes"].append(
-                dict(
-                    kind="developmental_stage",
-                    entity=cid,
-                    before=old,
-                    after=stage,
-                    minute=minute,
-                    turn_id=s["meta"]["turn_id"],
-                    source_ids=[actor.get("life_fact_id")]
-                    if actor.get("life_fact_id")
-                    else [],
-                    basis=dict(birth_date=actor["birth_date"], date=today),
-                )
-            )
+    from backend.runtime_v3.calendar import update_developmental_stages
+    update_developmental_stages(s, batch['state_changes'])
     from backend.runtime_v3.remote import advance as advance_remote
 
     history = WorldHistoryV3()
@@ -486,6 +454,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         for c in group
         if c.id not in chosen_ids
     )
+    arrival = None
     chosen.sort(key=lambda group: (group[0].minute, group[0].id))
     for group_index, group in enumerate(chosen):
         if cancelled is not None and cancelled.is_set():
@@ -570,12 +539,23 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         ]
         if config.get('_extraction_contract',1) >= 6:
             instruction=instruction.replace('events и information_events','scene_steps')
+        with_arrival = config.get('_extraction_contract',1) >= 10 and group_index == len(chosen)-1
+        narrative_instruction = instruction
+        if with_arrival:
+            destination = current_time(original, report['actual_target'])
+            pov = original['camera'].get('pov_actor_id') or original['camera'].get('controlled_actor_id')
+            narrative_instruction += (' Верни JSON: scene — закрытая сцена этой группы, '
+                'arrival — короткая открытая сцена на конечную дату перехода для POV '
+                + str(pov or 'наблюдателя') + ' (' + str(destination['date']) + ' ' + destination['time'] + '). '
+                'Не разглашай частные события группы в arrival. actions — ровно шесть разных продолжений '
+                'открытой сцены, каждое {"text":"…","facts":[]} с ID ранее известных POV сведений, '
+                'либо пустым списком для непосредственно видимой сцены.')
         narrative = ""
         try:
             messages = build_context(
                 camera,
                 [],
-                instruction,
+                narrative_instruction,
                 "background",
                 config.get("context_length", 32768),
                 config.get("max_tokens", 2000),
@@ -583,11 +563,27 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 world_history=history,
                 pacing_decision=group_policy,
             )
+            if with_arrival:
+                from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
+                for message in messages:
+                    if message['role'] == 'system':
+                        message['content'] = message['content'].replace(PROSE_ONLY_OUTPUT, '')
             report["llm_calls"] += 1
             from backend.services.letter_sources import generate_result
             narrative, artifacts = generate_result(generate, "long_term_narrative", messages,
                 config.get("max_tokens", 2000), config.get("temperature", 0.8), camera['world_state'],
                 context_key=[c.id for c in group])
+            if with_arrival:
+                try:
+                    wire = json.loads(narrative)
+                except ValueError:
+                    wire = None
+                if isinstance(wire, dict) and isinstance(wire.get('scene'), str):
+                    narrative = wire['scene']
+                    from backend.services.letter_sources import enabled, parse
+                    artifacts = parse(narrative) if enabled(camera['world_state']) else []
+                    if isinstance(wire.get('arrival'), str) and wire['arrival'].strip():
+                        arrival = (report['actual_target'], wire['arrival'], {'actions':wire.get('actions')})
             if cancelled is not None and cancelled.is_set():
                 return None
             if not narrative.strip():
@@ -868,4 +864,6 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
     result["world_state"] = assert_world_state_v3_invariants(
         result["world_state"], original
     )
+    if arrival and arrival[0] == report['actual_target']:
+        result['_public_arrival'] = arrival[1:]
     return result, batch, report

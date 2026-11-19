@@ -37,15 +37,15 @@ def parse_skip(text, now, cards=()):
         number = int(duration[1]) if duration[1].isdigit() else NUMBERS[duration[1]]
         target = now+number*(1 if duration[2].startswith('минут') else 60 if duration[2].startswith('час') else 1440)
     else:
-        until = re.search(r'\bдо\s+(?:следующего\s+)?(\d{1,2}:\d{2}|вечера|утра|полуночи)\b', text)
+        until = re.search(r'\bдо\s+(?:(следующего)\s+|(завтра)\s+в\s+)?(\d{1,2}:\d{2}|вечера|утра|полуночи)\b', text)
         if until:
-            clock = {'вечера':1080,'утра':420,'полуночи':0}.get(until[1])
+            clock = {'вечера':1080,'утра':420,'полуночи':0}.get(until[3])
             if clock is None:
-                hour, minute = map(int,until[1].split(':'))
+                hour, minute = map(int,until[3].split(':'))
                 if hour>23 or minute>59: raise ValueError('Неверное время Time Skip.')
                 clock=hour*60+minute
             target=now//1440*1440+clock
-            if target<=now: target+=1440
+            if until[1] or until[2] or target<=now: target+=1440
     waiting=None
     if source=='wait':
         who=re.fullmatch(r'(?:я )?(?:жду|ожидаю) (.+?) до .+',text)
@@ -55,6 +55,7 @@ def parse_skip(text, now, cards=()):
                 aliases=[card['name'].replace(' (ГГ)','').casefold(),*map(str.casefold,card.get('aliases',[]))]
                 forms=set(aliases)
                 for name in aliases:
+                    if not name.strip(): continue
                     first=name.split()[0]
                     forms.add(first)
                     if first.endswith('а'):forms.add(first[:-1]+'у')

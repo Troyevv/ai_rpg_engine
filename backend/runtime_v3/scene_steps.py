@@ -193,6 +193,11 @@ def project_schema(schema, *, version=6, camera_mode=None):
         props['life_changes']['items']['properties']['perceived_by'] = {
             'type':'array', 'items':{'type':'string'}, 'maxItems':16,
             'description':'Кому стало известно об указанном жизненном статусе.'}
+        from backend.runtime_v3.life_operations import wire_schema
+        wire_schema(props)
+        scene['properties']['ending'] = dict(type='object', additionalProperties=False,
+            required=['location_id','present_ids'], properties=dict(location_id={'type':'string','minLength':1},
+            present_ids={'type':'array','items':{'type':'string','minLength':1},'uniqueItems':True,'maxItems':64}))
         props.pop('agency_findings', None)
         props.pop('chronology_claims', None)
         for step in schema['$defs'].values():
@@ -612,6 +617,10 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         if not isinstance(records[name],list):
             records[name]=[]
             warnings.append(dict(section=name,code='optional_section_invalid',action='drop_section'))
+    if version >= 10:
+        from backend.runtime_v3.life_operations import phase_changes, consolidate_experience
+        phase_changes(records, state, turn_id, namespace)
+        consolidate_experience(records, state, turn_id, namespace)
     if version >= 9:
         bind_profile_baselines(records, state)
     normalize_facts(records, p, state)
@@ -708,6 +717,15 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
         if camera['mode'] == 'observer':
             location = observer_location
     visible = scene.pop('visible_character_ids', None)
+    ending = scene.pop('ending', None) if version >= 10 else None
+    if ending:
+        location = ending['location_id']
+        elsewhere = set(scene.get('observed_character_ids', []))
+        elsewhere.update(entry['actor_id'] for entry in scene.get('remote_interactions', []))
+        visible = [cid for cid in ending['present_ids'] if cid not in elsewhere]
+        if camera['mode'] == 'actor' and subject not in visible:
+            fatal('Итоговый физический состав должен включать управляемого героя.',
+                  'camera_actor_missing', section='scene', field='ending')
     if visible is None:
         visible = ([subject] if camera['mode']=='actor' and subject in local_exits else
                    [cid for cid in camera['present_character_ids'] if positions.get(cid)==location and cid not in local_exits])
@@ -785,6 +803,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
     raw.semantic_candidate = original
     raw.movement_sources = movement_sources
     raw.event_routes = event_routes
+    raw.explicit_ending = bool(ending)
     raw.preflight_errors = [row for e in errors for row in e.diagnostics('compilation')]
     return raw
 

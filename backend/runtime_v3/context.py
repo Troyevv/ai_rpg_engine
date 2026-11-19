@@ -153,7 +153,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
         from backend.runtime_v3.appearance import context_profile as appearance_context
         character['appearance']=appearance_context(state,character['id'],observer=scope.pov_actor_id or scope.controlled_actor_id,omniscient=extraction,known_actor_ids=scope.relevant_actor_ids)
         if character['appearance'] is None: character.pop('appearance')
-        character['age'] = age_on(character.get('birth_date'), current['current_time']['date'], profile_of(state))
+        character['age'] = age_on(character.get('birth_date'), character.get('death_date') if character.get('life_status')=='dead' else current['current_time']['date'], profile_of(state))
         from backend.runtime_v3.personality import context_profile
         profile = context_profile(character, evaluation=extraction)
         character.pop('personality', None)
@@ -675,7 +675,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=()):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:
@@ -841,18 +841,17 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     builder = ExtractionContextBuilder(extraction_contract) if extraction_text is not None else NarrativeContextBuilder(extraction_contract)
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
     reply_format = None
-    if (extraction_contract >= 9 and not builder.extraction and kind != 'background'
-            and camera['mode'] == 'actor' and scope.controlled_actor_id):
-        from backend.runtime_v3.life import capabilities
-        from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
-        if capabilities(state, scope.controlled_actor_id)['can_act']:
-            if extraction_contract >= 10:
-                from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
-                rules = rules.replace(PROSE_ONLY_OUTPUT, '')
-                reply_format = ('После сцены добавь отдельной строкой <action_suggestions>, '
-                                'затем JSON-массив из 4–6 коротких действий от лица героя. '
-                                'Используй только известное ему.')
-            else:
+    if not builder.extraction and (kind != 'background' or public_observation) and extraction_contract >= 9:
+        if extraction_contract >= 10:
+            from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
+            from backend.runtime_v3.narrative_frame import FORMAT
+            rules = rules.replace(PROSE_ONLY_OUTPUT, '')
+            reply_format = FORMAT + (' Варианты задают направление истории в режиме наблюдателя.'
+                                     if camera['mode']=='observer' else ' Варианты от лица героя.')
+        elif camera['mode']=='actor' and scope.controlled_actor_id:
+            from backend.runtime_v3.life import capabilities
+            from backend.runtime_v3.suggestions import NARRATIVE_INSTRUCTION
+            if capabilities(state, scope.controlled_actor_id)['can_act']:
                 rules += NARRATIVE_INSTRUCTION
     if builder.extraction and extraction_contract >= 10:
         for message in messages:

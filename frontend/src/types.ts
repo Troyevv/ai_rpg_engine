@@ -33,7 +33,7 @@ export interface Preferences {
   link_names: boolean;
 }
 export interface Character {
-  dossier?: {sex:string; life_status?:string|null; restrictions:string[]; conditions:{id:string;description:string;status:string;duration:string;since:number|null;until:number|null;restrictions:string[];evidence:string}[]};
+  dossier?: {sex:string; death_date?:string|null; age_at_death?:number|null; life_status?:string|null; restrictions:string[]; conditions:{id:string;description:string;status:string;duration:string;since:number|null;until:number|null;restrictions:string[];evidence:string}[]};
   appearance_history?:{before?:string|null;after?:string|null;minute:number}[];
   portrait?:import("./Portrait").PortraitRef|null;
   silhouette?:string;
