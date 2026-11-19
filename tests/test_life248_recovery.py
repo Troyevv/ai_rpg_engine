@@ -150,7 +150,7 @@ def test_production_world_job_recovers_length_with_changed_limit_and_reload(api)
             payload=json.loads(kw['messages'][1]['content']);answer=dict(candidate_hash=payload['candidate_hash'],rationale='Controlled fixture, no artistic evaluation.',changes=[])
             assert kw['thinking']=='low'
         elif system.startswith(draft_completeness.MARKER):
-            answer={'issues':[]};assert kw['thinking']=='off'
+            answer={'issues':[]};assert kw['thinking']=='low'
         else:
             assert len(calls)==1 and kw['max_tokens']==32000 and kw['thinking']=='low'
             answer=rich()

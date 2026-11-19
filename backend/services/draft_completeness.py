@@ -485,3 +485,41 @@ def parse(reply,state):
         problems.extend(rows)
     if errors:raise ReportError(errors,problems)
     return problems
+
+
+def advisory_messages(state, source):
+    """A reader's notes have no mutation scope or authority over the candidate."""
+    return [
+        dict(role='system',content=MARKER+' Рекомендательное чтение. Верни JSON {"issues": [{"message": "..."}]}. '
+             'Укажи только конкретные существенные противоречия явным вводным или канону. '
+             'Если их нет, верни пустой список. Не перечисляй возможные улучшения, отсутствующие '
+             'необязательные записи или серверные расчёты календаря. Присутствие не доказывает '
+             'свидетельство или знание. Не предлагай патчи и не интерпретируй тайну как ошибку.'),
+        dict(role='user',content=json.dumps(dict(candidate=state,author_context=source),ensure_ascii=False,separators=(',',':')))
+    ]
+
+
+def read_advisory(state, source, journal, call):
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_response import strict_loads
+    key=candidate_hash(state)
+    previous=journal.get('advisory')
+    if previous:
+        if previous['candidate_hash']==key:return previous
+        return dict(previous,status='stale',reason='После чтения мир изменился.')
+    result=dict(candidate_hash=key,advisory=True,issues=[])
+    try:
+        reply=call('completeness_advisory_'+key,advisory_messages(state,source))
+        if reply is None:return None
+        report=strict_loads(reply)
+        if not isinstance(report,dict) or not isinstance(report.get('issues'),list):
+            raise ValueError('В отчёте отсутствует список замечаний.')
+        for item in report['issues']:
+            if not isinstance(item,dict) or not isinstance(item.get('message'),str) or not item['message'].strip():
+                raise ValueError('Часть замечаний не удалось прочитать.')
+            result['issues'].append(dict(message=item['message'],severity='recommendation' if item.get('severity')=='recommendation' else 'warning',patch_paths=[]))
+        result['status']='completed'
+    except ValueError as exc:
+        result.update(status='failed',reason=str(exc))
+    journal['advisory']=result
+    return result

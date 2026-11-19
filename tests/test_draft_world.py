@@ -295,7 +295,7 @@ def test_failed_structural_repair_keeps_previous_version(api):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Идея',
                                                 'config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='error'
-    assert len(calls)==3
+    assert len(calls)==2
     current=client.get(path+'?author=true').json()
     assert current['candidate']['protagonist_id']=='missing'
     assert draft['version_id'] in [v['id'] for v in current['history']]

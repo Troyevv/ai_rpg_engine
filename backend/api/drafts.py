@@ -63,6 +63,10 @@ class Resume(Credential):
     retry_empty_response: str | None = Field(default=None,pattern=r'^[0-9a-f]{64}$')
     expected_epoch: int | None = Field(default=None,ge=0)
 
+class CreativeRecovery(Revision):
+    destination: Literal['current','copy']
+
+
 class CandidateChange(Revision):
     path: str
     value: Any
@@ -165,6 +169,19 @@ def install(app,repo,preparation,credentials,job):
         repo.merge_draft_relations(wid,body.revision,body.ids)
         return repo.draft(wid,True)
 
+    @app.post('/api/workspaces/{wid}/draft/finish/{jid}')
+    def finish_saved_candidate(wid:str,jid:str,body:Revision):
+        repo.finish_saved_candidate(wid,jid,body.revision)
+        return repo.draft(wid)
+
+    @app.get('/api/workspaces/{wid}/draft/creative/{jid}/{base_hash}')
+    def preview_creative(wid:str,jid:str,base_hash:str):
+        return repo.creative_recovery(wid,jid,base_hash)
+
+    @app.post('/api/workspaces/{wid}/draft/creative/{jid}/{base_hash}')
+    def recover_creative(wid:str,jid:str,base_hash:str,body:CreativeRecovery):
+        return repo.creative_recovery(wid,jid,base_hash,revision=body.revision,destination=body.destination)
+
     @app.get('/api/workspaces/{wid}/draft/raw')
     def raw(wid:str,job_id:str|None=None):
         current=repo.workspace(wid)['job']
@@ -173,7 +190,7 @@ def install(app,repo,preparation,credentials,job):
         if not saved or saved['workspace_id']!=wid:raise ValueError('Задание не принадлежит черновику.')
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
-        keys=('editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+        keys=('advisory','creative_recoveries','editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
               'active_response','empty_requests','empty_retries','empty_retry_history','response_retries',
               'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
@@ -190,6 +207,7 @@ def install(app,repo,preparation,credentials,job):
                 'current_diagnostics':draft['validation'].get('diagnostics',[]),'current_start_block_reason':draft.get('start_block_reason'),
                 'candidate_snapshot':draft.get('candidate') or draft.get('state'),'candidate_version':draft.get('version_id'),
                 'author_input':{'text':json.loads(saved['config_json']).get('_draft_source',json.loads(saved['config_json']).get('_draft_input','')),'source_text':draft.get('source_text'),'outline':draft.get('outline')},
+                'budget_policy':{key:journal.get('budget_snapshot',{}).get(key) for key in ('_policy_version','_world_budget_policy','_world_reasoning_ratio','max_tokens','context_length')},
                 'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
                 'revision':saved['revision'],'review':repo.draft(wid,True).get('review')}}
 

@@ -115,7 +115,7 @@ def test_author_merge_revision_privacy_and_preserved_review(api):
     assert previous['candidate'] is True
 
 
-def test_prose_contradiction_is_reviewed_then_locally_repaired(api):
+def test_prose_contradiction_remains_visible_without_mutating_canon(api):
     client,app=api;wid=client.post('/api/workspaces',json={'name':'text conflict'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     state=pair();state['world']['objective_relations']['b']['context']='Они не родственники, sibling ошибочен.'
     calls=[]
@@ -126,16 +126,13 @@ def test_prose_contradiction_is_reviewed_then_locally_repaired(api):
         elif len(calls)==2:
             assert 'Они не родственники' in kw['messages'][1]['content'] and 'Брат и сестра' in kw['messages'][1]['content']
             yield json.dumps({'issues':[{'path':'/world/objective_relations/a/context','patch_paths':['/world/objective_relations/a/context'],'message':'Описания родства противоречат друг другу.','severity':'blocker'}]})
-        elif len(calls)==3:
-            payload=json.loads(kw['messages'][1]['content'])
-            assert payload['errors'][0]['path']=='/world/objective_relations/a/context'
-            yield '{"patches":[{"path":"/world/objective_relations/a/context","value":"Брат и сестра"}]}'
-        else:yield '{"issues":[]}'
+        else:pytest.fail('Unexpected semantic repair')
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         jid=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
         result=wait_job(client,jid);assert result['status']=='saved',result
-    assert len(calls)==4
-    assert client.get(url+'?author=true').json()['state']['world']['objective_relations']['a']['context']=='Брат и сестра'
+    draft=client.get(url+'?author=true').json()
+    assert len(calls)==2 and draft['review']['issues'][0]['message']=='Описания родства противоречат друг другу.'
+    assert draft['state']['world']['objective_relations']['a']['context']==state['world']['objective_relations']['a']['context']
 
 
 @pytest.mark.parametrize('state',[None,[],{'world':[]},{'world':{'objective_relations':[]}}])

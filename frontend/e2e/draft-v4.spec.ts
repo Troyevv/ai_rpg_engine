@@ -142,7 +142,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
     await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.world.characters[cid][field]).toEqual(records);
   }
   await page.getByRole('button',{name:'Готово',exact:true}).click();await workshopNav(page,'Проверка мира');
-  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Повторить проверку',exact:true})).toHaveCount(0);
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await page.screenshot({path:`test-results/motivations-${page.viewportSize()?.width}.png`,fullPage:true});
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();

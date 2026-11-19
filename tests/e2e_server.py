@@ -759,9 +759,10 @@ preparation.chat_stream = preparation_stream
 from backend.services import draft_generation
 _generation_run = draft_generation.run
 def generation_fixture(prep, jid, config, *args):
-    if 'TEST_RELEASE_QUALITY' in str(config.get('_draft_source', config.get('_draft_input', ''))):
+    source=str(config.get('_draft_source',config.get('_draft_input','')))
+    if any(marker in source for marker in ('TEST_RELEASE_QUALITY','TEST_REVIEW_PROTOCOL','TEST_REVIEW_AUTOMATIC','TEST_RELEASE_NESTED')):
         journal = json.loads(prep.repo.preparation_job(jid).get('response_journal') or '{}')
-        journal.setdefault('generation_contract', {'version': 5})
+        journal.setdefault('generation_contract', {'version':5} if 'TEST_RELEASE_QUALITY' in source else {'version':6,'portrait_version':2})
         prep.repo.save_response_journal(jid, journal)
     return _generation_run(prep, jid, config, *args)
 draft_generation.run = generation_fixture
@@ -885,6 +886,11 @@ if __name__ == '__main__':
         assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
         (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
+    @app.post('/test/generation266')
+    def generation266_seed():
+        from generation266_fixture import seed
+        return seed(app.state.repository)
+
     @app.post('/test/scene255-reset')
     def scene255_reset():
         global scene255_mode

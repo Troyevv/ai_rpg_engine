@@ -130,7 +130,7 @@ export function Settings({
                 <Choice aria-label={`Thinking ${key}`} value={draft[key].thinking || "off"} onValueChange={selectedValue => update(key,{thinking:selectedValue as ModelConfig["thinking"]})}>
                   <option value="off">Off</option><option value="low">Low</option><option value="high">High</option>
                 </Choice>
-                <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется. {key==='summary' && 'При проверке мира Thinking всегда выключен.'}</span>
+                <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется. {key==='summary' && 'При чтении нового мира используется выбранный доступный режим.'}</span>
               </label>}
             </div>
             <ModelBudget stage={key} value={draft[key]} change={patch=>update(key,patch)}/>

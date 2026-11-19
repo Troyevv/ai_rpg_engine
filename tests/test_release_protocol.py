@@ -209,14 +209,14 @@ def test_quality_rejected_rereview_or_cancel_rolls_back(broken_review):
 def legacy_generation(preparation,jid,*args):
     from backend.services.draft_generation import run
     journal=json.loads(preparation.repo.preparation_job(jid).get('response_journal') or '{}')
-    journal.setdefault('generation_contract',{'version':5})
+    journal['generation_contract']={'version':5}
     preparation.repo.save_response_journal(jid,journal)
     return ORIGINAL_GENERATION_RUN(preparation,jid,*args)
 
 from backend.services.draft_generation import run as ORIGINAL_GENERATION_RUN
 
 @pytest.mark.parametrize('scenario',['nullable_review','advisory','quality_partial'])
-def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
+def test_api_protocol_recovery_to_game_without_manual_world_edit(archived_world_review,api,scenario):
     client,app=api;state=rich();state['campaign']['title']='Неверное название'
     if scenario=='quality_partial':state['characters'][1]['fields']['Внешность']='неизвестно'
     wid=client.post('/api/workspaces',json={'name':'Release'}).json()['id'];url=f'/api/workspaces/{wid}/draft';calls=[]

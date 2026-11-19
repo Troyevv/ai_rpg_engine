@@ -528,3 +528,12 @@ html[data-theme=graphite] .atelier-scope .fl-stages li.done .fl-stage-no{backgro
 /* The generic mobile dialog is a bottom sheet; the approved atelier keeps centered folios. */
 .dialog-content.atelier-scope.folio-modal:not(.drawer){left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);border-radius:14px}
 html[data-theme=graphite] .atelier-scope .primary:disabled{opacity:1;background:#49463a;border-color:#575243;color:#c1baaa}
+
+.dialog-content.creative-recovery {max-height:calc(100dvh - 2rem - env(safe-area-inset-bottom));display:flex;flex-direction:column;overflow:hidden;overflow-wrap:anywhere}
+.creative-recovery-body {min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;gap:.65rem;padding:.2rem}
+.creative-recovery-body button {justify-self:start}
+.creative-recovery details, .generation-notes {margin-block:.65rem}
+.creative-recovery summary, .generation-notes summary, .generation-notes button {cursor:pointer;min-height:44px;align-content:center}
+.creative-recovery ul, .generation-notes ul {padding-inline-start:1.4rem;list-style:disc}
+.creative-recovery li, .generation-notes li {margin-block:.45rem;overflow-wrap:anywhere}
+.generation-notes button {color:var(--accent);text-decoration:underline}

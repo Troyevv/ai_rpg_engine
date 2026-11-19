@@ -21,7 +21,7 @@ def is_builtin_prompt(name, content, root=ROOT):
     """
     import hashlib
     current = (root / name).read_text(encoding='utf-8')
-    return (content.strip() == current.strip()
+    return (content == current or (name != "draft_world_prompt.md" and content.strip() == current.strip())
             or hashlib.sha256(content.encode()).hexdigest() in builtin_prompt_hashes(root).get(name, ()))
 
 
@@ -78,8 +78,9 @@ class DocumentStorage:
             raise ValueError('Неизвестный документ.')
         with self.connect() as db:
             head=db.execute('SELECT version_id FROM document_heads WHERE kind=? AND owner=?',(kind,owner)).fetchone()
-            template = (ROOT/owner).read_text(encoding='utf-8') if kind=='prompt' and owner=='state_update_prompt.md' else None
-            return {'template':template,'active_id':head[0] if head else None,'versions':[dict(r) for r in db.execute('SELECT * FROM document_versions WHERE kind=? AND owner=? ORDER BY id DESC',(kind,owner))]}
+            template = (ROOT/owner).read_text(encoding='utf-8') if kind=='prompt' and owner in ('state_update_prompt.md','draft_world_prompt.md') else None
+            active=db.execute('SELECT content FROM document_versions WHERE id=?',(head[0],)).fetchone()[0] if template is not None and head else ''
+            return {'template':template,'prompt_origin':('bundled' if (ROOT/owner).read_text()==active else 'historical_builtin' if is_builtin_prompt(owner,active) else 'custom_unverified') if template is not None else None,'active_id':head[0] if head else None,'versions':[dict(r) for r in db.execute('SELECT * FROM document_versions WHERE kind=? AND owner=? ORDER BY id DESC',(kind,owner))]}
 
     def change_document(self,kind,owner,content,expected_head,source_id=None):
         if kind not in ('idea','summary','prompt') or (kind=='prompt' and owner not in PROMPT_NAMES):

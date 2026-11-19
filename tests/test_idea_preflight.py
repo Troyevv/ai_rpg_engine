@@ -89,18 +89,14 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
             assert duplicate.status_code==409
         finally:provider.gate.set()
         failed=wait_job(client,jid)
-        assert failed['status']=='error',failed
+        assert failed['status']=='saved',failed
         d=client.get(url).json()
         assert d['job']['response_diagnostic']['http_status']==502,d
         assert d['state'] is not None
         assert d['source_text']=='' and d['candidate'] is None
-        resume=client.post(url+'/resume',json=dict(revision=d['revision'],api_key='offline-fixture'))
-        assert resume.status_code==200,resume.text
-        assert resume.json()['id']==jid
-        assert wait_job(client,jid)['status']=='saved'
     after=client.get(url+'?author=true').json()
-    assert provider.world_calls==1 and provider.review_calls==2
-    assert after['review']['status']=='completed'
+    assert provider.world_calls==1 and provider.review_calls==1
+    assert after['review']['status']=='failed'
     assert after['version_origin_job_id']==jid and not after['version_is_candidate']
     assert after['creation_settings']['communication']['voice_call']
     assert after['creation_settings']['communication']['letter'] and after['creation_settings']['communication']['courier']
@@ -112,7 +108,7 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
             for field,expected in value.items():assert after['creation_settings']['calendar_start'][key][field]==expected
         else:assert after['creation_settings']['calendar_start'][key]==value
     journal=json.loads(repo.preparation_job(jid)['response_journal'])
-    assert journal['recovery_epoch']==1
+    assert journal.get('recovery_epoch',0)==0
     # A second real job initially sees the previous head; its successful review
     # must not become completion evidence for the new generation.
     from threading import Event
@@ -131,7 +127,7 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
             assert current['job']['id']==second_id and second_id!=jid
             assert current['version_id']==after['version_id']
             assert current['version_origin_job_id']==jid
-            assert current['review']['status']=='completed'
+            assert current['review']['status']=='failed'
             assert current['creative_status'] is None
         finally:
             release.set()

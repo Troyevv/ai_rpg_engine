@@ -85,7 +85,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(idea.repeat(80));
 });
 
-test('idea190: real generation, reload, HTTP502 review recovery and author revision',async({page,request},info)=>{
+test('idea190: real generation, reload, optional HTTP502 review and author revision',async({page,request},info)=>{
  await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
  await request.post('/test/idea190',{data:{fail_review:true,custom_calendar:true}});
  await page.goto('/');
@@ -111,18 +111,14 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  const before=await(await request.get(url+'?author=true')).json();expect(before.version_id).toBeTruthy();
  await expect(page.locator('.fl-stages li[data-state=done]')).toHaveCount(3);await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);await capture(page,info,'production-running');
  await page.reload();await nav(page,'Создать');await expect(page.getByRole('region',{name:'Этапы создания мира'})).toBeVisible();
- await request.post('/test/idea190/release');await expect(page.getByRole('alert')).toContainText('HTTP 502');
- await expect(page.getByText(/известной причиной HTTP 400/)).toHaveCount(0);
- await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);await capture(page,info,'production-error');
+ await request.post('/test/idea190/release');await expect(page.getByRole('heading',{name:'Мир сохранён с замечаниями'})).toBeVisible();
  await page.reload();await nav(page,'Создать');
- await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
- await expect.poll(async()=> (await(await request.get(url)).json()).job.status).toBe('saved');
- const after=await(await request.get(url+'?author=true')).json();expect(after.job.id).toBe(job.id);expect(after.review.status).toBe('completed');
+ const after=await(await request.get(url+'?author=true')).json();expect(after.job.id).toBe(job.id);expect(after.review.status).toBe('failed');expect(after.review.reason).toContain('502');
  expect(after.creation_settings.calendar_start).toMatchObject({mode:'custom',date:'2026-02-30',time:'18:30',profile:{month_lengths:[30,40]}});
  expect(after.creation_settings.communication).toMatchObject({preset:'custom',letter:true,courier:true,voice_call:true,presentation:'phone'});
  expect(after.creation_settings).toMatchObject({primary_genre:'custom',custom_genre:'Драма',cast_preset:'custom',core_npcs:4,secondary_npcs:7});
- await expect(page.getByRole('heading',{name:'Мир готов к редактированию'})).toBeVisible();await capture(page,info,'production-result');
- const counts=await(await request.post('/test/idea190/release')).json();expect(counts.world_calls).toBe(1);expect(counts.review_calls).toBe(2);
+ await expect(page.getByRole('heading',{name:'Мир сохранён с замечаниями'})).toBeVisible();await capture(page,info,'production-result');
+ const counts=await(await request.post('/test/idea190/release')).json();expect(counts.world_calls).toBe(1);expect(counts.review_calls).toBe(1);
  await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
  await expect(page.locator('.ww-hero h1')).toBeVisible();
  // Edit through the existing author editor, preserving revision protection.

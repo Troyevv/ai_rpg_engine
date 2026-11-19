@@ -13,18 +13,24 @@ def selected(issues):
             and e.get('assertion')=='optional_detail' and e.get('patch_paths')]
 
 
-def minimum(state, author_context):
+def minimum(state, author_context, *, creative=False):
     """Detect placeholders, never grade prose length or invent facts in Python."""
     placeholders={'','неизвестно','не указано','не задано','unknown','n/a','—'}
+    names=('Внешность','Характер','Стиль общения','Привычки','Сильные стороны','Слабости','Биография')
+    if creative:
+        names+=('Возраст','Статус','Роль','Страхи и уязвимости')
+        placeholders.update(('нет данных','неизвестен','неизвестна'))
     protected=state.get('authoring',{}).get('manual_paths',[])
     findings=[]
     for i,card in enumerate(state.get('characters',[])):
         if card['id']==state.get('controlled_actor_id'):continue
         fields=card.get('fields',{})
-        for name in ('Внешность','Характер','Стиль общения','Привычки','Сильные стороны','Слабости','Биография'):
+        for name in names:
             value=fields.get(name,'')
             path=f'/characters/{i}/fields/{name}'
-            if path in protected or not isinstance(value,str) or value.strip().lower() not in placeholders:continue
+            if not isinstance(value,str) or any(path==p or path.startswith(p+'/') for p in protected):continue
+            normalized=value.strip().lower()
+            if (normalized.rstrip('.').strip() if creative else normalized) not in placeholders:continue
             # Explicit author uncertainty is interpreted by the completion model,
             # using the intact source; the detector grants no fact authority.
             findings.append(dict(path=path,message='Проверь намеренную неизвестность по авторскому контексту. Если она не задана автором, дополни полезную для игры черту NPC.',severity='recommendation',assertion='optional_detail',category='semantic_completeness',patch_paths=[path],minimum=True))

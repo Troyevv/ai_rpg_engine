@@ -102,7 +102,7 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
         before=repo.get_snapshot(sid);job=repo.begin_job(sid,'Осматриваюсь.' if kind=='turn' else '',kind,CONFIG)
         play(repo,job,raw_for(before));assert repo.get_job(job)['status']=='saved'
         repo=Repository(repo.path)
-    assert len(calls)==3
+    assert len(calls)==2
     stale=client.patch(url+'/candidate',json={'revision':0,'path':'/protagonist_id','value':original})
     assert stale.status_code==409
 
@@ -115,19 +115,11 @@ def test_malformed_review_resume_does_not_regenerate(api):
         yield json.dumps(rich()) if len(calls)==1 else '{"bad":true}'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         jid=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
-        assert wait_job(client,jid)['status']=='error'
-    d=client.get(url+'?author=true').json()
-    assert d['candidate'] and d['technical_valid'] and d['start_warning']
-    assert d['review']['status']=='failed' # v2: failure remains truthful, now advisory
-    @accept_creative_unchecked
-    def correct(**kw):
-        assert kw['messages'][0]['content'].startswith(review.MARKER)
-        yield '{"issues":[]}'
-    with patch('backend.services.preparation.chat_stream',side_effect=correct) as provider:
-        r=client.post(url+'/resume',json={'api_key':'test','revision':d['revision'],'max_tokens':2048});assert r.status_code==200,r.text
         assert wait_job(client,jid)['status']=='saved'
-        assert provider.call_count==1
-    cfg=json.loads(app.state.repository.preparation_job(jid)['config_json']);assert cfg['max_tokens']==2048
+    d=client.get(url+'?author=true').json()
+    assert d['state'] and d['technical_valid'] and d['review']['status']=='failed'
+    assert len(calls)==2
+    assert d['review']['advisory'] and not d['version_is_candidate']
 
 
 @pytest.mark.parametrize('context_length',[65536,262144])

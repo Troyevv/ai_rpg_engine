@@ -100,7 +100,7 @@ def author_value(old, new, path=""):
 
 
 def resolve_card_paths(state, proposal):
-    """Editor-only identity aliases; numeric addresses retain frozen-base semantics.
+    """Stable card identity aliases; numeric addresses retain frozen-base semantics.
 
     The shadow tracks prior additions/assignments and tombstones without shifting
     indices. It never escapes preflight or changes the shared JSON Pointer reader.
@@ -120,11 +120,11 @@ def resolve_card_paths(state, proposal):
                 rows = shadow[parts[0]]
                 token = parts[1]
                 if token != '-' and not re.fullmatch(r'0|[1-9]\d*', token):
-                    matches = [i for i, row in enumerate(rows) if row.get('id') == token]
+                    matches = [i for i, row in enumerate(rows) if isinstance(row, dict) and row.get('id') == token]
                     if len(matches) != 1:
                         raise ValueError('ID карточки не найден' if not matches else 'Неоднозначный ID карточки')
                     parts[1] = str(matches[0])
-                elif token.isdigit() and any(row.get('id') == token for row in rows):
+                elif token.isdigit() and any(isinstance(row, dict) and row.get('id') == token for row in rows):
                     raise ValueError('Неоднозначная адресация: числовой ID совпадает с индексом')
             path = '/' + '/'.join(p.replace('~', '~0').replace('/', '~1') for p in parts)
             if any(path == dead or path.startswith(dead + '/') for dead in deleted):
@@ -161,8 +161,7 @@ def apply_proposal(state, reply, *, editing=False):
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
-    if editing:
-        resolve_card_paths(state, proposal)
+    resolve_card_paths(state, proposal)
     trial = deepcopy(state)
     schema = prompt_schema()['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}

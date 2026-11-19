@@ -9,7 +9,8 @@ import {FeelingEditor} from './workshop/FeelingEditor';
 import {VersionPreview} from './workshop/VersionPreview';
 import {StartConfirmation,type LaunchSnapshot} from './workshop/StartConfirmation';
 import {workshopSearch} from './workshop/workshopSearch';
-import {IdeaGeneration} from './workshop/IdeaGeneration';
+import {CreativeRecovery,type Package} from './workshop/CreativeRecovery';
+import {IdeaGeneration,CharacterGaps} from './workshop/IdeaGeneration';
 import {IdeaAtelier} from './workshop/IdeaAtelier';
 import {readIdeaBuffer,writeIdeaBuffer} from './workshop/ideaBuffer';
 import {ReferenceChecklist} from './workshop/ReferenceChecklist';
@@ -85,9 +86,10 @@ type Draft = {
     games?: {world:number;save:number;version_id:number}[];
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
-    review?: {status:string;reason?:string;checked_revision?:number;issues?:{message:string;severity:string;path?:string|null;patch_paths?:string[];related_paths?:string[];protocol_warnings?:unknown[]}[]} | null;
+    review?: {status:string;advisory?:boolean;reason?:string;checked_revision?:number;issues?:{message:string;severity:string;path?:string|null;patch_paths?:string[];related_paths?:string[];protocol_warnings?:unknown[]}[]} | null;
     review_decisions?:ReviewDecision[];
     pending_editor?: boolean;
+    npc_gaps?:{id:string;name:string;fields:string[]}[];can_finish_candidate?:boolean;creative_job_id?:string;creative_packages?:Package[];has_creative_recovery?:boolean;
     creative_status?: 'running' | 'applied' | 'rejected' | 'cancelled' | 'interrupted' | null;
     quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
     start_block_reason?: string | null;
@@ -558,7 +560,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const characterGroups=[...(familyIds.length?[{id:'family',label:'Семья',ids:familyIds}]:[]),...Object.entries(state?.world.organizations||{}).map(([oid,o])=>({id:'org:'+oid,label:String(o.name),ids:Object.values(state?.world.roles||{}).filter(role=>role.organization_id===oid&&role.status!=='closed').map(role=>String(role.actor_id)).filter(cid=>characters.some(c=>c.id===cid))})).filter(g=>g.ids.length)];
     const searchResults=workshopSearch(state,search);
     const selectedCard=characters.find(c=>c.id===selectedCharacter) as WorkshopCharacter|undefined;
-    const navigate=(next:WorkshopSection)=>{setMode('quick');setRecordTarget(null);setSection(next);if(next==='idea')setEditingIdea(true)};
+    const navigate=(next:WorkshopSection)=>{setMode('quick');setRecordTarget(null);setSection(next);if(next==='idea')setEditingIdea(job?.kind!=='draft_world'||job.status==='saved'&&!draft?.has_creative_recovery)};
     const pageHeader=(title:string,description:string)=><header className="ww-page-head"><div><p className="ww-eyebrow">Мастерская миров</p><h1>{title}</h1><p>{description}</p></div></header>;
     const tab=(key:string,items:[string,string][])=>{const value=subsection[key]||items[0][0];return <SectionTabs label={key} value={value} onChange={value=>setSubsection({...subsection,[key]:value})} items={items.map(([id,label])=>({id,label}))}/>};
     const currentSub=(key:string,fallback:string)=>subsection[key]||fallback;
@@ -585,7 +587,12 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const canOpenBrief=author||!id||!!draft&&!state&&!viewChanging&&!draft.version_id;
     const workspaceTitle=String(state?.campaign.title||draft?.name||'Новая история');
     const ideaGenerationVisible=showIdea&&job?.kind==='draft_world'&&!!draft&&!editingIdea;
-    const resumeAction=((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button className={ideaGenerationVisible?"fl-primary":undefined} disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>;
+    const resumeAction=((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && !draft.review.advisory && job?.status==='saved' && job.kind!=='draft_editor')) && <Button className={ideaGenerationVisible?"fl-primary":undefined} disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>;
+    const finishCandidate = draft?.can_finish_candidate && job && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/finish/${job.id}`,{revision:draft.revision});await refresh()})}>Завершить с сохранённым миром</Button>;
+    const openGap=(cid:string)=>{setSection('characters');setSelectedCharacter(cid);setDossierOpen(true)};
+    const recoveredAction = draft?.has_creative_recovery && draft.creative_job_id && !active(job) && (author && draft.creative_packages?.length
+        ? <CreativeRecovery key={id+draft.creative_job_id} workspace={id} job={draft.creative_job_id} packages={draft.creative_packages} onOpen={wid=>{selectWorkspace(wid,null,true);setSection('overview');if(wid===id)void refresh()}}/>
+        : <Button variant="outline" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Посмотреть дополнение в режиме автора</Button>);
     const emptyRetryAction=job?.empty_retry_token && <Button className={ideaGenerationVisible?"fl-primary":undefined} disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>;
     const generationActivity = (resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
         <span className="workshop-pulse"/><div><strong>{resuming ? 'Запускаем повторную проверку…' : reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{resuming ? 'Отправляем запрос на продолжение сохранённого задания.' : reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
@@ -620,15 +627,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         </details>
       </details>
       </DialogContent></Dialog>
-      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} activity={generationActivity} recoveryActions={<>{resumeAction}{emptyRetryAction}</>} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
+      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} activity={generationActivity} onCharacter={openGap} recoveryActions={<>{finishCandidate}{recoveredAction}{resumeAction}{emptyRetryAction}</>} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
       {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<div className={showIdea?"atelier-scope atelier-recovery":undefined}>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
-      {!ideaGenerationVisible&&resumeAction}
+      {!ideaGenerationVisible&&finishCandidate}{!ideaGenerationVisible&&recoveredAction}{!ideaGenerationVisible&&resumeAction}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
       {job?.response_diagnostic?.code === 'provider_http_rejection' && job.response_diagnostic.http_status === 400 && !active(job) && <p className="workshop-hint">HTTP-отказ не применён к миру. Перед продолжением проверь причину: для ошибки параметров нужно исправить настройки или сборку запроса. Неизменённый запрос с известной причиной HTTP 400 повторно не отправляется.</p>}
       {!ideaGenerationVisible&&emptyRetryAction}
       <Dialog open={!!emptyRetry} onOpenChange={open=>{if(!open)setEmptyRetry(null)}}><DialogContent><DialogHeader><DialogTitle>Повторная проверка после сбоя</DialogTitle><DialogDescription>Провайдер завершил запрос без текста. Если временный сбой устранён, можно подтвердить одну новую проверку сохранённого мира. Это новый запрос, который может быть оплачен. Предыдущие ответы и расходы сохранятся, общий бюджет не сбрасывается. Каждому повтору нужно новое подтверждение; автоматических повторов не будет.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={()=>setEmptyRetry(null)}>Отмена</Button><Button disabled={locked} onClick={()=>{if(!emptyRetry)return;const retry=emptyRetry;setEmptyRetry(null);void resume({retry_empty_response:retry.token,expected_epoch:retry.epoch})}}>Подтвердить одну повторную проверку</Button></div></DialogContent></Dialog>
-      {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Смысловая проверка выполняется с Thinking Off; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}
+      {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Thinking проверки — {job.review_thinking||'ещё не определён'}; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}
       {(job as Job & {transport_blocked?:boolean})?.transport_blocked && <p role="alert">Сборка остановлена: повреждены исходные данные или нет безопасной границы для повтора. Скачайте диагностику; автоматическая замена сохранённых частей запрещена.</p>}
       {(job as Job & {fragment_recovery?:boolean})?.fragment_recovery && <details><summary>Повторить проблемное продолжение</summary><p>Предыдущие части останутся неизменными. Отклонённая часть сохранится в диагностике; новый запрос может быть оплачен.</p><Button disabled={locked} onClick={()=>void resume({retry_last_fragment:true})}>Запросить только последнее продолжение</Button></details>}
       {(job?.status === 'error' || job?.status === 'stopped') && <div>{author && <Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>}
@@ -698,7 +705,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       {!(showIdea&&job?.kind==='draft_world'&&!editingIdea) && !resuming && !active(job) && (job?.response_diagnostic?.message || job?.error) && <p className="workshop-error" role="alert">{job?.response_diagnostic?.message || job?.error}</p>}
       {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
       {(job?.pinned_config||job?.effective_config)&&<details className="workshop-detail ww-request-details"><summary>Параметры запроса</summary>
-      {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: off</p>}
+      {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: {job.review_thinking || 'ещё не определён'}</p>}
       {job?.effective_config && <p className="workshop-hint" aria-label="Фактические параметры запроса">Последний запрос: {job.effective_config.provider} / {job.effective_config.model} · Thinking: {job.effective_config.thinking} · Контекст: {job.effective_config.context_length} · Лимит ответа: {job.effective_config.max_tokens} · Попытка: {(job.attempt_epoch || 0)+1}</p>}
       </details>}
       {!ideaGenerationVisible && job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
@@ -714,6 +721,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         {section==='ai'&&!author&&<div className="ww-empty"><h2>Изменения с ИИ</h2><p>Редактор работает с полным авторским миром, включая тайны и знания персонажей.</p><button onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть авторский редактор</button></div>}
         {section==='ai' && author && draft && <WorldAIEditor title={workspaceTitle} version={draft.version_id} example={aiExample} onHistory={setPreviewVersion} onObject={(section,eid)=>{if(section==='characters'){if(characters.some(c=>c.id===eid))openPerson(eid);return}const path='/'+section+'/'+eid;const link=reviewLink(path);if(link)link.open();else toast.info('Объект недоступен в текущей версии. Откройте историю изменений.')}} wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
           {section === 'overview' && <>
+            {author&&<CharacterGaps gaps={draft?.npc_gaps} onCharacter={openGap}/>}
             <section className="ww-hero">
               {author&&<button className="ww-hero-edit" aria-label="Изменить описание и правила" title="Изменить описание и правила" onClick={()=>editRecord('campaign','',state.campaign,'Описание и правила мира')}><Pencil size={18}/></button>}
               <div className="ww-eyebrow">Ваш мир. Ваши истории.</div><h1>{workspaceTitle}</h1>

@@ -84,9 +84,7 @@ for (const skin of ["graphite", "parchment"])
       preset: "custom",
     });
     await workshopNav(page,'Проверка мира');
-    await page
-      .getByRole("button", { name: "Повторить проверку", exact: true })
-      .click();
+    await expect(page.getByRole("button",{name:"Повторить проверку",exact:true})).toHaveCount(0);
     await workshopNav(page,'Обзор мира');
     await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
     await page

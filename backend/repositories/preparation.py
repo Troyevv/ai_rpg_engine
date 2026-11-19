@@ -103,10 +103,22 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                  'response_diagnostic':public_diagnostic(record.get('failure') or record.get('http_failure')),
                  'empty_retry_token':Repository.empty_retry_token(journal) if job.get('status')=='error' else None,
                  'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
+            if job['kind']=='draft_world':
+                from llm import thinking_options
+                review_records=[v for k,v in journal.get('responses',{}).items() if k.startswith('completeness') and v.get('effective_config')]
+                job['review_thinking']=(review_records[-1]['effective_config']['thinking'] if review_records else
+                    thinking_options(config.get('provider','local'),config.get('model',''),config.get('thinking','off'))[0]
+                    if journal.get('generation_contract',{}).get('audit_policy')==2 else 'off' if journal.get('generation_contract') else None)
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
         if 'repairs' in job:
             job['repairs']=[{k:v for k,v in row.items() if k in ('repair_error_code','repair_error_type','stage','attempt','attempt_epoch','revision')} for row in job['repairs']]
         return {k: v for k, v in job.items() if k not in ('private_artifacts_json', 'config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal', 'repair_diagnostics_json')}
+
+    def preparation_request_messages(self,jid,rid):
+        """Original provider input for resuming a specific paid fragment."""
+        with self.connect() as db:
+            row=db.execute('SELECT context_json FROM llm_requests WHERE job_id=? AND id=?',(jid,rid)).fetchone()
+            return json.loads(row[0]) if row else None
 
     def save_response_journal(self, jid, journal):
         """Private response transport state; no new checkpoint table or world format."""

@@ -32,7 +32,11 @@ def messages_for(repo,job,config):
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema, compact_schema, SECRET_AUTHORING_RULES
-        system=(config['_prompts']['draft_world_prompt.md']['content']+'\n'+SECRET_AUTHORING_RULES
+        from backend.repositories.documents import ROOT, is_builtin_prompt
+        name='draft_world_prompt.md'
+        selected=config['_prompts'][name]['content']
+        author_prompt=(ROOT/name).read_text(encoding='utf-8') if is_builtin_prompt(name,selected) else selected
+        system=(author_prompt+'\nФормат ответа задаёт текущая схема ниже.\n'+SECRET_AUTHORING_RULES
                 +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
                 +json.dumps(compact_schema(prompt_schema(initial_portraits=True)),ensure_ascii=False,separators=(',',':')))
@@ -103,12 +107,13 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     original=repo.draft(job['workspace_id'],author=True)['state']
     context=config['context_length']
     if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+    advisory_policy=False
     stage='draft_'+config['_draft_task']
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(messages,limit):
-        effective=review_config(config) if stage=='draft_world_validation' else config
+        effective=review_config(config) if stage=='draft_world_validation' and not advisory_policy else config
         structured=effective['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
         return tracked_stream(repo,stream_fn,jid,stage,effective,messages,model=effective['model'],provider=effective['provider'],api_key=api_key,
             temperature=effective['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
@@ -136,7 +141,17 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             'portrait_version':1 if legacy else 2,
             'prompt_contract':'bundled' if config['_prompts']['draft_world_prompt.md']['content']==bundled else 'custom_unverified',
             'prompt_sha256':hashlib.sha256(config['_prompts']['draft_world_prompt.md']['content'].encode()).hexdigest()}
-    messages=journal.setdefault('messages',messages_for(repo,job,config))
+        if not legacy:
+            from backend.repositories.documents import is_builtin_prompt
+            chosen=config['_prompts']['draft_world_prompt.md']
+            builtin=is_builtin_prompt('draft_world_prompt.md',chosen['content'])
+            contract=journal['generation_contract']
+            contract.update(audit_policy=2, prompt_version_id=chosen.get('id'),
+                prompt_contract=('historical_builtin' if builtin and chosen['content']!=bundled else contract['prompt_contract']),
+                effective_prompt_sha256=hashlib.sha256((bundled if builtin else chosen['content']).encode()).hexdigest())
+    advisory_policy=journal['generation_contract'].get('audit_policy')==2
+    if 'messages' not in journal:journal['messages']=messages_for(repo,job,config)
+    messages=journal['messages']
     input_hash=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
     binding=dict(job_id=jid,input_hash=input_hash)
     if journal.get('binding',binding)!=binding:raise ValueError('Ответ принадлежит другому заданию или входу.')
@@ -150,7 +165,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     result=journal.get('candidate_text',result)
     epoch=journal.get('recovery_epoch',0)
     patch_failure=None
-    for attempt in range(3):
+    max_repairs=1 if advisory_policy else 2
+    for attempt in range(max_repairs+1):
         if handle.cancel.is_set():return
         repo.draft_phase(jid,'validating')
         try:
@@ -172,9 +188,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     raw=motivations(raw)
                 else:raw.setdefault('creation_settings',config.get('_creation_settings',{}))
                 from backend.services.communication_profile import apply_explicit
-                raw=apply_explicit(raw)
+                if not (recovered_candidate and advisory_policy):raw=apply_explicit(raw)
                 from backend.services.draft_calendar import complete
-                raw=complete(raw, config.get('_draft_source',config.get('_draft_input','')), seed=jid)
+                if not (recovered_candidate and advisory_policy):raw=complete(raw, config.get('_draft_source',config.get('_draft_input','')), seed=jid)
                 if not recovered_candidate:
                     schedules=raw.get('world',{}).get('scheduled_events',{}) if isinstance(raw.get('world'),dict) else {}
                     for event in (schedules.values() if isinstance(schedules,dict) else []):
@@ -223,6 +239,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if state is None:return
             result=journal['candidate_text']
             repo.save_draft_candidate(jid,state,[],review=dict(status='not_started',issues=[]),epoch=epoch)
+        if not errors and advisory_policy:
+            stage='draft_world_validation'
+            repo.draft_phase(jid,'reviewing',reset_progress=True)
+            def read_once(slot, request_messages):
+                return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+            notes=draft_completeness.read_advisory(state,messages[-1]['content'],journal,read_once)
+            if notes is None or handle.cancel.is_set():return
+            repo.save_response_journal(jid,journal)
+            repo.save_draft_candidate(jid,state,[],review=notes,epoch=epoch)
+            break
         if not errors:
             review_meta=dict(status='running',contract_version=draft_completeness.CONTRACT_VERSION,issues=[])
             if not patch_failure:repo.save_draft_candidate(jid,state,[],review=review_meta,epoch=epoch)
@@ -246,7 +272,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if not errors:break
             result=json.dumps(state,ensure_ascii=False)
         journal['errors']=errors;repo.save_response_journal(jid,journal)
-        if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
+        if attempt==max_repairs:raise ValueError('Исправление структуры не завершено. Ответ сохранён. '+str(errors))
         # A rejected trial remains uncommitted. Its newly revealed diagnostics
         # join the next bounded request against the original candidate, so the
         # model can resubmit a coherent patch rather than repeat the old scope.

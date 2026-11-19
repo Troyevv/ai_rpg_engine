@@ -7,7 +7,7 @@ import {Textarea} from "./components/ui/textarea";
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from "./components/ui/dialog";
 import {Markdown} from "./Markdown";
 interface Version {id:number;content:string;complete:boolean;created_at:string;reason:string;source_version_id:number|null}
-interface History {template?:string;active_id:number|null;versions:Version[]}
+interface History {template?:string;prompt_origin?:string;active_id:number|null;versions:Version[]}
 export function Versions({kind,owner,open,close,changed}:{kind:string;owner:string;open:boolean;close:()=>void;changed?:()=>void}){
  const [loading,setLoading]=useState(true);
  const [history,setHistory]=useState<History>({active_id:null,versions:[]});
@@ -18,8 +18,8 @@ export function Versions({kind,owner,open,close,changed}:{kind:string;owner:stri
  return <Dialog open={open} onOpenChange={v=>{if(!v)close()}}><DialogContent className="settings-dialog"><DialogHeader><DialogTitle>История версий · {kind==="prompt"?owner:kind==="idea"?"Сценарий":"Выжимка"}</DialogTitle><DialogDescription>Сохранение и откат создают новую версию. Старые записи остаются в истории. Новые промпты применяются к следующим запросам.</DialogDescription></DialogHeader>
  <label>Версия<Choice disabled={loading||busy} value={selected||""} onValueChange={selectedValue => {const id=+selectedValue;setSelected(id);setContent(history.versions.find(v=>v.id===id)?.content||"")}}>{history.versions.map(v=><option key={v.id} value={v.id}>#{v.id} · {v.created_at} · {v.reason}{v.id===history.active_id?" · активная":""}{!v.complete?" · черновик/удалено":""}</option>)}</Choice></label>
  <details><summary>Просмотр выбранной версии</summary><Markdown text={content||"Документ пуст"}/></details>
- {history.template && <div><p>Технический контракт новых ходов задаёт Runtime. Авторские дополнения редактируются в extraction_author.md. Старые версии доступны ниже.</p><details><summary>Актуальный шаблон Extraction</summary><Markdown text={history.template}/></details>{content!==history.template&&<Button variant="outline" onClick={()=>setContent(history.template!)}>Подставить актуальный шаблон для сохранения</Button>}</div>}
- <Textarea readOnly={!!history.template} disabled={loading||busy} aria-label="Содержимое версии" value={content} onChange={e=>setContent(e.target.value)} style={{minHeight:260}}/>
+ {history.template && <div>{owner==="draft_world_prompt.md"?<p>{history.prompt_origin==="bundled"?"Активен актуальный встроенный промпт генерации.":history.prompt_origin==="historical_builtin"?"Активна историческая версия встроенного промпта.":"Активен авторский промпт. Его совместимость с текущим форматом мира не проверена."} Вы можете сравнить шаблон и сохранить новую версию.</p>:<p>Технический контракт новых ходов задаёт Runtime. Авторские дополнения редактируются в extraction_author.md. Старые версии доступны ниже.</p>}<details><summary>Актуальный шаблон {owner==="draft_world_prompt.md"?"генерации мира":"Extraction"}</summary><Markdown text={history.template}/></details>{content!==history.template&&<Button variant="outline" onClick={()=>setContent(history.template!)}>Подставить актуальный шаблон для сохранения</Button>}</div>}
+ <Textarea readOnly={!!history.template&&owner==="state_update_prompt.md"} disabled={loading||busy} aria-label="Содержимое версии" value={content} onChange={e=>setContent(e.target.value)} style={{minHeight:260}}/>
  <div className="actions"><Button disabled={busy||loading} onClick={()=>void commit()}>Сохранить новую версию</Button><Button variant="outline" disabled={busy||loading||!selected||selected===history.active_id} onClick={()=>{if(window.confirm("Сделать выбранную версию активной? Текущая останется в истории."))void commit(selected)}}>Откатить к выбранной</Button></div>
  </DialogContent></Dialog>
 }

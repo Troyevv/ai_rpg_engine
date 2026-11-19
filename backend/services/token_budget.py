@@ -94,6 +94,13 @@ def prepare(config, operation, *, loaded=None, detail='balanced', api_key=None):
         from backend.services.draft_response import MAX_FRAGMENTS
         working.setdefault('_draft_token_budget', 3 * MAX_FRAGMENTS * (32768 + 12000))
 
+    if operation == 'draft_world' and auto and provider == 'deepseek' and thinking != 'off':
+        # Structured generation may spend several reasoning tokens per visible
+        # token even at low effort. This is an allowance, never a usage forecast.
+        working['_world_budget_policy'] = 2
+        working['_world_reasoning_ratio'] = 2 if thinking == 'low' else 3
+        cap = caps.get('max_output') or working['max_tokens']
+        working['max_tokens'] = min(context-MARGIN, cap, 32768*(1+working['_world_reasoning_ratio']))
     pinned = config.get('_budget_snapshot')
     if pinned:
         previous = pinned['_budget_caps']
@@ -103,13 +110,16 @@ def prepare(config, operation, *, loaded=None, detail='balanced', api_key=None):
                 or caps.get('max_output') and max(pinned['max_tokens'], pinned['update_tokens']) > caps['max_output']
                 or caps.get('max_input') and not previous.get('max_input') and pinned['context_length'] > caps['max_input']):
             raise BudgetError('Возможности модели изменились. Сохранённый план несовместим. Подтвердите новые лимиты для восстановления.')
+        if '_world_budget_policy' not in pinned:
+            working.pop('_world_budget_policy', None)
+            working.pop('_world_reasoning_ratio', None)
         working.update(pinned)
     return working
 
 
 def snapshot(config):
     keys = ('_budget_caps', '_visible_target', '_policy_version', '_reasoning_reserve',
-            '_output_target', '_detail', 'context_length', 'max_tokens', 'update_tokens')
+            '_output_target', '_world_budget_policy', '_world_reasoning_ratio', '_detail', 'context_length', 'max_tokens', 'update_tokens')
     return {key: config[key] for key in keys if key in config}
 
 
@@ -117,7 +127,13 @@ def world_output(config, messages):
     from backend.services.world_creation_settings import CreationSettings
     targets = CreationSettings.model_validate(config.get('_creation_settings', {})).cast_targets([])
     source = estimate([m for m in messages if m['role'] == 'user'])
-    return 2500 + 650 * targets['core'] + 320 * targets['secondary'] + min(source, 12000) + config['_reasoning_reserve']
+    visible = 2500 + 650 * targets['core'] + 320 * targets['secondary'] + min(source, 12000)
+    return structured_output(config,visible)
+
+
+def structured_output(config, visible):
+    ratio = config.get('_world_reasoning_ratio')
+    return visible + (visible * ratio if ratio else config.get('_reasoning_reserve',0))
 
 
 def extraction_output(config, scene_size):
@@ -185,13 +201,17 @@ def plan_request(config, stage, messages, requested, *, response_format=None, st
     if output == window-consumed-MARGIN: reasons.append('context_window')
     if caps.get('max_output') == output: reasons.append('provider_output_limit')
     if detail and config.get('_output_target',0) > requested: reasons.append('stage_limit')
+    visible_target=config.get('_visible_target', DETAILS[detail].visible) if detail else None
+    reserve=config.get('_reasoning_reserve',0) if config.get('thinking') in ('low','high') else 0
+    if config.get('_world_budget_policy')==2:
+        visible_target=output//(1+config['_world_reasoning_ratio'])
+        reserve=output-visible_target
     return dict(policy_version=config.get('_policy_version', VERSION), stage=stage, budget_mode=config.get('budget_mode') or 'manual',
                 capabilities=caps, context_window=window, estimated_input=consumed, estimate_method=method,
                 reservation_input=wire_bytes + expected_text + MARGIN,
                 input_target=min(INPUT_TARGET,window-output-MARGIN), requested_output=requested, output_allowance=output,
                 safety_margin=MARGIN, requested_detail=detail, effective_detail=detail,
-                visible_target=config.get('_visible_target', DETAILS[detail].visible) if detail else None,
-                reasoning_reserve=config.get('_reasoning_reserve',0) if config.get('thinking') in ('low','high') else 0,
+                visible_target=visible_target,reasoning_reserve=reserve,
                 reasons=reasons or ['stage_target'])
 
 
