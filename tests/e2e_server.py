@@ -848,8 +848,8 @@ def authoring_stream(**kwargs):
 
 llm.chat_stream = authoring_stream
 llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture','chat-tools-fixture','chat-tools-summary-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
-llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
+llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('local-model',32768),('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
+llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model','config':{'context_length':32768}}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
 llm.unload_all_models = lambda: 1
