@@ -6,6 +6,10 @@ for(const width of [360,393,1280])test(`saved creative recovery at ${width}px`,a
  test.skip((width<760)!==(info.project.name==='mobile'));
  const {wid}=await(await request.post('/test/generation266')).json();
  await page.setViewportSize({width,height:800});
+ if(width===393){
+   const device=await page.context().newCDPSession(page);
+   await device.send('Emulation.setSafeAreaInsetsOverride',{insets:{top:24,bottom:32}});
+ }
  const skin=width===360?'parchment':'graphite';
  await page.addInitScript(({wid,skin})=>{
    if(!localStorage.getItem('draftWorkspace'))localStorage.setItem('draftWorkspace',wid);
@@ -36,6 +40,10 @@ for(const width of [360,393,1280])test(`saved creative recovery at ${width}px`,a
  const button=dialog.getByRole('button',{name:'Создать отдельную копию'});
  await button.scrollIntoViewIfNeeded();
  await expect(button).toBeInViewport();await expect(dialog.getByRole('button',{name:'Закрыть',exact:true})).toBeInViewport();
+ if(width===393){
+   const bounds=await button.boundingBox();
+   expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height-32);
+ }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  await page.screenshot({path:info.outputPath('recovery.png')});
  await button.click();await dialog.getByRole('button',{name:'Открыть восстановленный мир'}).click();
