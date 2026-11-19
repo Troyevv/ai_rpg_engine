@@ -86,11 +86,28 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   padding: 0 30px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  /* Equal side tracks center the title independently of control widths. */
+  grid-template-columns: minmax(9rem, 1fr) minmax(0, 2fr) minmax(9rem, 1fr);
   align-items: center;
   gap: 15px;
   background: var(--surface-1);
+}
+
+.topbar-start,
+.topbar-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.topbar-title {
+  justify-content: center;
+}
+
+.topbar-title .breadcrumb {
+  max-width: 100%;
+  min-height: 44px;
 }
 
 .breadcrumb {
@@ -113,11 +130,26 @@
   flex-shrink: 0;
 }
 
+.breadcrumb > span:last-child {
+  flex-shrink: 0;
+}
+
 .topbar-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .topbar .desktop-label { display: none; }
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    grid-template-columns: minmax(4.5rem, 1fr) minmax(0, 2fr) minmax(4.5rem, 1fr);
+  }
 }
 
 .welcome {

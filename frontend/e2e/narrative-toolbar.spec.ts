@@ -112,3 +112,43 @@ for (const theme of ['graphite', 'parchment']) {
     });
   }
 }
+
+// Three groups keep the world title centered even when left/right controls
+// differ in width. Long names must truncate inside their own grid track.
+test('Narrative header: centered world title, bounded controls and ordinary Chat navigation',async({page,request},info)=>{
+  test.setTimeout(120000);
+  const seed=await(await request.post('/test/story168-seed')).json();
+  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);
+  const titles=['Наследие Волковых','Наследие Волковых — семейная сага о городе, старом доме и тайнах нескольких поколений','НаследиеВолковых'.repeat(30)];
+  let title=titles[0];
+  await page.route(`**/api/worlds/${seed.world}`,async route=>{const response=await route.fetch();const body=await response.json();body.name=title;await route.fulfill({response,json:body})});
+  for(const width of info.project.name==='mobile'?[320,360,393,430]:[768,900,1024,1440,1920]){
+    await page.setViewportSize({width,height:width<768?780:900});
+    for(title of titles){
+      await page.goto('/');const header=page.locator('.topbar'),world=header.locator('.breadcrumb');await expect(world).toContainText(title);await expect(world).toHaveAttribute('title',title);
+      await expect(header.locator(':scope > div')).toHaveCount(3);await expect(page.locator('.chat-copy-entry')).toHaveCount(0);
+      if(width>=768)await expect(header.getByRole('button',{name:'О мире',exact:true})).toBeVisible();
+      const h=(await header.boundingBox())!,t=(await world.boundingBox())!;
+      expect(Math.abs(t.x+t.width/2-(h.x+h.width/2))).toBeLessThanOrEqual(1);
+      const groups=await header.locator(':scope > div').evaluateAll(nodes=>nodes.map(el=>el.getBoundingClientRect().toJSON()));
+      expect(groups[0].right).toBeLessThanOrEqual(groups[1].left);expect(groups[1].right).toBeLessThanOrEqual(groups[2].left);
+      for(const button of await header.locator('button').all()){
+        const b=(await button.boundingBox())!;expect(b.x).toBeGreaterThanOrEqual(h.x);expect(b.x+b.width).toBeLessThanOrEqual(h.x+h.width);
+        expect(Math.abs(b.y+b.height/2-(t.y+t.height/2))).toBeLessThanOrEqual(1);
+        if(width<768)expect(b.height).toBeGreaterThanOrEqual(44);
+      }
+      const left=(await header.getByRole('button',{name:'RP-чат',exact:true}).boundingBox())!;
+      expect(left.x+left.width).toBeLessThanOrEqual(t.x);const action=(await header.locator('.topbar-actions button').first().boundingBox())!;expect(t.x+t.width).toBeLessThanOrEqual(action.x);
+      expect(await header.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    }
+  }
+  if(info.project.name==='desktop'){
+    await expect(page.locator('.topbar').getByRole('button',{name:'О мире',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Режим чтения',exact:true}).click();await expect(page.locator('.nav-rail')).toBeHidden();
+    const h=(await page.locator('.topbar').boundingBox())!,t=(await page.locator('.breadcrumb').boundingBox())!;
+    expect(Math.abs(t.x+t.width/2-(h.x+h.width/2))).toBeLessThanOrEqual(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole('button',{name:'Выйти из чтения',exact:true}).click();
+  }
+  await page.locator('.breadcrumb').click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'RP-чат',exact:true}).click();await expect(page.getByRole('button',{name:'Новая RP-кампания',exact:true})).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await page.getByRole('button',{name:'Вернуться в Narrative',exact:true}).click();await expect(page.locator('.breadcrumb')).toContainText(title);
+});

@@ -146,11 +146,18 @@ test('Chat: persisted draft review, settings, request receipts and browser Back'
 test('Chat: explicit Narrative snapshot copy leaves source unchanged',async({page,request})=>{
   const seed=await (await request.post('/test/seed')).json();
   const before=await (await request.get(`/api/saves/${seed.save}/author-state`)).json();
-  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);
+  const save=await(await request.get(`/api/saves/${seed.save}`)).json();
+  const defaults=await(await request.get('/api/chat/defaults')).json();
+  // The Narrative header no longer offers an import shortcut. Keep exercising
+  // existing snapshot persistence and its ordinary saved-draft review UI.
+  const prepared=await request.post('/api/chat/creations',{data:{token:crypto.randomUUID(),name:'Снимок Narrative',settings:defaults.settings,source:{save_id:seed.save,revision:save.revision}}});
+  expect(prepared.ok()).toBe(true);const draft=await prepared.json();
+  await page.addInitScript(({seed,id})=>{localStorage.setItem('selection',JSON.stringify(seed));localStorage.setItem('chat-create-active',id)},{seed,id:draft.id});
   await page.goto('/');
-  await page.getByRole('button',{name:'Продолжить в Chat Mode',exact:true}).click();
+  await expect(page.locator('.chat-copy-entry')).toHaveCount(0);
+  await page.getByRole('button',{name:'RP-чат',exact:true}).click();
+  await page.getByRole('button',{name:'Новая RP-кампания',exact:true}).click();
   const dialog=page.getByRole('dialog');
-  await dialog.getByRole('button',{name:'Подготовить снимок бесплатно',exact:true}).click();
   await expect(dialog.getByText('Снимок подготовлен',{exact:true})).toBeVisible();
   await expect(dialog.getByLabel('Стартовая выжимка',{exact:true})).toHaveValue(/ИСХОДНЫЙ СНИМОК/);
   await dialog.getByRole('group',{name:'Обычный RP-ответ'}).getByLabel('Модель',{exact:true}).fill('chat-fixture');
@@ -167,7 +174,8 @@ test('Chat: explicit Narrative snapshot copy leaves source unchanged',async({pag
   expect(c.source.origin.save_id).toBe(seed.save);
   expect(await (await request.get(`/api/saves/${seed.save}/author-state`)).json()).toEqual(before);
   await page.getByRole('button',{name:'Вернуться в Narrative',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Продолжить в Chat Mode',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'RP-чат',exact:true})).toBeVisible();
+  await expect(page.locator('.chat-copy-entry')).toHaveCount(0);
 });
 
 test('Chat: thousand-message archive renders bounded pages across chapters',async({page,request})=>{

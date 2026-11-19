@@ -252,51 +252,58 @@ export default function App() {
       </nav>}
       <div className="app-main">
         <header className="topbar" hidden={inspector}>
-          <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
-          {save&&<Button className="chat-copy-entry" aria-label="Продолжить в Chat Mode" variant="ghost" size="sm" onClick={()=>openChat({save_id:save.id,revision:save.revision})}><span className="chat-copy-long">Продолжить в Chat Mode</span><span className="chat-copy-short">В Chat</span></Button>}
-          <button className="breadcrumb" onClick={() => setLibrary(true)}>
-            <LibraryIcon size={17} />
-            <span>
-              {view === "prepare"
-                ? "Мастерская"
-                : world?.name || "Твои истории"}
-            </span>
-            <span className="muted">⌄</span>
-          </button>
-          {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<div className="topbar-actions">
-            {view === "game" && (
+          <div className="topbar-start">
+            <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
+          </div>
+          <div className="topbar-title">
+            <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
+              <LibraryIcon size={17} />
+              <span>
+                {view === "prepare"
+                  ? "Мастерская"
+                  : world?.name || "Твои истории"}
+              </span>
+              <span className="muted">⌄</span>
+            </button>
+          </div>
+          <div className="topbar-actions">
+            {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<>
+              {view === "game" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={reading ? "Выйти из чтения" : "Режим чтения"}
+                  onClick={() => {
+                    setReading(!reading);
+                    setInspector(false);
+                  }}
+                >
+                  {reading ? <EyeOff size={19} /> : <Eye size={19} />}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={reading ? "Выйти из чтения" : "Режим чтения"}
-                onClick={() => {
-                  setReading(!reading);
-                  setInspector(false);
-                }}
+                disabled={prefsLoading}
+                aria-label="Настройки"
+                onClick={() => setSettings(true)}
               >
-                {reading ? <EyeOff size={19} /> : <Eye size={19} />}
+                <Settings2 size={18} />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              disabled={prefsLoading}
-              aria-label="Настройки"
-              onClick={() => setSettings(true)}
-            >
-              <Settings2 size={18} />
-            </Button>
-            {world && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => inspect(panel)}
-              >
-                <PanelRight size={16} />
-                <span className="desktop-label">О мире</span>
-              </Button>
-            )}
-          </div>}
+              {world && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="О мире"
+                  title="О мире"
+                  onClick={() => inspect(panel)}
+                >
+                  <PanelRight size={16} />
+                  <span className="desktop-label">О мире</span>
+                </Button>
+              )}
+            </>}
+          </div>
         </header>
         {view === "prepare" && (
           <WorldWorkshop
