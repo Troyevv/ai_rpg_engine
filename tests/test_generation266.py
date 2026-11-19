@@ -192,3 +192,13 @@ def test_duplicate_identity_and_controlled_actor_gap():
     gaps={c['id']:c['fields'] for c in draft_creative.npc_gaps(state)}
     assert 'Возраст' in gaps[card['id']] and 'Биография' not in gaps[card['id']]
     assert state['controlled_actor_id'] not in gaps
+
+
+def test_resuming_another_stage_cannot_replace_a_paid_creative_batch():
+    state=candidate()
+    raw=proposal(state,[])
+    journal={'generation_contract':{'version':6,'audit_policy':2},
+             'creative':{'status':'rejected','before_hash':candidate_hash(state),'current_reply':raw}}
+    changed=deepcopy(state);changed['campaign']['title']='Редакция автора'
+    result=draft_creative.develop(changed,'Автор',journal,lambda *_:pytest.fail('Unexpected paid request'),lambda:None)
+    assert result==changed and draft_creative.recoverable(journal)[candidate_hash(state)]['current_reply']==raw

@@ -19,7 +19,11 @@ for(const width of [360,393,1280])test(`saved creative recovery at ${width}px`,a
  await dialog.getByRole('combobox').click();
  await expect(page.getByRole('option',{name:'Дополнение 2'})).toBeVisible();
  await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
- await dialog.getByRole('combobox').focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('End');await page.keyboard.press('Enter');
+ const field=dialog.getByRole('combobox');
+ await expect(field).toBeFocused();await field.press('ArrowDown');
+ await expect(page.getByRole('option',{name:'Дополнение 1'})).toBeFocused();
+ await page.keyboard.press('End');
+ await expect(page.getByRole('option',{name:'Дополнение 2'})).toBeFocused();await page.keyboard.press('Enter');
  await expect(dialog.getByRole('button',{name:'Применить дополнение'})).toBeVisible();
  await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
  await trigger.click();await dialog.getByRole('combobox').click();

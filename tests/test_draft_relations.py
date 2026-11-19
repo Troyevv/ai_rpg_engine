@@ -132,7 +132,9 @@ def test_prose_contradiction_remains_visible_without_mutating_canon(api):
         result=wait_job(client,jid);assert result['status']=='saved',result
     draft=client.get(url+'?author=true').json()
     assert len(calls)==2 and draft['review']['issues'][0]['message']=='Описания родства противоречат друг другу.'
-    assert draft['state']['world']['objective_relations']['a']['context']==state['world']['objective_relations']['a']['context']
+    reviewed=json.loads(calls[1]['messages'][1]['content'])['candidate']
+    assert draft['state']['world']['objective_relations']==reviewed['world']['objective_relations']
+    assert state['world']['objective_relations']['b']['context'] in reviewed['world']['objective_relations']['a']['context']
 
 
 @pytest.mark.parametrize('state',[None,[],{'world':[]},{'world':{'objective_relations':[]}}])

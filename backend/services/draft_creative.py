@@ -110,6 +110,10 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return state  # Manual edits/repair/resume never trigger enrichment again.
     before = candidate_hash(state)
     if record and record.get('before_hash') != before:
+        if record.get('current_reply') and journal.get('generation_contract',{}).get('audit_policy')==2:
+            # A different revision can preview the paid batch on its own base.
+            # Resuming another stage must never buy a replacement for it.
+            return state
         journal.setdefault('creative_history', []).append(record)
         record = None
     if record is None:
