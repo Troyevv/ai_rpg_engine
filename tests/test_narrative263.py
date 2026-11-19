@@ -136,6 +136,7 @@ def test_current_cafe_wire_commit_reload_and_rollback(tmp_path):
         def chat(**kwargs):
             if not any(m.get('content','').startswith('Текущий ввод\n') and '"response_format"' in m['content'] for m in kwargs['messages']):
                 return reply('{"action":null}')
+            assert 'response_format' not in kwargs
             return reply(recorded['narrative']+'\n'+MARKER+json.dumps([proposal,hidden],ensure_ascii=False))
         sdk.return_value.chat.completions.create.side_effect=chat
         sdk.return_value.responses.create.return_value=Stream(events(json.dumps(payload)))

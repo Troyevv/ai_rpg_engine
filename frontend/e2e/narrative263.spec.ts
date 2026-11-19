@@ -117,3 +117,31 @@ test('a free direction from an incapacitated hero follows the observer camera', 
   expect(after.state.controlled_actor_id).toBeNull();
   await expect(page.locator('.choices button')).toHaveCount(6);
 });
+
+test('canceling a blank provider reply restores the original editable input', async ({page, request}) => {
+  const selection = await (await request.post('/test/scene263-seed')).json();
+  const profile = 'blank263-' + selection.save;
+  await request.put('/api/settings/' + profile, {data: {...defaults, game: {...defaults.game, model:'blank263-test',context_length:65536}}});
+  await page.addInitScript(({selection,profile}) => {
+    localStorage.setItem('selection',JSON.stringify(selection));
+    localStorage.setItem('profile',profile);
+  }, {selection,profile});
+  const read = async () => (await request.get('/api/saves/' + selection.save)).json();
+  const before = await read();
+  await page.goto('/');
+  const input = page.getByLabel('Своё действие или реплика',{exact:true});
+  const action = 'Спрашиваю, что слышно во дворе.';
+  await input.fill(action);
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect.poll(async () => (await read()).job?.status).toBe('error');
+  await page.reload();
+  const cancel = page.getByRole('button',{name:'Отменить неудачный ход',exact:true});
+  await cancel.focus();
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue(action);
+  await page.reload();
+  await expect(input).toHaveValue(action);
+  const after = await read();
+  expect(after.revision).toBe(before.revision);
+  expect(after.turns).toHaveLength(before.turns.length);
+});

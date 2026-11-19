@@ -666,6 +666,10 @@ def scripted_stream(**kwargs):
 
 def stream(**kwargs):
     global scene255_attempts
+    if kwargs.get('model') == 'blank263-test':
+        from backend.services.provider_attempt import identity
+        yield '  \n  ' if identity()['stage'] == 'narrative' else '{}'
+        return
     if kwargs.get('model') == 'frame263-test':
         from backend.services.provider_attempt import identity
         if identity()['stage'] == 'narrative':

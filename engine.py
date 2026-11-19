@@ -299,8 +299,9 @@ def run_job(path, job_id, handle):
                     chunks = []
                 else:
                     structured_menu = version >= 10 and narrative_frame.requested(messages)
-                    options = {'response_format': {'type':'json_object'}} if structured_menu and common['provider']=='deepseek' else {}
-                    chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8),**options)
+                    # Ask for the frame in the prompt. DeepSeek JSON Output can
+                    # replace unrecognized output with spaces before we see it.
+                    chunks = generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8))
                 authored = narrative
                 for chunk in chunks:
                     if handle.cancelled.is_set():

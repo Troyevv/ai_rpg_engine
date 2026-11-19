@@ -232,7 +232,7 @@ export function Game({
             revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
           });
           setSubmitted(discarded);
-          if (physical && (job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
+          if (physical && (!job.narrative_complete || job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
             setDraft(job.user_text);
             sessionStorage.setItem(draftKey, job.user_text);
           }
