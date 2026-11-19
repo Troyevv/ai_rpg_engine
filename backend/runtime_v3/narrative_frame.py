@@ -41,6 +41,15 @@ def _complete_metadata(remainder):
     frame = {}
     rest = remainder.lstrip()
     try:
+        if rest.startswith('}'):
+            # Flash can close the scene object and send its menu as the next JSON object.
+            # Accept only a complete actions envelope, never arbitrary trailing prose or endings.
+            tail = rest[1:].strip()
+            if tail.startswith('{'):
+                menu = json.loads(tail)
+                if isinstance(menu, dict) and set(menu) == {'actions'} and isinstance(menu['actions'], list):
+                    return menu
+            return frame
         while rest.startswith(','):
             key, end = _DECODER.raw_decode(rest[1:].lstrip())
             rest = rest[1:].lstrip()[end:].lstrip()

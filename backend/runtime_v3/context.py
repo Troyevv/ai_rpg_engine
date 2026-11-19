@@ -383,6 +383,9 @@ class NarrativeContextBuilder:
                 'Consider established addresses, employers, obligations and the viewpoint. '
                 'An unknown address or role does not establish homelessness or unemployment.\n')
         if self.contract_version >= 11:
+            narrative_rules = narrative_rules.replace('Не превращай засыпание в произвольный скачок времени.',
+                'Доведи прямо выбранное игроком действие до указанного им конца, включая дорогу и сон до будильника. '
+                'Если событие прервало действие, покажи где и когда. Засыпание без указанного срока само по себе не задаёт время пробуждения.')
             narrative_rules = narrative_rules.replace('illness/injury/death need canonical Condition/Life State.',
                 'author new events according to established conditions, causality and the selected risk.')
             narrative_rules = narrative_rules.replace('Routine waiting/travel/work may be summarized up to continuity.compression.max_minutes.',
@@ -903,6 +906,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 rules += '\n' + AUTHOR_FORMAT
             reply_format = (FORMAT if extraction_contract >= 11 else RECORDED_FORMAT) + (' Варианты задают направление истории в режиме наблюдателя.'
                                      if directs else ' Варианты от лица героя.')
+            if extraction_contract >= 11:
+                reply_format += ' Включи массив actions после scene также в первой сцене.' if kind == 'start' else ' После scene включи actions.'
             if state['meta'].get('interaction_focus')=='call':
                 reply_format += ' Предложи продолжения этого звонка.'
         elif camera['mode']=='actor' and scope.controlled_actor_id:
@@ -920,6 +925,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     scene_fields = schema['properties']['scene']['properties']
                     scene_fields.pop('compression', None)
                     scene_fields.pop('situation_evidence', None)
+                    job_fields = schema['properties']['role_changes']['items']['properties']
+                    # Current employment is objective. A separately attributed decision by an
+                    # employer can still name its actor. Recorded voluntary annotations remain readable.
+                    job_fields['transition'] = {'enum':['external'], 'description':'Только для отдельного решения работодателя с decision_actor_id.'}
+                    job_fields['replaces']['description'] = 'Только у новой должности, вступившей в силу. current закрывает прежнюю должность одной операцией.'
+                    job_fields['outcome']['description'] = 'Только при отдельном закрытии существующей фазы.'
+                    job_fields['context']['description'] = 'Обстоятельства открытия новой фазы.'
                     # The compiler still reads explicit links in saved responses.
                     for name in ('role_changes','residence_changes','social_relation_changes'):
                         phase = schema['properties'][name]['items']['properties']

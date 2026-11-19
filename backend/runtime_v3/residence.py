@@ -234,6 +234,12 @@ def apply_residence(resolver, raw):
                     fields=deepcopy(old or dict(id=key,actor_id=actor,since=state['meta']['world_time'],since_date=current_time(state)['date']))
                     identity_fields = ('actor_id','location_id') if target=='residences' else ('actor_id','kind','title','organization_id','field')
                     if old:
+                        if resolver.scene_version >= 11 and item.get('status') == 'closed' and item.get('context'):
+                            # A closing note belongs to this transition's history. The opening stays immutable.
+                            item = dict(item)
+                            note = item.pop('context')
+                            if note != old['context'] and note != item.get('evidence'):
+                                item['evidence'] = '\n'.join(filter(None, (item.get('evidence'), note)))
                         if any(k in item and item[k] != old[k] for k in (*identity_fields,'context','fact_id')):
                             raise ValueError('phase identity/context cannot change; close old and create new phase')
                         if item.get('status',old['status']) == old['status'] and not item.get('replaces'):

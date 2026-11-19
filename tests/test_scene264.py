@@ -224,3 +224,76 @@ def test_uninterpreted_skip_keeps_prose_without_claiming_target_was_reached(game
     assert turn['assistant_text'] == prose and changes['interpretation'] == 'partial'
     assert fresh.get_snapshot(sid)['world_state']['meta']['world_time'] == before
     assert not changes['time_skip']
+
+
+def test_named_role_closure_keeps_its_opening_and_closing_note():
+    opening = dict(id='old', actor_id='b', title='Реставратор', kind='employment',
+                   context='Испытательный срок', perceived_by=['a'])
+    world = apply(state(), {'role_changes':[opening]}).state
+    closing = dict(id='old', actor_id='b', kind='employment', status='closed', replaces='current',
+                   context='Приказ вступил в силу', perceived_by=['a'])
+    result = apply(world, {'role_changes':[closing]}, 2)
+    old = result.state['roles']['old']
+    assert old['status'] == 'closed' and old['context'] == opening['context']
+    assert result.state['knowledge']['a:'+old['closure_fact_id']]['status'] == 'known'
+    assert any(closing['context'] in row['evidence'] for row in result.history['state_changes']
+               if row['kind'] == 'roles')
+
+
+def test_live_opening_and_signed_transfer_contracts():
+    from backend.runtime_v3.context import build_context
+    from backend.services.structured_extraction import request_schema
+    from test_narrative_choices import initial
+
+    snap = initial()
+    args = (snap, [], '', 'start', 65536, 4096)
+    opening = build_context(*args)
+    assert 'actions' in json.loads(opening[-1]['content'].split('\n', 1)[1])['response_format']
+    assert 'сон до будильника' in opening[0]['content']
+    ext = build_context(*args, extraction_text='Приказ подписан сегодня и вступит в силу завтра.')
+    fields = request_schema(ext)['properties']['role_changes']['items']['properties']
+    assert fields['transition']['enum'] == ['external'] and 'player_evidence' in fields
+    assert 'известный подписанту факт' in ext[0]['content']
+    legacy = build_context(*args, extraction_contract=10, extraction_text='Подписан приказ.')
+    assert 'voluntary' in request_schema(legacy)['properties']['role_changes']['items']['properties']['transition']['enum']
+
+
+def test_signed_future_transfer_is_known_before_effective_replacement():
+    from backend.runtime_v3.residence import visible_social_state
+
+    prior = dict(kind='employment', actor_id='a', title='Реставратор', perceived_by=['a'])
+    before = apply(state(), {'role_changes':[prior]}).state
+    notice = 'Приказ подписан. С завтрашнего дня Кирилл — хранитель фонда.'
+    signed = apply(before, {'scene_steps':[dict(kind='information', medium='discovery',
+        claims=[dict(fact=dict(text=notice, visibility='secret'),
+                     assertion='observation', perceived_by=['a'])])]}, 2).state
+    assert signed['roles'] == before['roles']
+    fid, = [row['id'] for row in signed['facts'].values() if row['text'] == notice]
+    assert signed['knowledge']['a:'+fid]['status'] == 'known'
+    assert 'c:'+fid not in signed['knowledge']
+
+    effective = apply(signed, {'scene':{'end_time':{'day_offset':1,'time':'09:00'}},
+        'role_changes':[dict(kind='employment', actor_id='a', title='Хранитель фонда',
+                             replaces='current', perceived_by=['a'])]}, 3).state
+    assert {r['label']:r['status'] for r in visible_social_state(effective,'a')['roles']} == {
+        'Реставратор':'closed', 'Хранитель фонда':'active'}
+    assert visible_social_state(effective,'c')['roles'] == []
+
+
+def test_separate_actions_object_from_live_opening():
+    from backend.runtime_v3.narrative_frame import read, menu
+
+    scene = json.dumps({'scene':'Вера касается конверта.'}, ensure_ascii=False)
+    rows = [{'text':'Открыть конверт вместе'}, {'text':'Спросить Веру о письме'},
+            {'text':'Вспомнить секрет', 'facts':['unknown']}]
+    second = json.dumps({'actions':rows}, ensure_ascii=False)
+    for end in range(len(scene),len(scene + '\n' + second)):
+        assert read((scene + '\n' + second)[:end],complete=False) == ('Вера касается конверта.',{})
+    prose, frame = read(scene + '\n' + second,complete=True)
+    assert prose == 'Вера касается конверта.'
+    choices, diagnostics = menu(frame,state())
+    assert [c['action'] for c in choices] == [x['text'] for x in rows[:2]]
+    assert diagnostics[0]['received'] == 3
+    for tail in (second + ' ещё текст', '{"ending":{"elapsed_minutes":100},"actions":[]}',
+                 '1. Открыть письмо', '{"actions":"Открыть письмо"}'):
+        assert read(scene + '\n' + tail,complete=True) == (prose,{})

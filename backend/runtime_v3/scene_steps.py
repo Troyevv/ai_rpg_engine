@@ -650,7 +650,7 @@ def compile_scene(payload, state, narrative, turn_id, *, namespace=None, version
             warnings.append(dict(section=name,code='optional_section_invalid',action='drop_section'))
     if version >= 10:
         from backend.runtime_v3.life_operations import phase_changes, consolidate_experience
-        phase_changes(records, state, turn_id, namespace)
+        phase_changes(records, state, turn_id, namespace, version)
         consolidate_experience(records, state, turn_id, namespace)
     if version >= 9:
         bind_profile_baselines(records, state)

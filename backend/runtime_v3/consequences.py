@@ -198,8 +198,11 @@ def resolve_consequences(payload, before, narrative, turn_id, suggestions, resol
                         else:
                             claims.append(claim)
                 else:
-                    warnings.append(dict(section=section, code=exc.code, action='skip_group',
-                        records=[dict(section=s, key=k) for s,k,_ in group]))
+                    warning = dict(section=section, code=exc.code, action='skip_group',
+                                   records=[dict(section=s, key=k) for s,k,_ in group])
+                    if version >= 11 and exc.code == 'residence_transition_invalid':
+                        warning['reason'] = str(exc)
+                    warnings.append(warning)
         result.warnings.extend(warnings)
     result.warnings.extend(decoding_warnings)
     if normalization:

@@ -25,7 +25,7 @@ def wire_schema(props, version):
                                          'fears','temperament','value']), text=dict(type='string',minLength=1,maxLength=300)))
 
 
-def phase_changes(records, state, turn_id, namespace):
+def phase_changes(records, state, turn_id, namespace, version=10):
     for name, collection in [('residence_changes','residences'), ('role_changes','roles'),
                              ('social_relation_changes','objective_relations')]:
         phases = []
@@ -52,7 +52,10 @@ def phase_changes(records, state, turn_id, namespace):
                              r['status']=='active' and (collection=='residences' or r['kind']==row.get('kind'))]
                     if len(prior)>1:
                         reject('При нескольких действующих фазах укажи точные ID для замены.')
-                    row['replaces'] = prior
+                    if version >= 11 and row.get('status') == 'closed' and prior == [row.get('id')]:
+                        row.pop('replaces')  # Closing the sole current phase already names it.
+                    else:
+                        row['replaces'] = prior
                 if 'id' not in row:
                     if row.get('status')=='closed':
                         reject('Для закрытия укажи действующую фазу.')
