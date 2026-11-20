@@ -148,5 +148,10 @@ test('workshop fits the cast by age and preserves a revision-21 portrait until c
  const grid=page.locator('.ww-characters-grid');
  await grid.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>(img as HTMLImageElement).decode())));
  await grid.screenshot({path:info.outputPath('family-cards.png'),scale:'css'});
- await button('Досье Илья Волков').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('family-screen.jpg'),scale:'css'});
+ const card=button('Досье Илья Волков');
+ await expect(async()=>{
+  await card.evaluate(el=>el.scrollIntoView({block:'nearest',behavior:'instant'}));
+  await expect(card).toBeInViewport({timeout:1000});
+ }).toPass({timeout:10000});
+ await page.screenshot({path:info.outputPath('family-screen.jpg'),scale:'css'});
 });
