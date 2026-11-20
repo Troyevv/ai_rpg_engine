@@ -1,3 +1,4 @@
+import {pages} from '../../gestures/surface';
 import { useState } from 'react';
 import { Choice } from '../../components/ui/choice';
 import { proceduralPortrait } from '../proceduralPortrait';
@@ -115,7 +116,7 @@ export function IllustrationControls({
           ))}
         </Choice>
       </div>
-      <div className="studio-tabs illustration-sections" role="group" aria-label="Раздел настройки">
+      <div {...pages(Object.keys(sections) as (keyof typeof sections)[],section,switchSection)} className="studio-tabs illustration-sections" role="group" aria-label="Раздел настройки">
         {(Object.keys(sections) as (keyof typeof sections)[]).map((s) => (
           <button type="button" key={s} aria-pressed={section === s} onClick={() => switchSection(s)}>
             {sections[s]}
@@ -202,7 +203,7 @@ export function IllustrationControls({
               </label>
             </>
           )}
-          <div className="studio-tabs studio-subtabs">
+          <div {...pages(groups[section],field,select)} className="studio-tabs studio-subtabs">
             {groups[section].map((key) => (
               <button type="button" key={key} aria-pressed={key === field} onClick={() => select(key)}>
                 {names[key]}

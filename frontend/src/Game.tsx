@@ -1,3 +1,4 @@
+import {ActionPanel} from './gestures/panels';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
 import type {StoryNotice} from './types';
@@ -281,7 +282,7 @@ export function Game({
       </main>
     );
   return (
-    <main className="game">
+    <main className="game" data-gesture-busy={generating}>
       {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
@@ -416,7 +417,7 @@ export function Game({
                     <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
+                  <ActionPanel label="Варианты действий"><motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
                     {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
@@ -440,7 +441,7 @@ export function Game({
                         </span>
                       </motion.button>
                     ))}
-                  </motion.div>
+                  </motion.div></ActionPanel>
                   {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"
@@ -483,7 +484,7 @@ export function Game({
       {save && (
         <div className="composer">
           <Dialog open={pendingChoice!==null} onOpenChange={open=>{if(!open)closeChoice()}}>
-            <DialogContent onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
+            <DialogContent data-gesture-confirm="" onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
               <DialogTitle>В поле уже есть черновик</DialogTitle>
               <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
               <div className="actions">
@@ -508,7 +509,7 @@ export function Game({
               placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
-                  e.key === "Enter" &&
+                  e.key === "Enter" && !e.nativeEvent.isComposing &&
                   (e.ctrlKey || e.metaKey) &&
                   canSubmit &&
                   draft.trim()

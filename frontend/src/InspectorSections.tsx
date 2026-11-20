@@ -1,3 +1,4 @@
+import {pages} from './gestures/surface';
 import { Choice } from "@/components/ui/choice";
 import {CharacterPeople as People} from "./CharacterPeople";
 import {StorySecretBrowser} from './StorySecretBrowser';
@@ -214,7 +215,7 @@ function Segments<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="inspector-segments" role="group" aria-label={label}>
+    <div {...pages(items.filter(item=>!item.disabled).map(item=>item.id),value,onChange)} className="inspector-segments" role="group" aria-label={label}>
       {items.map((i) => (
         <button
           key={i.id}

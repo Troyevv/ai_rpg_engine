@@ -1,6 +1,8 @@
+import {dismissTransient} from './lib/transientBack';
 import {useEffect,useRef} from 'react';
 
-/** Chat owns one route entry and one modal entry; Back consumes only the top layer. */
+/** Browser entries identify both the Chat route and nested panel destinations.
+ * A completed command can return to the conversation in one traversal. */
 export function useChatNavigation<T extends string>(panel:T|null,setPanel:(panel:T|null)=>void,onBack:()=>void,onInnerBack?:()=>boolean) {
   const current=useRef(panel);current.current=panel;
   const leave=useRef(onBack);leave.current=onBack;
@@ -8,33 +10,50 @@ export function useChatNavigation<T extends string>(panel:T|null,setPanel:(panel
   const after=useRef<(()=>void)|null>(null);
   const closing=useRef(false);
   const inner=useRef(onInnerBack);inner.current=onInnerBack;
+  const entry=useRef(history.state);
   useEffect(()=>{
     if(!history.state?.chatMode)history.pushState({...history.state,chatMode:true},'');
     const back=(event:PopStateEvent)=>{
       event.stopImmediatePropagation();
-      // Shared connection settings (and its prompt viewer) sit above Chat.
-      // Consume Back there first, preserving the Chat route and its drafts.
-      const nested=!current.current?document.querySelectorAll<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]):not(.chat-dialog) .dialog-close'):null;
-      if(nested?.length){history.pushState({...history.state,chatMode:true},'');nested[nested.length-1].click();return}
+      if(!closing.current && dismissTransient()){history.pushState(entry.current,'');return;}
+      const dialogs=document.querySelectorAll<HTMLElement>('[role="dialog"]:not([data-state="closed"])');
+      const top=dialogs[dialogs.length-1];
+      if(top&&!top.classList.contains('chat-dialog')){
+        history.pushState(entry.current,'');
+        top.querySelector<HTMLButtonElement>(':scope > .dialog-close')?.click();return;
+      }
       if(!closing.current&&current.current&&inner.current?.()){
-        history.pushState({...history.state,chatMode:true,chatPanel:true},'');return;
+        history.pushState(entry.current,'');return;
       }
       closing.current=false;
-      if(current.current){setPanel(null);requestAnimationFrame(()=>trigger.current?.isConnected&&trigger.current.focus({preventScroll:true}))}
+      const destination=typeof history.state?.chatPanel==='string'?history.state.chatPanel as T:null;
+      setPanel(destination);
+      if(!destination)requestAnimationFrame(()=>trigger.current?.isConnected&&trigger.current.focus({preventScroll:true}));
       if(!history.state?.chatMode)leave.current();
+      entry.current=history.state;
       const done=after.current;after.current=null;done?.();
     };
     window.addEventListener('popstate',back,true);
     return()=>window.removeEventListener('popstate',back,true);
   },[setPanel]);
   useEffect(()=>{
-    if(panel&&!history.state?.chatPanel)history.pushState({...history.state,chatPanel:true},'');
-  },[!!panel]);
-  const open=(value:T)=>{if(!current.current)trigger.current=document.activeElement as HTMLElement;setPanel(value)};
+    if(panel){
+      if(!history.state?.chatPanel)history.pushState({...history.state,chatPanel:panel,chatDepth:1},'');
+      else if(history.state.chatPanel!==panel)history.replaceState({...history.state,chatPanel:panel},'');
+    }
+    entry.current=history.state;
+  },[panel]);
+  const open=(value:T,nested=false)=>{
+    if(!current.current)trigger.current=document.activeElement as HTMLElement;
+    if(nested&&current.current&&value!==current.current){
+      history.pushState({...history.state,chatPanel:value,chatDepth:(history.state?.chatDepth||1)+1},'');
+    }
+    setPanel(value);
+  };
   const close=(done?:()=>void)=>{
     if(closing.current)return;
     after.current=done||null;
-    if(history.state?.chatPanel){closing.current=true;history.back()}
+    if(history.state?.chatPanel){closing.current=true;history.go(-(history.state.chatDepth||1))}
     else{setPanel(null);done?.()}
   };
   const back=()=>{if(history.state?.chatMode)history.back();else onBack()};

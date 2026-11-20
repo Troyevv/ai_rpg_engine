@@ -1,3 +1,4 @@
+import {rowActions} from './gestures/rows';
 import {CharacterAvatar} from "./Portrait";
 import {it} from "./lib/inspector";
 import type {State,Save} from "./types";
@@ -24,7 +25,7 @@ export function CharacterPeople({
             type="button"
             aria-label={`Открыть досье: ${c.name}`}
             data-character-id={id}
-            className="inspector-person-chip"
+            {...rowActions()} className="inspector-person-chip"
             key={id}
             onClick={() => onCharacter(id)}
           >

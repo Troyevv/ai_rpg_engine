@@ -1,3 +1,5 @@
+import {backSwipe} from './gestures/surface';
+import {ActionPanel} from './gestures/panels';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {PhoneOff,Minimize2,Phone,Send,ArrowDown} from 'lucide-react';
@@ -61,21 +63,21 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
          else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
        }
      }}>
-       <header className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
+       <header {...backSwipe(collapse)} className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
        <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
-         {active&&choices.length>0&&<div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
+         {active&&choices.length>0&&<ActionPanel label="Варианты продолжения"><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
            {choices.map(c=><button key={JSON.stringify([c.action,c.speech])} type="button" disabled={disabled} onClick={()=>{
              const text=[c.action,c.speech].filter(Boolean).join(' ');
              const next=draft.trim() ? draft+'\n'+text : text;
              setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
            }}>{[c.action,c.speech].filter(Boolean).join(' ')}</button>)}
-         </div>}
+         </div></ActionPanel>}
        </div></div>
        <footer>
          {active&&<div className="call-activity" data-state={activity}><p role="status" aria-live="polite" aria-atomic="true">{working&&<span className="call-activity-dots" aria-hidden="true"><i/><i/><i/></span>}{t(activity)}</p>{stop&&canStopCall(job)&&<button disabled={stopping} onClick={stop}>{t('callStop')}</button>}</div>}
          {active&&restoreSpeech&&!draft&&<button disabled={disabled} onClick={()=>{const text=job!.user_text!;setDraft(text);sessionStorage.setItem(key,text);input.current?.focus()}}>{t('restoreSpeech')}</button>}
          {away&&<button onClick={jumpToLatest}><ArrowDown size={15}/>{t('latest')}</button>}
-         {active?<><form onSubmit={e=>{e.preventDefault();void send()}}><textarea ref={input} aria-label={t('input')} value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem(key,e.target.value)}} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.stopPropagation();void send()}}}/><button disabled={disabled||!draft.trim()} aria-label={t('send')}><Send size={21}/></button></form><div className="call-scene-actions"><button onClick={collapse}>{t('physical')}</button><button className="call-end" disabled={disabled} onClick={()=>void end()}><PhoneOff size={18}/>{t('end')}</button></div></>:<button onClick={()=>onSelect(null)}>{t('close')}</button>}
+         {active?<><form onSubmit={e=>{e.preventDefault();void send()}}><textarea ref={input} aria-label={t('input')} value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem(key,e.target.value)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.stopPropagation();void send()}}}/><button disabled={disabled||!draft.trim()} aria-label={t('send')}><Send size={21}/></button></form><div className="call-scene-actions"><button onClick={collapse}>{t('physical')}</button><button className="call-end" disabled={disabled} onClick={()=>void end()}><PhoneOff size={18}/>{t('end')}</button></div></>:<button onClick={()=>onSelect(null)}>{t('close')}</button>}
        </footer>
      </section>
    </div>

@@ -1,3 +1,4 @@
+import {swipe} from './touch';
 import {chooseOption} from './choice-navigation';
 import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
@@ -57,7 +58,8 @@ for(const width of [320,360,375,393,412,430,768,1024,1440])test(`Chat mobile lay
   await article.getByRole('button',{name:'Редактировать',exact:true}).click();await fits(page);
   const edit=page.getByLabel('Новый текст',{exact:true});await edit.fill('Несохранённая правка сохраняется после Back и reload.');
   if(width===320)await shot(page,info,'edit-320');
-  await page.goBack();await expect(page.getByRole('dialog')).toHaveCount(0);
+  if(width===393)await swipe(page,page.getByRole('dialog').locator('.dialog-title'),0,90);else await page.goBack();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await article.getByRole('button',{name:'Редактировать',exact:true}).click();await expect(edit).toHaveValue('Несохранённая правка сохраняется после Back и reload.');
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
   const input=page.getByLabel('Твоё сообщение',{exact:true});await input.fill('Длинная реплика игрока. '.repeat(60));

@@ -1,3 +1,7 @@
+import {phoneDock} from './gestures/panels';
+import {dismissTransient} from './lib/transientBack';
+import {pages,backSwipe} from './gestures/surface';
+import {rowActions} from './gestures/rows';
 import {phoneText as t} from "./lib/phone";
 import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
@@ -123,6 +127,9 @@ export function Phone({
   const list = useRef<HTMLDivElement>(null);
   const listPositions = useRef<Record<string, number>>({});
   const returnFocus = useRef<HTMLElement | null>(null);
+  // An explicit visit to a conversation retains the normal read receipt.
+  // Moving a panel or browsing tabs must not mark hidden messages as read.
+  const browsingByGesture=useRef(false);
   const focusKey = useRef<string | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<string | null>(null);
@@ -147,6 +154,7 @@ export function Phone({
     return () => onBusyChange(false);
   }, [busy, onBusyChange]);
   const [editContact, setEditContact] = useState<string | null>(null);
+  const contactLabels=useRef(new Map<string,string>());
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false),
     [grouping, setGrouping] = useState(false);
@@ -168,8 +176,9 @@ export function Phone({
     else if (content.top < bounds.top) viewport.scrollTop -= bounds.top - content.top;
   };
   const back = () => {
+    if(dismissTransient())return;
     if (membersOpen) { setMembersOpen(false); requestAnimationFrame(()=>screen.current?.querySelector<HTMLElement>('[aria-label="Управление участниками"]')?.focus({preventScroll:true})); return; }
-    if (adding) { setAdding(false); return; }
+    if (adding) { setAdding(false); setEditContact(null); return; }
     if (grouping) { setGrouping(false); return; }
     if (tab === 'messages' && (conversation || contact || recipient)) {
       setConversation(null); setContact(null); setRecipient(null);
@@ -235,14 +244,14 @@ export function Phone({
     setEditContact(null);
     setAdding(false);
     setTab("contacts");
-    setLabel("");
+    contactLabels.current.clear();setLabel("");
     setGrouping(false);
     setGroupMembers([]);
     setGroupName("");
   }, [save.id, phone?.actor_id]);
   useLayoutEffect(() => {
     if (!open) {autoReadAttempt.current=null;return;}
-    if (tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
+    if (browsingByGesture.current || tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
     const attempt=`${ownerKey}:${conversation}:${save.revision}`;
     if(autoReadAttempt.current===attempt)return;
     autoReadAttempt.current=attempt;
@@ -387,12 +396,13 @@ export function Phone({
     }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
   const inChat = tab==='messages' && !!(conversation || contact || recipient);
-  const nested = inChat || (tab==='contacts' && !!detail) || grouping;
+  const nested = adding || editContact!==null || inChat || (tab==='contacts' && !!detail) || grouping;
   const title = membersOpen ? 'Участники группы' : grouping && tab==='messages' ? 'Новая группа' : inChat ? selected?.title || target?.label || recipientTarget?.subject.name : tab==='contacts' ? detail ? currentContact?.label : 'Контакты' : tab==='calls' ? 'Звонки' : 'Переписки';
   const jobHere=job?.kind==='communication'&&(job.presentation?.call_id?tab==='calls':tab==='messages'&&!!conversation&&job.presentation?.conversation_id===conversation);
   return (
     <div
       className="phone-affordance"
+      onClickCapture={()=>{browsingByGesture.current=false}}
       style={{ "--phone-dock-bottom": `${dock}px` } as CSSProperties}
     >
 
@@ -401,7 +411,7 @@ export function Phone({
         data-testid="phone-device"
       >
         <button
-          ref={trigger}
+          {...phoneDock(open,()=>{browsingByGesture.current=true;if(open)close();else setOpen(true)})} ref={trigger}
           className="phone-peek"
           aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
           aria-expanded={open}
@@ -435,12 +445,12 @@ export function Phone({
             else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===screen.current)){e.preventDefault();first?.focus()}
           }}
         >
-          <header className="phone-top">
+          <header {...backSwipe(back)} className="phone-top">
             {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ArrowLeft size={20}/></Button>}
             {inChat && !membersOpen && <span className="phone-header-avatar" aria-label="Участники переписки">{selected?.group ? <Users size={24}/> : (selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject) ? avatar((selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject)!) : null}</span>}
             <div className="phone-heading" aria-busy={busy}><strong title={title}>{title}</strong><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : save.state.characters.find(c=>c.id===phone.actor_id)?.name}</small></div>
             {inChat && selected?.group && selected.active && !membersOpen && <Button variant="ghost" size="icon" aria-label="Управление участниками" onClick={()=>setMembersOpen(true)}><Users size={20}/></Button>}
-            <Button variant="ghost" size="icon" aria-label="Свернуть телефон" onClick={close}><X size={20}/></Button>
+            <Button {...phoneDock(true,close)} variant="ghost" size="icon" aria-label="Свернуть телефон" onClick={close}><X size={20}/></Button>
           </header>
           {error && <div className="phone-error" role="alert"><span>{error}</span><button disabled={busy} onClick={async()=>{
             if(requestLock.current||locked)return;requestLock.current=true;setBusy(true);
@@ -499,7 +509,7 @@ export function Phone({
                       const saved = savedRecipient(r);
                       return <article className="phone-row phone-recipient" key={r.id}>
                         {avatar(r.subject)}
-                        <button className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
+                        <button {...rowActions('.phone-row')} className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
                           <strong>{saved?.label || r.subject.name}</strong>
                           {saved && saved.label !== r.subject.name && <small>{r.subject.name}</small>}
                         </button>
@@ -526,7 +536,8 @@ export function Phone({
                             ?.blocked || false,
                       }).then((next) => {
                         if (next) {
-                          setAdding(false);
+                          if(editContact)contactLabels.current.delete(editContact);
+                          setEditContact(null);setAdding(false);
                           setLabel("");
                         }
                       });
@@ -536,7 +547,7 @@ export function Phone({
                       Сохранённое имя
                       <input
                         value={label}
-                        onChange={(e) => setLabel(e.target.value)}
+                        onChange={e=>{setLabel(e.target.value);if(editContact)contactLabels.current.set(editContact,e.target.value)}}
                         maxLength={160}
                         required
                       />
@@ -548,7 +559,7 @@ export function Phone({
                   <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
-                      <button className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
+                      <button {...rowActions('.phone-row')} className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
                       <small>
                         {c.address}
                         {c.blocked
@@ -601,7 +612,7 @@ export function Phone({
                         disabled={locked}
                         onClick={() => {
                           setEditContact(c.id);
-                          setLabel(c.label);
+                          setLabel(contactLabels.current.get(c.id)??c.label);
                           setAdding(true);
                         }}
                       >
@@ -826,7 +837,7 @@ export function Phone({
               </>
             )}
           </div>
-          <nav className="phone-bottom" aria-label="Разделы телефона">
+          <nav {...pages(['calls','messages','contacts'] as const,tab,key=>{browsingByGesture.current=true;setTab(key);setEntry(false);setMembersOpen(false);setGrouping(false)})} className="phone-bottom" aria-label="Разделы телефона">
             {(
               [
                 ["calls", "Звонки", PhoneIcon],

@@ -1,3 +1,4 @@
+import {pages,backSwipe} from './gestures/surface';
 import { Choice } from "@/components/ui/choice";
 import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
@@ -25,6 +26,8 @@ import { type World, type Save, type State, type Scene, active } from "./types";
 import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
 import type {StoryNotice} from './types';
+import {useTransientBack} from './lib/transientBack';
+import {foreground} from './gestures/surface';
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
 import { dossierText, type DossierTab } from "./lib/dossier";
@@ -75,6 +78,7 @@ export function CharacterPicker({
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  useTransientBack(open,()=>{if(!root.current||!foreground(root.current))return false;setOpen(false);button.current?.focus({preventScroll:true})});
   const button = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const cards = state.characters.filter(
@@ -110,7 +114,7 @@ export function CharacterPicker({
   };
   return (
     <div
-      className="inspector-character-toolbar"
+      {...pages(cards.map(c=>c.id),character,setCharacter,"cards")} className="inspector-character-toolbar"
       ref={root}
       onKeyDown={(e) => {
         if (e.key === "Escape" && open) {
@@ -432,9 +436,9 @@ export function Inspector({
         hidden={!open}
         aria-label={panelLabel(panel)}
       >
-        <header className="inspector-topbar">
+        <header {...backSwipe(back)} className="inspector-topbar">
           {navigation}
-          <div className="inspector-breadcrumb">
+          <div {...pages(inspectorSections.map(s=>s.id),panel,setPanel)} className="inspector-breadcrumb">
             <span title={world.name}>{world.name}</span>
             <span>/</span>
             <strong>{panelLabel(panel)}</strong>

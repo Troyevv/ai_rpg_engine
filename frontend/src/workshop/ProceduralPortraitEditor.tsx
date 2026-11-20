@@ -1,3 +1,4 @@
+import {pages} from '../gestures/surface';
 import {useRef,useState,type ReactNode} from 'react';
 import {Check,RotateCcw} from 'lucide-react';
 import {IllustrationControls} from './portraitV4/IllustrationControls';
@@ -67,14 +68,14 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
    change(next);
  };
  if(!open)return <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(true)}}>Настроить иллюстрацию</Button>;
- return <section className="portrait-studio" aria-label="Настроить иллюстрацию">
+ return <section data-portrait-dirty={dirty} className="portrait-studio" aria-label="Настроить иллюстрацию">
  <div className="studio-main"><div className="studio-reference"><div className="portrait-comparison">
  <figure><figcaption>Сохранённый вариант</figcaption>{savedPreview||renderPreview(descriptor)}</figure>
  <figure><figcaption>{source||'Предпросмотр'}</figcaption>{renderPreview(value)}</figure></div>
  {commission?.(p=>{setValue(p);setSelected('procedural');setSource('Предложение модели');setError('')})}
  </div><fieldset ref={settings} disabled={disabled} className="studio-settings">
  {value.version===4?<IllustrationControls value={value} onChange={change} eligible={!!anatomyReference?.facial_hair_allowed} ageReference={ageReference} mode={selected} setMode={setSelected}/>:<>
- <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
+ <div {...pages(Object.keys(categories) as Category[],section,key=>{setSection(key);setFilter('');setSearch('');settings.current?.scrollTo(0,0)})} className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
   <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);setFilter('');setSearch('');settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
  {section in layers&&(()=>{const group=section as keyof typeof layers;
  const current=value.version===3 && (group!=='face'||(value.face_revision===3||value.face_revision===4))?value[layers[group] as keyof Layers]:null;

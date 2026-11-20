@@ -1,3 +1,4 @@
+import {pinch} from './touch';
 import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -28,6 +29,13 @@ test('genealogy controls, relationship details, geometry and responsive skins',a
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x+1||b.x+b.w<=a.x+1||a.y+a.h<=b.y+1||b.y+b.h<=a.y+1).toBe(true)}
   await area.getByRole('button',{name:'Увеличить',exact:true}).click();
   const viewport=area.locator('.react-flow__viewport');
+  if(info.project.name==='mobile'){
+   const scale=()=>viewport.evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).a);
+   const previous=await scale();
+   await pinch(page,area.locator('.family-graph'));
+   await expect.poll(scale).toBeGreaterThan(previous);
+   await expect(area).toBeVisible();
+  }
   const original=await viewport.getAttribute('style');
   await area.getByRole('button',{name:'Список',exact:true}).click();
   await area.getByRole('button',{name:'Дерево',exact:true}).click();

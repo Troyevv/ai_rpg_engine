@@ -1,3 +1,4 @@
+import {dismissNotice} from './gestures/panels';
 import {useEffect,useRef,useState} from 'react';
 import {Bell,BookOpen,KeyRound,Sparkles,ArrowUpRight,X} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from './components/ui/dialog';
@@ -40,7 +41,7 @@ export function StoryNotifications({save,enabled,active=true,onOpen}:{save:Save;
  const Icon=current?icons[current.kind]:Bell;
  return <>
   <button ref={trigger} className="story-journal-trigger" onClick={()=>setHistory(true)} aria-label={`История уведомлений, ${events.length}`}><Bell size={17} aria-hidden/><span>События истории</span><b>{events.length}</b></button>
-  {current&&!suspended&&<aside className={`story-toast ${current.kind}`} data-notice-id={current.id} aria-label="Событие истории" onMouseEnter={()=>setPaused(true)} onMouseLeave={()=>setPaused(false)} onFocusCapture={()=>setPaused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setPaused(false)}}>
+  {current&&!suspended&&<aside {...dismissNotice(()=>acknowledge(current.id))} className={`story-toast ${current.kind}`} data-notice-id={current.id} aria-label="Событие истории" onMouseEnter={()=>setPaused(true)} onMouseLeave={()=>setPaused(false)} onFocusCapture={()=>setPaused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setPaused(false)}}>
    <div className="story-toast-icon"><Icon size={23} aria-hidden/></div><div className="story-toast-body"><div role="status" aria-live="polite" aria-atomic="true"><strong>{storyNoticeTitle(current.kind)}</strong><p>{current.text}</p></div><button onClick={()=>open(current)}>Подробнее <ArrowUpRight size={15} aria-hidden/></button></div><button className="story-toast-close" aria-label="Скрыть уведомление" onClick={()=>acknowledge(current.id)}><X size={17}/></button>{queue.length>1&&<small className="story-toast-count">Ещё {queue.length-1}</small>}
   </aside>}
   <Dialog open={history} onOpenChange={setHistory}><DialogContent className="story-journal" onCloseAutoFocus={e=>{if(navigating.current){e.preventDefault();navigating.current=false}}}><DialogTitle>События истории</DialogTitle><DialogDescription>Открытия вашего персонажа в текущей ветке истории.</DialogDescription>

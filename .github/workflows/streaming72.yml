@@ -35,7 +35,7 @@ jobs:
         working-directory: after/frontend
       - name: Baseline — identical transport and capture script on the PR base
         run: |
-          cp after/frontend/e2e/streaming72.spec.ts before/frontend/e2e/
+          cp after/frontend/e2e/{streaming72.spec.ts,touch.ts} before/frontend/e2e/
           cd before/frontend
           npm ci
           npm run build

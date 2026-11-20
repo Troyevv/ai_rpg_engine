@@ -1,3 +1,4 @@
+import {pages} from './gestures/surface';
 import {
   NpcAttributes,
   NpcConnections,
@@ -425,7 +426,7 @@ export function NpcReview({
             </aside>
             <main className="npc-review-main">
               <div
-                className="npc-review-tabs"
+                {...pages(groups.map((_,i)=>i),section,setSection)} className="npc-review-tabs"
                 role="tablist"
                 aria-label="Разделы карточки"
               >

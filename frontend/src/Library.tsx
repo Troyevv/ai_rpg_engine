@@ -1,3 +1,5 @@
+import {rowActions} from './gestures/rows';
+import {RefreshRegion} from './gestures/RefreshRegion';
 import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
 import { BookOpen, Plus, Upload, X } from "lucide-react";
@@ -30,6 +32,10 @@ export function Library({
 }) {
   const [worlds, setWorlds] = useState<WorldItem[]>([]);
   const [selected, setSelected] = useState<number>();
+  const selectWorld=(id:number|undefined)=>{
+    if(id!==selected)setSaves([]);
+    setSelected(id);
+  };
   const [saves, setSaves] = useState<SaveItem[]>([]);
   const [mode,setMode]=useState("narrative");
   const [name, setName] = useState("Новое прохождение");
@@ -48,22 +54,23 @@ export function Library({
       setBusy(false);
     }
   };
+  const [refreshKey,setRefreshKey]=useState(0);
   useEffect(() => {
-    if (open)
-      api<WorldItem[]>("/worlds")
-        .then(setWorlds)
-        .catch((e) => toast.error(e.message));
-  }, [open]);
+    if (!open)return;
+    const controller=new AbortController();
+    api<WorldItem[]>("/worlds",undefined,"GET",controller.signal)
+      .then(setWorlds).catch(e=>{if(!controller.signal.aborted)toast.error(e.message)});
+    return ()=>controller.abort();
+  }, [open,refreshKey]);
   useEffect(() => {
-    setSaves([]);
-    if (selected) {
+    if (open && selected) {
       const c = new AbortController();
       api<SaveItem[]>(`/worlds/${selected}/saves`, undefined, "GET", c.signal)
         .then(setSaves)
         .catch(() => {});
       return () => c.abort();
     }
-  }, [selected]);
+  }, [open,selected,refreshKey]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="library-dialog">
@@ -85,11 +92,12 @@ export function Library({
             Создать историю
           </Button>
         </div>
+        <RefreshRegion refresh={()=>setRefreshKey(n=>n+1)}>
         <div className="world-grid">
           {worlds.map((w) => (
-            <article className="world-card-wrap" data-world-id={w.id} key={w.id}><button
+            <article {...rowActions()} className="world-card-wrap" data-world-id={w.id} key={w.id}><button
               aria-label={`Открыть ${w.name}`}
-              onClick={() => setSelected(w.id)}
+              onClick={() => selectWorld(w.id)}
               className={`world-card ${selected === w.id ? "selected" : ""}`}
             >
               <BookOpen size={23} />
@@ -101,6 +109,7 @@ export function Library({
             </button><button className="world-remove" aria-label={`Удалить ${w.name}`} disabled={busy} onClick={e=>{e.stopPropagation();setDeleting(w)}}><X size={18}/></button></article>
           ))}
         </div>
+        </RefreshRegion>
         {!worlds.length && (
           <p className="muted">
             Пока нет миров. Подготовь сценарий или загрузи готовую выжимку.
@@ -112,7 +121,7 @@ export function Library({
 
             {saves.map((s) => (
               <button
-                key={s.id}
+                {...rowActions()} key={s.id}
                 onClick={() => {
                   choose(selected, s.id);
                   onOpenChange(false);
@@ -156,7 +165,7 @@ export function Library({
             </div>
           </section>
         )}
-        <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div data-deleted-world-id={w.id} key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));setSelected(w.id)})}>Восстановить</Button></div>)}</details>
+        <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div data-deleted-world-id={w.id} key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));selectWorld(w.id)})}>Восстановить</Button></div>)}</details>
         <details>
           <summary>
             <Upload size={16} />
@@ -204,7 +213,7 @@ export function Library({
                   markdown,
                 });
                 setWorlds(await api("/worlds"));
-                setSelected(w.id);
+                selectWorld(w.id);
                 setMarkdown("");
                 toast.success("Мир сохранён");
               })
@@ -215,8 +224,8 @@ export function Library({
         </details>
       </DialogContent>
       <Dialog open={!!deleting} onOpenChange={v=>{if(!v&&!busy)setDeleting(null)}}>
-        <DialogContent><DialogHeader><DialogTitle>Удалить «{deleting?.name}»?</DialogTitle><DialogDescription>История будет перемещена в удалённые.</DialogDescription></DialogHeader>
-        <div className="actions"><Button variant="ghost" disabled={busy} onClick={()=>setDeleting(null)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{if(!deleting)return;await api(`/worlds/${deleting.id}`,undefined,"DELETE");setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));if(selected===deleting.id)setSelected(undefined);setDeleting(null);toast.success("История перемещена в удалённые")})}>Удалить</Button></div></DialogContent>
+        <DialogContent data-gesture-confirm=""><DialogHeader><DialogTitle>Удалить «{deleting?.name}»?</DialogTitle><DialogDescription>История будет перемещена в удалённые.</DialogDescription></DialogHeader>
+        <div className="actions"><Button variant="ghost" disabled={busy} onClick={()=>setDeleting(null)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{if(!deleting)return;await api(`/worlds/${deleting.id}`,undefined,"DELETE");setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));if(selected===deleting.id)selectWorld(undefined);setDeleting(null);toast.success("История перемещена в удалённые")})}>Удалить</Button></div></DialogContent>
       </Dialog>
     </Dialog>
   );

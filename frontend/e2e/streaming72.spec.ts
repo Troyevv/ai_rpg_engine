@@ -1,3 +1,4 @@
+import {swipe} from './touch';
 import {test,expect,type Page} from '@playwright/test';
 import {mkdir,writeFile,copyFile} from 'node:fs/promises';
 import {nav} from './navigation';
@@ -41,6 +42,14 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  for(const length of [35,90,700,710,narrative.length]){
   await emit({narrative:narrative.slice(0,length)});
   if(length===90)await page.getByLabel('Своё действие или реплика').fill('Черновик во время генерации');
+  if(!baseline&&length===700&&info.project.name==='mobile'){
+    await swipe(page,page.locator('[data-mobile-menu-trigger]'),-100,0);
+    await expect(page.locator('.mobile-game-menu')).toBeVisible();
+    await expect(page.locator('.gesture-tip')).toHaveCount(0);
+    await swipe(page,page.locator('.mobile-menu-brand'),100,1);
+    await expect(page.locator('.mobile-game-menu')).toHaveCount(0);
+    await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик во время генерации');
+  }
   await frames(page,25);
   if(!baseline)await expect.poll(()=>page.locator('.story-scroll').evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
  }
@@ -59,6 +68,15 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   await page.getByRole('button',{name:'Свернуть телефон'}).click();
  }
  const scroller=page.locator('.story-scroll');await scroller.evaluate(el=>el.scrollTop=el.scrollHeight/2);await frames(page);
+ if(info.project.name==='mobile'){
+  const before=await scroller.evaluate(el=>el.scrollTop);
+  await swipe(page,scroller,0,135);
+  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeLessThan(before);
+  await scroller.evaluate(el=>new Promise<void>(resolve=>{
+   let last=el.scrollTop,stable=0;
+   const frame=()=>{stable=el.scrollTop===last?stable+1:0;last=el.scrollTop;if(stable>=5)resolve();else requestAnimationFrame(frame)};frame();
+  }));
+ }
  const up=await scroller.evaluate(el=>el.scrollTop);
  await emit({status:'validating'});await frames(page);
  await page.evaluate(()=>{(window as any).streamNode=document.querySelector('[data-stream-id] .narrative-text')||document.querySelector('.job details > .prose')});

@@ -1,3 +1,5 @@
+import {DraftDialog} from './components/ui/draft-dialog';
+import {surface} from './gestures/surface';
 import {useState} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import {toast} from 'sonner';
@@ -5,7 +7,7 @@ import {api} from './api';
 import type {Save,Character} from './types';
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
+import {DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 
 type Entry={kind:'goal'|'intention';index:number;remove?:boolean};
 export function MotivationEditor({save,card,refresh}:{save:Save;card:Character;refresh:()=>void}){
@@ -27,7 +29,13 @@ export function MotivationEditor({save,card,refresh}:{save:Save;card:Character;r
    await refresh();setEntry(null);toast.success('Сохранено');
   }catch(e){toast.error((e as Error).message)}finally{setBusy(false)}
  };
- const row=(value:string,kind:Entry['kind'],index:number)=><div className="motivation-row" key={`${kind}-${index}`}>
+ const actions=(host:HTMLElement)=>{
+  const row=host.closest('.motivation-row'),menu=row?.querySelector('details');
+  if(!row||!menu)return;
+  row.parentElement?.querySelectorAll('details[open]').forEach(other=>{if(other!==menu)other.removeAttribute('open')});
+  menu.open=true;
+ };
+ const row=(value:string,kind:Entry['kind'],index:number)=><div {...surface({id:'row',group:'context',axis:'x',sign:-1,hold:actions,finish:({host})=>actions(host)})} className="motivation-row" key={`${kind}-${index}`}>
   <p>{value}</p><details className="motivation-menu"><summary aria-label={kind==='goal'?`Действия с целью ${index+1}`:`Действия с намерением ${index+1}`}><MoreHorizontal size={20}/></summary><div>
    <Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open({kind,index},value)}}>Редактировать</Button>
    <Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open({kind,index,remove:true},value)}}>Удалить</Button>
@@ -37,10 +45,10 @@ export function MotivationEditor({save,card,refresh}:{save:Save;card:Character;r
   <h4>Цели</h4>{goals.map((value,i)=>row(value,'goal',i))}<Button variant="ghost" disabled={goals.length>=20} onClick={()=>open({kind:'goal',index:-1})}>+ Добавить цель</Button>
   <h4>Намерения</h4>{intentions.map((value,i)=>row(value,'intention',i))}
   <Button variant="ghost" disabled={intentions.length>=20} onClick={()=>open({kind:'intention',index:-1})}>+ Добавить намерение</Button>
-  <Dialog open={!!entry} onOpenChange={v=>{if(!v&&!busy)setEntry(null)}}><DialogContent>
+  <DraftDialog dirty={!!entry&&!entry.remove&&text!==((entry.kind==='goal'?goals:intentions)[entry.index]||'')} open={!!entry} onOpenChange={v=>{if(!v&&!busy)setEntry(null)}}><DialogContent data-gesture-confirm={entry?.remove?"":undefined}>
    <DialogHeader><DialogTitle>{entry?.remove?'Удалить запись?':entry?.kind==='goal'?'Цель персонажа':'Намерение персонажа'}</DialogTitle><DialogDescription>{entry?.remove?'Запись будет удалена из текущего состояния. Отменить это действие кнопкой нельзя.':'Изменение сохранится в этом прохождении и будет учтено в следующем ходе.'}</DialogDescription></DialogHeader>
    {entry?.remove?<p className="motivation-delete-text">{text}</p>:<Textarea aria-label="Текст цели или намерения" value={text} maxLength={entry?.kind==='goal'?4000:2000} onChange={e=>setText(e.target.value)} autoFocus/>}
    <div className="actions"><Button variant="ghost" disabled={busy} onClick={()=>setEntry(null)}>Отмена</Button><Button disabled={busy||(!entry?.remove&&!text.trim())} onClick={()=>void persist()}>{entry?.remove?'Удалить':'Сохранить'}</Button></div>
-  </DialogContent></Dialog>
+  </DialogContent></DraftDialog>
  </div>;
 }
