@@ -312,3 +312,23 @@
 .zoom-view:not(:has(.gesture-zoom[data-zoomed])) > .gesture-pan-menu {
   display: none;
 }
+.chat-dialog .dialog-header:has(> .chat-panel-back) {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+.chat-panel-back {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.chat-dialog .dialog-header:has(> .chat-panel-back) .dialog-description {
+  grid-column: 1/-1;
+}

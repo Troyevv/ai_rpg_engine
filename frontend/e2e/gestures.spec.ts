@@ -449,3 +449,33 @@ test('large text and reduced motion keep controls usable by button and keyboard'
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(390);
 });
+
+test('the action sheet moves one stop at a time and preserves suggestions after the phone closes', async ({
+  page,
+  request,
+}) => {
+  const selected = await narrative(page, request);
+  const grip = page.locator('.gesture-sheet-grip').first(),
+    panel = grip.locator('..');
+  const suggestion = panel.locator('.choices button').first();
+  const label = await suggestion.innerText();
+  const revision = async () =>
+    (await (await request.get('/api/saves/' + selected.save)).json()).revision;
+  const before = await revision();
+  await swipe(page, grip, 0, 70, { cancel: true });
+  await expect(panel).toHaveAttribute('data-stop', '2');
+  await swipe(page, grip, 0, 64);
+  await expect(panel).toHaveAttribute('data-stop', '1');
+  await swipe(page, grip, 0, 64);
+  await expect(panel).toHaveAttribute('data-stop', '0');
+  await swipe(page, grip, 0, -80);
+  await expect(panel).toHaveAttribute('data-stop', '1');
+  await grip.click();
+  await expect(panel).toHaveAttribute('data-stop', '2');
+  await swipe(page, page.getByRole('button', { name: /^Телефон/ }), 0, -90);
+  await expect(page.locator('.phone-device')).toHaveClass(/is-open/);
+  await page.getByRole('button', { name: 'Свернуть телефон' }).click();
+  await expect(suggestion).toBeEnabled();
+  await expect(suggestion).toHaveText(label);
+  expect(await revision()).toBe(before);
+});

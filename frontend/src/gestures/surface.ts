@@ -302,12 +302,12 @@ export const backSwipe = (back: () => void) =>
     sign: 1,
     finish: back,
   });
-export const closeButtonSwipe = () =>
+export const closeButtonSwipe = (back?: () => void) =>
   surface({
     id: 'back',
     group: 'navigation',
     axis: 'x',
     sign: 1,
     allowButton: true,
-    finish: ({ host }) => host.click(),
+    finish: ({ host }) => (back ? back() : host.click()),
   });

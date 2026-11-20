@@ -91,8 +91,8 @@ const guide = {
   image: [
     'Разведи пальцы для увеличения. Перемещай двумя пальцами или одним после увеличения.',
     'Spread two fingers to zoom. Drag with two fingers or pan after zooming.',
-    'Масштаб, сброс и прокрутка',
-    'Zoom, reset and scroll controls',
+    'Кнопки масштаба, сброс и стрелки в меню «Перемещение»',
+    'Zoom, reset and the arrows in the Pan menu',
   ],
   double: [
     'Коснись портрета дважды, чтобы увеличить или вернуть исходный размер.',

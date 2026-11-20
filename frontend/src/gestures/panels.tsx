@@ -113,11 +113,16 @@ export function dismissLayer(horizontal: 0 | 1 | -1 = 0, back?: () => void) {
     group: 'navigation',
     axis: 'x',
     sign: 1,
-    finish: ({ host }) =>
+    finish: ({ host }) => {
+      if (back) {
+        back();
+        return;
+      }
       host
         .closest('[role=dialog]')
         ?.querySelector<HTMLButtonElement>(':scope > .dialog-close')
-        ?.click(),
+        ?.click();
+    },
   };
   return surface({
     alternate: horizontal ? undefined : () => backOnTitle,
