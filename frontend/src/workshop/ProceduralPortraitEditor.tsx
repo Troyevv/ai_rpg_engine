@@ -38,7 +38,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const modern=():Extract<ProceduralPortrait,{version:3}>=>{if(value.version===4)throw new Error('Недоступно для этого рисунка.');return value.version===3?value:{...value,version:3,base_version:value.version,
     body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
     facial_hair:value.version===2?value.facial_hair:'clean_shaven'}};
- const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:value.version===3&&value.face_revision===3?3:4}:{})} as ProceduralPortrait);
+ const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:value.version===3&&value.face_revision===3?3:4,...(value.version===3&&(value.face_revision===3||value.face_revision===4)?{}:{eye_revision:2 as const})}:{})} as ProceduralPortrait);
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
  const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
  const adult=(p:ProceduralPortrait)=>['adult','young_adult','mature_adult','elderly'].includes(p.visual_age||p.stage);
@@ -66,6 +66,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  })}</div>})()}
  {section==='face'&&<div className="studio-face-details">
 
+ {value.version===3&&(value.face_revision===3||value.face_revision===4)&&!value.eye_revision&&<Button variant="outline" onClick={()=>change({...value,eye_revision:2})}>Примерить новую посадку глаз</Button>}
  {value.version===3&&(value.face_revision===3||value.face_revision===4)?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
  <Choice aria-label={detailNames[key]} value={value[key]||'auto'} onValueChange={id=>{
  const next={...value};if(id==='auto')delete next[key];else Object.assign(next,{[key]:id});change(next)}}><option value="auto">По рисунку</option>

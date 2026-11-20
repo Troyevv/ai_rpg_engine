@@ -112,7 +112,7 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
         if eligible and 'facial_hair' not in authored:
             style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=STYLES['face'][choices['face']], face_revision=4, skin_swatch=True,eye_swatch=True,
+            visage=STYLES['face'][choices['face']], face_revision=4, eye_revision=2, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
             facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,
@@ -211,13 +211,23 @@ def reader_card(state,cid):
     return card
 
 
+def can_update_eyes(actor):
+    art = actor.get('procedural_portrait') or {}
+    return (art.get('version') == 3 and art.get('face_revision') in (3, 4)
+            and art.get('eye_revision') is None and art.get('form') == 'human'
+            and not any(not image.get('deleted') for image in actor.get('portraits', [])))
+
+
 def presentation_for(state,runtime,card,author):
     cid=card['id']
     if not author and not appearance_disclosed(state,card):
         return dict(portrait=None,procedural_portrait=None,silhouette='neutral')
     result=projection(runtime,cid)
     if author:
-        result['procedural_portrait']=runtime['characters'][cid]['procedural_portrait']
+        actor = runtime['characters'][cid]
+        result['procedural_portrait'] = actor['procedural_portrait']
+        if can_update_eyes(actor):
+            result['can_update_eyes'] = True
     return result
 
 
@@ -316,13 +326,36 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
                 content,w,h=image
                 db.execute('INSERT INTO portrait_assets(id,world_id,content,width,height) VALUES(?,0,?,?,?)',(aid,content,w,h))
                 db.execute("INSERT INTO portrait_asset_access VALUES(?,'draft',?)",(aid,wid))
-        # Visual-only changes do not add Knowledge or rewrite Appearance, but the
-        # exact reviewed snapshot hash still becomes stale like every draft edit.
-        review=record.get('review')
-        if review: review=dict(review,status='stale',reason='Изменилось оформление персонажа; версия проверки устарела.')
-        repo._write_draft(db,wid,state,'portrait',record.get('source',''),record.get('warnings',[]),
-            outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
+        write_portrait_edit(repo, db, wid, state, record)
     return listing(repo,wid,cid,author=True)
+
+
+def write_portrait_edit(repo, db, wid, state, record):
+    # Visual-only changes do not add Knowledge or rewrite Appearance, but the
+    # exact reviewed snapshot hash still becomes stale like every draft edit.
+    review=record.get('review')
+    if review: review=dict(review,status='stale',reason='Изменилось оформление персонажа; версия проверки устарела.')
+    repo._write_draft(db,wid,state,'portrait',record.get('source',''),record.get('warnings',[]),
+        outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
+
+
+def update_draft_eyes(repo, wid, revision):
+    with repo.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        repo._draft_workspace(db, wid, revision, idle=True)
+        head = repo._draft_head(db, wid)
+        if not head:
+            raise ValueError('Черновик недоступен.')
+        record = json.loads(head['content'])
+        state = record['state']
+        count = 0
+        for actor in state['world']['characters'].values():
+            if can_update_eyes(actor):
+                actor['procedural_portrait']['eye_revision'] = 2
+                count += 1
+        if count:
+            write_portrait_edit(repo, db, wid, state, record)
+        return {'updated': count}
 
 
 def handoff_assets(db,wid,world_id,state,*,scope='world'):

@@ -70,3 +70,25 @@ it('keeps the master revision 3 drawing byte-for-byte after adding the classic f
  expect(createHash('sha256').update(svg(pinned)).digest('hex'))
   .toBe('a7f630b8518dbc1c66ecb359b9727bd3ff2cdb0be78a6c86fb998df4a722f445');
 });
+
+it('projects both pupils onto one baseline with one gaze vector and iris diameter',()=>{
+ for(const revision of [3,4] as const) for(const eye_shape of ['open','hooded','almond'] as const) {
+  for(const byte of ['00','7f','ff']) {
+   const art={...modern,version:3,face_revision:revision,eye_revision:2,eye_shape,seed:byte.repeat(16)} as const;
+   const doc=new DOMParser().parseFromString(svg(art),'image/svg+xml');
+   const measurements=['far-orbit','near-orbit'].map(id=>{
+    const group=doc.getElementById(id)!.parentElement!.parentElement!;
+    const [,x,y,scale]=group.getAttribute('transform')!.match(/translate\(([-.\d]+) ([-.\d]+)\) scale\(([-.\d]+) 1\)/)!.map(Number);
+    const pupil=group.querySelector('ellipse[fill="#292725"]')!;
+    return {x,y:y+Number(pupil.getAttribute('cy')),offset:scale*Number(pupil.getAttribute('cx')),
+            radius:Math.abs(scale)*Number(pupil.getAttribute('rx')),scale};
+   });
+   const [far,near]=measurements;
+   expect(near.x).toBeGreaterThan(far.x);
+   expect(Math.abs(far.scale)).toBeLessThan(near.scale);
+   expect(far.y).toBe(near.y);
+   expect(far.offset).toBeCloseTo(near.offset,9);
+   expect(far.radius).toBeCloseTo(near.radius,9);
+  }
+ }
+});

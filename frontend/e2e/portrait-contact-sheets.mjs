@@ -14,10 +14,13 @@ import tailwindcss from '@tailwindcss/vite';
 const frontend = fileURLToPath(new URL('../', import.meta.url));
 const repo = path.dirname(path.resolve(frontend));
 const { values } = parseArgs({ options: {
-  out: { type: 'string' }, groups: { type: 'string' }, cases: { type: 'string' },
+  out: { type: 'string' }, eyes: { type:'boolean' }, 'mobile-width': {type:'string'}, groups: { type: 'string' }, cases: { type: 'string' },
   'full-size': { type: 'boolean', default: false },
 }});
 if (!values.out) throw new Error('Provide an output directory with --out');
+const revisions = values.eyes ? ['original-eyes','aligned-eyes'] : [3,4];
+const width = Number(values['mobile-width'] || 1280);
+if (![360,393,1280].includes(width)) throw new Error('Supported viewport widths: 360, 393, 1280');
 const groups = values.cases
   ? JSON.parse(await readFile(values.cases, 'utf8'))
   : JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-m', 'devtools.issue269.visual_cases'], {
@@ -53,15 +56,21 @@ try {
   });
   const port = server.httpServer.address().port;
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  const page = await browser.newPage({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
   page.on('pageerror', error => console.error(error.message));
   for (const group of selected) {
-    for (const revision of [3, 4]) {
+    for (const revision of revisions) {
       await page.goto(`http://127.0.0.1:${port}/`);
       await page.waitForFunction(() => typeof window.renderPortraitCases === 'function');
       await page.evaluate(([rows, revision, full]) => window.renderPortraitCases(rows, revision, full),
                           [groups[group], revision, values['full-size']]);
-      const file = `${group}-r${revision}.jpg`;
+      const stem = `${group}-${typeof revision==='number'?'r':''}${revision}`;
+      const file = stem+'.jpg';
+      const bounds = await page.locator('article').evaluateAll(items=>items.map(el=>{
+        const rect = node=>{const {x,y,width,height}=node.getBoundingClientRect();return {x,y,width,height}};
+        return {plate:rect(el.querySelector('.ww-card-art')),avatar:rect(el.lastElementChild.querySelector('img').parentElement)};
+      }));
+      await writeFile(path.join(destination,stem+'.json'),JSON.stringify(bounds));
       await page.locator('#review').screenshot({ path: path.join(destination, file), quality: 90 });
       console.log(`${file} — ${groups[group].length}`);
     }

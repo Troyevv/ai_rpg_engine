@@ -5,7 +5,7 @@ import {portraitFigure,type FeatureChoices} from './portraitFigure';
 import {portraitFace} from './portraitFace';
 import {coiffure,garmentLayer} from './portraitWardrobe';
 export type Styles = typeof catalog.styles;
-export type Layers = FeatureChoices & {face_revision?:2|3|4;body_build?:keyof typeof catalog.features.body_build;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
+export type Layers = FeatureChoices & {face_revision?:2|3|4;eye_revision?:2;body_build?:keyof typeof catalog.features.body_build;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
 import {type Illustration,validIllustration} from "./portraitV4/illustration";

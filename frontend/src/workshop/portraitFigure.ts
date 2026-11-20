@@ -179,6 +179,67 @@ function eye(h: Head, p: Paint, x: number, side: number, kind: string) {
  ${h.elder || h.age === 'mature_adult' ? line(`M${-w + 4} 8Q1 13 ${w + 1} 5m2-4 5 1m-6 3 4 2`, ink, 1.05, h.elder ? 0.34 : 0.16) : ''}</g>`;
 }
 
+// Two sockets on one curved orbital plane. The nose bridge is its centre;
+// horizontal yaw foreshortens the far orbit. Roll and mirroring are applied
+// once later, to the complete head, so they cannot change binocular alignment.
+function orbitalPair(h: Head) {
+  const radius = h.cheek * .87;
+  const sinYaw = -h.axis / radius;
+  const cosYaw = Math.sqrt(1 - sinYaw * sinYaw);
+  const spacing = h.cheek * (.40 + h.youth * .018) + (h.v(2) - .5) * 2.6;
+  const depth = Math.sqrt(radius * radius - spacing * spacing);
+  const middle = h.axis + (radius - depth) * sinYaw;
+  const orbit = (side: 1 | -1) => ({
+    side, x: middle + side * spacing * cosYaw,
+    widthScale: cosYaw + side * (spacing / depth) * sinYaw,
+  });
+  return { near: orbit(1), far: orbit(-1), halfWidth: spacing * .52,
+    gaze: (h.v(13) - .5) * .20 - sinYaw * .52 };
+}
+
+function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair>,
+                      orbit: ReturnType<typeof orbitalPair>['near'], kind: string) {
+  const { side, x, widthScale } = orbit;
+  const w = pair.halfWidth * (kind === 'hooded' ? 1.045 : kind === 'open' ? .97 : 1);
+  const rise = .55 + h.v(4) * 1.35 + (kind === 'almond' ? .65 : 0);
+  const opening = (kind === 'open' ? .40 : kind === 'hooded' ? .29 : .33) *
+    w * (1 + h.youth * .15) * (h.elder ? .93 : 1);
+  // Both canthi and both Bézier arcs are expressed about the same optical
+  // centre. The upper lid covers more of the iris on a hooded eye.
+  const lid = `M${-w} .8 C${-w*.64} ${-opening*.95} ${-w*.18} ${-opening*1.25} 0 ${-opening*1.19}
+    C${w*.42} ${-opening*1.25} ${w*.76} ${-opening*.66} ${w} ${-rise}`;
+  const lower = `Q${w*.18} ${opening*1.38} ${-w} .8`;
+  const aperture = lid + ' ' + lower + 'Z';
+  const id = side === 1 ? 'near-orbit' : 'far-orbit';
+  const ink = tone(paint.skin[2], '#292422', .70);
+  const radius = w * (.45 + h.youth * .045);
+  // Gaze is a single direction in head coordinates. Undo the socket-local
+  // reflection/scale for the horizontal displacement and the corneal highlight.
+  const pupilX = pair.gaze * radius * side / widthScale;
+  const irisX = radius / widthScale;
+  const pupilY = -.55;
+  const browY = -opening - 5.5 - h.v(5) * 1.7 + (h.elder ? 1.2 : 0);
+  const thick = mix(3.3 + h.build * .7 + h.v(6) * 1.3, 1.6, h.youth);
+  const arch = 2.5 + h.v(5) * 2.9;
+  const brow = `M${-w} ${browY+1}
+    Q${-w*.32} ${browY-arch} ${w*.25} ${browY-arch}
+    Q${w*.67} ${browY-arch} ${w+1} ${browY+.3}
+    Q${w*.53} ${browY-2.1} ${w*.23} ${browY-arch+thick*.66}
+    Q${-w*.35} ${browY-.8+thick*.52} ${-w} ${browY+1+thick*.72}Z`;
+  return `<g transform="translate(${x} 0) scale(${side*widthScale} 1)">
+    <defs><clipPath id="${id}"><path d="${aperture}"/></clipPath></defs>
+    ${ellipse(0,browY+3,w+3,6,'url(#socket)')}${path(aperture,tone(paint.skin[0],'#fff2e4',.79))}
+    <g clip-path="url(#${id})">
+    ${ellipse(pupilX,pupilY,irisX,radius,ink)}
+    ${ellipse(pupilX,pupilY,irisX*.83,radius*.86,paint.iris)}
+    ${ellipse(pupilX,pupilY,irisX*.43,radius*.47,'#292725')}
+    ${ellipse(pupilX-radius*.25*side/widthScale,pupilY-radius*.34,irisX*.16,radius*.16,'#fff6e9')}</g>
+    ${line(lid,ink,1.65,.95)}
+    ${line(`M${w} ${-rise} Q${w*.76} ${opening*.59} ${w*.34} ${opening*.6}`,ink,.9,.53)}
+    ${line(`M${-w*.8} ${-opening*.65-1.4} Q0 ${-opening*1.94-1.8} ${w*.92} ${-rise-2.4}`,paint.skin[2],1.1,.58)}
+    ${path(brow,tone(paint.hair[1],paint.skin[2],.31+h.youth*.15),.82-h.youth*.28)}</g>`;
+}
+
 function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
   const { axis, tip, nose: y, mouth: m, lipX: x } = h;
   const wide =
@@ -331,8 +392,9 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
     tone(hair[1], '#201a21', 0.38),
     h.refined ? { infant: h.infant, part: h.v(6) } : undefined,
   );
-  const nearEye = a + h.eyeSpacing + 3,
-    farEye = a - h.eyeSpacing * 0.87;
+  const orbits = p.eye_revision === 2 ? orbitalPair(h) : undefined;
+  const nearEye = orbits?.near.x ?? (a + h.eyeSpacing + 3),
+    farEye = orbits?.far.x ?? (a - h.eyeSpacing * 0.87);
   const ears = (near: boolean) => {
     const size = (near ? 1 : 0.67) * (h.elder ? 1.06 : 1);
     const px = near ? earX : -t + 1,
@@ -375,8 +437,9 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
       skin[2],
       0.19,
     ) +
-    eye(h, paint, farEye, -1, styleEye) +
-    eye(h, paint, nearEye, 1, styleEye);
+    (orbits
+      ? projectedEye(h, paint, orbits, orbits.far, styleEye) + projectedEye(h, paint, orbits, orbits.near, styleEye)
+      : eye(h, paint, farEye, -1, styleEye) + eye(h, paint, nearEye, 1, styleEye));
   const { nose, lips } = expressions(h, paint, h.noseStyle, styleLip);
   const folds =
     h.elder || h.age === 'mature_adult'

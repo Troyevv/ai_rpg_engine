@@ -10,15 +10,24 @@ interface ReviewCase {
   portrait: Extract<LegacyPortrait, {version: 3}>;
 }
 
-export async function render(cases: ReviewCase[], revision: 3 | 4, fullSize: boolean) {
+export async function render(cases: ReviewCase[], revision: 3 | 4 | 'original-eyes' | 'aligned-eyes', fullSize: boolean) {
   const rootElement = document.getElementById('review')!;
   const width = fullSize ? 400 : 160;
   const columns = Math.min(fullSize ? 3 : 6, cases.length);
   rootElement.style.cssText = `display:grid;grid-template-columns:repeat(${columns},${width}px);gap:8px;padding:8px;width:max-content;background:#eee9df;color:#262323`;
+  if (!fullSize && window.innerWidth<=393) {
+    rootElement.classList.add('ww-content');
+    rootElement.style.cssText='width:100%;background:#eee9df;color:#262323';
+  }
   const root = createRoot(rootElement);
-  root.render(<>{cases.map(({label, portrait}, i) => {
-    const card = { id: String(i), name: label, fields: {}, procedural_portrait: {...portrait, face_revision: revision} };
-    return <article key={card.id}>
+  const mobile = !fullSize && window.innerWidth<=393;
+  root.render(<div className={mobile?'ww-characters-grid':undefined} style={mobile?undefined:{display:'contents'}}>{cases.map(({label, portrait}, i) => {
+    const art = {...portrait};
+    if (typeof revision==='number') art.face_revision=revision;
+    if (revision==='aligned-eyes') art.eye_revision=2;
+    if (revision==='original-eyes' || revision===3) delete art.eye_revision;
+    const card = { id: String(i), name: label, fields: {}, procedural_portrait: art };
+    return <article key={card.id} style={mobile?{display:'grid',gridTemplateColumns:'minmax(0,1fr)',alignContent:'start'}:undefined}>
       {fullSize ? <div style={{width:400,height:500}} className="ww-card-art">
         <CharacterAvatar subject={card} size="100%" framing="plate"/>
       </div> : <CharacterCard card={card} wid="review" author={false} onOpen={()=>{}}/>}
@@ -26,7 +35,7 @@ export async function render(cases: ReviewCase[], revision: 3 | 4, fullSize: boo
         <CharacterAvatar subject={card} size={48}/>{fullSize ? label : null}
       </div>
     </article>;
-  })}</>);
+  })}</div>);
   // React commits asynchronously. Wait for every visible plate and round frame before capturing.
   await new Promise<void>((resolve, reject) => {
     const deadline = performance.now() + 15000;
