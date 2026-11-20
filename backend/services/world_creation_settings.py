@@ -41,6 +41,7 @@ class CalendarStart(StrictModel):
 from backend.runtime_v3.remote_models import CommunicationCapabilities
 
 class CreationSettings(GenreConfig):
+    portrait_style: Literal['legacy','anime','semi_realistic'] = 'legacy'
     communication: CommunicationCapabilities | None = None
     calendar_start: CalendarStart = Field(default_factory=CalendarStart)
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)

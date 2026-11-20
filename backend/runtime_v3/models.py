@@ -462,7 +462,7 @@ class ProceduralPortrait(StrictModel):
     @model_serializer(mode='wrap')
     def _sparse_colors(self, handler):
         result=handler(self)
-        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision','eye_shape','nose_shape','lip_shape'):
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision','eye_revision','cheek_revision','nose_revision','body_revision','eye_shape','nose_shape','lip_shape','body_build','accent_color','face_detail','eyewear'):
             if result.get(key) is None: result.pop(key,None)
         return result
 
@@ -486,15 +486,26 @@ class ProceduralPortraitV2(ProceduralPortrait):
 
 class ProceduralPortraitV3(ProceduralPortraitV2):
     version: Literal[3]
+    facial_hair: FacialHair | Literal['goatee', 'sideburns']
     # Keep each unedited layer of a historical plate exactly as it was painted.
     base_version: Literal[1, 2] = 2
     hairstyle: str | None = None
     garment: str | None = None
     visage: str | None = None
-    face_revision: Literal[2, 3] | None = None
-    eye_shape: Literal['almond','open','hooded'] | None = None
-    nose_shape: Literal['straight','rounded','arched'] | None = None
-    lip_shape: Literal['defined','full','fine'] | None = None
+    face_revision: Literal[2, 3, 4] | None = None
+    eye_revision: Literal[2] | None = None
+    cheek_revision: Literal[2] | None = None
+    nose_revision: Literal[2] | None = None
+    body_revision: Literal[2, 3] | None = None
+    hair_color: int | None = Field(default=None, ge=0, le=15)
+    clothing_color: int | None = Field(default=None, ge=0, le=19)
+    accent_color: int | None = Field(default=None, ge=0, le=19)
+    face_detail: Literal['none','freckles','beauty_mark','brow_scar','cheek_scar','dimples'] | None = None
+    eyewear: Literal['none','round_wire','rectangular','cat_eye'] | None = None
+    body_build: Literal['slender','average','broad','full','athletic','stocky'] | None = None
+    eye_shape: Literal['almond','open','hooded','upturned','downturned','deep_set'] | None = None
+    nose_shape: Literal['straight','rounded','arched','upturned','broad_base','aquiline'] | None = None
+    lip_shape: Literal['defined','full','fine','cupid','wide','lower_full'] | None = None
     skin_swatch: bool = False
     eye_swatch: bool = False
 
@@ -507,7 +518,41 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
         return self
 
 
-PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3
+class ProceduralPortraitV4(StrictModel):
+    version: Literal[4]
+    art_revision: Literal[1]
+    art_style: Literal['anime', 'semi_realistic']
+    seed: str = Field(pattern=r'^[a-f0-9]{32}$')
+    palette: int = Field(ge=0, le=6)
+    form: Literal['human', 'neutral']
+    body_frame: Literal['male', 'female', 'neutral']
+    stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult']
+    visual_age: Literal['infant','child','adolescent','young_adult','mature_adult','elderly'] | None = None
+    visual_age_mode: Literal['auto','manual'] | None = None
+    traits: dict[str, str]
+    manual_traits: list[str] = Field(default_factory=list, max_length=18)
+
+    @model_serializer(mode='wrap')
+    def sparse_age(self, handler):
+        result={key:value for key,value in handler(self).items() if value is not None}
+        if not self.manual_traits: result.pop('manual_traits',None)
+        return result
+
+    @model_validator(mode='after')
+    def supported_art(self):
+        from backend.runtime_v3.portrait_catalog import ILLUSTRATION_STYLES
+        if not set(self.manual_traits)<=ILLUSTRATION_STYLES.keys() or len(set(self.manual_traits))!=len(self.manual_traits):
+            raise ValueError('Неизвестная ручная черта.')
+        if self.traits.keys() != ILLUSTRATION_STYLES.keys() or any(
+                value not in ILLUSTRATION_STYLES[key] for key, value in self.traits.items()):
+            raise ValueError('Неизвестный вариант рисунка.')
+        if self.traits['facial_hair'] != 'clean_shaven' and (
+                self.form != 'human' or (self.visual_age or self.stage) not in ('adult','young_adult','mature_adult','elderly')):
+            raise ValueError('Растительность на лице требует взрослой человеческой иллюстрации.')
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3 | ProceduralPortraitV4
 
 
 class PortraitReference(StrictModel):

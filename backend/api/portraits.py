@@ -79,6 +79,14 @@ def register_drafts(app,repo):
     from backend.services import draft_portraits as drafts
     base='/api/workspaces/{wid}/draft/characters/{cid}/portraits'
 
+    @app.post('/api/workspaces/{wid}/draft/portraits/update-eyes')
+    def update_eyes(wid: str, revision: int):
+        return drafts.update_figure_layer(repo, wid, revision, 'eye_revision')
+
+    @app.post('/api/workspaces/{wid}/draft/portraits/update-body')
+    def update_body(wid: str, revision: int):
+        return drafts.update_figure_layer(repo, wid, revision, 'body_revision')
+
     @app.get(base)
     def listing(wid:str,cid:str,author:bool=False):
         return drafts.listing(repo,wid,cid,author)

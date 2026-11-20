@@ -24,7 +24,7 @@ def messages_for(repo,job,config):
         instructions=idea_text(repo,job,config)
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(config.get('_creation_settings',{}))
-        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True,exclude={'narrative_detail'}),ensure_ascii=False)
+        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True,exclude={'narrative_detail','portrait_style'}),ensure_ascii=False)
         if settings.communication is not None:instructions+='\nТехнологии связи communication заданы явно: не меняй каналы, доставку и дату по жанру или эпохе. author_note — антураж, не разрешение включить канал.'
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
@@ -36,9 +36,9 @@ def messages_for(repo,job,config):
         selected=config['_prompts'][name]['content']
         author_prompt=(ROOT/name).read_text(encoding='utf-8') if is_builtin_prompt(name,selected) else selected
         system=(author_prompt+'\nФормат ответа задаёт текущая схема ниже.\n'+SECRET_AUTHORING_RULES
-                +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Творчески развивай открытую внешность в рамках замысла; сохрани намеренную неизвестность. Выбери campaign.portrait_profile по эпохе. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
+                +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Творчески развивай открытую внешность в рамках замысла; сохрани намеренную неизвестность. Выбери campaign.portrait_profile по эпохе. Подбирай фасон, отделку и приметы по возрасту, роли, одежде и условиям мира. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(compact_schema(prompt_schema(initial_portraits=True)),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(compact_schema(prompt_schema(initial_portraits=True), dense=True),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']

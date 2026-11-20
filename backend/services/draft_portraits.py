@@ -4,10 +4,12 @@ import hashlib
 import json
 import uuid
 from pydantic import TypeAdapter
-from backend.runtime_v3.models import PortraitDescriptor, ProceduralPortrait, ProceduralPortraitV2, ProceduralPortraitV3
+from backend.runtime_v3.models import PortraitDescriptor, ProceduralPortrait, ProceduralPortraitV2, ProceduralPortraitV3, ProceduralPortraitV4
 from backend.runtime_v3.portraits import life_period, projection, visual_age
 from backend.repositories.portraits import mutate
 
+
+from backend.runtime_v3.portrait_catalog import ILLUSTRATION, ILLUSTRATION_STYLES
 
 DESCRIPTORS = TypeAdapter(PortraitDescriptor)
 
@@ -18,7 +20,7 @@ def authoring_context(state):
     for cid, actor in actors.items():
         art = actor.get('procedural_portrait') or {}
         actors_without_art[cid] = ({k:v for k,v in actor.items() if k != 'procedural_portrait'}
-                              if art.get('version') == 3 else actor)
+                              if art.get('version') in (3,4) else actor)
     return {**state, 'world':{**state['world'], 'characters':actors_without_art}}
 
 
@@ -39,20 +41,34 @@ def beard_eligible(actor, stage):
     return stage == 'adult' and body_frame(actor) == 'male'
 
 
-def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, version=2, world_id="", profile="neutral", warnings=None):
+def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, version=2, world_id="", profile="neutral", art_style="legacy", warnings=None):
     from backend.services.portrait_traits import FACIAL_HAIR, graphic_choices
-    identity = json.dumps([world_id, cid], ensure_ascii=False) if version == 3 else 'workshop-portrait-v1:'+cid
+    identity = json.dumps([world_id, cid], ensure_ascii=False) if version >= 3 else 'workshop-portrait-v1:'+cid
     seed=hashlib.sha256(identity.encode()).hexdigest()[:32]
     # Neutral graphic choices never become canonical appearance facts.
     values=[int(seed[i:i+2],16) for i in range(0,14,2)]
     hinted_form = hints.get('form') if isinstance(hints,dict) else None
-    human = stage in ('infant','child','adolescent','adult') or version==3 and hinted_form=='human'
+    human = stage in ('infant','child','adolescent','adult') or version>=3 and hinted_form=='human'
     form = 'human' if human and hinted_form!='neutral' else 'neutral'
     choices=dict(face=values[0]%7,hair=values[1]%8,skin=values[2]%7,eyes=values[3]%7,
         clothing=0,accessory=0,palette=values[6]%7)
     actor = actor or {}
     eligible = (version >= 2 and form == 'human' and beard_eligible(actor, stage)
                 and age_style not in ('infant', 'child', 'adolescent'))
+    # Each draw depends only on the world, character and named trait.
+    def pick(field, pool):
+        digest = hashlib.sha256(f'{seed}:{field}'.encode()).digest()
+        return tuple(pool)[int.from_bytes(digest[:8], 'big') % len(pool)]
+
+    if version==4:
+        traits={key:pick(key,options) for key,options in ILLUSTRATION_STYLES.items()}
+        traits.update(clothing=pick('clothing',ILLUSTRATION['wardrobes'].get(profile, ILLUSTRATION['wardrobes']['neutral'])),
+                      hair_color=pick('hair_color', ILLUSTRATION['natural_hair']), detail='none', expression='neutral')
+        if not eligible: traits['facial_hair']='clean_shaven'
+        traits.update(graphic_choices(actor,hints,facial_hair=eligible,warnings=warnings,semantic=True))
+        return ProceduralPortraitV4(version=4,art_revision=1,art_style=art_style,seed=seed,
+                stage=stage,form=form,visual_age=age_style,palette=choices['palette'],
+                body_frame=body_frame(actor) if form=='human' else 'neutral',traits=traits).model_dump(exclude_none=True)
     authored = graphic_choices(actor, hints, facial_hair=eligible, warnings=warnings, catalog_labels=version==3) if form=='human' or version==3 else {}
     choices.update(authored)
     common = dict(seed=seed, stage=stage, form=form, visual_age=age_style)
@@ -65,17 +81,60 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
     if version == 3:
         from backend.runtime_v3.portrait_catalog import CATALOG, STYLES
         wardrobes = CATALOG['wardrobes']
-        pool = wardrobes.get(profile, wardrobes['neutral']) if isinstance(profile,str) else wardrobes['neutral']
-        hair = STYLES['hair'][authored.get('hair', values[1] % len(STYLES['hair']))]
-        garment = STYLES['clothing'][authored['clothing']] if 'clothing' in authored else pool[values[4] % len(pool)]
-        choices.update(hair=min(STYLES['hair'].index(hair),7), clothing=min(STYLES['clothing'].index(garment),7),
-                       eyes=authored.get('eyes',values[3] % len(STYLES['eyes'])))
-        choices.setdefault('hair_color',int(seed[16:18],16)%len(STYLES['hair_color']))
-        choices.setdefault('clothing_color',int(seed[18:20],16)%len(STYLES['clothing_color']))
+        outfits = wardrobes.get(profile, wardrobes['neutral']) if isinstance(profile,str) else wardrobes['neutral']
+        if (age_style or stage) == 'child' and 'clothing' not in authored:
+            uniforms = {'chef', 'blazer', 'flight_suit', 'lamellar', 'trench'}
+            outfits = [garment for garment in outfits if garment not in uniforms]
+        face = STYLES['face'][authored['face']] if 'face' in authored else pick('visage', STYLES['face'])
+        hair = STYLES['hair'][authored['hair']] if 'hair' in authored else pick('hairstyle', STYLES['hair'])
+        garment = STYLES['clothing'][authored['clothing']] if 'clothing' in authored else pick('outfit', outfits)
+        # Numeric fields remain valid fallbacks for clients reading old descriptors.
+        choices.update(face=min(STYLES['face'].index(face),6), hair=min(STYLES['hair'].index(hair),7),
+                       clothing=min(STYLES['clothing'].index(garment),7),eyes=authored.get('eyes',values[3] % len(STYLES['eyes'])))
+        color_count = len(STYLES['clothing_color'])
+        choices.setdefault('clothing_color', pick('fabric',range(color_count)))
+        fabric = choices['clothing_color']
+        neutral_trim = (0, 1, 6, 7, 18)
+        color_families = ((2, 7, 8, 13, 15, 18), (4, 5, 6, 9, 10, 14, 19),
+                          (3, 8, 10, 13, 16, 19), (5, 9, 11, 12, 14, 17))
+        trim = range(color_count) if fabric in neutral_trim else dict.fromkeys(
+            (*neutral_trim, *(i for family in color_families if fabric in family for i in family)))
+        choices.setdefault('accent_color', pick('lining', [i for i in trim if i != fabric]))
+        natural = range(len(STYLES['hair_color'])) if profile in ('modern','fantasy','futuristic') else range(14)
+        choices.setdefault('hair_color',pick('hair-dye',natural))
+        for field, options in CATALOG['features'].items():
+            pool = list(options)
+            if field == 'eyewear':
+                if profile in ('historical', 'fantasy'):
+                    pool = ['none', 'round_wire']
+                pool += ['none'] * (30 if (age_style or stage) in ('child','adolescent') else 13)
+                if stage == 'infant': pool = ['none']
+            if field == 'face_detail':
+                pool += ['none'] * 6
+                if stage in ('infant','child'): pool = ['none','none','freckles','beauty_mark','dimples']
+            choices.setdefault(field, pick(field, pool))
+        # Keep explicit choices. Pattern baldness and adult beard presets are poor defaults for children.
+        age = age_style or stage
+        if age == 'infant':
+            if 'hair' not in authored:
+                hair = pick('infant-hair', ('short','buzz','bald','curly','fringe'))
+                choices['hair'] = min(STYLES['hair'].index(hair), 7)
+            if 'clothing' not in authored:
+                garment = pick('infant-garment', ('romper','wrap_blanket','smock','plain','jumper') if profile in ('modern','futuristic') else ('wrap_blanket','smock','plain'))
+                choices['clothing'] = min(STYLES['clothing'].index(garment), 7)
+        if age in ('child', 'adolescent') and 'hair' not in authored and hair == 'receding':
+            hair = pick('juvenile-hair', ('short', 'curly', 'fringe', 'medium', 'bob'))
+            choices['hair'] = min(STYLES['hair'].index(hair), 7)
+        if age in ('infant','child','adolescent') and 'hair_color' not in authored:
+            choices['hair_color'] = pick('juvenile-color', (0,1,2,3,4,7,8,9,10,11))
+        if age == 'elderly' and 'hair_color' not in authored:
+            choices['hair_color'] = pick('age-hair', (0,1,3,5,5,6,7,11,12,13,13))
+        if eligible and 'facial_hair' not in authored:
+            style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4, 5, 6))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=STYLES['face'][choices['face']], face_revision=3, skin_swatch=True,eye_swatch=True,
+            visage=face, face_revision=4, eye_revision=2, cheek_revision=2, nose_revision=2, body_revision=3, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
-            facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()
+            facial_hair=STYLES['facial_hair'][style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,
         body_frame=body_frame(actor) if form == 'human' else 'neutral',
         facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()
@@ -84,7 +143,8 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
 def world_art(state):
     campaign = state.get('campaign', {})
     return dict(world_id=state.get('portrait_world_id') or json.dumps(campaign, sort_keys=True),
-                profile=campaign.get('portrait_profile', 'neutral'))
+                profile=campaign.get('portrait_profile', 'neutral'),
+                art_style='legacy')
 
 
 def consume_authored_traits(state, warnings=None, *, version=3):
@@ -103,11 +163,28 @@ def refine_automatic(state, cid, hints, warnings=None):
     actor = runtime['characters'][cid]
     old = actor.get('procedural_portrait') or {}
     generated = default_descriptor(cid, life_period(runtime,cid)[1], actor, hints, visual_age(runtime,cid),
-                                   version=3, **world_art(state))
-    if old.get('version') != 3 or old.get('seed') != generated['seed']: return
+                                   version=4 if old.get('version')==4 else 3, **{**world_art(state),'art_style':old.get('art_style','legacy')})
+    if old.get('version') not in (3,4) or old.get('version') != generated['version'] or old.get('seed') != generated['seed']: return
+    if old['version']==4:
+        from backend.services.portrait_traits import graphic_choices
+        conflicts=[]
+        eligible=beard_eligible(actor,generated['stage']) and generated['form']=='human'
+        traits=graphic_choices(actor,hints,facial_hair=eligible,warnings=conflicts,semantic=True)
+        old['traits'].update(traits)
+        if not eligible: old['traits']['facial_hair']='clean_shaven'
+        if isinstance(hints,dict) and hints.get('form') in ('human','neutral') or old['stage']=='unknown' and generated['stage']!='unknown':
+            old['form']=generated['form']
+        for key in ('body_frame','stage','visual_age'):
+            old[key]=generated.get(key)
+        if old['form']=='neutral':
+            old['body_frame']='neutral'
+            old['traits']['facial_hair']='clean_shaven'
+        if warnings is not None:
+            warnings.extend(dict(category='portrait_traits',path=f'/characters/{cid}/portrait_traits',message=w) for w in conflicts)
+        return
     from backend.services.portrait_traits import graphic_choices
     conflicts=[]
-    fields=graphic_choices(actor,hints,facial_hair=beard_eligible(actor,generated['stage']),warnings=conflicts)
+    fields=graphic_choices(actor,hints,facial_hair=beard_eligible(actor,generated['stage']),warnings=conflicts,catalog_labels=True)
     if warnings is not None:
         warnings.extend(dict(category='portrait_traits',path=f'/characters/{cid}/portrait_traits',message=message) for message in conflicts)
     if old['stage']=='unknown' and generated['stage']!='unknown':
@@ -115,6 +192,8 @@ def refine_automatic(state, cid, hints, warnings=None):
     old.update(stage=generated['stage'],visual_age=generated.get('visual_age'),body_frame=generated['body_frame'])
     if not beard_eligible(actor,generated['stage']): old['facial_hair']='clean_shaven'
     if old['visual_age'] is None: old.pop('visual_age')
+    if 'nose_shape' in fields and old.get('face_revision') in (3,4):
+        old['nose_revision'] = 2
     for field in fields:
         old[field] = generated[field]
         layer = {'hair':'hairstyle','clothing':'garment','face':'visage'}.get(field)
@@ -154,13 +233,25 @@ def reader_card(state,cid):
     return card
 
 
+def can_update_figure_layer(actor, field):
+    art = actor.get('procedural_portrait') or {}
+    return (art.get('version') == 3 and art.get('face_revision') in (3, 4)
+            and (art.get(field) is None or (field == 'body_revision' and art[field] == 2))
+            and art.get('form') == 'human'
+            and not any(not image.get('deleted') for image in actor.get('portraits', [])))
+
+
 def presentation_for(state,runtime,card,author):
     cid=card['id']
     if not author and not appearance_disclosed(state,card):
         return dict(portrait=None,procedural_portrait=None,silhouette='neutral')
     result=projection(runtime,cid)
     if author:
-        result['procedural_portrait']=runtime['characters'][cid]['procedural_portrait']
+        actor = runtime['characters'][cid]
+        result['procedural_portrait'] = actor['procedural_portrait']
+        for layer, field in (('eyes','eye_revision'), ('body','body_revision')):
+            if can_update_figure_layer(actor, field):
+                result['can_update_'+layer] = True
     return result
 
 
@@ -219,24 +310,28 @@ def asset(repo,wid,cid,aid,author=False):
         return row[0]
 
 
-def apply_descriptor(runtime,cid,descriptor,mode):
+def apply_descriptor(runtime,cid,descriptor,mode,*,preserve_mode=False):
     actor=runtime['characters'][cid]
     art=DESCRIPTORS.validate_python(descriptor)
-    if art.visual_age_mode == 'auto':
+    old=actor.get('procedural_portrait') or {}
+    same_basis=(old.get('version')==4 and isinstance(art,ProceduralPortraitV4) and
+                all(old.get(k)==getattr(art,k) for k in ('stage','visual_age','visual_age_mode')))
+    if art.visual_age_mode == 'auto' and not same_basis:
         # Resolve once at explicit save, never silently redraw on a birthday.
         art.stage=life_period(runtime,cid)[1]
         art.visual_age=visual_age(runtime,cid)
     elif art.visual_age_mode == 'manual' and art.visual_age is None:
         raise ValueError('Выберите визуальный возраст.')
-    if isinstance(art, ProceduralPortraitV2) and art.facial_hair != 'clean_shaven':
+    beard = art.traits['facial_hair'] if isinstance(art, ProceduralPortraitV4) else getattr(art,'facial_hair','clean_shaven')
+    if beard != 'clean_shaven':
         if (art.form != 'human' or art.visual_age in ('infant','child','adolescent')
                 or not beard_eligible(actor, life_period(runtime,cid)[1])):
             raise ValueError('Растительность на лице доступна только взрослому мужчине со взрослым визуальным возрастом.')
-    actor['procedural_portrait']=art.model_dump()
-    actor['portrait_mode']=mode or 'procedural'
+    actor['procedural_portrait']=art.model_dump(exclude_none=isinstance(art,ProceduralPortraitV4))
+    if not preserve_mode: actor['portrait_mode']=mode or 'procedural'
 
 
-def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None):
+def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None,preserve_mode=False):
     with repo.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         _,record,state=load(repo,db,wid,cid,revision,editable=True)
@@ -244,7 +339,7 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         if descriptor is not None or descriptors:
             for target, art in (descriptors or {cid:descriptor}).items():
                 if target not in runtime['characters']: raise ValueError('Портрет недоступен.')
-                apply_descriptor(runtime,target,art,mode)
+                apply_descriptor(runtime,target,art,mode,preserve_mode=preserve_mode)
                 if state.get('portrait_world_id'):
                     state.setdefault('authoring',{}).setdefault('manual_portraits',{})[target]=True
         elif mode is not None: actor['portrait_mode']=mode
@@ -255,13 +350,38 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
                 content,w,h=image
                 db.execute('INSERT INTO portrait_assets(id,world_id,content,width,height) VALUES(?,0,?,?,?)',(aid,content,w,h))
                 db.execute("INSERT INTO portrait_asset_access VALUES(?,'draft',?)",(aid,wid))
-        # Visual-only changes do not add Knowledge or rewrite Appearance, but the
-        # exact reviewed snapshot hash still becomes stale like every draft edit.
-        review=record.get('review')
-        if review: review=dict(review,status='stale',reason='Изменилось оформление персонажа; версия проверки устарела.')
-        repo._write_draft(db,wid,state,'portrait',record.get('source',''),record.get('warnings',[]),
-            outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
+        write_portrait_edit(repo, db, wid, state, record)
     return listing(repo,wid,cid,author=True)
+
+
+def write_portrait_edit(repo, db, wid, state, record):
+    # Visual-only changes do not add Knowledge or rewrite Appearance, but the
+    # exact reviewed snapshot hash still becomes stale like every draft edit.
+    review=record.get('review')
+    if review: review=dict(review,status='stale',reason='Изменилось оформление персонажа; версия проверки устарела.')
+    repo._write_draft(db,wid,state,'portrait',record.get('source',''),record.get('warnings',[]),
+        outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
+
+
+def update_figure_layer(repo, wid, revision, field):
+    if field not in ('eye_revision','body_revision'):
+        raise ValueError('Неизвестная версия рисунка.')
+    with repo.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        repo._draft_workspace(db, wid, revision, idle=True)
+        head = repo._draft_head(db, wid)
+        if not head:
+            raise ValueError('Черновик недоступен.')
+        record = json.loads(head['content'])
+        state = record['state']
+        count = 0
+        for actor in state['world']['characters'].values():
+            if can_update_figure_layer(actor, field):
+                actor['procedural_portrait'][field] = 3 if field == 'body_revision' else 2
+                count += 1
+        if count:
+            write_portrait_edit(repo, db, wid, state, record)
+        return {'updated': count}
 
 
 def handoff_assets(db,wid,world_id,state,*,scope='world'):

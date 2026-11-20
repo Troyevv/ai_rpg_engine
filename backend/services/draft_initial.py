@@ -183,7 +183,7 @@ def validate_generated_input(raw):
         raise DraftErrors([error('/world/contacts','Телефонная книга не входит в контракт генерации. Удалите свойство contacts.','forbidden')])
 
 
-def prompt_schema(*, initial_portraits=False):
+def prompt_schema(*, initial_portraits=False, portrait_version=3):
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
     from backend.services.draft_schema import world_state_schema
@@ -230,8 +230,8 @@ def prompt_schema(*, initial_portraits=False):
         omit_motivation_source(actor['properties'][key])
     if initial_portraits:
         from backend.services.portrait_traits import input_schema
-        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()
-        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']}
+        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema(portrait_version)
+        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']+(['fantasy','futuristic'] if portrait_version in (3,4) else [])}
     return schema
 
 
@@ -588,7 +588,7 @@ def inspect_candidate(raw, *, for_start=False, portrait_version=3):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
-    portrait_errors = input_diagnostics(raw.get('characters')) if isinstance(raw, dict) else []
+    portrait_errors = input_diagnostics(raw.get('characters'),portrait_version) if isinstance(raw, dict) else []
     independent_errors = dependency_errors(raw)
     state=raw
     try:
@@ -613,15 +613,19 @@ def inspect_candidate(raw, *, for_start=False, portrait_version=3):
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)
 
 
-def compact_schema(schema):
+def compact_schema(schema, *, dense=False):
     """Factor repeated schema nodes without dropping constraints or canon."""
     from collections import Counter
     import json
     counts=Counter();definitions={};names={}
+    # The world schema shares its context with previously generated fragments.
+    # Factor smaller repeated constraints there while retaining the legacy wire schema.
+    threshold=35 if dense else 160
+    prefix='c' if dense else 'creative_'
     def key(node):return json.dumps(node,sort_keys=True,separators=(',', ':'))
     def count(node):
         if isinstance(node,dict):
-            if len(key(node))>160:counts[key(node)]+=1
+            if len(key(node))>threshold:counts[key(node)]+=1
             for value in node.values():count(value)
         elif isinstance(node,list):
             for value in node:count(value)
@@ -633,7 +637,7 @@ def compact_schema(schema):
         # Property maps are not schemas; never replace them with a $ref.
         if not properties and counts[signature]>1:
             if signature not in names:
-                name='creative_'+str(len(names));names[signature]=name
+                name=prefix+str(len(names));names[signature]=name
                 definitions[name]={k:compact(v,k=='properties') for k,v in node.items()}
             return {'$ref':'#/$defs/'+names[signature]}
         return {k:compact(v,k=='properties') for k,v in node.items()}

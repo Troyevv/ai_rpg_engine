@@ -1,6 +1,7 @@
 // Trusted artwork uses a common collar landmark (200, 319). Sleeves, neckline,
 // and the outer layer are painted together before fitting the plate to the frame.
 import type {BodyFrame} from './portraitAnatomy';
+import {garments, type GarmentPlate} from './portraitGarments';
 import catalog from '../../../shared/portrait-catalog.json';
 
 type Garment = keyof typeof catalog.styles.clothing;
@@ -9,14 +10,16 @@ const dark='#20262a', ivory='#f2debf';
 export const shape=(d:string, fill:string, opacity=1)=>`<path d="${d}" fill="${fill}" opacity="${opacity}"/>`;
 export const seam=(d:string,color=dark,width=2,opacity=.65)=>`<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
 const buttons=(x:number,y:number,count:number)=>Array.from({length:count},(_,i)=>`<circle cx="${x}" cy="${y+23*i}" r="3" fill="#ead4ac"/><circle cx="${x+.5}" cy="${y+23*i+.5}" r="1" fill="#473c32"/>`).join('');
+const tshirtBand=seam('M171 321Q200 353 229 321',dark,8);
 const lapels=shape('M171 319L141 340 156 348 144 359 199 430Z M229 319L259 340 244 348 256 359 201 430Z',ivory,.35);
 const collar=shape('M171 315L197 340 178 355 157 333Z M229 315L203 340 222 355 243 333Z',ivory,.72);
 const rib=seam('M170 310q30 12 60 0m-61 6q31 14 62 0m-60 7q29 14 58 0',ivory,1.8,.48);
-const cuts: Record<Garment,[string,string]> = {
+type OriginalGarment = Exclude<Garment,keyof typeof garments>;
+const cuts: Record<OriginalGarment,[string,string]> = {
  plain:['M172 318Q200 346 228 318L275 338Q297 346 312 386L351 510H49L88 386Q101 348 126 338Z',
  seam('M170 319Q199 351 230 319',ivory,7)+seam('M197 337l3 24 5-24',dark,3)],
  tshirt:['M172 320Q200 348 228 320L291 345 330 406 286 428 275 406 283 510H117L125 406 114 428 70 406 109 345Z',
- seam('M171 321Q200 353 229 321',dark,8)+seam('M73 401l42 21m170 0 42-21',ivory,2)],
+ tshirtBand+seam('M73 401l42 21m170 0 42-21',ivory,2)],
  shirt:['M170 316L200 342 230 316 291 344Q310 358 320 409L337 510H63L80 409Q90 358 109 344Z',
  collar+seam('M200 344v165 M232 375h33v27l-16 8-17-8Z',ivory,2)+buttons(200,360,6)],
  blazer:['M167 313L200 404 233 313 301 337 321 351 341 510H59L79 351 99 337Z',
@@ -44,8 +47,90 @@ const cuts: Record<Garment,[string,string]> = {
  cloak:['M169 309Q196 332 231 309l23 16q52 17 70 62l56 123H20l56-123q18-45 70-62Z',
  shape('M166 312q36 19 66-3 9 85 94 201H134q94-116 32-198Z',dark,.32)+seam('M164 317q-7 72-55 157m126-158q8 60 59 130',ivory,4,.35)+'<circle cx="215" cy="332" r="8" fill="#c7a469"/><circle cx="215" cy="332" r="4" fill="#795f46"/>'],
 };
-export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null) {
- const [outline,details]=cuts[id];
+type Fit = {build: keyof typeof catalog.features.body_build; youth: number; collarY: number; turn: number};
+// Necklines stay in the same coordinates as their plackets. Sleeve heads and hips
+// are fitted separately so broad shoulders do not enlarge a collar or a button.
+const necklines: Record<OriginalGarment, string> = {
+ plain:'M172 318Q198 349 228 318', tshirt:'M172 320Q200 347 228 320',
+ shirt:'M170 316L200 342 230 316', blazer:'M167 313L200 404 233 313',
+ jacket:'M163 301L200 350 237 301 248 322', cardigan:'M169 319Q200 345 231 319',
+ jumper:'M163 321L200 351 237 321', sweater:'M172 297Q200 306 228 297L233 325',
+ blouse:'M166 319Q200 356 234 319', hoodie:'M153 322Q153 292 177 292L200 308 223 292Q250 293 247 322',
+ vest:'M171 316L200 348 229 316', dress:'M153 329Q162 351 200 364Q238 351 247 329',
+ coveralls:'M170 316L200 341 230 316', smock:'M174 318Q200 343 226 318', cloak:'M169 309Q196 332 231 309',
+};
+function fittedGarment(id: OriginalGarment, frame: BodyFrame, fit: Fit, details: string) {
+ const {build,youth,collarY,turn}=fit;
+ const tailored=id==='blazer'||id==='jacket'||id==='coveralls';
+ const flowing=id==='cloak'||id==='smock';
+ const sleeves=id==='tshirt'||id==='dress'||id==='blouse';
+ const shoulder=(104+(frame==='male'?5:frame==='female'?-4:0)+(tailored?9:flowing?7:0)
+   +({slender:-13,average:0,broad:20,full:12,athletic:26,stocky:7}[build])*(1-youth))*(1-youth*.29);
+ const waist=(102+(flowing?25:0)+(id==='dress'?-15:0)+({slender:-21,average:0,broad:0,full:30,athletic:-13,stocky:20}[build])*(1-youth))*(1-youth*.32);
+ const drop=(tailored?338:flowing?352:346)+(build==='stocky'?6:build==='athletic'?-4:0)*(1-youth);
+ const cuff=id==='dress'?387:id==='blouse'?404:417;
+ const r=200+shoulder,l=200-shoulder;
+ const side=sleeves
+   ? `Q${r+12} ${drop+10} ${r+25} ${cuff-9} L${r-6} ${cuff+2} L${r-14} ${cuff-13} Q${200+waist-10} 460 ${200+waist} 510 H${200-waist} Q${200-waist+10} 460 ${l+14} ${cuff-13} L${l+6} ${cuff+2} L${l-25} ${cuff-9} Q${l-12} ${drop+10} ${l} ${drop}`
+   : `C${r+15} ${drop+3} ${r+23} ${drop+29} ${r+27} 402 Q${200+waist+27} 452 ${200+waist+37} 510 H${200-waist-37} Q${200-waist-27} 452 ${l-27} 402 Q${l-19} ${drop+5} ${l} ${drop}`;
+ const outline=necklines[id]+` Q${r-24} ${drop-9} ${r} ${drop} `+side+` Q${l+26} ${drop-10} ${id==='cloak'?169:id==='hoodie'||id==='dress'?153:170} 319Z`;
+ const arms=sleeves?shape(`M${l-21} ${cuff-15}l30 6-13 120h-37Z M${r+21} ${cuff-15}l-30 6 13 120h37Z`,'url(#skin)'):'';
+ const sleeveFolds=flowing
+   ? `M${r-8} ${drop+1}Q${r-28} 404 ${r+8} 489 M${l+10} ${drop+2}Q${l+14} 397 ${l-14} 460`
+   : `M${l+7} ${drop+3}Q${l+20} ${drop+15} ${l+23} ${drop+38} M${r-8} ${drop+3}Q${r-24} ${drop+21} ${r-23} ${drop+41}`;
+ const shade=shape(`M${r+7} ${drop-8}Q${r-29} ${drop+25} ${r-20} 429 Q${r-36} 477 ${r-35} 511H401V300Z`,dark,.14);
+ const dropY=collarY+(youth>.8?-4:0);
+ return `<g transform="translate(0 ${dropY})"><defs><clipPath id="fittedCloth"><path d="${outline}"/></clipPath></defs>${arms}${shape(outline,'url(#cloth)')}<g clip-path="url(#fittedCloth)">${turn<0?'<g transform="translate(400 0) scale(-1 1)">':''}${shade}${turn<0?'</g>':''}${seam(sleeveFolds,dark,1.9,.25)}${details}</g></g>`;
+}
+
+function drawPlate(plate: GarmentPlate, frame: BodyFrame, fit: Fit, accent: string) {
+ const {build,youth,collarY} = fit;
+ const shoulders = {slender:-.12,average:0,broad:.18,full:.10,athletic:.22,stocky:.05}[build];
+ const waist = {slender:-.19,average:0,broad:.01,full:.25,athletic:-.12,stocky:.18}[build];
+ const frameWidth = frame==='male'?.04:frame==='female'?-.035:0;
+ // Keep the neck opening fixed while fitting the shoulder and hem independently.
+ function fitted(d: string) {
+   return d.replace(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g, (_, xText, yText) => {
+     const x=Number(xText), y=Number(yText), u=Math.min(1, Math.max(0,(y-350)/120));
+     const influence=Math.min(1,Math.max(0,(Math.abs(x-200)-24)/48+(y-332)/100));
+     const width=(1-youth*.28)*(1+frameWidth+(shoulders*(1-u)+waist*u)*(1-youth));
+     return `${(200+(x-200)*(1+(width-1)*influence)).toFixed(2)} ${(y+(build==='stocky'?5:build==='athletic'?-4:0)*(1-youth)*(1-u)*influence).toFixed(2)}`;
+   });
+ }
+ const outline=fitted(plate.outline);
+ return `<g transform="translate(0 ${collarY})"><defs><clipPath id="outerPlate"><path d="${outline}"/></clipPath></defs>`+
+   (plate.arms?shape(fitted(plate.arms),'url(#skin)'):'')+shape(outline,'url(#cloth)')+
+   '<g clip-path="url(#outerPlate)">'+plateTrim(plate,accent,fitted)+'</g></g>';
+}
+
+function plateTrim(plate: GarmentPlate, accent: string, fitted:(d:string)=>string, bust=false) {
+ let surface='';
+ if (plate.textured==='quilt') {
+   for(let i=0;i<12;i++)surface+=`M${80+14*i} 345 l65 120 m-130 0 l65 -120 `;
+ } else if(plate.textured==='scales') {
+   for(let y=356;y<463;y+=12) for(let x=133+(y%24?6:0);x<268;x+=15)
+     surface+=`M${x} ${y} v6q7 8 14 0v-6 `;
+ }
+ const fasteners=(plate.buttons||[]).map(([x,y])=>`<g transform="translate(${fitted(x+' '+y)})"><circle r="3" fill="#bba276"/><circle r="1.2" fill="#574c40"/></g>`).join('');
+ return (surface?seam(surface,ivory,1.45,.46):'')+
+   shape(fitted(bust && plate.upperPanels || plate.panels),accent,.88)+(plate.inset?shape(fitted(plate.inset),dark,.54):'')+
+   shape(fitted('M290 351 Q266 410 284 462 L268 510 L360 510 L360 365 Z'),dark,.12)+
+   seam(fitted(bust && plate.upperStitching || plate.stitching),ivory,2.15,.68)+fasteners;
+}
+
+export function garmentTrim(id:Garment, accent?:string, bust=false) {
+ if(Object.hasOwn(garments,id)) return plateTrim(garments[id as keyof typeof garments],accent||ivory,d=>d,bust);
+ const template=bust && id==='tshirt' ? tshirtBand : cuts[id as OriginalGarment][1];
+ return accent?template.replaceAll(ivory,accent).replace(/#dfcfb6|#dbcdb7/g,accent):template;
+}
+
+export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null, fit?:Fit, accent?:string) {
+ if(Object.hasOwn(garments,id)) return drawPlate(garments[id as keyof typeof garments],frame,
+   fit||{build:'average',youth:young?.6:0,collarY:0,turn:1},accent||ivory);
+ const original=id as OriginalGarment;
+ const [outline]=cuts[original];
+ const details=garmentTrim(original,accent);
+ if(fit)return fittedGarment(original,frame,fit,details);
  const width=young?.85:frame==='male'?1.12:frame==='female'?.89:1;
  const arms=(id==='tshirt'||id==='dress') ?
    shape(id==='tshirt'?'M79 397L112 411 103 461 98 510H60L68 460Z M321 397L288 411 297 461 302 510H340L332 460Z':'M93 375L123 388 116 459 112 510H77L84 447Z M307 375L277 388 284 459 288 510H323L316 447Z','url(#skin)'):'';

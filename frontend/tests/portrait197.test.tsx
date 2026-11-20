@@ -62,3 +62,47 @@ it('preserves approved v3 faces until a revised face is chosen',()=>{
   expect(new Set(options).size).toBe(3);
  }
 });
+
+it('keeps the master revision 3 drawing byte-for-byte after adding the classic fits',()=>{
+ const pinned = {version:3,form:'human',stage:'adult',seed:'ab'.repeat(16),face:0,hair:0,clothing:0,
+  skin:2,eyes:3,accessory:0,palette:1,body_frame:'male',facial_hair:'short_beard',
+  visage:'broad',hairstyle:'curly',garment:'jacket',face_revision:3} as const;
+ expect(createHash('sha256').update(svg(pinned)).digest('hex'))
+  .toBe('a7f630b8518dbc1c66ecb359b9727bd3ff2cdb0be78a6c86fb998df4a722f445');
+});
+
+it('projects both pupils onto one baseline with one gaze vector and iris diameter',()=>{
+ for(const revision of [3,4] as const) for(const eye_shape of ['open','hooded','almond'] as const) {
+  for(const byte of ['00','7f','ff']) {
+   const art={...modern,version:3,face_revision:revision,eye_revision:2,eye_shape,seed:byte.repeat(16)} as const;
+   const doc=new DOMParser().parseFromString(svg(art),'image/svg+xml');
+   const measurements=['far-orbit','near-orbit'].map(id=>{
+    const group=doc.getElementById(id)!.parentElement!.parentElement!;
+    const [,x,y,scale]=group.getAttribute('transform')!.match(/translate\(([-.\d]+) ([-.\d]+)\) scale\(([-.\d]+) 1\)/)!.map(Number);
+    const pupil=group.querySelector('ellipse[fill="#292725"]')!;
+    return {x,y:y+Number(pupil.getAttribute('cy')),offset:scale*Number(pupil.getAttribute('cx')),
+            radius:Math.abs(scale)*Number(pupil.getAttribute('rx')),scale};
+   });
+   const [far,near]=measurements;
+   expect(near.x).toBeGreaterThan(far.x);
+   expect(Math.abs(far.scale)).toBeLessThan(near.scale);
+   expect(far.y).toBe(near.y);
+   expect(far.offset).toBeCloseTo(near.offset,9);
+   expect(far.radius).toBeCloseTo(near.radius,9);
+  }
+ }
+});
+
+it('keeps the whole eye pair intact when opting into any projected nose',()=>{
+ const eyes=(doc:Document)=>['far-orbit','near-orbit'].map(id=>doc.getElementById(id)!.parentElement!.parentElement!.outerHTML);
+ const parse=(p:ProceduralPortrait)=>new DOMParser().parseFromString(svg(p),'image/svg+xml');
+ for(const face_revision of [3,4] as const) for(const byte of ['14','e4']) {
+  const head={...modern,version:3,face_revision,eye_revision:2,seed:byte.repeat(16)} as const;
+  for(const nose_shape of ['straight','rounded','arched','upturned','broad_base','aquiline'] as const) {
+   const stored={...head,nose_shape}, original=parse(stored), preview=parse({...stored,nose_revision:2});
+   expect(original.querySelector('[data-part="nose"]')).toBeNull();
+   expect(preview.querySelector('[data-part="nose"]')).not.toBeNull();
+   expect(eyes(preview)).toEqual(eyes(original));
+  }
+ }
+});

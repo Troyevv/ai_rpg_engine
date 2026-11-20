@@ -65,6 +65,7 @@ test('workshop portrait illustration and uploaded original survive Start Game',a
  await page.getByText('Свериться с описанием внешности',{exact:true}).click();
  await expect(page.locator('.portrait-literary-reference p')).toHaveText(state.characters[0].fields['Внешность']);
  await page.getByRole('button',{name:'Цвета',exact:true}).click();await page.getByRole('button',{name:'Рыжие',exact:true}).click();
+ await page.getByRole('button',{name:'Цвет одежды',exact:true}).click();
  await page.getByRole('button',{name:'Графит',exact:true}).click();await page.getByRole('button',{name:'Образ',exact:true}).click();
  await chooseOption(page.getByLabel('Предпочтение',{exact:true}), 'procedural');
  let release!:()=>void,received!:()=>void;const gate=new Promise<void>(r=>release=r),refreshStarted=new Promise<void>(r=>received=r);

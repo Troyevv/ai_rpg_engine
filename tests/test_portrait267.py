@@ -11,7 +11,7 @@ from backend.runtime_v3.portrait_catalog import CATALOG
 
 def test_world_scoped_catalogue_and_wardrobe():
     def sample(world):
-        return [default_descriptor(str(i),'adult',version=3,world_id=world,profile='historical') for i in range(80)]
+        return [default_descriptor(str(i),'adult',version=3,world_id=world,profile='historical') for i in range(512)]
     first=sample('first')
     assert sample('first')==first and sample('second')!=first
     assert {p['garment'] for p in first}==set(CATALOG['wardrobes']['historical'])
@@ -19,7 +19,7 @@ def test_world_scoped_catalogue_and_wardrobe():
     assert {p['eyes'] for p in first}==set(range(8))
     assert all(p['accessory']==0 for p in first)
     from backend.runtime_v3.models import ProceduralPortraitV3
-    assert all(p['face_revision']==3 for p in first)
+    assert all(p['face_revision']==4 for p in first)
     historical=dict(first[0])
     historical.pop('face_revision')
     assert 'face_revision' not in ProceduralPortraitV3.model_validate(historical).model_dump()
@@ -62,7 +62,7 @@ def test_single_paid_dispatch_partial_preview_and_revision_fence(api,scope):
         calls.append(payload)
         kw['on_usage'](dict(prompt_tokens=128,completion_tokens=49,prompt_cache_hit_tokens=0))
         kw['on_finish']('stop')
-        yield json.dumps(dict(version=3,characters={ids[0]:dict(hair='bald',clothing='smock',eyes='<svg>'),ids[1]:{'src':'private.png'}}))
+        yield json.dumps(dict(version=3,characters={ids[0]:dict(hair='bald',clothing='doublet',eyes='<svg>',lip_shape='cupid',accent_color='bronze'),ids[1]:{'src':'private.png'}}))
     with patch('llm.chat_stream',side_effect=stream):
         q=client.post(base,json=body)
         assert q.status_code==200,q.text
@@ -79,7 +79,7 @@ def test_single_paid_dispatch_partial_preview_and_revision_fence(api,scope):
         assert client.post(ticket+'/generate',json={'api_key':'test'}).json()==result
         assert client.get(ticket).json()==result and len(calls)==1
         art=result['proposals'][ids[0]]['descriptor']
-        assert art['garment']=='smock' and art['hairstyle']=='braid' and result['proposals'][ids[0]]['warnings']
+        assert art['garment']=='doublet' and art['accent_color']==19 and art['lip_shape']=='cupid' and art['hairstyle']=='braid' and result['proposals'][ids[0]]['warnings']
         assert ids[1] in result['errors']
         assert client.post(ticket+'/apply',json=dict(ids=[ids[0]],revision=revision+1)).status_code==409
         assert before==[client.get(path+'?author=true').json() for path in paths]

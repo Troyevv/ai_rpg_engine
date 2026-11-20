@@ -209,8 +209,8 @@ def apply(raw,reply,paths):
         path=patch['path'];used.add(path)
         if isinstance(paths,RepairScope) and path.startswith('/characters/') and path.endswith('/portrait_traits'):
             from backend.services.draft_completeness import pointer
-            from backend.services.portrait_traits import STYLES
-            prior=pointer(original,path);proposed=patch['value'];options=dict(STYLES,form=('human','neutral'))
+            from backend.runtime_v3.portrait_catalog import CLASSIC_OPTIONS
+            prior=pointer(original,path);proposed=patch['value'];options=dict(CLASSIC_OPTIONS,form=('human','neutral'))
             if not isinstance(proposed,dict) or (not isinstance(prior,dict) and proposed):
                 raise ValueError('portrait_traits: исправление не должно придумывать признаки.')
             if isinstance(prior,dict) and (set(proposed)-set(prior) or any(

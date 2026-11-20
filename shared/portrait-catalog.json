@@ -17,7 +17,21 @@
       "bun": "Пучок",
       "braid": "Коса",
       "parted": "Боковой пробор",
-      "receding": "Редкие волосы"
+      "receding": "Редкие волосы",
+      "french_crop": "Французский кроп",
+      "quiff": "Объёмный квифф",
+      "flat_top": "Площадка",
+      "finger_waves": "Холодная волна",
+      "shag": "Шэг слоями",
+      "asym_bob": "Асимметричное каре",
+      "blunt_long": "Длинные с прямой чёлкой",
+      "hime": "Химэ с боковыми ступенями",
+      "afro": "Округлое афро",
+      "locs": "Локоны-локи",
+      "twin_braids": "Две косы",
+      "twin_puffs": "Два кудрявых пучка",
+      "crown_braid": "Коса вокруг головы",
+      "high_pony": "Высокий хвост"
     },
     "clothing": {
       "plain": "Туника",
@@ -34,7 +48,24 @@
       "dress": "Платье",
       "coveralls": "Комбинезон",
       "smock": "Рубаха",
-      "cloak": "Плащ"
+      "cloak": "Плащ",
+      "polo": "Поло",
+      "bomber": "Бомбер",
+      "parka": "Парка",
+      "trench": "Тренч",
+      "track_jacket": "Спортивная олимпийка",
+      "sailor": "Матроска",
+      "chef": "Поварской китель",
+      "work_apron": "Рабочий фартук",
+      "doublet": "Стёганый дублет",
+      "surcoat": "Геральдическая накидка",
+      "kimono": "Кимоно с оби",
+      "mantle": "Пелерина",
+      "lamellar": "Пластинчатый доспех",
+      "flight_suit": "Лётный скафандр",
+      "tech_shell": "Модульный технокостюм",
+      "romper": "Детский комбинезон",
+      "wrap_blanket": "Пелёнка-конверт"
     },
     "face": {
       "oval": "Овальное",
@@ -43,7 +74,12 @@
       "broad": "Широкое",
       "long": "Вытянутое",
       "round": "Округлое",
-      "soft": "Мягкое"
+      "soft": "Мягкое",
+      "heart": "Сердцевидное",
+      "diamond": "Ромбовидное",
+      "pear": "Грушевидное",
+      "square": "Квадратное",
+      "oblong": "Прямоугольное"
     },
     "hair_color": {
       "black": "Чёрные",
@@ -52,7 +88,16 @@
       "dark_blond": "Тёмно-русые",
       "red": "Рыжие",
       "grey": "Седые",
-      "white": "Белые"
+      "white": "Белые",
+      "espresso": "Эспрессо",
+      "auburn": "Красное дерево",
+      "copper": "Медные",
+      "honey": "Медовый блонд",
+      "ash_blond": "Пепельно-русые",
+      "platinum": "Платиновые",
+      "salt_pepper": "Стальные",
+      "indigo": "Индиго",
+      "rose": "Пыльная роза"
     },
     "skin": {
       "light": "Светлая",
@@ -80,14 +125,29 @@
       "green": "Зелёный",
       "brown": "Коричневый",
       "red": "Красный",
-      "sand": "Песочный"
+      "sand": "Песочный",
+      "navy": "Чернильный",
+      "teal": "Морская волна",
+      "burgundy": "Бордовый",
+      "ochre": "Охра",
+      "plum": "Сливовый",
+      "lilac": "Сиреневый",
+      "mint": "Мятный",
+      "coral": "Коралловый",
+      "cobalt": "Кобальтовый",
+      "forest": "Хвойный",
+      "rose": "Пудровый",
+      "slate": "Грифельный",
+      "bronze": "Бронзовый"
     },
     "facial_hair": {
       "clean_shaven": "Гладко выбрит",
       "stubble": "Щетина",
       "mustache": "Усы",
       "short_beard": "Короткая борода",
-      "full_beard": "Полная борода"
+      "full_beard": "Полная борода",
+      "goatee": "Эспаньолка",
+      "sideburns": "Бакенбарды"
     }
   },
   "wardrobes": {
@@ -97,14 +157,21 @@
       "blouse",
       "vest",
       "dress",
-      "cloak"
+      "cloak",
+      "work_apron",
+      "kimono"
     ],
     "historical": [
       "plain",
       "smock",
       "vest",
       "dress",
-      "cloak"
+      "cloak",
+      "doublet",
+      "surcoat",
+      "kimono",
+      "mantle",
+      "work_apron"
     ],
     "modern": [
       "tshirt",
@@ -118,7 +185,38 @@
       "hoodie",
       "vest",
       "dress",
-      "coveralls"
+      "coveralls",
+      "polo",
+      "bomber",
+      "parka",
+      "trench",
+      "track_jacket",
+      "sailor",
+      "chef",
+      "work_apron"
+    ],
+    "fantasy": [
+      "plain",
+      "cloak",
+      "smock",
+      "vest",
+      "dress",
+      "doublet",
+      "surcoat",
+      "mantle",
+      "lamellar",
+      "work_apron"
+    ],
+    "futuristic": [
+      "flight_suit",
+      "tech_shell",
+      "jacket",
+      "coveralls",
+      "polo",
+      "bomber",
+      "track_jacket",
+      "parka",
+      "vest"
     ]
   },
   "skin_materials": {
@@ -167,5 +265,287 @@
     "blue": "#577d9c",
     "light_green": "#8c9c69",
     "grey_blue": "#6f8998"
+  },
+  "features": {
+    "eye_shape": {
+      "almond": "Миндалевидные",
+      "open": "Открытые",
+      "hooded": "Прикрытые веком",
+      "upturned": "С приподнятым уголком",
+      "downturned": "С опущенным уголком",
+      "deep_set": "Глубоко посаженные"
+    },
+    "nose_shape": {
+      "straight": "Прямой",
+      "rounded": "Округлый",
+      "arched": "С горбинкой",
+      "upturned": "Курносый",
+      "broad_base": "С широкими крыльями",
+      "aquiline": "Орлиный"
+    },
+    "lip_shape": {
+      "defined": "Выраженный контур",
+      "full": "Полные",
+      "fine": "Тонкие",
+      "cupid": "Бантиком",
+      "wide": "Широкие",
+      "lower_full": "С полной нижней губой"
+    },
+    "body_build": {
+      "slender": "Худощавое",
+      "average": "Среднее",
+      "broad": "Широкоплечее",
+      "full": "Полное",
+      "athletic": "Атлетическое",
+      "stocky": "Коренастое"
+    },
+    "eyewear": {
+      "none": "Без очков",
+      "round_wire": "Круглые в металле",
+      "rectangular": "Прямоугольная оправа",
+      "cat_eye": "Приподнятая оправа"
+    },
+    "face_detail": {
+      "none": "Без отметин",
+      "freckles": "Веснушки",
+      "beauty_mark": "Родинка на щеке",
+      "brow_scar": "Шрам у брови",
+      "cheek_scar": "Шрам на скуле",
+      "dimples": "Ямочки на щеках"
+    }
+  },
+  "hair_materials": [
+    [
+      "#3b3738",
+      "#201d20"
+    ],
+    [
+      "#795737",
+      "#45362b"
+    ],
+    [
+      "#e5ca93",
+      "#a68b60"
+    ],
+    [
+      "#99876c",
+      "#685b4b"
+    ],
+    [
+      "#ad6742",
+      "#653c32"
+    ],
+    [
+      "#aaa6a0",
+      "#67686a"
+    ],
+    [
+      "#f1ead8",
+      "#b7b2a9"
+    ],
+    [
+      "#50413c",
+      "#291e1b"
+    ],
+    [
+      "#884735",
+      "#492726"
+    ],
+    [
+      "#d78b49",
+      "#79452e"
+    ],
+    [
+      "#d8af69",
+      "#8e6737"
+    ],
+    [
+      "#b7ad95",
+      "#746e61"
+    ],
+    [
+      "#e4dfce",
+      "#a19e93"
+    ],
+    [
+      "#83878a",
+      "#40454c"
+    ],
+    [
+      "#69658c",
+      "#35324f"
+    ],
+    [
+      "#bd8c8a",
+      "#795657"
+    ]
+  ],
+  "cloth_materials": [
+    [
+      "#393b40",
+      "#20242a"
+    ],
+    [
+      "#e7e1d7",
+      "#b9b2a5"
+    ],
+    [
+      "#637c97",
+      "#35475e"
+    ],
+    [
+      "#788673",
+      "#435448"
+    ],
+    [
+      "#876651",
+      "#533e33"
+    ],
+    [
+      "#a4665c",
+      "#673d3c"
+    ],
+    [
+      "#c4b395",
+      "#8d7c60"
+    ],
+    [
+      "#3c4f77",
+      "#222b46"
+    ],
+    [
+      "#42847e",
+      "#254d50"
+    ],
+    [
+      "#884651",
+      "#522733"
+    ],
+    [
+      "#c59a48",
+      "#80602e"
+    ],
+    [
+      "#806085",
+      "#48334e"
+    ],
+    [
+      "#b49cc4",
+      "#756184"
+    ],
+    [
+      "#a6cbbb",
+      "#637f74"
+    ],
+    [
+      "#d48c79",
+      "#99544c"
+    ],
+    [
+      "#4d76bd",
+      "#2c447b"
+    ],
+    [
+      "#4c7256",
+      "#2c493d"
+    ],
+    [
+      "#d6a4af",
+      "#976875"
+    ],
+    [
+      "#82919b",
+      "#4e5d68"
+    ],
+    [
+      "#ad8455",
+      "#725439"
+    ]
+  ],
+  "groups": {
+    "hair": {
+      "Короткие": [
+        "short",
+        "buzz",
+        "pixie",
+        "undercut",
+        "french_crop",
+        "quiff",
+        "flat_top",
+        "receding",
+        "bald"
+      ],
+      "Распущенные": [
+        "long",
+        "bob",
+        "curly",
+        "medium",
+        "wavy",
+        "fringe",
+        "parted",
+        "finger_waves",
+        "shag",
+        "asym_bob",
+        "blunt_long",
+        "hime",
+        "afro",
+        "locs"
+      ],
+      "Собранные": [
+        "ponytail",
+        "bun",
+        "braid",
+        "twin_braids",
+        "twin_puffs",
+        "crown_braid",
+        "high_pony"
+      ]
+    },
+    "clothing": {
+      "Повседневная": [
+        "plain",
+        "tshirt",
+        "shirt",
+        "cardigan",
+        "jumper",
+        "sweater",
+        "blouse",
+        "hoodie",
+        "vest",
+        "dress",
+        "polo",
+        "bomber",
+        "parka",
+        "sailor"
+      ],
+      "Деловая и рабочая": [
+        "blazer",
+        "jacket",
+        "coveralls",
+        "smock",
+        "trench",
+        "chef",
+        "work_apron"
+      ],
+      "Спортивная": [
+        "track_jacket"
+      ],
+      "История и фэнтези": [
+        "cloak",
+        "doublet",
+        "surcoat",
+        "kimono",
+        "mantle",
+        "lamellar"
+      ],
+      "Будущее": [
+        "flight_suit",
+        "tech_shell"
+      ],
+      "Детская одежда": [
+        "romper",
+        "wrap_blanket"
+      ]
+    }
   }
 }
