@@ -21,7 +21,7 @@ export async function render(cases: ReviewCase[], revision: 3 | 4 | 'current' | 
   }
   const root = createRoot(rootElement);
   const mobile = !fullSize && window.innerWidth<=393;
-  root.render(<div className={mobile?'ww-characters-grid':undefined} style={mobile?undefined:{display:'contents'}}>{cases.map(({label, portrait}, i) => {
+  root.render(<div className={mobile?'ww-characters-grid':undefined} style={mobile?{paddingInline:18}:{display:'contents'}}>{cases.map(({label, portrait}, i) => {
     const art = {...portrait};
     if (typeof revision==='number') art.face_revision=revision;
     if (revision==='aligned-eyes') art.eye_revision=2;

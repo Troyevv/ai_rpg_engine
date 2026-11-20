@@ -64,12 +64,18 @@ test('classic portrait edits keep the revision, local controls and saved feature
   expect(generations).toBe(0);
 });
 
-test('previewing the corrected eyes keeps the saved cast until explicit confirmation', async ({page,request}, info) => {
+for (const layer of ['eyes','body'] as const) {
+test(`previewing the ${layer} keeps the saved cast until explicit confirmation`, async ({page,request}, info) => {
+  const bust=layer==='body';
+  const field=bust?'body_revision':'eye_revision';
+  const source=bust?process.env.PORTRAIT_BODY_REVIEW_DRAFT:process.env.PORTRAIT_REVIEW_DRAFT;
+  const previewLabel=bust?'Примерить погрудные портреты':'Примерить новую посадку глаз';
+  const saveLabel=bust?'Сохранить погрудные портреты':'Сохранить посадку глаз';
   const mobile = info.project.name === 'mobile';
   await page.setViewportSize({width:mobile?393:1280,height:850});
   const fixture = new URL('../../tests/fixtures/initial_world/runtime_presentation.json', import.meta.url);
-  const state = JSON.parse(readFileSync(process.env.PORTRAIT_REVIEW_DRAFT || fixture,'utf8'));
-  if (!process.env.PORTRAIT_REVIEW_DRAFT) {
+  const state = JSON.parse(readFileSync(source || fixture,'utf8'));
+  if (!source) {
     for (const [i, card] of state.characters.entries()) {
       state.world.characters[card.id].procedural_portrait = {
         version:3, seed:i.toString(16).padStart(32,'0'), stage:'adult', form:'human', face_revision:i%2?3:4,
@@ -85,7 +91,7 @@ test('previewing the corrected eyes keeps the saved cast until explicit confirma
   expect(imp.ok()).toBe(true);
   const saved=async()=>await(await request.get(url+'?author=true')).json();
   const before=await saved();
-  const included=state.characters.filter((c:{id:string})=>before.portraits[c.id]?.can_update_eyes);
+  const included=state.characters.filter((c:{id:string})=>before.portraits[c.id]?.['can_update_'+layer]);
   expect(included.length).toBeGreaterThan(0);
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/'); await nav(page,'Создать'); await authorView(page); await workshopNav(page,'Персонажи');
@@ -107,7 +113,7 @@ test('previewing the corrected eyes keeps the saved cast until explicit confirma
         });
       });
       writeFileSync(info.outputPath(name+'-'+width+'.json'),JSON.stringify(bounds));
-      if (process.env.PORTRAIT_REVIEW_DRAFT && mobile) {
+      if (source && mobile) {
         for (const [i,plate] of (await grid.locator('.ww-card-art').all()).entries()) {
           await plate.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
           await expect(plate).toBeInViewport();
@@ -118,37 +124,65 @@ test('previewing the corrected eyes keeps the saved cast until explicit confirma
   };
   const initial=await pictures();
   await capture('before');
-  await button('Примерить новую посадку глаз').click();
+  await button(previewLabel).click();
   await capture('preview');
-  const pupilsInside = await grid.locator('.ww-card-art img').evaluateAll(images=>images.every(img=>{
-    const src = (img as HTMLImageElement).src;
-    if (!src.startsWith('data:image/svg+xml')) return true;
-    const svg = new DOMParser().parseFromString(decodeURIComponent(src.slice(src.indexOf(',')+1)),'image/svg+xml');
-    const node=document.importNode(svg.documentElement,true) as unknown as SVGSVGElement;
-    node.style.cssText='position:fixed;left:-10000px;top:0';document.body.append(node);
-    const pupils=[...node.querySelectorAll('ellipse[fill="#292725"]')];
-    try { return pupils.length===2 && pupils.every(pupil=>{
-      const clip=pupil.parentElement!.getAttribute('clip-path')!;
-      const aperture=node.querySelector(clip.slice(4,-1)+' path') as SVGPathElement;
-      return aperture.isPointInFill(new DOMPoint(Number(pupil.getAttribute('cx')),Number(pupil.getAttribute('cy'))));
-    }); } finally {node.remove()}
-  }));
-  expect(pupilsInside).toBe(true);
+  if (!bust) {
+    const pupilsInside = await grid.locator('.ww-card-art img').evaluateAll(images=>images.every(img=>{
+      const src = (img as HTMLImageElement).src;
+      if (!src.startsWith('data:image/svg+xml')) return true;
+      const svg = new DOMParser().parseFromString(decodeURIComponent(src.slice(src.indexOf(',')+1)),'image/svg+xml');
+      const node=document.importNode(svg.documentElement,true) as unknown as SVGSVGElement;
+      node.style.cssText='position:fixed;left:-10000px;top:0';document.body.append(node);
+      const pupils=[...node.querySelectorAll('ellipse[fill="#292725"]')];
+      try { return pupils.length===2 && pupils.every(pupil=>{
+        const clip=pupil.parentElement!.getAttribute('clip-path')!;
+        const aperture=node.querySelector(clip.slice(4,-1)+' path') as SVGPathElement;
+        return aperture.isPointInFill(new DOMPoint(Number(pupil.getAttribute('cx')),Number(pupil.getAttribute('cy'))));
+      }); } finally {node.remove()}
+    }));
+    expect(pupilsInside).toBe(true);
+  } else {
+    const bustFits = await grid.locator('.ww-card-art img').evaluateAll(images=>images.every(el=>{
+      const src=(el as HTMLImageElement).src;
+      const doc=new DOMParser().parseFromString(decodeURIComponent(src.slice(src.indexOf(',')+1)), 'image/svg+xml');
+      const svg=document.importNode(doc.documentElement,true) as unknown as SVGSVGElement;
+      svg.style.cssText='position:fixed;left:0;top:0;width:400px;height:500px;pointer-events:none';
+      document.body.append(svg);
+      try {
+        const head=svg.querySelector('#headShape path') as SVGPathElement;
+        const pose=svg.lastElementChild!.lastElementChild as SVGGraphicsElement;
+        const skull=head.getBBox(), matrix=pose.getCTM()!;
+        const height=skull.height*Math.hypot(matrix.c,matrix.d);
+        const chin=new DOMPoint(skull.x+skull.width/2,skull.y+skull.height).matrixTransform(matrix);
+        return !!svg.getElementById('bustCloth') && height>180 && height<360 && chin.y>315 && chin.y<355;
+      } finally { svg.remove(); }
+    }));
+    expect(bustFits).toBe(true);
+  }
   expect(await pictures()).not.toEqual(initial);
   expect((await saved()).revision).toBe(before.revision);
   await button('Отменить примерку').click();
   expect(await pictures()).toEqual(initial);
-  await button('Примерить новую посадку глаз').click();
-  await button('Сохранить посадку глаз · '+included.length).click();
-  await expect(button('Примерить новую посадку глаз')).toHaveCount(0);
+  await button(previewLabel).click();
+  await button(saveLabel+' · '+included.length).click();
+  await expect(button(previewLabel)).toHaveCount(0);
   const after=await saved();
   for(const card of included) {
-    expect(after.portraits[card.id].procedural_portrait).toEqual({...before.portraits[card.id].procedural_portrait,eye_revision:2});
+    expect(after.portraits[card.id].procedural_portrait).toEqual({...before.portraits[card.id].procedural_portrait,[field]:2});
   }
 
   const card=included[0], approved=after.portraits[card.id].procedural_portrait;
   await button('Досье '+card.name).click();
   await button('Редактировать портрет').click();
+  if(bust) {
+    await button('Настроить иллюстрацию').click();
+    await button('Образ').click();
+    await button('Вернуть прежнюю композицию').click();
+    await button('Сохранить иллюстрацию').click();
+    await expect(page.locator('.portrait-dialog')).toHaveCount(0);
+    expect((await saved()).portraits[card.id].procedural_portrait.body_revision).toBeUndefined();
+    return;
+  }
   const previewNose=async()=>{
     await button('Настроить иллюстрацию').click();
     await button('Лицо').click();
@@ -165,3 +199,4 @@ test('previewing the corrected eyes keeps the saved cast until explicit confirma
     base_version:2, skin_swatch:false, eye_swatch:false, ...approved, nose_revision:2,
   });
 });
+}

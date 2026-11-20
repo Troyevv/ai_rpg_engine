@@ -10,6 +10,7 @@ const dark='#20262a', ivory='#f2debf';
 export const shape=(d:string, fill:string, opacity=1)=>`<path d="${d}" fill="${fill}" opacity="${opacity}"/>`;
 export const seam=(d:string,color=dark,width=2,opacity=.65)=>`<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
 const buttons=(x:number,y:number,count:number)=>Array.from({length:count},(_,i)=>`<circle cx="${x}" cy="${y+23*i}" r="3" fill="#ead4ac"/><circle cx="${x+.5}" cy="${y+23*i+.5}" r="1" fill="#473c32"/>`).join('');
+const tshirtBand=seam('M171 321Q200 353 229 321',dark,8);
 const lapels=shape('M171 319L141 340 156 348 144 359 199 430Z M229 319L259 340 244 348 256 359 201 430Z',ivory,.35);
 const collar=shape('M171 315L197 340 178 355 157 333Z M229 315L203 340 222 355 243 333Z',ivory,.72);
 const rib=seam('M170 310q30 12 60 0m-61 6q31 14 62 0m-60 7q29 14 58 0',ivory,1.8,.48);
@@ -18,7 +19,7 @@ const cuts: Record<OriginalGarment,[string,string]> = {
  plain:['M172 318Q200 346 228 318L275 338Q297 346 312 386L351 510H49L88 386Q101 348 126 338Z',
  seam('M170 319Q199 351 230 319',ivory,7)+seam('M197 337l3 24 5-24',dark,3)],
  tshirt:['M172 320Q200 348 228 320L291 345 330 406 286 428 275 406 283 510H117L125 406 114 428 70 406 109 345Z',
- seam('M171 321Q200 353 229 321',dark,8)+seam('M73 401l42 21m170 0 42-21',ivory,2)],
+ tshirtBand+seam('M73 401l42 21m170 0 42-21',ivory,2)],
  shirt:['M170 316L200 342 230 316 291 344Q310 358 320 409L337 510H63L80 409Q90 358 109 344Z',
  collar+seam('M200 344v165 M232 375h33v27l-16 8-17-8Z',ivory,2)+buttons(200,360,6)],
  blazer:['M167 313L200 404 233 313 301 337 321 351 341 510H59L79 351 99 337Z',
@@ -97,6 +98,12 @@ function drawPlate(plate: GarmentPlate, frame: BodyFrame, fit: Fit, accent: stri
    });
  }
  const outline=fitted(plate.outline);
+ return `<g transform="translate(0 ${collarY})"><defs><clipPath id="outerPlate"><path d="${outline}"/></clipPath></defs>`+
+   (plate.arms?shape(fitted(plate.arms),'url(#skin)'):'')+shape(outline,'url(#cloth)')+
+   '<g clip-path="url(#outerPlate)">'+plateTrim(plate,accent,fitted)+'</g></g>';
+}
+
+function plateTrim(plate: GarmentPlate, accent: string, fitted:(d:string)=>string, bust=false) {
  let surface='';
  if (plate.textured==='quilt') {
    for(let i=0;i<12;i++)surface+=`M${80+14*i} 345 l65 120 m-130 0 l65 -120 `;
@@ -105,20 +112,24 @@ function drawPlate(plate: GarmentPlate, frame: BodyFrame, fit: Fit, accent: stri
      surface+=`M${x} ${y} v6q7 8 14 0v-6 `;
  }
  const fasteners=(plate.buttons||[]).map(([x,y])=>`<g transform="translate(${fitted(x+' '+y)})"><circle r="3" fill="#bba276"/><circle r="1.2" fill="#574c40"/></g>`).join('');
- return `<g transform="translate(0 ${collarY})"><defs><clipPath id="outerPlate"><path d="${outline}"/></clipPath></defs>`+
-   (plate.arms?shape(fitted(plate.arms),'url(#skin)'):'')+shape(outline,'url(#cloth)')+
-   '<g clip-path="url(#outerPlate)">'+(surface?seam(surface,ivory,1.45,.46):'')+
-   shape(fitted(plate.panels),accent,.88)+(plate.inset?shape(fitted(plate.inset),dark,.54):'')+
+ return (surface?seam(surface,ivory,1.45,.46):'')+
+   shape(fitted(bust && plate.upperPanels || plate.panels),accent,.88)+(plate.inset?shape(fitted(plate.inset),dark,.54):'')+
    shape(fitted('M290 351 Q266 410 284 462 L268 510 L360 510 L360 365 Z'),dark,.12)+
-   seam(fitted(plate.stitching),ivory,2.15,.68)+fasteners+'</g></g>';
+   seam(fitted(bust && plate.upperStitching || plate.stitching),ivory,2.15,.68)+fasteners;
+}
+
+export function garmentTrim(id:Garment, accent?:string, bust=false) {
+ if(Object.hasOwn(garments,id)) return plateTrim(garments[id as keyof typeof garments],accent||ivory,d=>d,bust);
+ const template=bust && id==='tshirt' ? tshirtBand : cuts[id as OriginalGarment][1];
+ return accent?template.replaceAll(ivory,accent).replace(/#dfcfb6|#dbcdb7/g,accent):template;
 }
 
 export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null, fit?:Fit, accent?:string) {
  if(Object.hasOwn(garments,id)) return drawPlate(garments[id as keyof typeof garments],frame,
    fit||{build:'average',youth:young?.6:0,collarY:0,turn:1},accent||ivory);
  const original=id as OriginalGarment;
- const [outline,template]=cuts[original];
- const details=accent?template.replaceAll(ivory,accent).replace(/#dfcfb6|#dbcdb7/g,accent):template;
+ const [outline]=cuts[original];
+ const details=garmentTrim(original,accent);
  if(fit)return fittedGarment(original,frame,fit,details);
  const width=young?.85:frame==='male'?1.12:frame==='female'?.89:1;
  const arms=(id==='tshirt'||id==='dress') ?

@@ -1,8 +1,9 @@
 // Portraits are drawn in a shallow three-quarter view. All head layers use the
 // eye line as y=0; only the assembled head is posed on the clothed bust.
 import type { ProceduralPortrait, Styles } from './proceduralPortrait';
+import { portraitBust } from './portraitBody';
 import { garmentLayer, shape as path, seam as line } from './portraitWardrobe';
-import { figureHair } from './portraitFigureHair';
+import { figureHair, hairExtents } from './portraitFigureHair';
 
 type Human = Extract<ProceduralPortrait, { version: 3 }>;
 type Face = keyof Styles['face'];
@@ -736,17 +737,29 @@ export function portraitFigure(
   const torso = h.infant || h.child ? 'neutral' : p.body_frame;
   const shoulders = bodyScale * (torso === 'male' ? 1.12 : torso === 'female' ? 0.89 : 1);
   const neckLine = `M${center - neck} 253 Q${center - neck + 3} 287 ${center - neck - 2} 304 Q${200 - 29 * shoulders} 316 ${200 - 35 * shoulders} 323 L${200 - 63 * shoulders} 342 L${200 - 54 * shoulders} 376H${200 + 54 * shoulders}L${200 + 63 * shoulders} 342 L${200 + 35 * shoulders} 323 Q${200 + 29 * shoulders} 316 ${center + neck} 305 Q${center + neck - 3} 288 ${center + neck + 3} 250Z`;
-  const body = h.refined
+  const body = p.body_revision===2 ? '' : h.refined
     ? garmentLayer(garment, torso, false, null, { build: p.body_build || 'average', youth: h.youth, collarY, turn },paint.accent)
     : `<g transform="translate(200 ${317 + collarY}) skewX(${2.8 * turn}) scale(${bodyScale} 1) translate(-200 -317)">${garmentLayer(garment, torso, false, null, undefined, paint.accent)}</g>`;
   const chain = [1, 2, 5, 7].includes(p.accessory)
     ? line('M172 310Q195 357 225 311', '#b29769', 1.6, 0.92) +
       (p.accessory === 1 ? '' : ellipse(199, 337, 3, 5, '#d7b476'))
     : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500"><title>Иллюстрация персонажа</title><defs>${defs}<clipPath id="nape"><path d="${neckLine}"/></clipPath></defs>
+  const fitted = p.body_revision===2 ? portraitBust({frame:torso,build:p.body_build||'average',
+    youth:h.youth,elderly:h.elder,chinY:eyeY+h.depth*scale,halfHead:h.cheek*scale,
+    center:headX+turn*2,turn},garment,paint.accent) : null;
+  const neckSurface = fitted ? `<g transform="${fitted.transform}">${fitted.neck}</g>` : path(neckLine,'url(#neck)');
+  const nape = fitted ? `<path transform="${fitted.transform}" d="${fitted.neckPath}"/>` : `<path d="${neckLine}"/>`;
+  const dressedBody = fitted ? `<g transform="${fitted.transform}">${fitted.cloth}${chain}</g>` : body+chain;
+  // Fit from the hairline to the upper chest across age and face lengths.
+  // The legacy plate retains its original camera and framing.
+  const chinY=eyeY+h.depth*scale;
+  const hairBounds=hairExtents(hairstyle,h.temple,h.crown);
+  const zoom=Math.min(1.58,312/((h.depth+hairBounds.height)*scale),194/(hairBounds.halfWidth*scale));
+  const composition=fitted ? `translate(200 336) scale(${zoom}) translate(-${headX} ${-chinY})` : 'translate(-18 -27) scale(1.09)';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500"><title>Иллюстрация персонажа</title><defs>${defs}<clipPath id="nape">${nape}</clipPath></defs>
  <rect width="400" height="500" fill="url(#backdrop)"/>${ellipse(turn < 0 ? 324 : 76, 124, 290, 300, 'url(#window)')}
  ${path('M0 405Q161 291 400 255V500H0Z', '#243b3a', 0.07)}
- <g transform="translate(-18 -27) scale(1.09)"><g transform="${pose}">${head.back}</g>
- ${path(neckLine, 'url(#neck)')}<g clip-path="url(#nape)"><g transform="${pose}"><g transform="translate(2 7)">${path(h.outline, skinInk, 0.41)}</g></g></g>
- ${body}${chain}<g transform="${pose}">${head.head}</g></g></svg>`;
+ <g transform="${composition}"><g transform="${pose}">${head.back}</g>
+ ${neckSurface}<g clip-path="url(#nape)"><g transform="${pose}"><g transform="translate(2 7)">${path(h.outline, skinInk, 0.41)}</g></g></g>
+ ${dressedBody}<g transform="${pose}">${head.head}</g></g></svg>`;
 }

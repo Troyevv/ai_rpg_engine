@@ -81,7 +81,11 @@ def register_drafts(app,repo):
 
     @app.post('/api/workspaces/{wid}/draft/portraits/update-eyes')
     def update_eyes(wid: str, revision: int):
-        return drafts.update_draft_eyes(repo, wid, revision)
+        return drafts.update_figure_layer(repo, wid, revision, 'eye_revision')
+
+    @app.post('/api/workspaces/{wid}/draft/portraits/update-body')
+    def update_body(wid: str, revision: int):
+        return drafts.update_figure_layer(repo, wid, revision, 'body_revision')
 
     @app.get(base)
     def listing(wid:str,cid:str,author:bool=False):

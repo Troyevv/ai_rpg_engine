@@ -19,7 +19,7 @@ def test_new_classic_faces_have_independent_persisted_features():
         assert {p[field] for p in cast} == set(options)
         assert set(input_schema()['properties'][field]['enum']) == set(options)
     for p in cast:
-        assert p['eye_revision'] == p['cheek_revision'] == p['nose_revision'] == 2
+        assert p['eye_revision'] == p['cheek_revision'] == p['nose_revision'] == p['body_revision'] == 2
         assert (p['visage'], p['hairstyle'], p['garment'], p['face_revision']) == ('broad','parted','shirt',4)
     assert cast[0] == default_descriptor('0','adult',hints=hints,version=3,world_id='same')
     old = deepcopy(cast[0])
@@ -100,7 +100,8 @@ def test_manual_new_dossier_draws_without_inventing_a_canonical_age(api):
     assert all(result['portraits'][k] == p for k,p in draft['portraits'].items())
 
 
-def test_explicit_gaze_update_preserves_every_other_trait_and_old_versions(api):
+@pytest.mark.parametrize(('layer', 'field'), [('eyes', 'eye_revision'), ('body', 'body_revision')])
+def test_figure_update_preserves_other_traits_photos_and_old_versions(api, layer, field):
     from test_workshop_portraits import create
     from test_portraits import image
     client, _ = api
@@ -109,7 +110,7 @@ def test_explicit_gaze_update_preserves_every_other_trait_and_old_versions(api):
     actors = state['world']['characters']
     for i, cid in enumerate(ids):
         art = default_descriptor(cid, 'adult', version=3, world_id='previous')
-        art.pop('eye_revision')
+        art.pop(field)
         art['face_revision'] = 3 if i == 0 else 2 if i == 2 else 4
         actors[cid].update(procedural_portrait=art, portrait_mode='procedural')
     url, draft = create(client, state)
@@ -119,14 +120,14 @@ def test_explicit_gaze_update_preserves_every_other_trait_and_old_versions(api):
     before = client.get(url+'?author=true').json()
     def art(d, cid):
         return d['state']['world']['characters'][cid]['procedural_portrait']
-    assert [c for c in ids if before['portraits'][c].get('can_update_eyes')] == ids[:2]
+    assert [c for c in ids if before['portraits'][c].get('can_update_' + layer)] == ids[:2]
     def update(revision):
-        return client.post(url+'/portraits/update-eyes',params={'revision':revision})
+        return client.post(url+'/portraits/update-' + layer,params={'revision':revision})
     assert update(before['revision']).json() == {'updated':2}
     assert update(before['revision']).status_code == 409
     after=client.get(url+'?author=true').json()
     for i,cid in enumerate(ids):
-        assert art(after,cid)==({**art(before,cid),'eye_revision':2} if i<2 else art(before,cid))
+        assert art(after,cid)==({**art(before,cid), field:2} if i<2 else art(before,cid))
         assert after['state']['world']['characters'][cid]['portrait_mode']==before['state']['world']['characters'][cid]['portrait_mode']
     assert update(after['revision']).json() == {'updated':0}
     restored=client.patch(url,json=dict(revision=after['revision'],operation='restore',source_id=before['version_id']))

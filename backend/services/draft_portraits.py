@@ -132,7 +132,7 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
         if eligible and 'facial_hair' not in authored:
             style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4, 5, 6))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=face, face_revision=4, eye_revision=2, cheek_revision=2, nose_revision=2, skin_swatch=True,eye_swatch=True,
+            visage=face, face_revision=4, eye_revision=2, cheek_revision=2, nose_revision=2, body_revision=2, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
             facial_hair=STYLES['facial_hair'][style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,
@@ -233,10 +233,10 @@ def reader_card(state,cid):
     return card
 
 
-def can_update_eyes(actor):
+def can_update_figure_layer(actor, field):
     art = actor.get('procedural_portrait') or {}
     return (art.get('version') == 3 and art.get('face_revision') in (3, 4)
-            and art.get('eye_revision') is None and art.get('form') == 'human'
+            and art.get(field) is None and art.get('form') == 'human'
             and not any(not image.get('deleted') for image in actor.get('portraits', [])))
 
 
@@ -248,8 +248,9 @@ def presentation_for(state,runtime,card,author):
     if author:
         actor = runtime['characters'][cid]
         result['procedural_portrait'] = actor['procedural_portrait']
-        if can_update_eyes(actor):
-            result['can_update_eyes'] = True
+        for layer, field in (('eyes','eye_revision'), ('body','body_revision')):
+            if can_update_figure_layer(actor, field):
+                result['can_update_'+layer] = True
     return result
 
 
@@ -361,7 +362,9 @@ def write_portrait_edit(repo, db, wid, state, record):
         outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
 
 
-def update_draft_eyes(repo, wid, revision):
+def update_figure_layer(repo, wid, revision, field):
+    if field not in ('eye_revision','body_revision'):
+        raise ValueError('Неизвестная версия рисунка.')
     with repo.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         repo._draft_workspace(db, wid, revision, idle=True)
@@ -372,8 +375,8 @@ def update_draft_eyes(repo, wid, revision):
         state = record['state']
         count = 0
         for actor in state['world']['characters'].values():
-            if can_update_eyes(actor):
-                actor['procedural_portrait']['eye_revision'] = 2
+            if can_update_figure_layer(actor, field):
+                actor['procedural_portrait'][field] = 2
                 count += 1
         if count:
             write_portrait_edit(repo, db, wid, state, record)

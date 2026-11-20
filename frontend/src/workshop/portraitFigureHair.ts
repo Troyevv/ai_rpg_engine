@@ -178,6 +178,17 @@ const croppedCuts: Partial<Record<HairStyle, Partial<Cut>>> = {
  bun:{back:'M31-65Q49-90 72-79Q95-71 85-44Q78-27 54-32Z',backLines:'M49-70q17-12 28 3m-25 9q20-10 26 2'},
  curly:{front:'M-61 7Q-75 8-71-9Q-87-12-77-31Q-88-43-74-56Q-77-73-58-76Q-56-93-39-88Q-31-106-14-96Q-2-110 14-98Q33-108 44-95Q64-97 68-79Q87-78 80-61Q99-53 87-37Q94-19 76-14Q78 2 62 9Q57 18 52 11L50-4Q35-1 37-16Q22-13 20-26Q8-17 2-29Q-12-16-23-27Q-32-12-44-20Q-44-4-55-7Z'},
 };
+// Extents of cuts that rise above or extend well outside the fitted skull,
+// in the same 61 × 87 reference space as the locks.
+const extent: Partial<Record<HairStyle, readonly [number,number]>> = {
+  afro:[110,129], twin_puffs:[123,124], high_pony:[106,111],
+  ponytail:[109,100], quiff:[79,115], wavy:[106,102],
+};
+export function hairExtents(style:HairStyle, temple:number, crown:number) {
+  const [width,height]=extent[style]||[80,103];
+  return {halfWidth:width*(temple+1)/61, height:height*(-crown)/87};
+}
+
 export function figureHair(
   style: HairStyle,
   temple: number,

@@ -34,6 +34,16 @@ def cases():
          'visual_age':age, 'stage':age if age in ages[:3] else 'adult'}}
         for build in CATALOG['features']['body_build']
         for age, outfit in [('child','parka'), ('young_adult','kimono'), ('mature_adult','tech_shell'), ('elderly','lamellar')]]
+    for build in CATALOG['features']['body_build']:
+        groups['body_' + build] = [
+            {'label': label, 'portrait': {**base, 'body_build': build, 'garment': garment}}
+            for garment, label in CATALOG['styles']['clothing'].items()]
+    probes = ['shirt', 'dress', 'blazer', 'kimono', 'parka', 'wrap_blanket']
+    groups['body_ages'] = [
+        {'label': f'{age} · {build}', 'portrait': {
+            **base, 'body_build': build, 'garment': probes[(i+j) % len(probes)],
+            'visual_age': age, 'stage': age if i < 3 else 'adult'}}
+        for i, age in enumerate(ages) for j, build in enumerate(CATALOG['features']['body_build'])]
     # Each row keeps the same person, pose, tone and eyes across all six noses.
     groups['nose_matrix'] = []
     groups['nose_previous'] = []

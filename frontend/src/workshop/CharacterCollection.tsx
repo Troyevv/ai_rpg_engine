@@ -1,7 +1,7 @@
 import type {ReactNode} from 'react';
 import {LayoutGrid,List,Search,Plus} from 'lucide-react';
 import {CharacterAvatar,type PortraitSubject} from '../Portrait';
-export type WorkshopCharacter=PortraitSubject&{can_update_eyes?:boolean;fields:Record<string,string>;aliases?:string[]};
+export type WorkshopCharacter=PortraitSubject&{can_update_eyes?:boolean;can_update_body?:boolean;fields:Record<string,string>;aliases?:string[]};
 export type CollectionView={query:string;filter:string;page:number;list:boolean};
 export const emptyCollection:CollectionView={query:'',filter:'all',page:1,list:false};
 export function CharacterCard({card,wid,author,protagonist,onOpen,compact=false}:{card:WorkshopCharacter;wid:string;author:boolean;protagonist?:string|null;compact?:boolean;onOpen:(id:string)=>void}) {

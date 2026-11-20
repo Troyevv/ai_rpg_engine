@@ -34,7 +34,7 @@ import {CalendarProfileEditor} from './CalendarProfileEditor';
 import {RuntimeValue, resolver, recordTitle, runtimeLabels, enumLabels, characterRefs} from './runtimePresentation';
 import {WorldCreationSettings, defaultCreation, type Creation} from './WorldCreationSettings';
 import {SectionTabs} from "./components/ui/section-tabs";
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, download } from './api';
 import { detectWorldImport } from './worldImport';
@@ -168,7 +168,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [mode, setMode] = useState('quick');
     const initialView=useRef(storedView(localStorage.getItem('draftWorkspace')||'')).current;
     const [section, setSection] = useState<WorkshopSection>(initialView.section||'overview');
-    const [eyePreview,setEyePreview]=useState<{workspace:string;revision:number}|null>(null);
+    const [figurePreview,setFigurePreview]=useState<{workspace:string;revision:number;layer:'eyes'|'body'}|null>(null);
     const [collection,setCollection]=useState<CollectionView>(initialView.collection||emptyCollection);
     const [subsection,setSubsection]=useState<Record<string,string>>(initialView.subsection||{});
     const [draftsOpen,setDraftsOpen]=useState(false);
@@ -405,11 +405,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const nullableEdit=editTypes.includes('null');
     const previousWorld = !!state && !!(job as Job & {transport_incomplete?:boolean})?.transport_incomplete;
     const characters = (state?.characters || []).map(c=>({...c,...draft?.portraits?.[c.id]}));
-    const previewEyes = author && eyePreview?.workspace===id && eyePreview?.revision===draft?.revision;
-    const eligibleEyes = characters.filter(c=>c.can_update_eyes).length;
-    const collectionCards = previewEyes ? characters.map(c=>{
+    const activeLayer = author && figurePreview?.workspace===id && figurePreview?.revision===draft?.revision ? figurePreview?.layer : undefined;
+    const figureEdits = [
+      {layer:'eyes',eligible:'can_update_eyes',field:'eye_revision',tryLabel:'Примерить новую посадку глаз',saveLabel:'Сохранить посадку глаз'},
+      {layer:'body',eligible:'can_update_body',field:'body_revision',tryLabel:'Примерить погрудные портреты',saveLabel:'Сохранить погрудные портреты'},
+    ] as const;
+    const previewEdit = figureEdits.find(edit=>edit.layer===activeLayer);
+    const collectionCards = previewEdit ? characters.map(c=>{
         const art=c.procedural_portrait;
-        return c.can_update_eyes && art?.version===3 ? {...c,procedural_portrait:{...art,eye_revision:2 as const}} : c;
+        return c[previewEdit.eligible] && art?.version===3 ? {...c,procedural_portrait:{...art,[previewEdit.field]:2 as const}} : c;
     }) : characters;
     const actor = state?.controlled_actor_id;
     const resolve = resolver(state || {characters:[],locations:[],world:{}});
@@ -746,13 +750,17 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
             <div className="ww-overview-grid"><div><header className="ww-section-head"><h2>Те, кто оживляет историю</h2><button onClick={()=>navigate('characters')}>Все персонажи <ArrowRight size={16}/></button></header><div className="ww-characters-grid is-overview">{characters.slice(0,4).map(c=><CharacterCard compact key={c.id} card={c as WorkshopCharacter} wid={id} author={author} protagonist={state.protagonist_id} onOpen={openPerson}/>)}</div><section className="ww-panel ww-opening"><p className="ww-eyebrow">Первая сцена</p><h2>{place(beginning?.location||actorState?.location)}</h2><p className="workshop-literary">{String(beginning?.text||actorState?.situation||'Стартовая ситуация пока не описана.')}</p><p>{weekTime()}</p><button className="ww-text-button" onClick={()=>navigate('start')}>Открыть начало истории →</button></section></div><aside className="ww-overview-aside"><section className="ww-panel"><h3><ShieldCheck size={20}/>{allIssues.length?'Миру нужно немного внимания':'Готовность мира'}</h3><p>{draft?.technical_valid?'Структура мира корректна.':'Проверьте ошибки перед запуском.'}</p>{draft?.start_warning&&<p role="status">{draft.start_warning} Можно начать с предупреждениями.</p>}{overviewIssues.slice(0,3).map((issue,i)=><article className="ww-issue-summary" key={i}><p>{issue.message}</p>{reviewLinks(issue.paths)}{!issue.paths.length&&<button className="ww-text-button" onClick={()=>navigate('review')}>Подробнее о замечании →</button>}</article>)}<button className="ww-soft" onClick={()=>navigate('review')}>Перейти к проверке <ArrowRight size={16}/></button></section><section className="ww-panel"><h3>У истории есть продолжение</h3><p>Опишите, что изменить. Сначала появится предложение — решение останется за вами.</p><button className="ww-text-button" onClick={()=>{setAiExample('Раскрой мотивы второстепенных персонажей, сохранив известные факты.');navigate('ai')}}>Изменить с ИИ →</button></section><section className="ww-panel ww-recent"><h3>Последние изменения</h3>{draft?.history.slice(0,3).map(v=><p key={v.id}>{versionReasons[v.reason]||'Обновление мира'}<small>{new Date(v.created_at).toLocaleString('ru-RU')}</small></p>)}{!draft?.history.length&&<p>Изменений пока нет.</p>}<button className="ww-text-button" onClick={()=>navigate('more')}>История версий →</button></section></aside></div>
           </>}
           {section==='characters'&&<><CharacterCollection portraitAction={author&&draft&&<>
-            {eligibleEyes>0&&(previewEyes ? <>
-              <button disabled={locked} onClick={()=>setEyePreview(null)}>Отменить примерку</button>
-              <button disabled={locked} onClick={()=>run(async()=>{
-                const result=await api<{updated:number}>(`/workspaces/${id}/draft/portraits/update-eyes?revision=${draft.revision}`,{});
-                setEyePreview(null);await refresh();toast.success(`Обновлено портретов: ${result.updated}`);
-              })}>Сохранить посадку глаз · {eligibleEyes}</button></>
-              : <button disabled={locked} onClick={()=>setEyePreview({workspace:id,revision:draft.revision})}>Примерить новую посадку глаз</button>)}
+            {figureEdits.map(edit=>{
+              const count=characters.filter(c=>c[edit.eligible]).length;
+              if(!count || (activeLayer && activeLayer!==edit.layer)) return null;
+              return activeLayer===edit.layer ? <Fragment key={edit.layer}>
+                <button disabled={locked} onClick={()=>setFigurePreview(null)}>Отменить примерку</button>
+                <button disabled={locked} onClick={()=>run(async()=>{
+                  const result=await api<{updated:number}>(`/workspaces/${id}/draft/portraits/update-${edit.layer}?revision=${draft.revision}`,{});
+                  setFigurePreview(null);await refresh();toast.success(`Обновлено портретов: ${result.updated}`);
+                })}>{edit.saveLabel} · {count}</button></Fragment>
+                : <button key={edit.layer} disabled={locked} onClick={()=>setFigurePreview({workspace:id,revision:draft.revision,layer:edit.layer})}>{edit.tryLabel}</button>;
+            })}
             <PortraitCommission cards={characters} workspaceId={id} revision={draft.revision} refresh={refresh} disabled={locked}/></>} groups={characterGroups} characters={collectionCards as WorkshopCharacter[]} wid={id} author={author} protagonist={state.protagonist_id} view={collection} setView={setCollection} onOpen={openPerson} onAdd={()=>void change({operation:'add',kind:'character'})} disabled={locked}/></>}
           {section==='world'&&<>{pageHeader('Места и сообщества','Где проходит жизнь и что объединяет людей.')}{tab('Места',[['locations','Локации'],['organizations','Сообщества'],['residences','Проживание'],['roles','Роли'],['conditions','Обстоятельства'],['possessions','Имущество'],['contacts','Контакты']])}{currentSub('Места','locations')==='locations'?collectionRecords('location','Места',state.locations.map(l=>[l.id,l]),l=>String(l.name||l.text||'Место')):extension(currentSub('Места','locations'),extensionGroups[currentSub('Места','locations')])}</>}
           {section==='knowledge'&&<>{pageHeader('Факты и знания','Что известно, что скрыто и кто владеет информацией.')}{tab('Знания',[['facts','Все факты'],['secrets','Сюжетные тайны'],['private','Приватные факты'],['knowledge','Кто что знает']])}{currentSub('Знания','facts')!=='knowledge'?collectionRecords('fact',author?'Факты и тайны':'Доступные факты',facts.filter(([,f])=>currentSub('Знания','facts')==='secrets'?!!f.story_secret:currentSub('Знания','facts')==='private'?!!f.secret:true),f=>String(f.text||'Факт')):collectionRecords('knowledge','Знания персонажей',Object.entries(state.world.knowledge||{}),k=>recordTitle('knowledge',k,resolve,author))}</>}
