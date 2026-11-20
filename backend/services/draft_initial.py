@@ -388,6 +388,10 @@ def validate_typed(state, *, advisory_age=False):
                             problems.append(error(f'/world/{section}/{escape(key)}/until_date','Конец предшествует началу.','chronology'))
                     except (ValueError,TypeError,KeyError):pass  # Exact date diagnostics collected above.
         for cid,record in world['characters'].items():
+            if record.get('death_date') is not None:
+                try:date_parts(record['death_date'],profile)
+                except (ValueError,TypeError,KeyError) as exc:
+                    problems.append(error('/world/characters/'+escape(cid)+'/death_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
             if record.get('birth_date') is not None:
                 try:
                     date_parts(record['birth_date'],profile)

@@ -27,7 +27,8 @@ def seed(repo, scenario=''):
 def reply(messages):
     data = json.loads(messages[-1]['content'])
     if 'response_schema' in data and data['author_context']['original_idea'].startswith(FAMILY_SOURCE):
-        return json.dumps(family_reply(data),ensure_ascii=False)
+        fn=direct_family_reply if data['author_context']['original_idea'].endswith('direct-family') else family_reply
+        return json.dumps(fn(data),ensure_ascii=False)
     decisions=[];changes=[]
     fix='response_schema' in data
     if fix and data['author_context']['original_idea'].endswith('empty-conflicts'):
@@ -56,7 +57,7 @@ def reply(messages):
         decisions.append(decision)
     if fix:
         if data['author_context']['original_idea'].endswith('invalid-write'):
-            changes[-1]['path']='/campaign/title'
+            changes[-1]['path']='/world_clock/minute'
         return json.dumps(dict(candidate_hash=candidate_hash(data['candidate']),rationale='Уточнить карточку Марины по замыслу автора.',
                           changes=changes,decisions=decisions),ensure_ascii=False)
     return json.dumps(dict(issues=[],decisions=decisions),ensure_ascii=False)
@@ -66,7 +67,7 @@ FAMILY_SOURCE = ('Сегодня у Ильи день рождения. Илье
                  'Лиза умерла при родах в 19 лет. Лиза родилась в 1996 году.')
 
 
-def seed_family(repo, *, both_nineteen=False):
+def seed_family(repo, *, both_nineteen=False, scenario=''):
     state=candidate()
     ids=[c['id'] for c in state['characters'][:3]]
     father,child,mother=ids
@@ -93,6 +94,7 @@ def seed_family(repo, *, both_nineteen=False):
             status='closed',outcome='widowed',since_date='2014-01-01',until_date='2015-01-01',
             context='Точные даты брака и смерти условны.')
     idea=FAMILY_SOURCE+(' Илье при рождении дочери было 19 лет.' if both_nineteen else '')
+    if scenario:idea+=' '+scenario
     wid=repo.create_workspace('Семейная хронология')['id']
     with repo.connect() as db:
         repo._write_draft(db,wid,state,'draft_world',source=idea,review=dict(status='completed',
@@ -114,6 +116,20 @@ def family_reply(payload):
                          for cid,basis in [(child,year),(father,birthday)]],
                 decisions=[dict(issue_id=payload['findings'][0]['issue_id'],reason='Общая дата для связанных записей.',
                                 outcome='proposed',change_indices=[0,1])])
+
+
+def direct_family_reply(data):
+    father,child,mother=[c['id'] for c in data['candidate']['characters'][:3]]
+    day='2015-06-15'
+    def field(cid,key,value,detail,op='replace'):
+        return dict(op=op,path=f'/world/characters/{cid}/{key}',value=value,detail=detail)
+    changes=[field(child,'birth_date',day,'new_detail'),field(father,'birth_date','1996-07-10','author_fact'),
+             field(mother,'birth_date','1996-03-23','new_detail'),field(mother,'death_date',day,'new_detail','add'),
+             dict(op='replace',path='/world/objective_relations/old_marriage/until_date',value=day),
+             dict(op='replace',path='/world/events/delivery/text',value='15 июня Лиза умерла при родах Мёрфи.')]
+    return dict(candidate_hash=data['candidate_hash'],changes=changes,
+                conflicts=['При выбранной дате Илье 18. Если обоим родителям должно быть 19, возможен день 10 июля.'],
+                rationale='День рождения Мёрфи предложен моделью. Лизе при родах было 19 лет.')
 
 
 def legacy_year_packet(payload):

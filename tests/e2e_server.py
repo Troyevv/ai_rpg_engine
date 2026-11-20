@@ -897,8 +897,8 @@ if __name__ == '__main__':
         from review_actions_fixture import seed, seed_family, seed_legacy_family
         if scenario=='legacy-family':
             return seed_legacy_family(app.state.repository)
-        if scenario=='family':
-            return seed_family(app.state.repository)
+        if scenario in ('family','direct-family'):
+            return seed_family(app.state.repository,scenario=scenario)
         return seed(app.state.repository,scenario)
 
     @app.post('/test/generation266')

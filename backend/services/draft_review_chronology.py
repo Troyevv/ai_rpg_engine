@@ -14,7 +14,7 @@ from backend.services.draft_initial import escape
 class ParentAtBirth(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     actor_id: str
-    quote: str = Field(min_length=1)
+    quote: str = ''
     age: int | None = Field(default=None, ge=0, le=9999)
     died_at_birth: bool = False
     birth_year: int | None = Field(default=None, ge=1, le=9999)
@@ -24,7 +24,18 @@ class ParentAtBirth(BaseModel):
 class ConditionalMarriage(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     relation_id: str
-    quote: str = Field(min_length=1)
+    quote: str = ''
+
+
+class RecordedYear(BaseModel):
+    """Calendar instructions from the retired null-placeholder contract."""
+    kind: str
+    year: int = Field(ge=1,le=9999)
+    quote: str = ''
+    preferred_date: str | None = None
+    parents: list[ParentAtBirth] = Field(default_factory=list)
+    conditional_marriages: list[ConditionalMarriage] = Field(default_factory=list)
+    event_ids: list[str] = Field(default_factory=list)
 
 
 def birth_path(cid):
@@ -52,36 +63,9 @@ def exact_age(card):
     return int(match[1]) if match else None
 
 
-def quoted(quote, sources):
-    return bool(quote.strip()) and any(quote in text for text in sources if isinstance(text,str))
-
-
 def protected(state, path):
     return any(path==p or path.startswith(p+'/') or p.startswith(path+'/')
                for p in state.get('authoring',{}).get('manual_paths',[]))
-
-
-def number_in(value, quote):
-    return re.search(r'(?<!\d)'+str(value)+r'(?!\d)', quote) is not None
-
-
-def parent_evidence(base, child, proof, cards):
-    world = base['state']['world']
-    cid = proof.actor_id
-    if cid not in cards or cid == child:
-        raise ValueError('Проверьте ID родителя и ребёнка.')
-    texts = [base.get('source'), cards[child]['fields'].get('Биография'), cards[cid]['fields'].get('Биография')]
-    previous = base['state'].get('authoring',{}).get('calendar_completion',{}).get('family_chronologies',{}).get(child,{})
-    for entry in previous.get('parent_evidence',[]):
-        if entry['actor_id']==cid:
-            texts.extend([entry['quote'],entry.get('birth_year_quote','')])
-    for group, field in [('facts','character_ids'),('events','participants')]:
-        texts.extend(r.get('text') for r in world[group].values() if {cid,child} <= set(r.get(field,[])))
-    age_in_card = proof.died_at_birth and proof.age == exact_age(cards[cid])
-    if not quoted(proof.quote,texts) or (proof.age is not None and not age_in_card and not number_in(proof.age,proof.quote)):
-        raise ValueError('Возраст и связь родителя при рождении должны иметь основание в замысле или каноне.')
-    if proof.birth_year and not (quoted(proof.birth_year_quote,texts) and number_in(proof.birth_year,proof.birth_year_quote)):
-        raise ValueError('Не подтверждён год рождения родителя.')
 
 
 def birthday_range(options, day, age):
@@ -120,10 +104,6 @@ def plan_birth(base, cid, basis, exact_dates):
     ledger = metadata.get('birth_dates',{}).get(cid,{})
     if ledger.get('known_year') not in (None,basis.year):
         raise ValueError('Указанный год расходится с ранее подтверждённым годом рождения.')
-    sources = [base.get('source'),child['fields'].get('Биография'),actors[cid].get('biography')]
-    sources.extend(f.get('text') for f in world['facts'].values() if cid in f.get('character_ids',[]))
-    if not quoted(basis.quote,sources) or not number_in(basis.year,basis.quote):
-        raise ValueError('Год рождения не подтверждён цитатой об этом персонаже.')
     today = age_reference_date(actors[cid],clock)
     age = exact_age(child)
     if not today:
@@ -153,8 +133,8 @@ def plan_birth(base, cid, basis, exact_dates):
             'died_at_birth': supplied.died_at_birth or original.died_at_birth,
             'quote': original.quote if original.age is not None and supplied.age is None else supplied.quote,
         })
-    for proof in proofs.values():
-        parent_evidence(base,cid,proof,cards)
+    if not proofs.keys() <= cards.keys() or cid in proofs:
+        raise ValueError('Неверная ссылка на родителя.')
     parent_ids = links | proofs.keys()
     parents = []
     constraints = {fixed_birth} if fixed_birth else set()
@@ -234,8 +214,6 @@ def plan_birth(base, cid, basis, exact_dates):
                     (pair <= parent_ids or rid in approx)):continue
             path='/world/objective_relations/'+escape(rid)+'/until_date'
             conditional=approx.get(rid)
-            if conditional and not quoted(conditional.quote,[r.get('context'),r.get('evidence'),base.get('source')]):
-                raise ValueError('Условность прежней даты брака не подтверждена цитатой.')
             adjustable_end = conditional or previously_chosen(path,r.get('until_date'))
             if r.get('until_date') and (not adjustable_end or protected(state,path)):
                 constraints.add(r['until_date'])
@@ -280,56 +258,6 @@ def plan_birth(base, cid, basis, exact_dates):
                 marriage_ids=list(marriages),event_ids=event_ids,parent_evidence=[p.model_dump() for p in proofs.values()],options=len(dates),first=dates[0],last=dates[-1],
                 inventions=inventions,adjustable=sorted(adjustable),anchored=bool(constraints),quote=basis.quote)
     return updates,dependent,report
-
-
-def validate_result(state, reports, *, preview=True):
-    world=state['world']
-    clock=state['world_clock']
-    profile=(clock.get('calendar') or {}).get('profile') or {}
-    cards={c['id']:c for c in state['characters']}
-    for report in reports:
-        day=report['date']
-        child=world['characters'][report['child']]
-        if child.get('birth_date')!=day or int(day[:4])!=report['year'] or (report['age'] is not None and
-                age_on(day,age_reference_date(child,clock),profile)!=report['age']) or exact_age(cards[report['child']])!=report['age']:
-            raise ValueError('Итоговая дата рождения расходится с годом или возрастом ребёнка.')
-        for parent in report['parents']:
-            actor=world['characters'][parent['id']]
-            age=age_on(actor.get('birth_date'),day,profile)
-            if (preview and age!=parent['age']) or (parent['required'] is not None and age!=parent['required']):
-                raise ValueError('Итоговый возраст родителя не соответствует хронологии семьи.')
-            if parent['died'] and (actor.get('life_status')!='dead' or actor.get('death_date')!=day):
-                raise ValueError('Дата смерти при родах расходится с датой рождения ребёнка.')
-            if parent['died'] and actor.get('death_minute') is not None:
-                if current_time({'meta':dict(world_time=clock['minute'],calendar=clock['calendar'])},actor['death_minute'])['date']!=day:
-                    raise ValueError('Время смерти не совпадает с рассчитанным календарным днём.')
-        for eid in report['event_ids']:
-            event=world['events'].get(eid)
-            if not event:
-                raise ValueError('Связанное историческое событие отсутствует.')
-            if event.get('minute') is not None:
-                historical=current_time({'meta':dict(world_time=clock['minute'],calendar=clock['calendar'])},event['minute'])
-                if historical['date']!=day:
-                    raise ValueError('Дата связанного исторического события расходится с датой родов.')
-        for rid in report['marriage_ids']:
-            relation=world['objective_relations'][rid]
-            if relation.get('until_date')!=day or relation.get('outcome')!='widowed' or (relation.get('since_date') or '')>day:
-                raise ValueError('Дата или причина окончания брака расходится со смертью при родах.')
-
-
-def validate_review(before, trial, reports):
-    """A later change to a shared parent must also fit previously agreed family dates."""
-    validate_result(trial, reports)
-    previous = before.get('authoring',{}).get('calendar_completion',{}).get('family_chronologies',{})
-    replaced = {report['child'] for report in reports}
-    for child,report in previous.items():
-        if child in replaced:continue
-        actors = [child, *(p['id'] for p in report['parents'])]
-        relevant = [('characters',cid) for cid in actors]
-        relevant += [('events',eid) for eid in report['event_ids']]
-        relevant += [('objective_relations',rid) for rid in report['marriage_ids']]
-        if any(before['world'][group].get(key)!=trial['world'][group].get(key) for group,key in relevant):
-            validate_result(trial,[report],preview=False)
 
 
 class FamilyConfirmation(BaseModel):

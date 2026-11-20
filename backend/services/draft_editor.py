@@ -6,7 +6,8 @@ Only DraftStorage.decide_world_edit can publish the reviewed snapshot.
 import json
 from copy import deepcopy
 from backend.repositories.drafts import candidate_hash
-from backend.services.draft_changes import Proposal, apply_proposal, validate_candidate, author_value
+from backend.services.draft_changes import Change, Proposal, apply_proposal
+from typing import Literal
 from backend.services.draft_completeness import pointer
 
 MARKER = 'AI-редактор начального мира / v1.'
@@ -17,7 +18,7 @@ RULES = '''Ты автор-редактор ещё не запущенного �
 неоднозначно требует разрушительного изменения, объясни конфликт в rationale;
 не выбирай молча. Укажи такие нерешённые противоречия в conflicts (массив строк);
 пустой массив означает отсутствие нерешённых конфликтов. Все изменения будут показаны автору до подтверждения.
-Не выполняй будущие добровольные решения, согласия и обязательства игрока.
+Это авторское редактирование предыстории, включая характер, мотивы и поступки героя. Для новых вымышленных деталей укажи detail=new_detail, для сведений из замысла — author_fact.
 Не передавай управление; сохраняй камеру, время начала и настройки. Тайна не
 становится знанием героя автоматически. Согласуй Knowledge, свидетельства,
 предысторию, родство, направленные отношения, организации и сюжетные линии.
@@ -61,6 +62,65 @@ def author_context(base, instruction):
         priority='Текущая инструкция заменяет противоречащие ей прежние детали. Остальные ограничения сохраняются.'), ensure_ascii=False)
 
 
+class EditorialChange(Change):
+    detail: Literal['proposal','author_fact','new_detail'] = 'proposal'
+    reason: str = ''
+
+
+class EditorialProposal(Proposal):
+    changes: list[EditorialChange]
+    rationale: str = ''
+
+
+def family_impacts(before, after):
+    """Display consequences of the shown dates, without deriving more operations."""
+    from backend.runtime_v3.calendar import age_on
+    world=after['world']
+    names={c['id']:c['name'] for c in after['characters']}
+    profile=(after['world_clock'].get('calendar') or {}).get('profile',{})
+    impacts=[]
+    for relation in world['objective_relations'].values():
+        if relation['kind']!='parent':continue
+        parent,child=relation['source_id'],relation['target_id']
+        actors=world['characters']
+        day=actors[child].get('birth_date')
+        def dates(who):
+            return [actors[who].get(k)!=before['world']['characters'].get(who,{}).get(k) for k in ('birth_date','death_date')]
+        if day and (any(dates(parent)) or any(dates(child))):
+            impacts.append(dict(parent=names[parent],child=names[child],day=day,
+                                age=age_on(actors[parent].get('birth_date'),day,profile)))
+    return impacts
+
+
+def preview(state, packet):
+    """One authoring boundary for suggestions, review fixes and local amendments."""
+    from backend.services.draft_initial import DraftErrors
+    raw=packet.model_dump()
+    for row in raw['changes']:
+        row.pop('detail')
+        row['reason']=row['reason'] or 'Предложенное изменение.'
+    raw['rationale']=raw['rationale'] or 'Предложение к этой версии мира.'
+    warnings=[]
+    try:
+        candidate,proposal=apply_proposal(state,json.dumps(raw),editing=True,warnings=warnings)
+    except (ValueError,KeyError,IndexError,TypeError) as exc:
+        paths=[item['path'] for item in exc.errors] if isinstance(exc,DraftErrors) else getattr(exc,'world_paths',[])
+        indices={int(p.split('/')[2]) for p in getattr(exc,'proposal_paths',[]) if p.startswith('/changes/')}
+        for i,change in enumerate(packet.changes):
+            if any(p==change.path or p.startswith(change.path+'/') or change.path.startswith(p+'/') for p in paths):
+                indices.add(i)
+        diagnostics=[dict(operation=i+1,path=packet.changes[i].path,message=str(exc)) for i in sorted(indices)]
+        failure=str(exc)
+        if diagnostics:
+            failure='; '.join(f"Операция {d['operation']} ({d['path']}): {d['message']}" for d in diagnostics)
+        return dict(status='unapplied',proposal=packet.model_dump(),failure=failure,diagnostics=diagnostics)
+    for row,original in zip(proposal['changes'],packet.changes):
+        row['detail']=original.detail
+    diff=differences(state,candidate)
+    return dict(status='preview' if diff else 'assessed',proposal=proposal,candidate=candidate,diff=diff,
+                conflicts=manual_conflicts(state,candidate),family_impacts=family_impacts(state,candidate),warnings=warnings)
+
+
 def messages(base, instruction):
     from backend.services.draft_initial import prompt_schema, compact_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
@@ -68,7 +128,7 @@ def messages(base, instruction):
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
-                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
+                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=EditorialProposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
 def rebased_path(before, after, path):
@@ -89,6 +149,13 @@ def manual_conflicts(before, after):
             if destination is not None and pointer(before,path)==pointer(after,destination):continue
         except (KeyError,IndexError,TypeError,ValueError):pass
         conflicts.append(path)
+    from backend.runtime_v3.birth_identity import dob_metadata
+    from backend.services.draft_initial import escape
+    for cid,actor in before['world']['characters'].items():
+        other=after['world']['characters'].get(cid,{})
+        if dob_metadata(actor).get('source')=='manual' and actor.get('birth_date')!=other.get('birth_date'):
+            path='/world/characters/'+escape(cid)+'/birth_date'
+            if path not in conflicts:conflicts.append(path)
     return conflicts
 
 
@@ -153,11 +220,8 @@ def accepted_state(before, after, instruction, jid):
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
-    from backend.services.draft_response import response, review_config
+    from backend.services.draft_response import response
     from backend.services.usage import tracked_stream
-    from backend.services import draft_completeness, draft_repair
-    from backend.services.draft_generation import review_signature
-    from backend.services.draft_review_recovery import obtain
     repo=preparation.repo;job=repo.preparation_job(jid)
     journal=json.loads(job['response_journal']);edit=journal['editor'];base=edit['base']
     state=base['state'];context=config['context_length']
@@ -168,13 +232,12 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(request_messages,limit):
-        effective=review_config(config) if stage=='draft_world_validation' and not edit.get('action') else config
-        return tracked_stream(repo,stream_fn,jid,stage,effective,request_messages,model=effective['model'],
-            provider=effective['provider'],api_key=api_key,temperature=effective['temperature'],max_tokens=limit,
+        return tracked_stream(repo,stream_fn,jid,stage,config,request_messages,model=config['model'],
+            provider=config['provider'],api_key=api_key,temperature=config['temperature'],max_tokens=limit,
             require_complete=True,cancel_event=handle.cancel,on_stream=opened,
-            **({'response_format':{'type':'json_object'}} if effective['provider']=='deepseek' and not any(m['role']=='assistant' for m in request_messages) else {}))
+            **({'response_format':{'type':'json_object'}} if config['provider']=='deepseek' and not any(m['role']=='assistant' for m in request_messages) else {}))
     def call(slot,request_messages):
-        return response(repo,jid,journal,slot,request_messages,review_config(config) if stage=='draft_world_validation' and not edit.get('action') else config,context,generate,handle.cancel)
+        return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
     if edit.get('action'):
         from backend.services import draft_review_actions
         if edit['action']=='recheck':
@@ -186,58 +249,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     slot=response_slot(journal,edit,candidate_hash([context,config.get('max_tokens')]))
     reply=call(slot,request)
     if reply is None:return
-    from backend.services import draft_creative_repair as correction
-    reply=edit.get('corrected_reply',reply)
-    corrections=edit.setdefault('corrections',[])
-    while True:
-        try:
-            trial,proposal=apply_proposal(state,reply,editing=True)
-            break
-        except ValueError as error:
-            allowed=correction.scope(state,reply,error)
-            if allowed is None or len(corrections)>=2:raise
-            stage='draft_editor_repair';repo.draft_phase(jid,'retrying')
-            fixed=call('editor_correction_'+str(len(corrections)),correction.messages(state,reply,author_context(base,edit['instruction']),allowed))
-            if fixed is None:return
-            corrections.append(dict(scope=allowed,response=fixed));save()
-            reply=correction.apply(reply,fixed,allowed)
-            edit['corrected_reply']=reply;save()
-    edit['proposal']=proposal;save()
-    # Reuse bounded address-scoped repairs, retaining every intermediate response.
-    for attempt in range(3):
-        if handle.cancel.is_set():return
-        trial=validate_candidate(state,trial,editing=True)
-        stage='draft_world_validation';repo.draft_phase(jid,'reviewing',reset_progress=True)
-        review_messages=draft_completeness.messages(trial,author_context(base,edit['instruction']))
-        from backend.services.portrait_traits import STYLES
-        review_messages[0]['content'] += ('\nСравни procedural_portrait новых NPC с литературной Внешностью. '
-            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь (facial_hair в v2 сохраняется строкой): '
-            + json.dumps(STYLES,ensure_ascii=False) + '. Неописанные признаки могут быть условными. '
-            'При противоречии поддерживаемого признака дай recommendation с path карточки и понятным message: '
-            'автор должен явно проверить и настроить портрет. Не исправляй литературный текст ради рисунка '
-            'и не предлагай менять защищённый procedural_portrait. Родинки, часы, медицинская форма '
-            'и индивидуальные особенности фигуры не поддерживаются; их отсутствие на рисунке не ошибка канона.')
-        signature=review_signature(review_messages,config)
-        issues=obtain(trial,review_messages,signature,journal,call,save)
-        if issues is None:return
-        edit.update(review=dict(status='completed',candidate_hash=candidate_hash(trial),issues=issues),candidate=trial)
-        save()
-        blockers=[i for i in issues if i.get('severity','blocker')=='blocker']
-        if not blockers or attempt==2:break
-        # The standard repair protects manual paths. Explicit replacements are
-        # already visible conflicts, never permission to silently repair others.
-        repair_input=deepcopy(trial)
-        if 'authoring' in repair_input:
-            repair_input['authoring']['manual_paths']=manual_paths(state,trial)
-        request,paths=draft_repair.request(json.dumps(repair_input,ensure_ascii=False),blockers,author_context(base,edit['instruction']))
-        stage='draft_editor_repair';repo.draft_phase(jid,'retrying')
-        repaired=call('editor_repair_'+candidate_hash([trial,blockers]),request)
-        if repaired is None:return
-        repaired_value=json.loads(draft_repair.apply(json.dumps(repair_input,ensure_ascii=False),repaired,paths))
-        trial=author_value(repair_input,repaired_value)
-        if 'authoring' in state:trial['authoring']=deepcopy(state['authoring'])
-        else:trial.pop('authoring',None)
-    edit.update(status='preview',candidate=trial,diff=differences(state,trial),
-                conflicts=manual_conflicts(state,trial))
+    from backend.services.draft_response import strict_loads
+    # Previously completed technical corrections remain reusable on recovery.
+    packet=EditorialProposal.model_validate(strict_loads(edit.get('corrected_reply',reply)))
+    edit.update(preview(state,packet))
     save()
     repo.finish_world_edit(jid,epoch)

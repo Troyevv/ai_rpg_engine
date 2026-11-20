@@ -83,7 +83,7 @@ def test_olya_job_preview_apply_start_and_restore(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         r=request(client,url,before,text='Создай сестру Ильи');assert r.status_code==200,r.text
         job=wait_job(client,r.json()['id']);assert job['status']=='saved',job.get('error')
-    assert calls==['proposal','review']
+    assert calls==['proposal']
     current=client.get(url+'?author=true').json();assert current['state']==before['state']
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
     assert edit['status']=='preview' and len(edit['proposal']['changes'])==13

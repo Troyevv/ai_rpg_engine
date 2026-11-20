@@ -1,3 +1,4 @@
+import {ProposalAdjustment,type ProposalChange} from './workshop/ProposalAdjustment';
 import {ReviewCalendarConfirmation,type LegacyFamily,type FamilyInput} from './workshop/ReviewCalendarConfirmation';
 import {requestId as newRequestId} from './lib/requestId';
 import {useEffect, useRef, useState} from 'react';
@@ -16,10 +17,10 @@ const outcomeLabels:Record<string,string>={proposed:'Предложена пра
 const findingLabels:Record<string,string>={contradiction:'Подтверждённое противоречие',incomplete_description:'Неполное описание',uncertainty:'Неопределённость',false_positive:'Ложное замечание'};
 type FamilyChronology = {child:string;name:string;date:string;age:number|null;reference:string;options:number;first:string;last:string;
   parents:{id:string;name:string;age:number|null;birth_date:string|null;died:boolean;quote:string}[];marriage_ids:string[];inventions:{name:string;date:string}[]};
-type Edit = {superseded_dates?:boolean;legacy_families?:LegacyFamily[];chronologies?:FamilyChronology[];action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
+type Edit = {family_impacts?:{parent:string;child:string;day:string;age:number|null}[];author_idea?:string;can_replay?:boolean;warnings?:{message:string;path:string}[];diagnostics?:{operation:number;path:string;message:string}[];original_proposal?:{changes:ProposalChange[]};amended_indices?:number[];superseded_dates?:boolean;legacy_families?:LegacyFamily[];chronologies?:FamilyChronology[];action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
   references?:Parameters<typeof resolver>[0];
   requests?:{id:string;stage:string;status:string;input_tokens:number|null;output_tokens:number|null;cost_usd:string|null}[];
-  proposal?:{rationale:string;conflicts?:string[];changes:{path:string;reason:string}[]};diff?:Diff[];conflicts?:string[];
+  proposal?:{rationale:string;conflicts?:string[];changes:ProposalChange[]};diff?:Diff[];conflicts?:string[];
   review?:{status:string;issues:{message:string;severity?:string}[]}};
 type Edits = {edits:Edit[];started:boolean};
 const sectionNames:Record<string,string>={characters:'Карточки персонажей',locations:'Места',campaign:'Замысел мира',
@@ -48,6 +49,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const [data,setData]=useState<Edits>({edits:[],started:false});
  const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  const [selected,setSelected]=useState<string|null>(null);
+ const [adjust,setAdjust]=useState<string|null>(null);
  const [confirm,setConfirm]=useState(false);const [conflicts,setConflicts]=useState(false);const [warnings,setWarnings]=useState(false);
  const acceptButton=useRef<HTMLButtonElement>(null);
  const guard=useRef(false);const requestId=useRef<string|null>(null);const alive=useRef(true);
@@ -73,18 +75,18 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const changed=current?.diff||[];
  const previewResolve=current?.references ? resolver(current.references) : resolve;
  const destructive=!!current?.conflicts?.length||changed.some(d=>d.operation==='remove');
- const issues=current?.action?[]:current?.review?.issues||[];const blocked=(current?.status==='preview'&&!!current.proposal?.conflicts?.length)||issues.some(i=>(i.severity||'blocker')==='blocker');
+ const issues=current?.review?.issues||[];
  const disabled=busy||locked;
  const appliedFix=current?.action==='recheck'&&history.find(e=>e.action==='fix'&&e.applied_version===current.base_version);
  const samePreview=current?.status==='preview'&&!current.stale&&current.instruction===instruction;
  useEffect(()=>{if(job && !active(job))requestId.current=null},[job?.status]);
- const decision=(choice:'accept'|'reject'|'recalculate_dates',family?:FamilyInput[])=>execute(async()=>{
+ const decision=(choice:'accept'|'reject'|'recalculate_dates'|'replay',family?:FamilyInput[])=>execute(async()=>{
   await api(`/workspaces/${wid}/draft/edits/${current.id}`,{revision,decision:choice,family,accept_conflicts:conflicts,accept_warnings:warnings});
   if(alive.current){setConfirm(false);requestId.current=null;await load();await refresh()}
  });
  return <section className="world-ai-editor" aria-labelledby="world-ai-title">
   <div className="ai-editor-heading"><WandSparkles aria-hidden="true"/><div><h3 id="world-ai-title">{reviewMode?'Работа с замечаниями':'AI-редактор мира'}</h3></div></div>
-  <p>{reviewMode?'Каждое действие отправляет один запрос к модели. До сохранения можно сравнить правки с исходной версией.':'Опишите любые связанные изменения. Сначала вы увидите предложение и результаты проверки, затем решите, что сохранить.'}</p>
+  <p>{reviewMode?'Каждое действие отправляет один запрос к модели. До сохранения можно сравнить правки с исходной версией.':'Опишите любые связанные изменения. Сначала вы увидите предложение, затем решите, что сохранить.'}</p>
   <div className="ww-ai-columns"><div className="ww-ai-compose"><p className="ww-eyebrow">{title} · версия #{version}</p>{!reviewMode&&<ol className="ww-ai-steps"><li>Замысел</li><li>Предложение</li><li>Ваше решение</li></ol>}
   {data.started && <p role="status">Изменения войдут в новое прохождение. Начатая игра останется без изменений.</p>}
   {reviewMode?<><p className="workshop-hint">Замечаний для рассмотрения · {reviewCount}</p><p className="workshop-hint">{prefs.summary.model} · {prefs.summary.provider==='local'?'Локальная модель':'Оплата по тарифу провайдера'}</p><div className="ai-editor-actions">
@@ -104,11 +106,13 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
   {error && <p className="ai-editor-error" role="alert">{error}</p>}
   </div><div className="ww-ai-result">
   {active(job)&&job?.kind==='draft_editor'&&<div className="ww-ai-loading" role="status" aria-live="polite"><WandSparkles/><h4>{job.phase==='reviewing'?'Проверяем мир':'Готовим предложение'}</h4><p>Результат сохранится в этом черновике.</p><div className="ww-ai-stream"/>{[94,68,82,55].map(width=><span key={width} className="ww-ai-skeleton" style={{width:width+'%'}}/>)}</div>}
-  {!reviewMode&&!current&&!active(job)&&<div className="ww-ai-empty"><WandSparkles size={40}/><h4>Здесь появится предложение</h4><p>Сценарист сопоставит ваш замысел с текущим миром. Вы увидите каждую правку, её связи и результаты проверки до сохранения.</p></div>}
+  {!reviewMode&&!current&&!active(job)&&<div className="ww-ai-empty"><WandSparkles size={40}/><h4>Здесь появится предложение</h4><p>Сценарист сопоставит ваш замысел с текущим миром. Вы увидите каждую правку, её связи до сохранения.</p></div>}
   {current && !(active(job)&&job?.kind==='draft_editor') && <div className="ai-preview" aria-label="Предпросмотр AI-изменений">
    <div className="ai-preview-title"><h4>{statuses[current.status]||'Сохранённый запрос'}</h4><span>На основе версии #{current.base_version}</span></div>
    {!reviewMode&&<details><summary>Инструкция автора</summary><p className="ai-prose">{current.instruction}</p></details>}
-   {current.failure&&<p className="ai-editor-error" role="alert">{current.failure}</p>}
+   {!!current.diagnostics?.length&&<ul className="ai-editor-error" role="alert" aria-label="Ошибки операций">{current.diagnostics.map(d=><li key={d.operation}><strong>Операция {d.operation}</strong> · {d.path}<p>{d.message}</p></li>)}</ul>}
+   {current.can_replay&&<Button variant="outline" disabled={disabled||current.stale} onClick={()=>void decision('replay')}>Открыть сохранённое предложение без нового запроса</Button>}
+   {current.failure&&!current.diagnostics?.length&&<p className="ai-editor-error" role="alert">{current.failure}</p>}
    {!!current.outcomes?.length&&<section className="ai-review-outcomes" aria-label="Результаты по замечаниям">
     {current.outcomes.map(row=>{
      const path=row.paths[0];
@@ -123,6 +127,8 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    </section>}
    {current.status==='reviewed'&&!current.review?.issues.length&&!current.outcomes?.length&&<p>Замечаний к этой версии нет.</p>}
    {appliedFix&&onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(appliedFix.base_version)}>Посмотреть версию до исправления и откатить</Button>}
+   {current.author_idea&&<details><summary>Исходный авторский замысел</summary><p className="ai-prose">{current.author_idea}</p></details>}
+   {!!current.family_impacts?.length&&!current.chronologies?.length&&<section className="ai-family-chronology"><h5>Возраст родителей по предложенным датам</h5><ul>{current.family_impacts.map((r,i)=><li key={i}>{r.parent} · {r.age===null?'возраст неизвестен':r.age+' лет'} на {r.day} · рождение: {r.child}</li>)}</ul></section>}
    {current.chronologies?.map(family=><section className="ai-family-chronology" aria-label="Семейная хронология" key={family.child}>
     <h5>Семейная хронология</h5><p><strong>{family.date}</strong> · Рождение: {family.name}{family.age!==null&&<> · возраст на {family.reference}: {family.age}</>}</p>
     <p>{family.options===1?'Единственная совместимая дата.':<>Предложен один из допустимых дней ({family.options}). Границы выбора: {family.first} — {family.last}.</>}</p>
@@ -130,7 +136,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
     <ul>{family.parents.map(parent=><li key={parent.id}>{parent.name}{parent.age!==null&&<> · возраст при родах: {parent.age}</>}{parent.died&&<> · смерть при родах {family.date}</>}{parent.quote&&<details><summary>Основание</summary><p>{parent.quote}</p></details>}</li>)}</ul>
     {family.marriage_ids.length>0&&<p>Дата окончания брака по смерти супруга: {family.date}.</p>}
    </section>)}
-   {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p>{current.proposal.changes.length>0&&<details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{c.path}</small></li>)}</ol></details>}</>}
+   {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p>{current.proposal.changes.length>0&&<details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{current.amended_indices?.includes(i)?'Скорректировано вами':c.detail==='new_detail'?'Новая деталь модели':c.detail==='author_fact'?'По авторскому замыслу (по оценке модели)':'Предложение модели'} · {c.path}</small></li>)}</ol></details>}</>}
    {current.error && <p role="alert">{current.error}</p>}
    {current.status==='preview' && current.stale && <p className="ai-editor-error" role="alert">Предпросмотр устарел: мир изменился. Отправьте инструкцию заново.</p>}
    {current.diff && (!reviewMode||changed.length>0) && <>
@@ -149,9 +155,19 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {current.status==='assessed'&&<p role="status">Модель завершила разбор. Правок нет. Сохранена исходная версия #{current.base_version}.</p>}
    {!!current.proposal?.conflicts?.length&&<section aria-label="Неоднозначности"><h5>Что требует решения автора</h5><ul>{current.proposal.conflicts.map((text,i)=><li key={i}>{text}</li>)}</ul></section>}
    {current.status==='assessed'&&onCharacters&&current.outcomes?.some(row=>row.outcome==='ambiguous')&&<Button variant="outline" disabled={disabled} onClick={onCharacters}>Уточнить данные в карточках персонажей</Button>}
-   {blocked && <p>Уточните инструкцию с учётом противоречий. Применение заблокировано.</p>}
+   {!!current.warnings?.length&&<section className="ai-editor-warning"><h5>Смысловые предупреждения</h5><ul>{current.warnings.map(w=><li key={w.path+w.message}>{w.message}</li>)}</ul></section>}
+   {current.original_proposal&&<details><summary>Исходные значения модели</summary>{current.amended_indices?.map(i=>{const c=current.original_proposal!.changes[i];return c&&<div key={i}><small>{c.path}</small><RuntimeValue field={c.path.split('/').pop()!} value={c.value} resolve={previewResolve} author/></div>})}</details>}
+   {['preview','unapplied'].includes(current.status)&&current.proposal?.changes.some(c=>c.op!=='remove')&&<Button variant="outline" disabled={disabled||current.stale} onClick={()=>setAdjust(current.id)}><Pencil size={16}/>Скорректировать значения</Button>}
+   {adjust===current.id&&current.proposal&&<ProposalAdjustment changes={current.proposal.changes} revision={revision} resolve={previewResolve}
+    disabled={busy} onClose={()=>setAdjust(null)} onSave={async(values,baseRevision)=>{
+     if(guard.current)throw new Error('Сохранение уже выполняется.');
+     guard.current=true;setBusy(true);
+     try{await api(`/workspaces/${wid}/draft/edits/${current.id}`,{revision:baseRevision,decision:'revise',values});await load();await refresh()}
+     finally{guard.current=false;if(alive.current)setBusy(false)}
+    }}/>}
    {current.superseded_dates&&<ReviewCalendarConfirmation key={current.id} families={current.legacy_families||[]} disabled={disabled||current.stale} onCalculate={family=>void decision('recalculate_dates',family)}/>}
-   {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||current.superseded_dates||blocked||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
+   {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
+   {current.status==='unapplied'&&current.proposal&&<Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button>}
    {current.status==='accepted' && <section><p role="status">Изменения сохранены в версии #{current.applied_version}.</p>{onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(current.base_version)}>{reviewMode?'Посмотреть исходную версию и откатить':'Посмотреть исходную версию'}</Button>}{onObject&&changed.filter(d=>d.operation!=='remove').map(d=><Button key={d.section+d.id} variant="ghost" onClick={()=>onObject(d.section,d.id)}>Открыть: {d.name}</Button>)}</section>}
    {!!current.requests?.length && <details><summary>Запросы и расходы · {current.requests.length}</summary>{current.requests.map((r,i)=><p key={r.id}>Запрос {i+1}: {r.input_tokens ?? 'неизвестно'} входных / {r.output_tokens ?? 'неизвестно'} выходных токенов · {r.cost_usd===null?'стоимость неизвестна':`оценка $${Number(r.cost_usd).toFixed(6)}`}</p>)}</details>}
    <Button variant="ghost" disabled={busy} onClick={()=>void execute(async()=>{download(JSON.stringify(current,null,2),'world-edit.json')})}>{current.action==='recheck'?'Скачать отчёт':'Скачать предложение'}</Button>

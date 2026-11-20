@@ -58,11 +58,11 @@ def test_multientity_preview_confirm_rollback_and_idempotency(api):
     job,edit=run_edit(client,url,before,calls=calls)
     preview=client.get(url+'?author=true').json()
     assert preview['version_id']==before['version_id'] and preview['state']==before['state']
-    assert len(edit['diff'])>=9 and edit['review']['status']=='completed'
+    assert len(edit['diff'])>=9 and edit['review'] is None
     assert not edit['stale'] and edit['status']=='preview'
     # Same request after worker finished is not another paid job.
     repeated=request(client,url,before);assert repeated.json()['id']==job['id']
-    assert len(calls)==2
+    assert len(calls)==1
     assert decide(client,url,preview,edit).status_code==200
     accepted=client.get(url+'?author=true').json()
     assert accepted['state']['world']['roles']['craft']['actor_id']=='craftswoman'
@@ -70,7 +70,7 @@ def test_multientity_preview_confirm_rollback_and_idempotency(api):
     assert accepted['version_id']!=before['version_id']
     assert decide(client,url,preview,edit).status_code==200
     assert client.get(url+'?author=true').json()['version_id']==accepted['version_id']
-    assert len(app.state.repository.request_log(job_id=job['id']))==2
+    assert len(app.state.repository.request_log(job_id=job['id']))==1
     restore=client.patch(url,json={'revision':accepted['revision'],'operation':'restore','source_id':before['version_id']})
     assert restore.status_code==200 and restore.json()['state']==before['state']
     assert Repository(app.state.repository.path).draft(wid,True)['state']==before['state']
@@ -122,7 +122,7 @@ def test_remove_dependencies_and_rebase_manual_paths():
 
 
 @pytest.mark.parametrize('changes',[
-    lambda s:[change('/world/characters/'+s['controlled_actor_id']+'/intentions',['Согласиться'],'replace')],
+    lambda s:[change('/world/characters/'+s['controlled_actor_id']+'/intentions',123,'replace')],
     lambda s:[change('/world/knowledge/bad',dict(actor_id=s['controlled_actor_id'],fact_id='ownership',status='known',source_event_id='missing'))],
     lambda s:[change('/world/events/future',dict(id='future',text='already happened',minute=9999999,participants=[],witnesses=[],fact_ids=[]))],
     lambda s:[change('/world_clock/minute',900,'replace')],
@@ -255,7 +255,7 @@ def test_transport_failure_resume_retains_paid_response_and_cost(api,failure):
             assert resumed.status_code==200,resumed.text
             done=wait_job(client,job['id']);assert done['status']=='saved',done.get('error')
         assert client.get(url+'?author=true').json()['state']==before['state']
-        assert len(app.state.repository.request_log(job_id=job['id']))==3
+        assert len(app.state.repository.request_log(job_id=job['id']))==2
     else:
         assert journal['editor']['base']['state']==before['state']
 
@@ -321,7 +321,7 @@ def test_preview_survives_repository_restart(api):
     assert repo.draft(wid,True)['state']['world']['roles']['craft']
 
 
-def test_explicit_model_conflict_is_reviewable_but_cannot_be_applied(api):
+def test_author_can_accept_explicit_model_conflict(api):
     client,app=api;wid,url,before=setup(client)
     def stream(**kw):
         if kw['messages'][0]['content'].startswith(draft_editor.MARKER):
@@ -333,7 +333,7 @@ def test_explicit_model_conflict_is_reviewable_but_cannot_be_applied(api):
         job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
     edit=client.get(url+'/edits?author=true').json()['edits'][0];draft=client.get(url+'?author=true').json()
     assert edit['proposal']['conflicts']
-    assert decide(client,url,draft,edit,accept_conflicts=True).status_code!=200
+    assert decide(client,url,draft,edit,accept_conflicts=True).status_code==200
     assert draft['state']==before['state']
 
 
@@ -348,7 +348,7 @@ def test_multi_entity_kinship_and_existing_organization_edit():
     assert after['world']['knowledge']['fire']['actor_id']=='craftswoman'
 
 
-def test_semantic_repair_is_previewed_before_commit(api):
+def test_review_does_not_rewrite_the_model_proposal(api):
     client,app=api;wid,url,before=setup(client);reviews=[]
     def stream(**kw):
         system=kw['messages'][0]['content']
@@ -361,9 +361,9 @@ def test_semantic_repair_is_previewed_before_commit(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
-    assert next(d for d in edit['diff'] if d['section']=='world/organizations' and d['id']=='workshop')['fields'][0]['after']['name']=='Реставрационная мастерская'
+    assert next(d for d in edit['diff'] if d['section']=='world/organizations' and d['id']=='workshop')['fields'][0]['after']['name']=='Мастерская Веры'
     assert client.get(url+'?author=true').json()['state']==before['state']
-    assert len(reviews)==2
+    assert reviews==[]
 
 
 def test_structural_correction_keeps_good_changes(api):
@@ -379,8 +379,14 @@ def test_structural_correction_keeps_good_changes(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
     journal=json.loads(app.state.repository.preparation_job(job['id'])['response_journal'])
-    assert len(journal['editor']['corrections'])==1
-    assert journal['editor']['candidate']['world']['roles']['craft']['actor_id']=='craftswoman'
+    edit=journal['editor']
+    assert edit['status']=='unapplied' and edit['diagnostics']
+    value=dict(edit['proposal']['changes'][3]['value'],actor_id='craftswoman')
+    current=client.get(url+'?author=true').json()
+    assert decide(client,url,current,job,'revise',values={3:value}).is_success
+    updated=client.get(url+'/edits?author=true').json()['edits'][0]
+    assert updated['status']=='preview' and updated['original_proposal']['changes'][3]['value']['actor_id']=='missing'
+    assert len(updated['requests'])==1
     assert client.get(url+'?author=true').json()['state']==before['state']
 
 
@@ -395,7 +401,7 @@ def test_budget_preflight_never_calls_provider(api):
     assert client.get(url+'?author=true').json()['state']==before['state']
 
 
-def test_truncated_response_continues_same_package(api):
+def test_truncated_editor_response_remains_saved_without_automatic_spend(api):
     from llm import OutputLimitReached
     client,app=api;wid,url,before=setup(client);reply='';calls=[]
     def stream(**kw):
@@ -408,10 +414,10 @@ def test_truncated_response_continues_same_package(api):
         assert kw['messages'][-2]==dict(role='assistant',content=reply[:len(reply)//2])
         yield reply[len(reply)//2:]
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
-        job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
-    assert len(calls)==2
+        job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='error'
+    assert len(calls)==1
     journal=json.loads(app.state.repository.preparation_job(job['id'])['response_journal'])
-    assert len(journal['responses'][journal['editor']['slot']]['parts'])==2
+    assert len(journal['responses'][journal['editor']['slot']]['parts'])==1
     assert client.get(url+'?author=true').json()['state']==before['state']
 
 
@@ -450,7 +456,7 @@ def test_editor_history_requires_explicit_author_projection(api,decision):
     assert public=={'edits':[], 'started':False}
     assert client.get(url+'/edits?author=false').json()==public
     author=client.get(url+'/edits?author=true').json()['edits'][0]
-    for key in ('diff','references','review','instruction'):
+    for key in ('diff','references','proposal','instruction'):
         assert hidden in json.dumps(author[key],ensure_ascii=False)
     assert hidden not in client.get(url).text
     assert decide(client,url,client.get(url+'?author=true').json(),author,decision,accept_warnings=True,accept_conflicts=True).status_code==200
@@ -493,7 +499,7 @@ def test_history_references_block_deletion_without_erasing_history():
     assert s==before
 
 
-@pytest.mark.parametrize('phase',['proposing','reviewing'])
+@pytest.mark.parametrize('phase',['proposing'])
 def test_process_crash_recovery_preserves_frozen_editor_and_requires_unknown_consent(tmp_path,phase):
     """Kill a real backend process, including its worker, without lifespan cleanup."""
     import os
@@ -549,7 +555,7 @@ with TestClient(create_app(sys.argv[1])) as client, patch('backend.services.prep
             response=client.post(url+'/resume',json={'revision':current['revision'],'api_key':'offline','acknowledge_unknown':True})
             assert response.status_code==200,response.text
             assert wait_job(client,jid)['status']=='saved'
-        assert len(calls)==(2 if phase=='proposing' else 1)
+        assert len(calls)==1
         assert client.get(url+'?author=true').json()['state']==before['state']
         assert decide(client,url,current,{'id':jid}).status_code==200
         accepted=client.get(url+'?author=true').json()

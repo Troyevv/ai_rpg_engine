@@ -10,7 +10,7 @@ class DraftEditorStorage:
         if not head:raise ValueError('Сначала создайте мир.')
         base=json.loads(head['content'])
         action=config.get('_review_action')
-        _,report=inspect_candidate(base['state'],for_start=bool(action))
+        _,report=inspect_candidate(base['state'],for_start=True)
         if report['errors']:raise ValueError('Сначала исправьте структурные ошибки черновика: '+'; '.join(report['errors']))
         extra={}
         if action:
@@ -31,7 +31,6 @@ class DraftEditorStorage:
                     raise ValueError('Сначала примите или отклоните открытое предложение.')
             extra=dict(action=action,findings=notes)
             if action=='recheck':
-                extra['current_hints']=report['warnings']
                 extra['calendar_conflicts']=[i['path']+': '+i['message'] for i in report.get('semantic_warnings',[])]
         # A reservation consumes the revision even if the provider returns fast.
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
@@ -46,7 +45,8 @@ class DraftEditorStorage:
             journal=json.loads(job['response_journal'])
             if job['status']!='generating' or journal.get('recovery_epoch',0)!=epoch:return
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
-            db.execute("UPDATE preparation_jobs SET status='saved',phase='preview' WHERE id=?",(jid,))
+            phase='preview' if journal['editor']['status']=='preview' else 'saved'
+            db.execute("UPDATE preparation_jobs SET status='saved',phase=? WHERE id=?",(phase,jid))
 
     def finish_review_action(self,jid,epoch,result):
         from backend.services.draft_review_tracking import observe
@@ -89,7 +89,12 @@ class DraftEditorStorage:
             result=[]
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
-                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies')}
+                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies','warnings','diagnostics','family_impacts','amended_indices','original_proposal')}
+                if edit.get('proposal'):
+                    item['author_idea']=edit['base'].get('source','')
+                if edit.get('status')=='unapplied' and edit.get('action')=='fix':
+                    from backend.services.draft_review_actions import saved_reply
+                    item['can_replay']=bool(saved_reply(json.loads(row['response_journal'])))
                 if superseded_year_preview(edit):
                     from backend.services.draft_review_chronology import legacy_families
                     item['superseded_dates']=True
@@ -108,7 +113,7 @@ class DraftEditorStorage:
                 result.append(item)
             return dict(edits=result,started=started)
 
-    def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False,family=()):
+    def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False,family=(),values=None):
         from backend.repositories.drafts import candidate_hash
         from backend.services.draft_editor import accepted_state,manual_conflicts,differences
         from backend.services.draft_changes import validate_candidate
@@ -119,10 +124,16 @@ class DraftEditorStorage:
             journal=json.loads(job['response_journal']);edit=journal['editor']
             if decision=='recalculate_dates' and edit.get('calendar_recalculated'):
                 return
-            if edit.get('action') and edit['status'] not in ('preview','accepted','rejected'):
+            recoverable=decision=='replay' and edit.get('action')=='fix' and edit['status']=='unapplied'
+            editable=decision=='revise' and bool(edit.get('proposal')) and edit['status']=='unapplied'
+            if decision=='replay' and not recoverable:
+                if edit.get('response_replayed'):return
+                raise ValueError('Нет отклонённого ответа для повторного открытия.')
+            dismiss=decision=='reject' and edit['status']=='unapplied'
+            if edit.get('action') and not (recoverable or editable or dismiss) and edit['status'] not in ('preview','accepted','rejected'):
                 raise ValueError('Нет пакета изменений для применения.')
             if edit['status'] in ('accepted','rejected'):
-                if edit['status']!=('accepted' if decision=='accept' else 'rejected'):raise ValueError('Решение уже принято.')
+                if (edit['status'],decision) not in (('accepted','accept'),('rejected','reject')):raise ValueError('Решение уже принято.')
                 return
             self._draft_workspace(db,wid,revision)
             if decision=='reject':
@@ -131,10 +142,42 @@ class DraftEditorStorage:
                 head=self._draft_head(db,wid)
                 if not head or head['id']!=edit['base_version'] or revision!=edit['base_revision']:
                     raise ValueError('Предпросмотр устарел: мир изменился. Создайте новое предложение.')
-                if job['status']!='saved' or edit['status']!='preview':raise ValueError('Предложение ещё не проверено.')
+                if job['status']!='saved' or (edit['status']!='preview' and not (recoverable or editable)):raise ValueError('Предложение ещё не проверено.')
                 current=json.loads(head['content'])
                 if candidate_hash(current['state'])!=edit['before_hash']:raise ValueError('Кандидат изменился.')
                 from backend.services.draft_review_actions import superseded_year_preview
+                if decision in ('revise','replay'):
+                    from backend.services import draft_editor, draft_review_actions
+                    if decision=='replay':
+                        from backend.services.draft_response import join_fragments
+                        saved=draft_review_actions.saved_reply(journal)
+                        if not saved:raise ValueError('Сохранённый ответ отсутствует.')
+                        raw=join_fragments(saved['parts'],saved.get('assembly'),terminal=True)
+                        updated=draft_review_actions.proposal_result(edit,raw)
+                        edit['response_replayed']=True
+                    else:
+                        from copy import deepcopy
+                        proposal=deepcopy(edit['proposal'])
+                        if not values:raise ValueError('Выберите значение для корректировки.')
+                        for i,value in values.items():
+                            if i<0 or i>=len(proposal['changes']) or proposal['changes'][i]['op']=='remove':
+                                raise ValueError('Некорректный номер операции для редактирования.')
+                            proposal['changes'][i]['value']=value
+                        updated=draft_editor.preview(current['state'],draft_editor.EditorialProposal.model_validate(proposal))
+                        if updated['status']=='unapplied':raise ValueError(updated['failure'])
+                        edit.setdefault('original_proposal',edit['proposal'])
+                        edit['amended_indices']=sorted(set(edit.get('amended_indices',[]))|set(values))
+                        edit['chronologies']=[]
+                        edit['calendar_decisions']={}
+                        for finding in edit.get('outcomes',[]):
+                            if finding['outcome']=='unapplied' and finding.get('change_indices'):
+                                finding['outcome']='proposed'
+                    for key in ('failure','candidate','diff','diagnostics','warnings'):
+                        edit.pop(key,None)
+                    edit.update(updated,base_revision=revision+1)
+                    db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+                    db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
+                    return
                 if decision=='recalculate_dates':
                     if not superseded_year_preview(edit):
                         raise ValueError('В этом предложении нет прежнего расчёта по году рождения.')
@@ -156,38 +199,27 @@ class DraftEditorStorage:
                     db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
                     db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
                     return
-                if superseded_year_preview(edit):
-                    raise ValueError('Сначала пересчитайте семейные даты и просмотрите обновлённое предложение.')
                 fix=edit.get('action')=='fix'
-                trial=validate_candidate(current['state'],edit['candidate'],editing=not fix,review_fix=fix)
+                trial=validate_candidate(current['state'],edit['candidate'],editing=True)
                 if differences(current['state'],trial)!=edit['diff']:raise ValueError('Предпросмотр изменился.')
-                if edit.get('proposal',{}).get('conflicts'):raise ValueError('Уточните инструкцию: в предложении есть нерешённые авторские конфликты.')
-                review=edit.get('review',{})
-                if not fix and (review.get('status')!='completed' or review.get('candidate_hash')!=candidate_hash(trial)):raise ValueError('Проверка предложения не завершена.')
-                if any(i.get('severity','blocker')=='blocker' for i in review.get('issues',[])):
-                    raise ValueError('Сначала разрешите противоречия: уточните инструкцию.')
-                if review.get('issues') and not accept_warnings:raise ValueError('Подтвердите предупреждения проверки.')
+                review=edit.get('review') or {}
                 conflicts=manual_conflicts(current['state'],trial)
                 if (conflicts or any(d['operation']=='remove' for d in edit['diff'])) and not accept_conflicts:
                     raise ValueError('Подтвердите удаления и замену ручных авторских решений.')
-                if fix:
-                    from backend.services.draft_review_actions import accept_calendar_updates, issue_from_finding
-                    review=dict(current.get('review') or {},status='stale',advisory=True,
-                        reason='Предложенные правки сохранены. Можно повторно проверить эту версию.',
-                        issues=[issue_from_finding(n) for n in edit['findings']])
-                    from backend.services.draft_review_chronology import validate_review
-                    timelines = edit.get('chronologies') or []
-                    validate_review(current['state'],trial,timelines)
-                    accept_calendar_updates(current['state'],trial,edit.get('calendar_decisions'))
-                    if timelines:
-                        metadata=trial.setdefault('authoring',{}).setdefault('calendar_completion',{})
-                        agreed=metadata.setdefault('family_chronologies',{})
-                        agreed.update({t['child']:t for t in timelines})
-                    current['state']=trial
-                    current.update(review=review)
-                else:
-                    current['state']=accepted_state(current['state'],trial,edit['instruction'],jid)
-                    current.update(candidate=True,diagnostics=[],review=dict(review,candidate_hash=candidate_hash(current['state'])))
+                from backend.services.draft_review_actions import accept_calendar_updates, issue_from_finding
+                before=current['state']
+                trial=accepted_state(before,trial,edit['instruction'],jid)
+                accept_calendar_updates(before,trial,edit.get('calendar_decisions'))
+                for i in edit.get('amended_indices',[]):
+                    path=edit['proposal']['changes'][i]['path']
+                    from backend.services.draft_editor import rebased_path
+                    path=rebased_path(before,trial,path)
+                    if path and not path.endswith('/-') and path not in trial['authoring']['manual_paths']:
+                        trial['authoring']['manual_paths'].append(path)
+                previous=current.get('review') or {}
+                issues=[issue_from_finding(n) for n in edit['findings']] if fix else previous.get('issues',[])
+                current.update(state=trial,candidate=True,diagnostics=[],review=dict(previous,status='stale',advisory=True,
+                    reason='Изменения сохранены. Можно повторно проверить эту версию.',issues=issues))
                 self._record_document(db,'world_draft',wid,json.dumps(current,ensure_ascii=False),True,'ai_edit',head['id'])
                 edit.update(status='accepted',applied_version=self._draft_head(db,wid)['id'])
                 db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))

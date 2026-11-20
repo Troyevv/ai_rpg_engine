@@ -97,7 +97,8 @@ from backend.services.draft_review_chronology import FamilyConfirmation
 
 
 class WorldEditDecision(EditDecision):
-    decision: Literal['accept','reject','recalculate_dates']
+    decision: Literal['accept','reject','recalculate_dates','revise','replay']
+    values: dict[int,Any] = Field(default_factory=dict)
     family: list[FamilyConfirmation] = Field(default_factory=list)
 
 
@@ -119,7 +120,7 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/edits/{jid}')
     def decide(wid:str,jid:str,body:WorldEditDecision):
-        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings,body.family)
+        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings,body.family,body.values)
         return repo.draft(wid,True)
 
     @app.get('/api/communication/presets')

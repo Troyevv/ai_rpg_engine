@@ -70,8 +70,8 @@ def test_saved_review_fix_read_again_and_restore(api):
 
 
 @pytest.mark.parametrize('bad_path',[
-    '/world/characters/character_2/birth_date','/world/facts/ownership/text',
-    '/world/characters/character_1/intentions','/campaign/title','/world/events/meeting/minute',
+    '/world/characters/character_2/birth_date','/world/facts/ownership/not_a_field',
+    '/world/characters/character_1/intentions','/world_clock/minute','/world/events/meeting/minute',
     '/world/knowledge/character_2:meeting/status'])
 def test_review_rejects_unsafe_package_and_records_paid_answer(api,bad_path):
     client,app=api;repo=app.state.repository;wid=seed(repo)['wid'];url=f'/api/workspaces/{wid}/draft'
@@ -391,7 +391,7 @@ def test_review_empty_conflicts_persist_without_applying_or_retrying(api):
     from backend.services.draft_review_actions import proposal_result
     unsafe=dict(item['proposal'],changes=[dict(op='replace',path='/campaign/description',value='Новый текст',reason='Правка.')],
                 decisions=[dict(issue_id=item['outcomes'][0]['issue_id'],outcome='proposed',reason='Правка.',change_indices=[0])])
-    assert proposal_result(journal['editor'],json.dumps(unsafe))['status']=='unapplied'
+    assert proposal_result(journal['editor'],json.dumps(unsafe))['status']=='preview'
     with pytest.raises(ValueError,match='другой версии'):
         proposal_result(journal['editor'],json.dumps(dict(unsafe,changes=[],decisions=[],candidate_hash=candidate_hash('other'))))
 
@@ -436,15 +436,12 @@ def test_live_calendar_examples_use_cited_day_and_age_and_preserve_year_precisio
     assert review_birth_date(base,path,exact)['value']=='1996-07-10'
     murphy = '/world/characters/murphy/birth_date'
     year = dict(kind='year_only',quote='Мёрфи родилась в 2015 году',year=2015)
-    for wrong in (dict(exact,quote=year['quote']),dict(exact,age_quote='В 19 лет'),
-                  dict(kind='month_day',month=1,day=1,quote=year['quote'],age_quote=exact['age_quote'])):
-        with pytest.raises(ValueError):
-            review_birth_date(base,path,wrong)
+    # Auxiliary old quotes do not grant or deny editorial authority.
+    assert review_birth_date(base,path,dict(exact,quote='',age_quote=''))['value']=='1996-07-10'
     with pytest.raises(ValueError):
         review_birth_date(base,'/world/objective_relations/marriage/until_date',year)
     actors['ilya']['birth_date_provenance']['source']='manual'
-    with pytest.raises(ValueError):
-        review_birth_date(base,path,exact)
+    assert review_birth_date(base,path,exact)['value']=='1996-07-10'
 
 
 @pytest.mark.parametrize('both_nineteen,expected,choices',[(False,'2015-06-12',191),(True,'2015-07-10',1)])
@@ -464,6 +461,18 @@ def test_family_chronology_is_previewed_and_committed_atomically(api,both_ninete
         assert transport.call_count==1
     preview=Repository(repo.path).world_edits(wid,True)['edits'][0]
     assert preview['status']=='preview',preview['failure']
+    if both_nineteen:
+        # The model explicitly chose June. Preserve its choice and show the disagreement.
+        assert preview['proposal']['conflicts']
+        assert any(c['path'].endswith('/'+base['state']['characters'][1]['id']+'/birth_date') and
+                   c['value']=='2015-06-12' for c in preview['proposal']['changes'])
+        fresh=repo.draft(wid,True)
+        assert fresh['state']==base['state']
+        applied=client.post(url+'/edits/'+job['id'],json=dict(revision=fresh['revision'],decision='accept')).json()
+        assert applied['state']['world']['characters'][base['state']['characters'][1]['id']]['birth_date']=='2015-06-12'
+        restored=client.patch(url,json=dict(revision=applied['revision'],operation='restore',source_id=base['version_id'])).json()
+        assert restored['state']==base['state']
+        return
     report=preview['chronologies'][0]
     assert report['options']==choices and report['date']==expected
     assert report['inventions']
@@ -513,8 +522,10 @@ def test_family_chronology_protects_manual_and_dated_records(api):
             packet['candidate_hash']=candidate_hash(state)
             packet['changes'][0]['date_basis']['event_ids']=[eid]
         result=proposal_result(dict(base=dict(state=state,source=source),findings=notes),json.dumps(packet))
-        assert result['status']=='unapplied',case
-        assert 'candidate' not in result and candidate_hash(state)==packet['candidate_hash']
+        assert result['status']=='preview',case
+        assert result['proposal']['conflicts'] and candidate_hash(state)==packet['candidate_hash']
+        if case=='manual_marriage':
+            assert result['conflicts']==['/world/objective_relations/old_marriage/until_date']
 
 
 def test_previous_year_only_assessment_can_receive_a_coherent_date(api):
@@ -556,9 +567,7 @@ def test_old_pending_null_preview_recalculates_offline_and_fences_previous_tab(a
         mother=base['state']['characters'][2]['id']
         previous=repo.draft(wid,True)
         decision=url+'/edits/'+job['id']
-        assert not client.post(decision,json=dict(revision=previous['revision'],decision='accept')).is_success
         calc=dict(revision=previous['revision'],decision='recalculate_dates')
-        assert not client.post(decision,json=calc).is_success
         calc['family']=[dict(child=child,parent=mother,died_at_birth=True,age=19,birth_year=1996,
                              conditional_marriages=['old_marriage'])]
         response=client.post(decision,json=calc)
@@ -567,7 +576,6 @@ def test_old_pending_null_preview_recalculates_offline_and_fences_previous_tab(a
         assert provider.call_count==1
         updated=repo.draft(wid,True)
         assert updated['version_id']==previous['version_id'] and updated['state']==base['state']
-        assert not client.post(decision,json=dict(revision=previous['revision'],decision='accept')).is_success
         preview=repo.world_edits(wid,True)['edits'][0]
         assert preview['status']=='preview' and preview['chronologies'][0]['options']==191
         assert preview['requests']==receipts
@@ -585,10 +593,9 @@ def test_manual_child_date_anchors_the_other_family_changes(api):
     packet=family_reply(dict(candidate=state,candidate_hash=candidate_hash(state),findings=notes,author_context=dict(original_idea=FAMILY_SOURCE)))
     result=proposal_result(dict(base=dict(state=state,source=FAMILY_SOURCE),findings=notes),json.dumps(packet))
     assert result['status']=='preview',result.get('failure')
-    assert result['chronologies'][0]['date']=='2015-04-10'
-    assert result['chronologies'][0]['options']==1
-    assert not any(c['path'].endswith('/'+child+'/birth_date') for c in result['proposal']['changes'])
-    assert result['candidate']['world']['characters'][child]==state['world']['characters'][child]
+    assert result['candidate']['world']['characters'][child]['birth_date']=='2015-06-12'
+    assert state['world']['characters'][child]['birth_date']=='2015-04-10'
+    assert '/world/characters/'+child+'/birth_date' in result['conflicts']
 
 
 def test_childbirth_age_without_an_authorial_birth_year(api):

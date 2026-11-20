@@ -122,7 +122,7 @@ test('family dates and invented details are visible before accepting the complet
 
 test('author refines a legacy paid date proposal offline',async({page,request},info)=>{
   const {panel,url,before}=await setupReview(page,request,info.project.name==='mobile','legacy-family');
-  await expect(panel.getByRole('button',{name:'Применить пакет…'})).toBeDisabled();
+  await expect(panel.getByRole('button',{name:'Применить пакет…'})).toBeEnabled();
   await panel.getByText('Лиза · сведения о родителе').click();
   const fields=panel.locator('details[open]').filter({hasText:'Лиза · сведения о родителе'});
   await fields.getByLabel('Подтверждённый год рождения родителя').fill('1996');
@@ -133,4 +133,33 @@ test('author refines a legacy paid date proposal offline',async({page,request},i
   await expect(panel.getByRole('region',{name:'Семейная хронология'})).toContainText('191');
   await expect(panel.getByRole('button',{name:'Применить пакет…'})).toBeEnabled();
   expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
+});
+
+test('author adjusts a disputed proposal, reloads it, and accepts the displayed dates',async({page,request},info)=>{
+ const {panel,url,before,openReview}=await setupReview(page,request,info.project.name==='mobile','direct-family');
+ await panel.getByRole('button',{name:'Исправить замечания с помощью ИИ'}).click();
+ await expect(panel.getByRole('region',{name:'Неоднозначности'})).toContainText('Илье 18');
+ await panel.getByRole('button',{name:'Скорректировать значения'}).click();
+ const dialog=page.getByRole('dialog');
+ const date=dialog.getByRole('textbox').last();
+ await date.fill('2015-02-31');
+ await dialog.getByRole('button',{name:'Обновить предпросмотр'}).click();
+ await expect(dialog.getByRole('alert')).toBeVisible();
+ expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
+ await date.fill('2015-07-10');
+ await page.screenshot({path:info.outputPath('adjust-family.png'),scale:'css'});
+ await dialog.getByRole('button',{name:'Обновить предпросмотр'}).click();
+ await expect(dialog).toHaveCount(0);
+ await openReview();
+ await expect(panel.getByText('Исходные значения модели')).toBeVisible();
+ const saved=await(await request.get(url+'/edits?author=true')).json();
+ expect(saved.edits[0].requests).toHaveLength(1);
+ await panel.getByRole('button',{name:'Применить пакет…'}).click();
+ await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();
+ await expect(panel.getByRole('heading',{name:'Применено',exact:true})).toBeVisible();
+ const accepted=await(await request.get(url+'?author=true')).json();
+ expect(accepted.state.world.characters.character_2.birth_date).toBe('2015-07-10');
+ expect(accepted.state.world.characters.character_3.death_date).toBe('2015-06-15');
+ expect(accepted.state.world.knowledge).toEqual(before.state.world.knowledge);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });

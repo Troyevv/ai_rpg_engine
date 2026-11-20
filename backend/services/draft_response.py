@@ -408,7 +408,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             return response(repo,jid,journal,logical_slot,messages,config,context,generate,cancel)
         repo.save_response_journal(jid,journal)
         raise TransportError(record['failure']['message'])
-    single_request=logical_slot.startswith(('completeness_advisory_', 'editor_proposal_findings_'))
+    single_request=logical_slot.startswith(('completeness_advisory_', 'editor_proposal'))
     if single_request and record['parts']:return text
     if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:
