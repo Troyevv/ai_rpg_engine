@@ -12,16 +12,20 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import {Choice} from '../components/ui/choice';
+import {illustrationCatalog,type ArtStyle} from './illustration';
 import { api } from '../api';
 import { defaults, type Preferences } from '../types';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
+import { type ReactNode } from 'react';
 import { type ProceduralPortrait } from './proceduralPortrait';
 import { CharacterAvatar, type PortraitSubject } from '../Portrait';
 import '../styles/portrait-commission.css';
 
 export const PortraitModels = createContext({ prefs: defaults as Preferences, apiKey: '' });
 type Ticket = {
+  local_style?: ArtStyle;
   id: string;
   ids?: string[];
   revision: number;
@@ -64,6 +68,18 @@ const money = (cost: string | null) =>
 const role = (card: PortraitSubject) => card.fields?.['Роль'] || card.fields?.['Возраст'] || '';
 const MAX_CAST = 64;
 
+function CastThumbnail({children}:{children:()=>ReactNode}) {
+  const ref=useRef<HTMLSpanElement>(null),[visible,setVisible]=useState(false);
+  useEffect(()=>{
+    if(!ref.current||!window.IntersectionObserver){setVisible(true);return}
+    const observer=new IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect()}
+    },{root:ref.current.closest('.commission-body'),rootMargin:'100px'});
+    observer.observe(ref.current);return ()=>observer.disconnect();
+  },[]);
+  return <span className="cast-thumbnail" ref={ref}>{visible&&children()}</span>;
+}
+
 export function PortraitCommission({
   workspaceId,
   saveId,
@@ -86,6 +102,9 @@ export function PortraitCommission({
   const [ticket, setTicket] = useState<Ticket | null>(null),
     [ids, setIds] = useState<string[]>([]),
     [chosen, setChosen] = useState<string[]>([]);
+  const [operation,setOperation]=useState('describe');
+  const [targetStyle,setTargetStyle]=useState<ArtStyle|'keep'>('keep');
+
   const [restoreFailed, setRestoreFailed] = useState(false);
   const [error, setError] = useState(''),
     [query, setQuery] = useState(''),
@@ -125,7 +144,7 @@ export function PortraitCommission({
     } catch {
       /* empty session */
     }
-    setRestoreFailed(false);
+    setRestoreFailed(false);setOperation('describe');setTargetStyle('keep');
     setIds(onPreview ? [cards[0].id] : saved);
     setQuery('');
     setFilter('all');
@@ -164,6 +183,7 @@ export function PortraitCommission({
     work(async () => {
       const t = await api<Ticket>(base, {
         revision,
+        art_style:targetStyle==='keep'?undefined:targetStyle,
         ids,
         config,
         api_key: config.provider === 'deepseek' ? apiKey : undefined,
@@ -172,6 +192,13 @@ export function PortraitCommission({
       receive({ ...t, status: 'quoted' });
       setChosen([]);
     });
+  const localStyle=()=>{
+    void work(async()=>{
+      const t=await api<Ticket>(base+'/style',{revision,ids,art_style:targetStyle==='keep'?'anime':targetStyle});
+      sessionStorage.setItem(cacheKey,t.id);receive(t);setChosen([]);
+    });
+  };
+  const local=ticket?!!ticket.local_style:operation==='style';
   const generate = () =>
     work(async () => {
       if (!ticket) return;
@@ -281,7 +308,7 @@ export function PortraitCommission({
                 : 'Подбор иллюстраций по описаниям персонажей.'}
             </DialogDescription>
             <ol className="commission-steps" aria-label="Этапы">
-              {['Персонажи', 'Расчёт', 'Предпросмотр'].map((s, i) => (
+              {(local?['Персонажи','Стиль','Предпросмотр']:['Персонажи', 'Расчёт', 'Предпросмотр']).map((s, i) => (
                 <li
                   key={s}
                   aria-current={i === step ? 'step' : undefined}
@@ -294,6 +321,12 @@ export function PortraitCommission({
               ))}
             </ol>
           </header>
+          {!ticket&&<div className="commission-operation">
+           {!onPreview&&<Choice aria-label="Действие с портретами" value={operation} onValueChange={v=>{setOperation(v);setTargetStyle(v==='style'?'anime':'keep')}}>
+             <option value="describe">Создать по описанию</option><option value="style">Сменить стиль бесплатно</option></Choice>}
+           <Choice aria-label="Стиль предложения" value={targetStyle} onValueChange={v=>setTargetStyle(v as typeof targetStyle)}>
+            {!local&&<option value="keep">Сохранить стиль каждого персонажа</option>}{Object.entries(illustrationCatalog.art_styles).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice>
+          </div>}
           {!ticket && !onPreview && (
             <div className="commission-tools">
               <label className="commission-search">
@@ -341,7 +374,7 @@ export function PortraitCommission({
                         onChange={() => select(toggle(ids, c.id))}
                       />
                       <span className="cast-art">
-                        {avatar(c, 80,'plate')}
+                        <CastThumbnail>{()=>avatar(c, 80,'plate')}</CastThumbnail>
                         <i aria-hidden="true">{ids.includes(c.id) && <Check size={15} />}</i>
                       </span>
                       <span className="cast-name">{c.name}</span>
@@ -349,6 +382,7 @@ export function PortraitCommission({
                     </label>
                   ))}
                 </div>
+
                 {!visible.length && (
                   <p className="commission-empty">
                     {filter === 'selected'
@@ -432,7 +466,7 @@ export function PortraitCommission({
                   {status === 'cancelled' && results.length > 0 && 'Запрос остановлен. '}
                   {ticket?.message ||
                     (results.length
-                      ? 'Слева текущий портрет, справа предложение модели.'
+                      ? local?'Слева текущий портрет, справа выбранный стиль.':'Слева текущий портрет, справа предложение модели.'
                       : 'Сохранённые портреты остались в карточках.')}
                 </p>
                 {failures.length > 0 && (
@@ -524,7 +558,7 @@ export function PortraitCommission({
                 </button>
               </div>
             )}
-            <div className="commission-summary">
+            {!local&&<div className="commission-summary">
               <span>
                 <Wallet size={15} />
                 <strong>{ticket ? money(ticket.cost) : 'Расход после расчёта'}</strong>
@@ -535,11 +569,11 @@ export function PortraitCommission({
                 {ticket?.model || config.model} · Thinking {ticket?.thinking || config.thinking}
               </small>
             </div>
-            <div className="commission-actions">
+            }<div className="commission-actions">
               {ticket && !waiting && (
                 <Button variant="ghost" disabled={busy} onClick={resetTicket}>
                   <ArrowLeft size={15} />
-                  {status === 'quoted' ? 'Изменить выбор' : 'Новый запрос'}
+                  {local||status === 'quoted' ? 'Изменить выбор' : 'Новый запрос'}
                 </Button>
               )}
               {restoreFailed && (
@@ -548,8 +582,8 @@ export function PortraitCommission({
                 </Button>
               )}
               {!ticket && !restoreFailed && (
-                <Button disabled={busy || !ids.length} onClick={() => void quote()}>
-                  {busy ? 'Рассчитываем…' : 'Рассчитать расход'}
+                <Button disabled={busy || !ids.length} onClick={() => local?localStyle():void quote()}>
+                  {local?'Сравнить стиль':busy ? 'Рассчитываем…' : 'Рассчитать расход'}
                   <ArrowRight size={16} />
                 </Button>
               )}

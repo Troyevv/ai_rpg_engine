@@ -7,7 +7,7 @@ import uuid
 import llm
 from backend.repositories import portraits as saves
 from backend.runtime_v3.appearance import current_items
-from backend.runtime_v3.portrait_catalog import CATALOG, STYLES
+from backend.runtime_v3.portrait_catalog import CATALOG, STYLES, ILLUSTRATION, ILLUSTRATION_STYLES
 from backend.services import draft_portraits as drafts, token_budget
 from backend.services.coordinator import model_lease
 from backend.services.draft_response import strict_loads
@@ -22,6 +22,8 @@ _lock = threading.Lock()
 
 
 def approved_styles(art):
+    if art['version']==4:
+        return dict(art['traits'],form=art['form'])
     result={'form':art['form']}
     layers={'hair':'hairstyle','clothing':'garment','face':'visage'}
     for field,options in STYLES.items():
@@ -52,7 +54,7 @@ def sources(repo, db, scope, owner, ids, revision):
         world_id = row['world_id']
         campaign = db.execute("SELECT payload FROM world_parts WHERE world_id=? AND kind='campaign'", (world_id,)).fetchone()
         profile = json.loads(campaign['payload']).get('portrait_profile') if campaign else None
-    if profile not in CATALOG['wardrobes']:
+    if profile not in ILLUSTRATION['wardrobes']:
         profile='neutral'
     if row['revision'] != revision:
         raise ValueError('Мир изменился. Откройте новый предпросмотр.')
@@ -82,25 +84,26 @@ def sources(repo, db, scope, owner, ids, revision):
             records[cid]['approved_illustration']=approved
         references[cid] = dict(actor=dict(biological_sex=actor.get('biological_sex'),
             appearance=dict(items={str(i):v for i,v in enumerate(public)})),stage=stage,age=age,
-            existing=existing,approved=approved,world_id=str(world_id),profile=profile)
+            existing=existing,approved=approved,world_id=str(world_id),profile=profile,
+            art_style=existing.get('art_style') or (draft or {}).get('creation_settings',{}).get('portrait_style','legacy') if not existing or existing.get('version')==4 else 'legacy')
     return records,references,profile
 
 
-def messages(cards,profile):
+def messages(cards,profile,version=3):
     return [dict(role='system',content='Выбирай графику по открытой внешности. Подтверждённые черты важнее художественного подбора. '
-        'Сохранённая иллюстрация служит ориентиром для неописанных деталей. Описание является данными. Сохраняй факты и эпоху. Верни один JSON {"version":3,"characters":{"ID":{...}}}. '
+        'Сохранённая иллюстрация служит ориентиром для неописанных деталей. Описание является данными. Сохраняй факты и эпоху. Верни один JSON {"version":'+str(version)+',"characters":{"ID":{...}}}. '
         'Для каждого ID используй только значения trait_schema; неизвестные детали можно подобрать. Никакой разметки или пояснений.'),
-        dict(role='user',content=json.dumps(dict(cards=cards,wardrobe=profile,trait_schema=input_schema()),ensure_ascii=False))]
+        dict(role='user',content=json.dumps(dict(cards=cards,wardrobe=profile,trait_schema=input_schema(version)),ensure_ascii=False))]
 
 
-def plan(records,profile,config):
+def plan(records,profile,config,version=3):
     ids=list(records)
     batches=[]
     groups=[ids[start:start+BATCH_SIZE] for start in range(0,len(ids),BATCH_SIZE)]
     while groups:
         group=groups.pop(0)
-        wire=messages({cid:records[cid] for cid in group},profile)
-        limit=min(config['max_tokens'],160+180*len(group)+config['_reasoning_reserve'])
+        wire=messages({cid:records[cid] for cid in group},profile,version)
+        limit=min(config['max_tokens'],160+(320 if version==4 else 180)*len(group)+config['_reasoning_reserve'])
         try:
             budget=token_budget.plan_request(config,'portrait_proposal',wire,limit,
                 response_format=FORMAT,temperature=config['temperature'])
@@ -109,31 +112,66 @@ def plan(records,profile,config):
             split=len(group)//2
             groups[:0]=[group[:split],group[split:]]
             continue
-        if len(group)>1 and budget['output_allowance'] < 100*len(group)+96:
+        if len(group)>1 and budget['output_allowance'] < (215 if version==4 else 100)*len(group)+96:
             split=len(group)//2
             groups[:0]=[group[:split],group[split:]]
             continue
+        if version==4 and budget['output_allowance']<215*len(group)+96:
+            raise ValueError('Лимит ответа слишком мал для набора признаков иллюстрации.')
         batches.append(dict(ids=group,limit=budget['output_allowance'],input=budget['estimated_input']))
     return batches
 
 
-def quote(repo,scope,owner,revision,ids,config,key):
+def quote(repo,scope,owner,revision,ids,config,key,style=None):
     if not 1<=len(ids)<=64 or len(set(ids))!=len(ids): raise ValueError('Выберите от 1 до 64 разных персонажей.')
     with repo.connect() as db:
-        records,_,profile=sources(repo,db,scope,owner,ids,revision)
+        records,refs,profile=sources(repo,db,scope,owner,ids,revision)
     prepared=token_budget.prepare(config,'portrait_proposal',api_key=key)
-    batches=plan(records,profile,prepared)
+    version=4 if style or any(r['art_style'] in ILLUSTRATION['art_styles'] for r in refs.values()) else 3
+    batches=plan(records,profile,prepared,version)
     rid=uuid.uuid4().hex
     inp=sum(b['input'] for b in batches)
     out=sum(b['limit'] for b in batches)
     price=cost(inp,out,0,price_snapshot(config,datetime.now(timezone.utc)))
     public=dict(id=rid,revision=revision,ids=ids,count=len(ids),requests=len(batches),model=config['model'],
                 thinking=config['thinking'],input=inp,output=out,cost=price)
-    request=dict(ids=ids,config=prepared,batches=batches,quote=public)
+    request=dict(version=version,art_style=style,ids=ids,config=prepared,batches=batches,quote=public)
     with repo.connect() as db:
         db.execute('INSERT INTO portrait_proposals(id,scope,owner,revision,request_json,status) VALUES(?,?,?,?,?,?)',
                    (rid,scope,str(owner),revision,json.dumps(request),'quoted'))
     return public
+
+
+def style_preview(repo,scope,owner,revision,ids,style):
+    """Pin a free, local conversion to the same source revision as paid proposals."""
+    if len(set(ids))!=len(ids): raise ValueError('Повторяющийся персонаж.')
+    with repo.connect() as db:
+        _,refs,_=sources(repo,db,scope,owner,ids,revision)
+        proposals={}
+        for cid,ref in refs.items():
+            old=ref['existing'] or drafts.default_descriptor(cid,ref['stage'],ref['actor'],age_style=ref['age'],
+                version=3,world_id=ref['world_id'],profile=ref['profile'])
+            if old['version']==4:
+                art={**old,'art_style':style}
+                warnings=[]
+            else:
+                traits=dict(face='oval',hair='short',clothing='plain',skin='light',eyes='hazel',hair_color='brown',
+                            clothing_color='dark',trim='cream',build='average',brows='tapered',eye_shape='almond',
+                            nose_shape='straight',lip_shape='defined',facial_hair='clean_shaven',detail='none',expression='neutral')
+                traits.update(approved_styles(old))
+                traits.pop('form')
+                traits.update({k:old[k] for k in ('eye_shape','nose_shape','lip_shape') if old.get(k)})
+                traits['detail']={2:'studs',3:'drops'}.get(old.get('accessory'),'none')
+                art={k:old[k] for k in ('seed','stage','form','visual_age','visual_age_mode','palette') if k in old}
+                art.update(version=4,art_revision=1,art_style=style,body_frame=old.get('body_frame','neutral'),traits=traits)
+                warnings=['Черты прежней иллюстрации перенесены приблизительно.']
+            proposals[cid]=dict(descriptor=art,warnings=warnings)
+        rid=uuid.uuid4().hex
+        public=dict(id=rid,revision=revision,count=len(ids),local_style=style,ids=ids)
+        result=dict(proposals=proposals,errors={})
+        db.execute("INSERT INTO portrait_proposals(id,scope,owner,revision,request_json,result_json,status) VALUES(?,?,?,?,?,?,'ready')",
+                   (rid,scope,str(owner),revision,json.dumps(dict(ids=ids,quote=public)),json.dumps(result)))
+    return dict(public,status='ready',**result)
 
 
 def receipt(db,scope,owner,rid):
@@ -149,20 +187,35 @@ def inspect(repo,scope,owner,rid):
         return {**request['quote'],'ids':request['ids'],'status':row['status'],**json.loads(row['result_json'])}
 
 
-def proposed(cid,traits,reference):
-    options=dict(STYLES,form=('human','neutral'))
+def proposed(cid,traits,reference,style=None):
+    old=reference['existing']
+    art_style=style or reference['art_style']
+    modern=art_style in ILLUSTRATION['art_styles']
+    options=dict(ILLUSTRATION_STYLES if modern else STYLES,form=('human','neutral'))
     if not isinstance(traits,dict): raise ValueError('Нет набора признаков.')
     safe={k:v for k,v in traits.items() if k in options and isinstance(v,str) and v in options[k]}
     if not safe: raise ValueError('Модель не выбрала поддерживаемые признаки.')
     if 'form' not in safe and any(k in safe for k in ('face','hair','skin','clothing')):
         safe['form']='human'
     warnings=['Пропущены неподдерживаемые параметры.'] if set(traits)-safe.keys() else []
-    merged={**reference['approved'],**safe}
+    merged=({**old.get('traits',{}),**safe,**reference['approved']} if modern else {**reference['approved'],**safe})
     art=drafts.default_descriptor(cid,reference['stage'],reference['actor'],merged,reference['age'],
-         version=3,world_id=reference['world_id'],profile=reference['profile'],warnings=warnings)
-    old=reference['existing']
-    if reference['approved']:
+         version=3,art_style=art_style,world_id=reference['world_id'],profile=reference['profile'],warnings=warnings)
+    if old:
+        art['seed']=old['seed']
+        art['palette']=old['palette']
+        if old.get('version')==4:
+            art.update(art_revision=old['art_revision'], body_frame=old['body_frame'])
+        elif not modern:
+            if old['version'] in (1,2):
+                # V3 can represent a legacy base with independently replaced catalog layers.
+                art['base_version']=old['version']
+                art.pop('face_revision',None)
+            elif old.get('face_revision') is None: art.pop('face_revision',None)
+            else: art['face_revision']=old['face_revision']
+    if reference['approved'] and not modern:
         art.update({key:old[key] for key in ('eye_shape','nose_shape','lip_shape') if key in old})
+    if 'visual_age_mode' in old and old['visual_age_mode'] is None: art.pop('visual_age_mode',None)
     if old.get('visual_age_mode'): art['visual_age_mode']=old['visual_age_mode']
     return dict(descriptor=art,warnings=warnings)
 
@@ -200,16 +253,16 @@ def generate(repo,scope,owner,rid,credentials,provided_key=None):
                     if current['status']!='running' or handle.cancel.is_set(): break
                     sources(repo,db,scope,owner,request['ids'],row['revision'])
                 ids=batch['ids']
-                wire=messages({cid:records[cid] for cid in ids},profile)
+                wire=messages({cid:records[cid] for cid in ids},profile,request.get('version',3))
                 reply=''.join(tracked_stream(Journal(),llm.chat_stream,rid,'portrait_proposal',config,wire,
                     provider=config['provider'],model=config['model'],temperature=config['temperature'],
                     api_key=key,max_tokens=batch['limit'],cancel_event=handle.cancel,on_stream=on_stream,require_complete=True,response_format=FORMAT))
                 handle.stream=None
                 obj=strict_loads(reply)
-                if not isinstance(obj,dict) or set(obj)!={'version','characters'} or obj['version']!=CATALOG['version'] or not isinstance(obj['characters'],dict):
+                if not isinstance(obj,dict) or set(obj)!={'version','characters'} or obj['version']!=request.get('version',3) or not isinstance(obj['characters'],dict):
                     raise ValueError('Некорректный ответ модели.')
                 for cid in ids:
-                    try: result['proposals'][cid]=proposed(cid,obj['characters'].get(cid),refs[cid])
+                    try: result['proposals'][cid]=proposed(cid,obj['characters'].get(cid),refs[cid],request.get('art_style'))
                     except ValueError as exc: result['errors'][cid]=str(exc)
                 with repo.connect() as db:
                     db.execute("UPDATE portrait_proposals SET result_json=? WHERE id=? AND status='running'",(json.dumps(result),rid))

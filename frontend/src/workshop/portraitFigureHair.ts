@@ -119,6 +119,8 @@ const cuts: Record<HairStyle, Cut> = {
     backLines: 'M48 12q14 5 23 16m-17 12q12 4 20 15m-17 14q12 5 17 14m-14 14q9 6 14 15',
   },
 };
+export function hairCut(style:HairStyle): Readonly<Cut> { return cuts[style] }
+
 export function figureHair(
   style: HairStyle,
   temple: number,

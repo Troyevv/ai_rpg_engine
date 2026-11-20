@@ -152,11 +152,12 @@ def messages(base, instruction):
     from backend.services.draft_initial import prompt_schema, compact_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
     from backend.services.draft_portraits import authoring_context
+    from backend.runtime_v3.portrait_catalog import art_version
     state=base['state']
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+ADDRESS_RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=authoring_context(state),candidate_hash=candidate_hash(state),
-                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=EditorialProposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
+                world_schema=compact_schema(prompt_schema(initial_portraits=True,portrait_version=art_version(state.get('creation_settings',{}).get('portrait_style')))),response_schema=EditorialProposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
 def rebased_path(before, after, path):

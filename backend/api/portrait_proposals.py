@@ -8,7 +8,12 @@ class Selection(Revision):
     ids:list[str]=Field(min_length=1,max_length=64)
 
 
+class StyleSelection(Selection):
+    art_style: Literal['anime','semi_realistic']
+
+
 class Quote(Selection, Credential):
+    art_style: Literal['anime','semi_realistic'] | None = None
     config:ModelConfig
 
 
@@ -19,7 +24,11 @@ def install(app,repo,credentials):
     @app.post(base)
     def quote(scope:Scope,owner:str,body:Quote):
         key=credentials.resolve(body.config.provider,body.key())
-        return service.quote(repo,scope,owner,body.revision,body.ids,body.config.model_dump(),key)
+        return service.quote(repo,scope,owner,body.revision,body.ids,body.config.model_dump(),key,body.art_style)
+
+    @app.post(base+'/style')
+    def preview_style(scope:Scope,owner:str,body:StyleSelection):
+        return service.style_preview(repo,scope,owner,body.revision,body.ids,body.art_style)
 
     @app.post(base+'/{rid}/generate')
     def generate(scope:Scope,owner:str,rid:str,body:Credential):

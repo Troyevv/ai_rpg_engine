@@ -139,7 +139,8 @@ def test_closed_appearance_blocks_commission_before_dispatch(api):
     assert response.status_code==409 and 'fact_sonya_love' not in response.text
 
 
-def test_runtime_rollback_and_alternate_variant_restore_own_illustration(tmp_path):
+@pytest.mark.parametrize('version',[3,4])
+def test_runtime_rollback_and_alternate_variant_restore_own_illustration(tmp_path,version):
     from backend.repositories import portraits
     from backend.repositories.preparation import Repository
     from devtools.narrative_test_world import load_fixture,ACTOR_ID
@@ -147,14 +148,14 @@ def test_runtime_rollback_and_alternate_variant_restore_own_illustration(tmp_pat
     from runtime_v3_fixture import execute
     repo=Repository(tmp_path/'portraits.sqlite')
     sid=load_fixture(repo,'family')['save']
-    art=default_descriptor(ACTOR_ID,'adult',version=3,hints={'hair':'braid','clothing':'hoodie'},world_id='family')
+    art=default_descriptor(ACTOR_ID,'adult',version=version,art_style='anime' if version==4 else 'legacy',hints={'hair':'braid','clothing':'hoodie'},world_id='family')
     def edit(value):
         portraits.edit(repo,sid,ACTOR_ID,repo.get_save(sid)['revision'],descriptor=value,mode='procedural')
     def saved():
         return repo.get_snapshot(sid)['world_state']['characters'][ACTOR_ID]['procedural_portrait']
     edit(art);ordinary_job(repo,sid,'start')
     opening=repo.list_turns(sid)[0]
-    edited=dict(art,garment='cloak')
+    edited=dict(art,art_style='semi_realistic') if version==4 else dict(art,garment='cloak')
     edit(edited);ordinary_job(repo,sid)
     repo=Repository(repo.path)
     assert saved()==edited
@@ -166,7 +167,7 @@ def test_runtime_rollback_and_alternate_variant_restore_own_illustration(tmp_pat
         present_character_ids=camera['present_character_ids'])),'Разговор продолжается.')
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     assert saved()==art
-    edit(dict(art,hairstyle='bun'))
+    edit(dict(art,traits={**art['traits'],'hair':'bun'}) if version==4 else dict(art,hairstyle='bun'))
     repo.select_variant(sid,opening['id'],opening['active_variant_id'],repo.get_save(sid)['revision'])
     assert saved()==art
 

@@ -507,7 +507,36 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
         return self
 
 
-PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3
+class ProceduralPortraitV4(StrictModel):
+    version: Literal[4]
+    art_revision: Literal[1]
+    art_style: Literal['anime', 'semi_realistic']
+    seed: str = Field(pattern=r'^[a-f0-9]{32}$')
+    palette: int = Field(ge=0, le=6)
+    form: Literal['human', 'neutral']
+    body_frame: Literal['male', 'female', 'neutral']
+    stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult']
+    visual_age: Literal['infant','child','adolescent','young_adult','mature_adult','elderly'] | None = None
+    visual_age_mode: Literal['auto','manual'] | None = None
+    traits: dict[str, str]
+
+    @model_serializer(mode='wrap')
+    def sparse_age(self, handler):
+        return {key:value for key,value in handler(self).items() if value is not None}
+
+    @model_validator(mode='after')
+    def supported_art(self):
+        from backend.runtime_v3.portrait_catalog import ILLUSTRATION_STYLES
+        if self.traits.keys() != ILLUSTRATION_STYLES.keys() or any(
+                value not in ILLUSTRATION_STYLES[key] for key, value in self.traits.items()):
+            raise ValueError('Неизвестный вариант рисунка.')
+        if self.traits['facial_hair'] != 'clean_shaven' and (
+                self.form != 'human' or (self.visual_age or self.stage) not in ('adult','young_adult','mature_adult','elderly')):
+            raise ValueError('Растительность на лице требует взрослой человеческой иллюстрации.')
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3 | ProceduralPortraitV4
 
 
 class PortraitReference(StrictModel):

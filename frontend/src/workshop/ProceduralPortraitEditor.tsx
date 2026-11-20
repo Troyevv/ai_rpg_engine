@@ -1,5 +1,6 @@
 import {useRef,useState,type ReactNode} from 'react';
 import {Check,RotateCcw} from 'lucide-react';
+import {StylePicker,IllustrationControls} from './IllustrationControls';
 import {Choice} from '../components/ui/choice';
 import {Button} from '../components/ui/button';
 import catalog from '../../../shared/portrait-catalog.json';
@@ -12,7 +13,7 @@ const featureLabels={almond:'Миндалевидные',open:'Открытые'
 export type AnatomyReference={body_frame:BodyFrame;facial_hair_allowed:boolean};
 type Age=NonNullable<ProceduralPortrait['visual_age']>;
 const ages:Record<Age,string>={infant:'Младенец',child:'Ребёнок',adolescent:'Подросток',young_adult:'Молодой взрослый',mature_adult:'Зрелый взрослый',elderly:'Пожилой'};
-const categories={hair:'Волосы',clothing:'Одежда',face:'Лицо',color:'Цвета',details:'Образ'};
+const categories={hair:'Волосы',clothing:'Одежда',face:'Лицо',color:'Цвета',details:'Образ',style:'Стиль'};
 type Category=keyof typeof categories;
 const layers={hair:'hairstyle',clothing:'garment',face:'visage'} as const;
 const swatches={
@@ -34,9 +35,9 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const settings=useRef<HTMLFieldSetElement>(null);
  const reset=()=>{setValue(descriptor);setSelected(mode);setSource('');setError('')};
  const change=(next:ProceduralPortrait)=>{setValue(next);setSelected('procedural');setSource('Ручной выбор');setError('')};
- const modern=():Extract<ProceduralPortrait,{version:3}>=>value.version===3?value:{...value,version:3,base_version:value.version,
+ const modern=():Extract<ProceduralPortrait,{version:3}>=>{if(value.version===4)throw new Error('Недоступно для этого рисунка.');return value.version===3?value:{...value,version:3,base_version:value.version,
     body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
-    facial_hair:value.version===2?value.facial_hair:'clean_shaven'};
+    facial_hair:value.version===2?value.facial_hair:'clean_shaven'}};
  const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:3}:{})} as ProceduralPortrait);
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
  const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
@@ -44,7 +45,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const setAge=(id:string)=>{
    const next:ProceduralPortrait=id==='auto'?{...value,visual_age_mode:'auto',visual_age:ageReference?.visual_age||undefined,stage:ageReference?.stage||value.stage}:
       {...value,visual_age_mode:'manual',visual_age:id as Age};
-   if(next.version!==1&&!adult(next))next.facial_hair='clean_shaven';
+   if(next.version!==1&&next.version!==4&&!adult(next))next.facial_hair='clean_shaven';
    change(next);
  };
  if(!open)return <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(true)}}>Настроить иллюстрацию</Button>;
@@ -54,8 +55,10 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <figure><figcaption>{source||'Предпросмотр'}</figcaption>{renderPreview(value)}</figure></div>
  {commission?.(p=>{setValue(p);setSelected('procedural');setSource('Предложение модели');setError('')})}
  </div><fieldset ref={settings} disabled={disabled} className="studio-settings">
+ {value.version===4?<IllustrationControls value={value} onChange={change} eligible={!!anatomyReference?.facial_hair_allowed} ageReference={ageReference} mode={selected} setMode={setSelected}/>:<>
  <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
   <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
+ {section==='style'&&<StylePicker value={value} onChange={change}/>}
  {section in layers&&(()=>{const group=section as keyof typeof layers;
  const current=value.version===3 && (group!=='face'||value.face_revision===3)?value[layers[group] as keyof Layers]:null;
  return <div className="studio-gallery" aria-label={categories[group]}>{Object.entries(catalog.styles[group]).map(([id,label])=>{
@@ -83,6 +86,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  {anatomyReference?.facial_hair_allowed&&adult(value)&&<label>Растительность на лице<Choice aria-label="Растительность на лице" disabled={disabled} value={value.version===1?'':value.facial_hair} onValueChange={v=>change({...modern(),facial_hair:v as FacialHair})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(facialHairStyles).map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>}
  <label>Аксессуары<Choice aria-label="Аксессуары" disabled={disabled} value={value.accessory===4||value.accessory===6?0:value.accessory} onValueChange={v=>change({...value,accessory:Number(v)})}>{accessories.map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>
  <label>Палитра фона<Choice aria-label="Палитра фона" disabled={disabled} value={value.palette} onValueChange={v=>change({...value,palette:Number(v)})}>{backgrounds.map((v,i)=><option value={i} key={v}>{v}</option>)}</Choice></label></>}</>}
+ </>}
  <details className="portrait-literary-reference"><summary>Свериться с описанием внешности</summary><p>{appearance||'Внешность пока не описана.'}</p></details>
 
  </fieldset></div>

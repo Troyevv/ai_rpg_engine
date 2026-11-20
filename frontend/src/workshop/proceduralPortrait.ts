@@ -8,7 +8,10 @@ export type Styles = typeof catalog.styles;
 export type Layers = FeatureChoices & {face_revision?:2|3;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
-export type ProceduralPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair} | ({version:3;body_frame:BodyFrame;facial_hair:FacialHair} & Layers)) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
+import {type Illustration,validIllustration} from "./illustration";
+import {illustratedPortrait} from "./illustratedPortrait";
+export type ProceduralPortrait=LegacyPortrait|Illustration;
+export type LegacyPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair} | ({version:3;body_frame:BodyFrame;facial_hair:FacialHair} & Layers)) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
 type Art = { [key:string]: any };
 function draw(p: Art): string {
     const skin = p.skin || ['#e6b99a', '#c68b70', '#aa705a'];
@@ -93,6 +96,12 @@ function tintLayers(body:string,swatch:string[]|undefined):string {
 }
 const cache=new Map<string,string>();
 export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
+ if(p?.version===4){
+   if(!validIllustration(p))return null;
+   if(p.form==='neutral')return null;
+   const key=JSON.stringify(p), hit=cache.get(key);
+   return hit||cachePortrait(key,illustratedPortrait(p));
+ }
  if(!p || (p.version!==1 && p.version!==2 && p.version!==3) || !/^[a-f0-9]{32}$/.test(p.seed))return null;
  const keys=['face','hair','skin','eyes','clothing','accessory','palette'] as const;
  if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','eyes','clothing','accessory'].includes(k)?7:6)))return null;
@@ -169,8 +178,12 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  } else return null;
  return cachePortrait(key,svg);
 }
+let cachedChars=0;
 function cachePortrait(key:string,svg:string){
  // Each SVG is an image document: gradient IDs cannot collide between cards.
  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
- if(cache.size>=512)cache.delete(cache.keys().next().value!);cache.set(key,url);return url;
+ while(cache.size && (cache.size>=512||cachedChars+url.length>4_000_000)){
+  const first=cache.keys().next().value!;cachedChars-=cache.get(first)!.length;cache.delete(first);
+ }
+ cache.set(key,url);cachedChars+=url.length;return url;
 }

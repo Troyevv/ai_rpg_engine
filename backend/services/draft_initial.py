@@ -183,7 +183,7 @@ def validate_generated_input(raw):
         raise DraftErrors([error('/world/contacts','Телефонная книга не входит в контракт генерации. Удалите свойство contacts.','forbidden')])
 
 
-def prompt_schema(*, initial_portraits=False):
+def prompt_schema(*, initial_portraits=False, portrait_version=3):
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
     from backend.services.draft_schema import world_state_schema
@@ -230,8 +230,8 @@ def prompt_schema(*, initial_portraits=False):
         omit_motivation_source(actor['properties'][key])
     if initial_portraits:
         from backend.services.portrait_traits import input_schema
-        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()
-        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']}
+        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema(portrait_version)
+        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']+(['fantasy','futuristic'] if portrait_version==4 else [])}
     return schema
 
 
@@ -588,7 +588,10 @@ def inspect_candidate(raw, *, for_start=False, portrait_version=3):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
-    portrait_errors = input_diagnostics(raw.get('characters')) if isinstance(raw, dict) else []
+    from backend.runtime_v3.portrait_catalog import art_version
+    settings=raw.get('creation_settings') if isinstance(raw,dict) else None
+    if portrait_version==3 and isinstance(settings,dict): portrait_version=art_version(settings.get('portrait_style'))
+    portrait_errors = input_diagnostics(raw.get('characters'),portrait_version) if isinstance(raw, dict) else []
     independent_errors = dependency_errors(raw)
     state=raw
     try:

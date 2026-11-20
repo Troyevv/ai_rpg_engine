@@ -243,6 +243,8 @@ test('game portrait collection protects a newer revision and refreshes the dossi
   await button('Применить выбранные · 1').click();
   await expect(page.locator('.portrait-dialog')).toHaveCount(0);
   const now = await saved();
-  expect(now.descriptor.face_revision).toBe(3);
+  // A commissioned hairstyle preserves the existing head drawing revision.
+  expect(now.descriptor.face_revision).toBe(original.descriptor.face_revision);
+  expect(now.descriptor.seed).toBe(original.descriptor.seed);
   expect(now.descriptor.hairstyle).toBe('bun');
 });
