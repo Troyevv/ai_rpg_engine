@@ -260,6 +260,8 @@ def join_fragments(parts, manifest=None, *, schema=None, terminal=False):
 
 def stage_output_plan(slot, messages, config):
     stage='repair' if slot.startswith('creative_correction_') else 'creative' if slot.startswith(('creative_', 'editor_proposal')) else 'world' if slot=='world' else 'review' if slot.startswith(('completeness','quality_review')) else 'quality' if slot.startswith('quality') else 'repair'
+    if slot in ('draft_field','draft_character'):
+        return dict(requested_output=config['max_tokens'],visible_target=None,reasoning_allowance=None,output_limit=config['max_tokens'])
     # Output size follows candidate/scope size, bounded by the user's ceiling.
     size=estimate(messages)
     target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90,'creative':0.90}[stage])))
@@ -408,7 +410,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             return response(repo,jid,journal,logical_slot,messages,config,context,generate,cancel)
         repo.save_response_journal(jid,journal)
         raise TransportError(record['failure']['message'])
-    single_request=logical_slot.startswith(('completeness_advisory_', 'editor_proposal'))
+    single_request=logical_slot in ('draft_field','draft_character') or logical_slot.startswith(('completeness_advisory_', 'editor_proposal'))
     if single_request and record['parts']:return text
     if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:

@@ -267,9 +267,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     slot=response_slot(journal,edit,candidate_hash([context,config.get('max_tokens')]))
     reply=call(slot,request)
     if reply is None:return
+    finish_proposal(repo,jid,journal,reply,epoch)
+
+
+def finish_proposal(repo,jid,journal,reply,epoch):
     from backend.services.draft_response import strict_loads
+    edit=journal['editor']
     # Previously completed technical corrections remain reusable on recovery.
     packet=EditorialProposal.model_validate(strict_loads(edit.get('corrected_reply',reply)))
-    edit.update(preview(state,packet))
-    save()
+    edit.update(preview(edit['base']['state'],packet))
+    repo.save_response_journal(jid,journal)
     repo.finish_world_edit(jid,epoch)

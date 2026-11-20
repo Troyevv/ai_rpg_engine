@@ -88,16 +88,25 @@ class Preparation:
 
     def run(self, jid, config, api_key, handle):
         narrative = ''
-        worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor') else None
+        worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor','field','character') else None
         try:
-            if config.get('_review_action'):
+            if config.get('_draft_task') in ('editor','field','character'):
                 from backend.services.draft_review_actions import saved_reply, finish
                 from backend.services.draft_response import join_fragments
                 journal=json.loads(self.repo.preparation_job(jid)['response_journal'])
                 cached=saved_reply(journal)
                 if cached:
                     text=join_fragments(cached['parts'],cached.get('assembly'),terminal=True)
-                    finish(self.repo,jid,journal['editor'],text,worker_epoch)
+                    if config.get('_review_action'):
+                        finish(self.repo,jid,journal['editor'],text,worker_epoch)
+                    elif config['_draft_task']=='editor':
+                        from backend.services.draft_editor import finish_proposal
+                        finish_proposal(self.repo,jid,journal,text,worker_epoch)
+                    else:
+                        from backend.services.draft_generation import finish_scoped
+                        job=self.repo.preparation_job(jid)
+                        base=self.repo.draft(job['workspace_id'],True)['state']
+                        finish_scoped(self.repo,jid,text,base,config)
                     return
             with model_lease(config['provider']):
                 if handle.cancel.is_set():

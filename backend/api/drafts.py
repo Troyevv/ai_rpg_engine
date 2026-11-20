@@ -96,6 +96,11 @@ class EditDecision(Revision):
 from backend.services.draft_review_chronology import FamilyConfirmation
 
 
+class FieldEditDecision(EditDecision):
+    decision: Literal['accept','reject','revise']
+    value: Any = None
+
+
 class WorldEditDecision(EditDecision):
     decision: Literal['accept','reject','recalculate_dates','revise','replay']
     values: dict[int,Any] = Field(default_factory=dict)
@@ -241,8 +246,8 @@ def install(app,repo,preparation,credentials,job):
         return repo.field_proposal(wid,jid,author)
 
     @app.post('/api/workspaces/{wid}/draft/field-proposals/{jid}')
-    def field_decision(wid:str,jid:str,body:EditDecision):
-        repo.decide_field_proposal(wid,jid,body.revision,body.decision,body.accept_warnings)
+    def field_decision(wid:str,jid:str,body:FieldEditDecision):
+        repo.decide_field_proposal(wid,jid,body.revision,body.decision,body.accept_warnings,body.value)
         return repo.draft(wid,True)
 
     @app.get('/api/workspaces/{wid}/draft/time')
@@ -284,7 +289,7 @@ def install(app,repo,preparation,credentials,job):
         if body.task=='world' and body.creation_settings.calendar_start.presets is None:
             body.creation_settings.calendar_start.presets=CalendarPresets()
         config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_preview_only':body.preview, '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+                '_preview_only':body.task in ('field','character') or body.preview, '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
         if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
         jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))

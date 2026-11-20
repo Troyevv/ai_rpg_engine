@@ -253,11 +253,11 @@ class DraftStorage(DraftEditorStorage):
             if not job or job['status']!='generating':return
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);head=self._draft_head(db,job['workspace_id'])
-            if not config.get('_preview_only') or config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
+            if config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
             target=config['_draft_target'];state=json.loads(head['content'])['state'];item=domain.entity(state,target['kind'],target['id'])
             before={key:item.get(key,[] if key=='aliases' else '') for key in ('name','aliases','fields')} if config['_draft_task']=='character' else item.get('fields',{}).get(target['field'][7:]) if target['field'].startswith('fields.') else item.get(target['field'])
             journal=json.loads(job['response_journal'] or '{}')
-            journal['field_proposal']={'status':'preview','base_version':head['id'],'target':target,'before':before,'value':value,'warnings':warnings}
+            journal['field_proposal']={'status':'preview','base_version':head['id'],'base_revision':job['revision'],'target':target,'before':before,'value':value,'warnings':warnings}
             db.execute("UPDATE preparation_jobs SET response_journal=?,status='saved',phase='preview' WHERE id=?",(dump(journal),jid))
 
     def field_proposal(self,wid,jid,author=False):
@@ -269,23 +269,31 @@ class DraftStorage(DraftEditorStorage):
             proposal=json.loads(job['response_journal'] or '{}').get('field_proposal')
             if not proposal:raise ValueError('Предложение ещё не готово.')
             head=self._draft_head(db,wid)
-            return dict(proposal,stale=not head or head['id']!=proposal['base_version'])
+            return dict(proposal,stale=not head or head['id']!=proposal['base_version'] or self._draft_workspace(db,wid,idle=False)['revision']!=proposal.get('base_revision',job['revision']))
 
-    def decide_field_proposal(self,wid,jid,revision,decision,accept_warnings=False):
+    def decide_field_proposal(self,wid,jid,revision,decision,accept_warnings=False,value=None):
         from backend.services.draft_generation import decode_result
         with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+            db.execute('BEGIN IMMEDIATE')
             job=db.execute('SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=?',(jid,wid)).fetchone()
             if not job:raise ValueError('Задание не принадлежит черновику.')
             journal=json.loads(job['response_journal'] or '{}');proposal=journal.get('field_proposal')
+            if proposal and (proposal['status'],decision) in (('accepted','accept'),('rejected','reject')):return
+            self._draft_workspace(db,wid,revision)
             if not proposal or proposal['status']!='preview':raise ValueError('Предложение уже рассмотрено или отсутствует.')
-            if decision=='accept':
+            if decision in ('accept','revise'):
                 head=self._draft_head(db,wid)
-                if not head or head['id']!=proposal['base_version']:raise ValueError('Предложение устарело. Мир изменился.')
+                if not head or head['id']!=proposal['base_version'] or revision!=proposal.get('base_revision',job['revision']):raise ValueError('Предложение устарело. Мир изменился.')
                 record=json.loads(head['content']);config=json.loads(job['config_json'])
-                state=decode_result(dump({'value':proposal['value']}),record['state'],config)
+                state=decode_result(dump({'value':value if decision=='revise' else proposal['value']}),record['state'],config)
                 report=domain.validate(state)
                 if report['errors']:raise ValueError('; '.join(report['errors']))
+                if decision=='revise':
+                    proposal.setdefault('original_value',proposal['value'])
+                    proposal.update(value=value,base_revision=revision+1,warnings=report['warnings'])
+                    db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+                    db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(dump(journal),jid))
+                    return
                 if report['warnings'] and not accept_warnings:raise ValueError('Подтвердите предупреждения перед применением.')
                 review=review_metadata(record)
                 if review:review=dict(review,status='stale',reason='Поле изменено автором.')

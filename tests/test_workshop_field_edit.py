@@ -42,13 +42,17 @@ def test_literary_appearance_isolated_and_failed_response_export(api,valid):
     assert 'дословно сохрани' in calls[0][0]['content']
     after=client.get(url+'?author=true').json();expected=deepcopy(before['state'])
     if valid:
+        assert after['state']==before['state']
+        accepted=client.post(url+'/field-proposals/'+job['id'],json=dict(revision=after['revision'],decision='accept',accept_warnings=True))
+        assert accepted.is_success,accepted.text
+        after=accepted.json()
         next(c for c in expected['characters'] if c['id']=='maxim')['fields']['Внешность']=new
         # Provenance is allowed to track the authored field, never neighboring data.
         after['state'].pop('authoring',None);expected.pop('authoring',None)
     assert after['state']==expected
     exported=client.get(url+'/raw').json()
     assert exported['job_id']==job['id'] and exported['target']=={'kind':'character','id':'maxim','field':'fields.Внешность'}
-    assert exported['operation']=='field' and exported['application']['phase']=='editing'
+    assert exported['operation']=='field' and exported['application']['phase']==('preview' if valid else 'editing')
     assert exported['model_response']['text']==answer and exported['model_response']['available']
     assert exported['requests'][0]['stage']=='draft_field' and exported['requests'][0]['status']=='complete'
     assert exported['model_response']['request_ids']==[exported['requests'][0]['id']]

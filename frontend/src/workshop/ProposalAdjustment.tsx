@@ -2,13 +2,13 @@ import {useState} from 'react';
 import {Button} from '../components/ui/button';
 import {Choice} from '../components/ui/choice';
 import {Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle} from '../components/ui/dialog';
-import {runtimeLabels} from '../runtimePresentation';
+import {runtimeLabels,type DisplayState} from '../runtimePresentation';
 import {StructuredValueEditor} from './StructuredValueEditor';
 
 export type ProposalChange = {op:'add'|'remove'|'replace';path:string;value:unknown;reason:string;detail?:string};
 
-export function ProposalAdjustment({changes,revision,resolve,disabled,onSave,onClose}:{
- changes:ProposalChange[];revision:number;disabled:boolean;resolve:(field:string,value:string)=>string|null;
+export function ProposalAdjustment({changes,revision,resolve,references,disabled,onSave,onClose}:{
+ changes:ProposalChange[];references?:DisplayState;revision:number;disabled:boolean;resolve:(field:string,value:string)=>string|null;
  onSave:(values:Record<number,unknown>,revision:number)=>Promise<void>;onClose:()=>void;
 }){
  const options=changes.flatMap((change,index)=>{
@@ -16,8 +16,16 @@ export function ProposalAdjustment({changes,revision,resolve,disabled,onSave,onC
   const parts=change.path.split('/').slice(1).map(p=>p.replace(/~1/g,'/').replace(/~0/g,'~'));
   const id=parts[0]==='world'?parts[2]:parts[1];
   const field=parts.at(-1)!;
-  const subject=parts[1]==='characters'?(resolve('actor_id',id)||id):parts[0]==='campaign'?'Мир':id;
-  const label=runtimeLabels[field]||field;
+  const record=change.value!==null&&typeof change.value==='object'?change.value as {name?:string;id?:string}:null;
+  let subject=id;
+  if(parts[0]==='campaign')subject='Мир';
+  if(parts[1]==='characters')subject=resolve('actor_id',id)||id;
+  if(parts[0]==='characters'||parts[0]==='locations'){
+   const cards=references?.[parts[0]];
+   const name=cards?.find(card=>card.id===id)?.name||cards?.[Number(id)]?.name;
+   subject=name||record?.name||(parts[0]==='characters'?resolve('actor_id',id):resolve('location_id',id))||id;
+  }
+  const label=field==='-'||field==='__character'?'Карточка':runtimeLabels[field]||field;
   return [{index,field,label,title:subject&&subject!==field?subject+' · '+label:label}];
  });
  const [index,setIndex]=useState(options[0]?.index);

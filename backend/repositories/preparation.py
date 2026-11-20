@@ -109,6 +109,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 job['review_action']=config['_review_action']
                 job['review_reply_saved']=bool(saved_reply(journal)) if job['resumable'] else False
                 job['review_thinking']=thinking_options(config.get('provider','local'),config.get('model',''),config.get('thinking','off'))[0]
+            elif job['kind'] in ('draft_editor','draft_field','draft_character'):
+                from backend.services.draft_review_actions import saved_reply
+                job['review_reply_saved']=bool(saved_reply(journal)) if job['resumable'] else False
             if job['kind']=='draft_world':
                 from llm import thinking_options
                 review_records=[v for k,v in journal.get('responses',{}).items() if k.startswith('completeness') and v.get('effective_config')]
@@ -181,8 +184,11 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
             journal = json.loads(job['response_journal'])
-            if job['kind'] not in ('draft_world','draft_editor') or job['status'] not in ('error','stopped','saved') or not journal:
+            if job['kind'] not in ('draft_world','draft_editor','draft_field','draft_character') or job['status'] not in ('error','stopped','saved') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
+            if job['kind'] in ('draft_field','draft_character'):
+                if job['status']=='saved' or (revision is not None and job['revision']!=revision):
+                    raise ValueError('Предложение уже обработано или его ревизия устарела.')
             if job['kind']=='draft_editor':
                 head=self._draft_head(db,job['workspace_id'])
                 edit=journal['editor']
@@ -237,7 +243,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                     join_fragments(parts,dict(record['assembly']),schema=prompt_schema(),terminal=record.get('complete',False))
                 journal.setdefault('fragment_recoveries',[]).append(dict(part=parts.pop(),assembly=record.pop('assembly',None),reason=record.pop('assembly_error'),epoch=journal.get('recovery_epoch',0)))
                 record['complete']=False
-            if revision is not None and job['kind']!='draft_editor':
+            if revision is not None and job['kind']=='draft_world':
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     record=json.loads(head['content'])

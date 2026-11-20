@@ -2,7 +2,6 @@
 import json
 import hashlib
 from backend.services import draft_world as domain
-from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
 
 
@@ -87,9 +86,59 @@ def decode_result(text,state,config):
         from backend.services.world import CARD_FIELDS
         if not isinstance(card['fields'],dict) or not set(CARD_FIELDS)<=card['fields'].keys():
             raise ValueError('Перегенерация должна вернуть все постоянные поля карточки.')
-        for field,new in card.items():state=domain.patch(state,'character',target['id'],field,new)
-        return domain.prepare(state)
-    return domain.prepare(domain.patch(state,target['kind'],target['id'],target['field'],value['value']))
+        fields=card
+    else:
+        fields={target['field']:value['value']}
+    from backend.services.draft_changes import apply_proposal
+    from backend.services.draft_initial import escape
+    from backend.repositories.drafts import candidate_hash
+    kind=target['kind']
+    if kind in ('character','location'):
+        section='characters' if kind=='character' else 'locations'
+        base='/'+section+'/'+escape(target['id'])
+    elif kind=='campaign':
+        base='/campaign'
+    elif kind in domain.GROUPS:
+        base='/world/'+domain.GROUPS[kind]+'/'+escape(target['id'])
+    else:
+        raise ValueError('Служебный контекст недоступен для AI-редактирования.')
+    item=domain.entity(state,kind,target['id'])
+    changes=[]
+    for field,new in fields.items():
+        if field.startswith('fields.') and kind=='character':
+            name=field[7:]
+            owner=item['fields']
+            path=base+'/fields/'+escape(name)
+        else:
+            name=field
+            owner=item
+            path=base+'/'+escape(name)
+        changes.append(dict(path=path,op='replace' if name in owner else 'add',value=new,reason='Адресная правка.'))
+    packet=dict(candidate_hash=candidate_hash(state),changes=changes,rationale='Предложение к выбранному полю.')
+    validated,normalized=apply_proposal(state,json.dumps(packet),editing=True)
+    # A legacy world's normalized projections may differ outside this target.
+    # Publish only the checked field values, keeping its unrelated records verbatim.
+    from copy import deepcopy
+    from backend.services.draft_completeness import pointer
+    trial=deepcopy(state)
+    paths=trial.setdefault('authoring',{}).setdefault('manual_paths',[])
+    for change in normalized['changes']:
+        path=change['path']
+        parent,key=path.rsplit('/',1)
+        pointer(trial,parent)[key.replace('~1','/').replace('~0','~')]=pointer(validated,path)
+        if path not in paths:paths.append(path)
+    trial=domain.prepare(trial)
+    from backend.services.draft_review_actions import accept_calendar_updates
+    accept_calendar_updates(state,trial)
+    return trial
+
+
+def finish_scoped(repo,jid,result,original,config):
+    from backend.services.draft_response import strict_loads
+    state=decode_result(result,original,config)
+    report=domain.validate(state)
+    if report['errors']:raise ValueError('; '.join(report['errors']))
+    repo.finish_field_preview(jid,strict_loads(result)['value'],report['warnings'])
 
 
 def review_signature(messages, config):
@@ -120,16 +169,15 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             **({'response_format':{'type':'json_object'}} if structured else {}))
     if config['_draft_task']!='world':
         repo.draft_phase(jid,'editing',reset_progress=True)
-        result=''
-        for chunk in stream_document(messages_for(repo,job,config),context,config['max_tokens'],generate,handle.cancel,format_hint='json',output_ceiling=config['max_tokens']):
-            result+=chunk;repo.preparation_progress(jid,result)
-        if handle.cancel.is_set():return
-        state=decode_result(result,original,config);report=domain.validate(state)
-        if report['errors']:raise ValueError('; '.join(report['errors']))
-        if report['warnings'] and not config.get('_warnings_ack') and not config.get('_preview_only'):raise ValueError('; '.join(report['warnings']))
-        if config.get('_preview_only'):
-            repo.finish_field_preview(jid,strict_loads(result)['value'],report['warnings'])
-        else:repo.finish_draft_job(jid,state)
+        journal=json.loads(job.get('response_journal') or '{}')
+        messages=journal.get('messages')
+        if messages is None:
+            messages=messages_for(repo,job,config)
+            journal['messages']=messages
+            repo.save_response_journal(jid,journal)
+        result=response(repo,jid,journal,stage,messages,config,context,generate,handle.cancel)
+        if result is None or handle.cancel.is_set():return
+        finish_scoped(repo,jid,result,original,config)
         return
     journal=json.loads(job.get('response_journal') or '{}')
     repo.draft_phase(jid,'world')

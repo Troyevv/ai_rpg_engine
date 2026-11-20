@@ -163,7 +163,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {!!current.warnings?.length&&<section className="ai-editor-warning"><h5>Смысловые предупреждения</h5><ul>{current.warnings.map(w=><li key={w.path+w.message}>{w.message}</li>)}</ul></section>}
    {current.original_proposal&&<details><summary>Исходные значения модели</summary>{current.amended_indices?.map(i=>{const c=current.original_proposal!.changes[i];return c&&<div key={i}><small>{c.path}</small><RuntimeValue field={c.path.split('/').pop()!} value={c.value} resolve={previewResolve} author/></div>})}</details>}
    {['preview','unapplied'].includes(current.status)&&current.proposal?.changes.some(c=>c.op!=='remove')&&<Button variant="outline" disabled={disabled||current.stale} onClick={()=>setAdjust(current.id)}><Pencil size={16}/>Скорректировать значения</Button>}
-   {adjust===current.id&&current.proposal&&<ProposalAdjustment changes={current.proposal.changes} revision={revision} resolve={previewResolve}
+   {adjust===current.id&&current.proposal&&<ProposalAdjustment references={current.references} changes={current.proposal.changes} revision={revision} resolve={previewResolve}
     disabled={busy} onClose={()=>setAdjust(null)} onSave={async(values,baseRevision)=>{
      if(guard.current)throw new Error('Сохранение уже выполняется.');
      guard.current=true;setBusy(true);
