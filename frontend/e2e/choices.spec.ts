@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {swipe} from './touch';
 
 test('choice proposals survive reload without committing action; free input remains available',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -33,4 +34,90 @@ test('choice proposals survive reload without committing action; free input rema
  }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  expect(errors).toEqual([]);
+});
+
+test('touch scrolls through ten proposals and back to the story without selecting one', async ({page, request}, info) => {
+ test.skip(info.project.name !== 'mobile');
+ await page.setViewportSize({width:393,height:720});
+ const selection=await (await request.post('/test/choices-seed')).json();
+ const path='/api/saves/'+selection.save;
+ const save=await (await request.get(path)).json();
+ const turn=save.turns.find((t:{id:number})=>t.id===save.physical_choice_source.turn_id);
+ turn.choices=Array.from({length:10}, (_,i)=>({
+   action:'Рассмотреть страницу '+(i+1),
+   speech:'Помнишь эту фотографию у окна? Я думал, она осталась у тебя.'
+ }));
+ await page.route('**'+path,r=>r.fulfill({json:save}));
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
+ await page.goto('/');
+ const cards=page.locator('.choices button'), story=page.locator('.story-scroll');
+ const grip=page.locator('.gesture-sheet-grip').first(), panel=grip.locator('..');
+ const draft=page.getByLabel('Своё действие или реплика');
+ await expect(cards).toHaveCount(10);
+ await cards.first().evaluate(el=>el.scrollIntoView({block:'start'}));
+ const finger=await page.context().newCDPSession(page);
+ // Begin inside an actual visible card. No scrollIntoView, wheel injection or
+ // programmatic scrolling between swipes.
+ async function dragCard(distance:number) {
+   const point=await cards.evaluateAll(nodes=>{
+     const v=document.querySelector('.story-scroll')!.getBoundingClientRect();
+     const b=nodes[0].parentElement!.getBoundingClientRect();
+     const y=(Math.max(b.top,v.top)+Math.min(b.bottom,v.bottom))/2;
+     const x=b.left+b.width/2;
+     if(!document.elementFromPoint(x,y)?.closest('.choices button')) {
+       const card=nodes.find(n=>{const r=n.getBoundingClientRect();return r.top>=v.top&&r.bottom<=v.bottom});
+       if(!card)throw Error('No visible proposal');
+       const r=card.getBoundingClientRect();return {x,y:r.top+r.height/2};
+     }
+     return {x,y};
+   });
+   await finger.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+   for(let i=1;i<=8;i++)await finger.send('Input.dispatchTouchEvent',{
+     type:'touchMove',touchPoints:[{x:point.x,y:point.y+distance*i/8}]
+   });
+   await finger.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ }
+ try {
+   await expect(cards.first()).toBeInViewport();
+   const start=await story.evaluate(el=>el.scrollTop);
+   for(let i=0;i<6;i++){
+     await dragCard(-110);
+     if(await cards.last().evaluate(n=>n.getBoundingClientRect().bottom<=document.querySelector('.story-scroll')!.getBoundingClientRect().bottom))break;
+   }
+   await expect(cards.last()).toBeInViewport({ratio:.9});
+   await expect.poll(()=>story.evaluate(el=>el.scrollTop)).toBeGreaterThan(start+40);
+   await expect(panel).toHaveAttribute('data-stop','2');
+   await expect(draft).toHaveValue('');
+   const bottom=await story.evaluate(el=>el.scrollTop);
+   await dragCard(145);
+   await expect.poll(()=>story.evaluate(el=>el.scrollTop)).toBeLessThan(bottom-35);
+   await grip.scrollIntoViewIfNeeded();
+   await swipe(page,grip,0,64);
+   await expect(panel).toHaveAttribute('data-stop','1');
+   const body=panel.locator('.gesture-sheet-body');
+   const box=await body.boundingBox();
+   if(!box)throw Error('Compact list is hidden');
+   await swipe(page,body,0,-Math.min(85,box.height*.6),{from:.4});
+   await expect.poll(()=>body.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+   await expect(panel).toHaveAttribute('data-stop','1');
+   // On Android, a tap during native momentum first brakes the list.
+   await body.evaluate(el=>new Promise<void>(resolve=>{
+     let previous=-1, stable=0;
+     function frame(){
+       const top=el.scrollTop;
+       stable=top===previous?stable+1:0;
+       previous=top;
+       if(stable>=5)resolve();else requestAnimationFrame(frame);
+     }
+     requestAnimationFrame(frame);
+   }));
+   await grip.tap();
+   await expect(panel).toHaveAttribute('data-stop','2');
+   await expect(draft).toBeInViewport();
+   await cards.last().tap();
+   await expect(draft).toHaveValue('Рассмотреть страницу 10: «Помнишь эту фотографию у окна? Я думал, она осталась у тебя.»');
+   await draft.fill('Подойти к окну.');
+   await expect(draft).toHaveValue('Подойти к окну.');
+   expect((await (await request.get(path)).json()).revision).toBe(save.revision);
+ } finally {await finger.detach()}
 });

@@ -1,3 +1,4 @@
+import {choiceText, NarrativeChoice} from './NarrativeChoice';
 import {ActionPanel} from './gestures/panels';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
@@ -15,13 +16,11 @@ import {Phone} from './Phone';
 import {CallScene} from './CallScene';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
-import {useMotionPreset} from "./motion";
 import {NarrativeTurn} from "./NarrativeTurn";
 import {useStableEvent} from "./hooks";
 import {useStoryScroll} from "./useStoryScroll";
 import {presentationEntries,surfaceEntries,physicalChoiceTurn} from "./presentationEntries";
-import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Clock,
@@ -101,7 +100,7 @@ export function Game({
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
-  const {scroll,away,jumpToLatest,onScroll}=useStoryScroll(viewScope);
+  const {scroll,away,jumpToLatest,onScroll,revealMenu}=useStoryScroll(viewScope);
   const [selectedCall,setSelectedCall]=useState<string|null>(null);
   const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
   useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
@@ -112,13 +111,8 @@ export function Game({
     sessionStorage.removeItem(`call-min:${save.id}:${save.state.phone.actor_id}:${save.state.camera?.pov_actor_id}:${id}`);
     setSelectedCall(id);
   };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
-  const reduced = useReducedMotion();
-  const choicesMotion=useMotionPreset('staggerContainer');
-  const choiceMotion=useMotionPreset('staggerItem');
-  // The loaded journal is already visible. Animate only records added in this session.
   const choiceTurn=physicalChoiceTurn(save);
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
-  const initialChoice=useRef(choiceKey);
   const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
   const [pendingChoice,setPendingChoice]=useState<string|null>(null);
   useEffect(()=>{setSelectedChoice(null);setPendingChoice(null)},[choiceKey]);
@@ -151,6 +145,14 @@ export function Game({
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const generating = running || !!revealingCommit;
+  const physicalStream = generating && (job?.presentation?.surface ?? (job?.kind === "communication" ? "phone" : "physical")) === "physical";
+  const choicesElement = useRef<HTMLDivElement>(null);
+  const wasStreaming = useRef(false);
+  useLayoutEffect(() => {
+    if (wasStreaming.current && !physicalStream && choicesElement.current)
+      revealMenu(choicesElement.current);
+    wasStreaming.current = physicalStream;
+  }, [physicalStream, revealMenu]);
   const turnLocked = generating || (rejected && !!job.narrative_complete);
   const observer = save?.state.camera?.mode==='observer';
   const canAct = !!save && !save.state.protagonist_required && (observer || (!!actorId && save.state.actor_capabilities?.can_act!==false));
@@ -417,16 +419,15 @@ export function Game({
                     <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <ActionPanel label="Варианты действий"><motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
+                  <ActionPanel label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
                     {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
-                      <motion.button
-                        variants={choiceMotion}
+                      <button type="button"
                         className={selectedChoice===i?"choice-selected":""}
                         key={i}
                         disabled={!canSubmit}
                         onClick={() => {
                           setSelectedChoice(i);
-                          const text=c.action + (c.speech ? `: «${c.speech}»` : "");
+                          const text=choiceText(c);
                           if(draftRef.current.trim()&&draftRef.current!==text){
                             history.pushState({...history.state,choiceDraft:true},'');
                             setPendingChoice(text);
@@ -434,14 +435,10 @@ export function Game({
                           else writeChoice(text);}
                         }
                       >
-                        <span className="choice-index">0{i + 1}</span>
-                        <span>
-                          <strong>{c.action}</strong>
-                          {c.speech && <>: «{c.speech}»</>}
-                        </span>
-                      </motion.button>
+                        <NarrativeChoice choice={c}/>
+                      </button>
                     ))}
-                  </motion.div></ActionPanel>
+                  </div></ActionPanel>
                   {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"

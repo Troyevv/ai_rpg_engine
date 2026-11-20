@@ -247,3 +247,20 @@ it('a late queued refresh cannot erase an observed review phase within the same 
  await render(<Reader initial={{...queued,attempt_epoch:2}}/>);
  expect(host.textContent).toBe('queued');
 });
+
+it('retains completed streaming paragraphs while resolving later Markdown references',async()=>{
+ const lead='За окном темнело.\n\n';
+ const body='[Альбом][album]\n\n- **Письмо**\n- Чашка\n\n';
+ await render(<Markdown text={lead+body+'Она взяла'} streaming/>);
+ const first=host.querySelector('p')!;
+ const leaf=host.querySelector('li strong');
+ const tail=Array.from(host.querySelectorAll('p')).at(-1)!.firstChild;
+ await render(<Markdown text={lead+body+'Она взяла книгу. 🕯️'} streaming/>);
+ expect(host.querySelector('p')).toBe(first);
+ expect(host.querySelector('li strong')).toBe(leaf);
+ expect(tail?.textContent).toBe('Она взяла книгу. 🕯️');
+ await render(<Markdown text={lead+body+'Она взяла книгу. 🕯️\n\n[album]: /album'} streaming/>);
+ expect(host.querySelector('p')).toBe(first);
+ expect(host.querySelector('a')?.getAttribute('href')).toBe('/album');
+ expect(fetch).not.toHaveBeenCalled();
+});

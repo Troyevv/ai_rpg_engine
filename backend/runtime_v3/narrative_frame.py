@@ -12,11 +12,18 @@ RECORDED_FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open
 FORMAT = 'JSON со сценой и вариантами'
 AUTHOR_FORMAT = (FORMAT + '. Верни один объект, первым полем scene с полным художественным текстом, '
     'затем actions. Цель — шесть разных уместных продолжений. Предложения оставляют выбор игроку. '
+    'В text дай короткое конкретное действие в инфинитиве на языке истории. Если герой говорит, '
+    'добавь speech — одну живую дословную реплику без внешних кавычек, в его голосе, с учётом отношений '
+    'и происходящего. Для молчаливого действия опусти speech. Предложи разные намерения, а не '
+    'перефразировки одного ответа. Не объясняй игроку механику и не предрешай реакцию окружающих. '
+    'В режиме наблюдателя предлагай направления сцены, не присваивая игроку речь персонажа. '
     'Используй только доступные POV сведения. Необязательный facts содержит ID известных этому POV фактов. '
     'Пример формы (подбери действия для своей сцены):\n'
-    '{"scene":"За окном стемнело. В дверь постучали.",'
-    '"actions":[{"text":"Спросить, кто там"},{"text":"Посмотреть в глазок"},'
-    '{"text":"Открыть дверь"},{"text":"Прислушаться"},{"text":"Позвать хозяйку"},{"text":"Отойти от двери"}]}')
+    '{"scene":"За окном стемнело. Мёрфи отставила чашку.",'
+    '"actions":[{"text":"Спросить Мёрфи об отце","speech":"Мёрф, а каким ты вообще считаешь папу?"},'
+    '{"text":"Подойти к окну и посмотреть на улицу."},{"text":"Предложить чай","speech":"Ещё тёплый. Налить?"},'
+    '{"text":"Достать семейный альбом."},{"text":"Попросить остаться","speech":"Посиди со мной ещё минутку."},'
+    '{"text":"Выйти во двор подышать."}]}')
 _DECODER = json.JSONDecoder()
 _JSON_FENCE = re.compile(r'^\s*```json[ \t]*\r?\n', re.IGNORECASE)
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
@@ -198,11 +205,15 @@ def menu(frame, state):
         if any(not isinstance(fid, str) or not pov or
                state['knowledge'].get(pov+':'+fid, {}).get('status') != 'known' for fid in refs):
             continue
-        key = ' '.join(text.casefold().split())
+        # The author owns both strings. Historical text-only entries remain literal.
+        speech = item.get('speech', '')
+        if not isinstance(speech, str) or len(text.strip()) + len(speech.strip()) > 800:
+            continue
+        key = tuple(' '.join(part.casefold().split()) for part in (text, speech))
         if key in seen:
             continue
         seen.add(key)
-        choice = dict(action=text.strip(), speech='')
+        choice = dict(action=text.strip(), speech=speech.strip())
         if state['meta'].get('interaction_focus') == 'call':
             choice['interaction_channel'] = 'call'
         choices.append(choice)

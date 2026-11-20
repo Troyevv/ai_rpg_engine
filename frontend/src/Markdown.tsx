@@ -15,6 +15,33 @@ sourceParser.renderer.rules.fence = (tokens, index, options, env, renderer) => {
   return renderFence(tokens, index, options, env, renderer);
 };
 
+// Parse the full source so a late link definition or closing fence can still
+// change an earlier block. React retains unchanged blocks and appends ordinary
+// prose to the current text node without replacing completed paragraphs.
+const FormattedBlock = memo(function FormattedBlock({html}: {html:string}) {
+  return <div style={{display:'contents'}} dangerouslySetInnerHTML={{__html:html}} />;
+});
+
+function StreamingBlocks({text}: {text:string}) {
+  const env = {};
+  const tokens = sourceParser.parse(text, env);
+  const blocks = [];
+  let first = 0;
+  for (let end = 0; end < tokens.length; end++) {
+    const token = tokens[end];
+    if (token.level !== 0 || token.nesting === 1) continue;
+    const inline = tokens[first + 1]?.children;
+    if (tokens[first].type === 'paragraph_open' && inline?.length === 1 && inline[0].type === 'text') {
+      blocks.push(<p key={first}>{inline[0].content}</p>);
+    } else {
+      const html = sourceParser.renderer.render(tokens.slice(first, end + 1), sourceParser.options, env);
+      blocks.push(<FormattedBlock key={first} html={html} />);
+    }
+    first = end + 1;
+  }
+  return <div>{blocks}</div>;
+}
+
 export const Markdown = memo(function Markdown({
   text,
   saveId,
@@ -82,6 +109,8 @@ export const Markdown = memo(function Markdown({
         <div dangerouslySetInnerHTML={{ __html: html.html }} />
       ) : liveHtml !== null ? (
         <div dangerouslySetInnerHTML={{ __html: liveHtml }} />
+      ) : streaming ? (
+        <StreamingBlocks text={text}/>
       ) : (
         <div dangerouslySetInnerHTML={{ __html: sourceParser.render(text) }} />
       )}

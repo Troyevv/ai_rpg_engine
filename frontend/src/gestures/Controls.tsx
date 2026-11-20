@@ -315,7 +315,12 @@ export function GestureHost() {
         ).find(eligible) || null;
       if (anchor) timer = window.setTimeout(show, 1800);
     }
-    const observer = new MutationObserver(schedule);
+    const observer = new MutationObserver((records) => {
+      // Literary text has no gesture anchors. Check transitions into/out of
+      // busy mode, but never rescan the shell for a token inside the reader.
+      if (records.some(({target}) => !(target instanceof Element && target.closest('.prose'))))
+        schedule();
+    });
     observer.observe(document.body, {
       childList: true,
       subtree: true,

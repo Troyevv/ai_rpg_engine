@@ -99,6 +99,12 @@ test('six authored actions survive reload and keep the editable draft', async ({
   await choices.filter({hasText:'Открыть альбом'}).click();
   await page.getByRole('button',{name:'Добавить к черновику'}).click();
   await expect(input).toHaveValue('Мой черновик\nОткрыть альбом');
+  await input.fill('');
+  await choices.filter({hasText:'Позвать хозяйку'}).click();
+  await expect(input).toHaveValue('Позвать хозяйку: «Анна, можно взглянуть на альбом?»');
+  expect((await read()).turns.at(-1).choices[2]).toMatchObject({
+    action:'Позвать хозяйку', speech:'Анна, можно взглянуть на альбом?'
+  });
   await input.fill('Открываю альбом на первой странице.');
   expect((await read()).revision).toBe(revision);
 });

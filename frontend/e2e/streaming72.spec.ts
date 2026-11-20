@@ -30,7 +30,11 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
  await page.getByLabel('Своё действие или реплика').fill(job.user_text!);await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!(window as any).testStream)).toBe(true);
- if(!baseline){await expect(page.locator('.choices button')).toHaveCount(1);await expect(page.locator('.choices button')).toBeDisabled()}
+ if(!baseline){
+   await expect(page.locator('.choices button')).toHaveCount(1);
+   await expect(page.locator('.choices button')).toBeDisabled();
+   await expect(page.locator('.choices')).toBeHidden();
+ }
  const emit=async(patch:Partial<Job>)=>{job={...job,...patch};await page.evaluate(j=>(window as any).testStream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify(j)})),job)};
  await page.evaluate(()=>{
  const w=window as any;w.samples=[];w.oldNode=document.querySelector('.turn .prose');w.oldMutations=0;
@@ -52,6 +56,13 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   }
   await frames(page,25);
   if(!baseline)await expect.poll(()=>page.locator('.story-scroll').evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
+ }
+ if(!baseline){
+   const reader=page.locator('.story-scroll');
+   const lastLine=page.locator('[data-stream-id] .narrative-text').last();
+   const box=await reader.boundingBox(), textBox=await lastLine.boundingBox();
+   expect(textBox!.y+textBox!.height).toBeGreaterThan(box!.y);
+   expect(textBox!.y+textBox!.height).toBeLessThanOrEqual(box!.y+box!.height+1);
  }
  await emit({status:'extracting',narrative_complete:true});await frames(page,100);
  await page.evaluate(()=>(window as any).testStream.onerror?.(new Event('error')));

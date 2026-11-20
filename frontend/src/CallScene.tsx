@@ -1,4 +1,5 @@
 import {backSwipe} from './gestures/surface';
+import {choiceText, NarrativeChoice} from './NarrativeChoice';
 import {ActionPanel} from './gestures/panels';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -65,12 +66,12 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
      }}>
        <header {...backSwipe(collapse)} className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
        <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
-         {active&&choices.length>0&&<ActionPanel label="Варианты продолжения"><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
+         {active&&choices.length>0&&<ActionPanel label="Варианты продолжения" hidden={working}><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
            {choices.map(c=><button key={JSON.stringify([c.action,c.speech])} type="button" disabled={disabled} onClick={()=>{
-             const text=[c.action,c.speech].filter(Boolean).join(' ');
+             const text=choiceText(c);
              const next=draft.trim() ? draft+'\n'+text : text;
              setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
-           }}>{[c.action,c.speech].filter(Boolean).join(' ')}</button>)}
+           }}><NarrativeChoice choice={c}/></button>)}
          </div></ActionPanel>}
        </div></div>
        <footer>

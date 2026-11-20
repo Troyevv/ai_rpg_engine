@@ -186,15 +186,34 @@
     width: 24px;
   }
   .gesture-sheet-body {
-    overflow: auto;
-    max-height: 64dvh;
-    overscroll-behavior: contain;
+    /* At full height the history is the sole scrollport, including over cards. */
+    overflow: clip;
+    interpolate-size: allow-keywords;
+    max-height: max-content;
   }
+  .gesture-sheet .choices {
+    gap: 6px;
+    margin: 0;
+    padding: 6px 0 12px;
+    border: 0;
+  }
+  .gesture-sheet .choices > button {
+    min-height: 44px;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    transform: none;
+    line-height: 1.35;
+  }
+  .gesture-sheet .choices > button:hover:not(:disabled) {
+    transform: none;
+  }
+  .gesture-sheet .choice-action { font-weight: 500; }
   .gesture-sheet[data-stop='0'] > .gesture-sheet-body {
     max-height: 0;
     overflow: hidden;
   }
   .gesture-sheet[data-stop='1'] > .gesture-sheet-body {
+    overflow-y: auto;
     max-height: 20dvh;
   }
   html[data-gestures~='context'] .gesture-sort-grip {
@@ -332,3 +351,13 @@
 .chat-dialog .dialog-header:has(> .chat-panel-back) .dialog-description {
   grid-column: 1/-1;
 }
+
+.narrative-choice {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.choice-action { color: var(--text); }
+.choice-speech { color: var(--text-secondary); font-weight: 400; }

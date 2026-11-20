@@ -303,3 +303,21 @@ def test_separate_actions_object_from_live_opening():
     for tail in (second + ' ещё текст', '{"ending":{"elapsed_minutes":100},"actions":[]}',
                  '1. Открыть письмо', '{"actions":"Открыть письмо"}'):
         assert read(scene + '\n' + tail, complete=True) == (prose, {})
+
+
+def test_authored_action_and_spoken_words_survive_menu_projection():
+    from backend.runtime_v3.narrative_frame import menu, read
+    rows = [
+        dict(text='Спросить Мёрфи об отце', speech='Мёрф, а каким ты вообще считаешь папу?'),
+        dict(text='Подойти к окну и посмотреть на улицу.'),
+        dict(text='Прочитать записку: «Осторожно!»'),
+        dict(text='Не выдавать чужую тайну', speech='Я всё знаю.', facts=['unknown']),
+    ]
+    scene, frame = read(json.dumps(dict(scene='Мёрфи поставила чашку.', actions=rows + rows)), complete=True)
+    choices, _ = menu(frame, state())
+    assert scene == 'Мёрфи поставила чашку.'
+    assert choices == [
+        dict(action=rows[0]['text'], speech=rows[0]['speech']),
+        dict(action=rows[1]['text'], speech=''),
+        dict(action=rows[2]['text'], speech=''),
+    ]

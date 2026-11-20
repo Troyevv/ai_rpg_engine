@@ -156,27 +156,33 @@ export function dismissLayer(horizontal: 0 | 1 | -1 = 0, back?: () => void) {
 export function ActionPanel({
   children,
   label,
+  hidden = false,
 }: {
+  hidden?: boolean;
   children: ReactNode;
   label: string;
 }) {
   const [step, setStep] = useState(2);
   const box = useRef<HTMLDivElement>(null);
   const start = useRef(0);
+  const extent = useRef(0);
   const resize = surface({
     id: 'sheet',
     group: 'panels',
     axis: 'y',
     allowButton: true,
     begin: () => {
-      start.current = box.current?.offsetHeight || 0;
+      const body = box.current;
+      if (!body) return false;
+      start.current = body.offsetHeight;
+      extent.current = body.scrollHeight;
     },
     move: ({ delta }) => {
       if (box.current)
         box.current.style.maxHeight =
           Math.max(
             0,
-            Math.min(box.current.scrollHeight, start.current - delta)
+            Math.min(extent.current, start.current - delta)
           ) + 'px';
     },
     reset: () => box.current?.style.removeProperty('max-height'),
@@ -184,7 +190,7 @@ export function ActionPanel({
       setStep((s) => Math.max(0, Math.min(2, s + (delta < 0 ? 1 : -1)))),
   });
   return (
-    <div className="gesture-sheet" data-stop={step}>
+    <div className="gesture-sheet" data-stop={step} hidden={hidden}>
       <button
         className="gesture-sheet-grip"
         type="button"
