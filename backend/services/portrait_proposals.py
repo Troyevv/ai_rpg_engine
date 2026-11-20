@@ -7,12 +7,13 @@ import uuid
 import llm
 from backend.repositories import portraits as saves
 from backend.runtime_v3.appearance import current_items
+from backend.runtime_v3.models import ProceduralPortraitV3
 from backend.runtime_v3.portrait_catalog import CATALOG, CLASSIC_OPTIONS, STYLES, ILLUSTRATION, ILLUSTRATION_STYLES
 from backend.services import draft_portraits as drafts, token_budget
 from backend.services.coordinator import model_lease
 from backend.services.draft_response import strict_loads
 from backend.services.preparation import Handle
-from backend.services.portrait_traits import input_schema
+from backend.services.portrait_traits import graphic_choices, input_schema
 from backend.services.usage import cost, price_snapshot, tracked_stream
 
 BATCH_SIZE = 8
@@ -172,21 +173,35 @@ def proposed(cid,traits,reference,style=None):
     merged=({**old.get('traits',{}),**safe,**reference['approved']} if modern else {**reference['approved'],**safe})
     art=drafts.default_descriptor(cid,reference['stage'],reference['actor'],merged,reference['age'],
          version=4 if modern else 3,art_style=art_style,world_id=reference['world_id'],profile=reference['profile'],warnings=warnings)
-    if old:
+    if old and not modern and old['version'] in (1,2,3):
+        # A partial suggestion only replaces named layers. The stored seed may
+        # have been imported from another world, and numeric legacy materials
+        # are not equivalent to catalogue swatches at the same index.
+        result = dict(old)
+        if old['version'] < 3:
+            result.update(version=3, base_version=old['version'],
+                          body_frame=old.get('body_frame', art['body_frame']),
+                          facial_hair=old.get('facial_hair', 'clean_shaven'))
+        if 'form' in safe:
+            result['form'] = art['form']
+        adult = (result.get('visual_age') or result['stage']) in ('adult','young_adult','mature_adult','elderly')
+        fields = graphic_choices(reference['actor'], safe, catalog_labels=True,
+                                 facial_hair=adult and drafts.beard_eligible(reference['actor'], reference['stage']))
+        layers = {'face':'visage', 'hair':'hairstyle', 'clothing':'garment', 'skin':'skin_swatch', 'eyes':'eye_swatch'}
+        for field in fields:
+            result[field] = art[field]
+            if field in layers:
+                layer = layers[field]
+                result[layer] = art[layer]
+        if result['form'] == 'neutral':
+            result.update(body_frame='neutral', facial_hair='clean_shaven')
+        art = ProceduralPortraitV3.model_validate(result).model_dump()
+    elif old:
         art['seed']=old['seed']
         art['palette']=old['palette']
         if old.get('version')==4:
             if old.get('manual_traits'): art['manual_traits']=old['manual_traits']
             art.update(art_revision=old['art_revision'], body_frame=old['body_frame'])
-        elif not modern:
-            if old['version'] in (1,2):
-                # V3 can represent a legacy base with independently replaced catalog layers.
-                art['base_version']=old['version']
-                art.pop('face_revision',None)
-            elif old.get('face_revision') is None: art.pop('face_revision',None)
-            else: art['face_revision']=old['face_revision']
-    if reference['approved'] and not modern:
-        art.update({key:old[key] for key in ('eye_shape','nose_shape','lip_shape','body_build') if key in old and key not in safe})
     if 'visual_age_mode' in old and old['visual_age_mode'] is None: art.pop('visual_age_mode',None)
     if old.get('visual_age_mode'): art['visual_age_mode']=old['visual_age_mode']
     return dict(descriptor=art,warnings=warnings)

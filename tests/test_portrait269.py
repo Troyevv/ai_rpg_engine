@@ -55,3 +55,23 @@ def test_open_body_description_and_explicit_infant_choices():
     assert art['body_build'] == 'broad'
     baby = default_descriptor('b','infant',hints={'hair':'braid','clothing':'dress','hair_color':'white'},version=3)
     assert baby['hairstyle'] == 'braid' and baby['garment'] == 'dress' and baby['hair_color'] == 6
+
+
+@pytest.mark.parametrize('version',[1,2,3])
+def test_partial_description_preserves_an_imported_portrait(version):
+    from backend.services.portrait_proposals import proposed
+    actor = {'biological_sex':'female'}
+    old = default_descriptor('original','adult',actor,version=version,world_id='original')
+    if version == 3:
+        old.update(face_revision=3, skin_swatch=False, eye_swatch=False)
+        old.pop('body_build')
+    reference = dict(existing=old, art_style='legacy', approved={}, actor=actor,
+                     world_id='imported', stage='adult', age='young_adult', profile='neutral')
+    art = proposed('local-id', {'hair':'bun'}, reference)['descriptor']
+    allowed = {'hair','hairstyle','version'}
+    assert {k:art[k] for k in old if k not in allowed} == {k:v for k,v in old.items() if k not in allowed}
+    assert art['hairstyle'] == 'bun' and 'body_build' not in art
+    if version < 3:
+        assert art['base_version'] == version and 'face_revision' not in art
+        assert art['garment'] is None and art['visage'] is None
+        assert not art['eye_swatch'] and not art['skin_swatch']
