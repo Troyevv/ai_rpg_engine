@@ -3,7 +3,7 @@ from typing import get_args
 from backend.runtime_v3.models import FacialHair
 
 FACIAL_HAIR = get_args(FacialHair)
-from backend.runtime_v3.portrait_catalog import STYLES
+from backend.runtime_v3.portrait_catalog import CATALOG, STYLES
 
 
 def input_diagnostics(cards):
@@ -38,6 +38,7 @@ _TYPED = {
     'hairstyle': ('hair', {
         'короткие':'short', 'длинные':'long', 'каре':'bob', 'кудрявые':'curly',
         'средние':'medium', 'волнистые':'wavy', 'чёлка':'fringe', 'без волос':'bald'}),
+    'face': ('face', {}),
     'skin': ('skin', {'светлая':'light','смуглая':'deep','оливковая':'olive'}),
     'eye_color': ('eyes', {
         'ореховые':'hazel', 'зелёные':'green', 'зеленые':'green', 'серые':'grey',
@@ -46,12 +47,16 @@ _TYPED = {
 }
 
 
+_LABEL_IDS = {field:{label.casefold():key for key,label in options.items()}
+              for field,options in CATALOG['styles'].items()}
+
+
 def input_schema():
     return {'type':'object', 'properties':{'form':{'enum':['human','neutral']},
             **{k:{'enum':list(v)} for k,v in STYLES.items()}}, 'additionalProperties':False}
 
 
-def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None):
+def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None, catalog_labels=False):
     approved = {}
     if isinstance(hints,dict):
         for field, options in STYLES.items():
@@ -75,6 +80,10 @@ def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None):
         if not spec or not isinstance(item.get('text'),str): continue
         field, names=spec
         token=item['text'].casefold().strip()
+        if catalog_labels:
+            token = _LABEL_IDS[field].get(token,token)
+        elif field == 'face':
+            continue
         matches.setdefault(field,set()).add(names.get(token,token))
     for field, tokens in matches.items():
         if len(tokens)==1:

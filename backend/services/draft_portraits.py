@@ -11,6 +11,19 @@ from backend.repositories.portraits import mutate
 
 DESCRIPTORS = TypeAdapter(PortraitDescriptor)
 
+def authoring_context(state):
+    """Creative and review need canonical appearance, not persisted renderer geometry."""
+    if not state.get('portrait_world_id'):
+        return state
+    actors = state['world']['characters']
+    public_actors = {}
+    for cid, actor in actors.items():
+        art = actor.get('procedural_portrait') or {}
+        public_actors[cid] = ({k:v for k,v in actor.items() if k != 'procedural_portrait'}
+                              if art.get('version') == 3 else actor)
+    return {**state, 'world':{**state['world'], 'characters':public_actors}}
+
+
 def portrait_state(state):
     # Minimal adapter to the existing portrait selector, no second calendar/POV rules.
     return dict(characters=state['world']['characters'], knowledge=state['world'].get('knowledge',{}),
@@ -42,7 +55,7 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
     actor = actor or {}
     eligible = (version >= 2 and form == 'human' and beard_eligible(actor, stage)
                 and age_style not in ('infant', 'child', 'adolescent'))
-    authored = graphic_choices(actor, hints, facial_hair=eligible, warnings=warnings) if form=='human' or version==3 else {}
+    authored = graphic_choices(actor, hints, facial_hair=eligible, warnings=warnings, catalog_labels=version==3) if form=='human' or version==3 else {}
     choices.update(authored)
     common = dict(seed=seed, stage=stage, form=form, visual_age=age_style)
     if version < 3:

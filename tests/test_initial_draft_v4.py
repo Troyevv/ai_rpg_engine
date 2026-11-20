@@ -159,8 +159,8 @@ def test_generation_repair_only_requested_field(api):
     assert out['world']['facts']==raw['world']['facts']
     from backend.services.draft_portraits import initialize
     expected=draft_world.prepare(draft_initial.normalize(raw))
-    # Fresh generation materializes deterministic v2 art even without LLM hints.
-    initialize(expected, version=2)
+    expected['portrait_world_id']=reply.json()['id']
+    initialize(expected, version=3)
     assert out['world']['characters']==expected['world']['characters']
 
 

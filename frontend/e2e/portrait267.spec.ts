@@ -67,3 +67,33 @@ test('portrait catalogue, local edits and quoted batch commissions',async({page,
  const saved=await(await request.get(url+'?author=true')).json();
  expect(saved.portraits.character_2.procedural_portrait.garment).toBe('blouse');
 });
+
+test('same v3 illustration stays legible in phone contacts and family nodes',async({page,request},info)=>{
+ const mobile=info.project.name==='mobile';
+ await page.setViewportSize({width:mobile?393:1280,height:820});
+ for(const surface of ['phone','family']){
+  const fixture=surface==='phone'?'/test/phone-seed?incoming=false&polish=true':'/test/ui-completion-seed?checkpoint=ui-family';
+  const selected=await(await request.post(fixture)).json();
+  const path='/api/saves/'+selected.save+'/characters/qa_timur/portraits';
+  const listing=await(await request.get(path)).json();
+  const descriptor={...listing.descriptor,version:3,base_version:2,form:'human',body_frame:'male',
+   facial_hair:'clean_shaven',hairstyle:'bun',garment:'cloak',visage:'angular',visual_age_mode:'manual',visual_age:'young_adult'};
+  const result=await request.put(path+'/procedural',{data:{descriptor,revision:listing.revision,mode:'procedural'}});
+  expect(result.ok(),await result.text()).toBeTruthy();
+  await page.goto('/');await page.evaluate(selection=>localStorage.setItem('selection',JSON.stringify(selection)),selected);
+  await page.reload();
+  if(surface==='phone'){
+   await page.getByRole('button',{name:/^Телефон/}).click();
+   await page.getByRole('region',{name:'Телефон персонажа'}).getByRole('button',{name:'Контакты',exact:true}).click();
+  }else{
+   await nav(page,'Родословная');
+   await chooseOption(page.getByLabel('Семья персонажа'),'qa_timur');
+  }
+  const row=page.locator(surface==='phone'?'.phone-recipient':'.family-root').filter({hasText:'Тимур'}).first();
+  const avatar=row.locator('.character-avatar').first();
+  await expect(avatar.locator('img')).toHaveAttribute('src',/^data:image\/svg/);
+  await expect(avatar).toHaveCSS('border-radius','50%');
+  await row.scrollIntoViewIfNeeded();
+  await row.screenshot({path:info.outputPath(surface+'-round.png'),scale:'css'});
+ }
+});

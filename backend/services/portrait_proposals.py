@@ -21,6 +21,18 @@ _active = {}
 _lock = threading.Lock()
 
 
+def approved_styles(art):
+    result={'form':art['form']}
+    layers={'hair':'hairstyle','clothing':'garment','face':'visage'}
+    for field,options in STYLES.items():
+        value=art.get(layers.get(field,field))
+        if isinstance(value,str) and value in options:
+            result[field]=value
+        elif isinstance(art.get(field),int):
+            result[field]=options[art[field]]
+    return result
+
+
 def sources(repo, db, scope, owner, ids, revision):
     if scope == 'workspace':
         row, _, draft = drafts.load(repo,db,owner,ids[0],revision,editable=True)
@@ -37,8 +49,11 @@ def sources(repo, db, scope, owner, ids, revision):
         runtime = snapshot['world_state']
         draft = None
         cards = snapshot.get('character_cards',[])
-        profile = 'neutral'
         world_id = row['world_id']
+        campaign = db.execute("SELECT payload FROM world_parts WHERE world_id=? AND kind='campaign'", (world_id,)).fetchone()
+        profile = json.loads(campaign['payload']).get('portrait_profile') if campaign else None
+    if profile not in CATALOG['wardrobes']:
+        profile='neutral'
     if row['revision'] != revision:
         raise ValueError('Мир изменился. Откройте новый предпросмотр.')
     cards = {card['id']:card for card in cards}
@@ -62,12 +77,12 @@ def sources(repo, db, scope, owner, ids, revision):
         confirmed = actor.get('portrait_mode')=='procedural' or bool(draft and draft.get('authoring',{}).get('manual_portraits',{}).get(cid))
         records[cid] = dict(description=description or (actor.get('appearance') or {}).get('legacy_text',''),
             features=[dict(kind=item['kind'],text=item['text']) for item in public],visual_age=age)
-        if confirmed and existing.get('version')==3:
-            records[cid]['approved_illustration']={key:existing[layer] for key,layer in
-                [('hair','hairstyle'),('face','visage'),('clothing','garment')] if existing.get(layer)}
+        approved=approved_styles(existing) if existing and confirmed else {}
+        if approved:
+            records[cid]['approved_illustration']=approved
         references[cid] = dict(actor=dict(biological_sex=actor.get('biological_sex'),
             appearance=dict(items={str(i):v for i,v in enumerate(public)})),stage=stage,age=age,
-            existing=existing,world_id=str(world_id),profile=profile)
+            existing=existing,approved=approved,world_id=str(world_id),profile=profile)
     return records,references,profile
 
 
@@ -142,7 +157,8 @@ def proposed(cid,traits,reference):
     if 'form' not in safe and any(k in safe for k in ('face','hair','skin','clothing')):
         safe['form']='human'
     warnings=['Пропущены неподдерживаемые параметры.'] if set(traits)-safe.keys() else []
-    art=drafts.default_descriptor(cid,reference['stage'],reference['actor'],safe,reference['age'],
+    merged={**reference['approved'],**safe}
+    art=drafts.default_descriptor(cid,reference['stage'],reference['actor'],merged,reference['age'],
          version=3,world_id=reference['world_id'],profile=reference['profile'],warnings=warnings)
     old=reference['existing']
     if old.get('visual_age_mode'): art['visual_age_mode']=old['visual_age_mode']
@@ -219,8 +235,10 @@ def cancel(repo,scope,owner,rid):
     return inspect(repo,scope,owner,rid)
 
 
-def apply(repo,scope,owner,rid,ids):
+def apply(repo,scope,owner,rid,ids,revision):
     result=inspect(repo,scope,owner,rid)
+    if revision != result['revision']:
+        raise ValueError('Ревизия предложения изменилась. Обновите предпросмотр.')
     proposals=result.get('proposals',{})
     if result['status'] in ('running','quoted') or not ids or any(cid not in proposals for cid in ids):
         raise ValueError('Выберите готовые предложения.')

@@ -268,6 +268,8 @@ def messages(state, author_context):
     instructions=state.get('authoring',{}).get('editor_instructions',[])
     if instructions:
         author_context=json.dumps(dict(original_context=author_context,confirmed_editor_instructions=instructions,priority='Подтверждённые инструкции редактора имеют приоритет над прежними деталями.'),ensure_ascii=False)
+    from backend.services.draft_portraits import authoring_context
+    state=authoring_context(state)
     candidate={k:deepcopy(state[k]) for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id')}
     schema={k:runtime_schema(EXTENSIONS[k]) for k in ('objective_relations','roles','residences','organizations')}
     example=ReviewReport(issues=[ReviewIssue(path='/world/roles/new_id',message='Конкретное противоречие',patch_paths=['/world/roles/new_id'])]).model_dump(exclude_none=True,exclude_defaults=True)
@@ -489,13 +491,14 @@ def parse(reply,state):
 
 def advisory_messages(state, source):
     """A reader's notes have no mutation scope or authority over the candidate."""
+    from backend.services.draft_portraits import authoring_context
     return [
         dict(role='system',content=MARKER+' Рекомендательное чтение. Верни JSON {"issues": [{"message": "..."}]}. '
              'Укажи только конкретные существенные противоречия явным вводным или канону. '
              'Если их нет, верни пустой список. Не перечисляй возможные улучшения, отсутствующие '
              'необязательные записи или серверные расчёты календаря. Присутствие не доказывает '
              'свидетельство или знание. Не предлагай патчи и не интерпретируй тайну как ошибку.'),
-        dict(role='user',content=json.dumps(dict(candidate=state,author_context=source),ensure_ascii=False,separators=(',',':')))
+        dict(role='user',content=json.dumps(dict(candidate=authoring_context(state),author_context=source),ensure_ascii=False,separators=(',',':')))
     ]
 
 

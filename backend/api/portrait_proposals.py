@@ -35,4 +35,4 @@ def install(app,repo,credentials):
 
     @app.post(base+'/{rid}/apply')
     def apply(scope:Scope,owner:str,rid:str,body:Selection):
-        return service.apply(repo,scope,owner,rid,body.ids)
+        return service.apply(repo,scope,owner,rid,body.ids,body.revision)

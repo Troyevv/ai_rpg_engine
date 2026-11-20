@@ -71,9 +71,11 @@ def messages(state, author_context):
     # Entire canonical content, no clipping, retrieval sampling, or second canon.
     # Transport preflight refuses contexts that cannot fit it before spending.
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
+    from backend.services.draft_portraits import authoring_context
+    candidate=authoring_context(state)
     return [dict(role='system', content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user', content=json.dumps(dict(
-                author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:state[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
+                author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:candidate[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
                 candidate_hash=candidate_hash(state), world_schema=creative_schema(),
                 response_schema=Proposal.model_json_schema()), ensure_ascii=False, separators=(',', ':')))]
 
