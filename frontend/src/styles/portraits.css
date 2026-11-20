@@ -51,7 +51,7 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
 .studio-reference .portrait-comparison figure{min-width:0;margin:0;flex:1}
 .studio-reference .portrait-comparison figure:last-child{flex:1.45}
 .studio-reference .portrait-comparison .character-avatar{display:block;width:100%;max-width:none;border:none}
-.studio-reference figcaption{font-weight:600}
+.studio-reference figcaption{font-weight:600}.studio-reference>.ui-button{margin:8px auto 0;display:flex}
 .portrait-dialog fieldset.studio-settings{overflow-y:auto;overscroll-behavior:contain;padding:0 4px 12px;border:none;scrollbar-gutter:stable}
 .studio-tabs{position:sticky;z-index:1;top:0;background:var(--surface-1);padding:3px 0 9px;display:flex;flex-wrap:wrap;gap:3px}
 .studio-tabs button,.studio-colors button,.studio-gallery button{background:var(--surface-2);color:var(--text);font:inherit;border:1px solid var(--border);border-radius:8px;cursor:pointer}
@@ -79,7 +79,7 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
  .studio-reference{width:100%;padding:6px 10px}
  .studio-reference .portrait-comparison{justify-content:center;gap:18px}
  .studio-reference .portrait-comparison figure,.studio-reference .portrait-comparison figure:last-child{flex:0 1 min(23vw,14dvh)}
- .studio-reference .portrait-comparison figcaption{font-size:10px;white-space:nowrap;margin-bottom:2px}
+ .studio-reference .portrait-comparison figcaption{font-size:11px;line-height:1.2;white-space:normal;margin-bottom:4px;text-align:center;overflow-wrap:normal}
  .studio-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}
  .studio-tabs{gap:2px;justify-content:space-between}
  .studio-tabs button{padding:5px 7px;min-height:42px;font-size:12px}

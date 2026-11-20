@@ -15,8 +15,8 @@ const layers={hair:'hairstyle',clothing:'garment',face:'visage'} as const;
 const swatches={
  hair_color:['#373437','#795737','#e5ca93','#99876c','#ad6742','#aaa6a0','#f1ead8'],
  clothing_color:['#393b40','#e7e1d7','#637c97','#788673','#876651','#a4665c','#c4b395'],
- skin:['#ffe2c7','#d2a185','#c9957c','#916044','#c3947d','#d19d7e','#d4a58b'],
- eyes:['#777052','#627456','#6c7276','#654a35','#7b846c','#66849c','#83996a','#6f8998'],
+ skin:Object.values(catalog.skin_materials).map(colors=>colors[1]),
+ eyes:Object.values(catalog.eye_colors),
 };
 const swatchLabels={hair_color:'Цвет волос',clothing_color:'Цвет одежды',skin:'Тон кожи',eyes:'Цвет глаз'};
 const accessories=[[0,'Без украшений'],[1,'Цепочка'],[2,'Серьги и подвеска'],[3,'Длинные серьги'],[5,'Кулон'],[7,'Подвеска']] as const;
@@ -49,6 +49,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <div className="studio-main"><div className="studio-reference"><div className="portrait-comparison">
  <figure><figcaption>Сохранённый вариант</figcaption>{savedPreview||renderPreview(descriptor)}</figure>
  <figure><figcaption>{source||'Предпросмотр'}</figcaption>{renderPreview(value)}</figure></div>
+ {commission?.(p=>{setValue(p);setSelected('procedural');setSource('Предложение модели');setError('')})}
  </div><fieldset ref={settings} disabled={disabled} className="studio-settings">
  <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
   <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
@@ -60,7 +61,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  })}</div>})()}
  {section==='color'&&(Object.keys(swatches) as (keyof typeof swatches)[]).map(field=><div key={field} className="studio-colors" role="group" aria-label={swatchLabels[field]}>
  <h3>{swatchLabels[field]}</h3>{Object.values(catalog.styles[field]).map((label,i)=><button key={label} type="button" title={label} aria-label={label} aria-pressed={value[field]===i}
- onClick={()=>change({...modern(),form:'human',[field]:i,...(field==='skin'?{skin_swatch:true}:{})})}><i style={{backgroundColor:swatches[field][i]}}/>{label}</button>)}</div>)}
+ onClick={()=>change({...modern(),form:'human',[field]:i,...(field==='skin'?{skin_swatch:true}:field==='eyes'?{eye_swatch:true}:{})})}><i style={{backgroundColor:swatches[field][i]}}/>{label}</button>)}</div>)}
  {section==='details'&&<>
  <label>Вид изображения<Choice aria-label="Вид изображения" disabled={disabled} value={value.form} onValueChange={v=>change({...value,form:v as 'neutral'|'human',...(v==='neutral'&&value.version!==1?{facial_hair:'clean_shaven'}:{})})}><option value="human">Человек</option><option value="neutral">Нейтральный силуэт</option></Choice></label>
  <label>Предпочтение<Choice aria-label="Предпочтение" disabled={disabled} value={selected} onValueChange={v=>setSelected(v as typeof selected)}><option value="auto">Фотография, если подходит</option><option value="procedural">Процедурная иллюстрация</option></Choice></label>
@@ -68,14 +69,14 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <div className="portrait-age-reference"><p>Возраст персонажа · {ageReference?.age==null?'неизвестен':new Intl.NumberFormat('ru',{style:'unit',unit:'year',unitDisplay:'long'}).format(ageReference.age)}{ageReference?.visual_age?' · '+ages[ageReference.visual_age]:''}</p>
  <label>Визуальный возраст<Choice aria-label="Визуальный возраст" disabled={disabled} value={ageSelection||'legacy'} onValueChange={setAge}><option value="auto" disabled={!ageReference?.visual_age}>По возрасту персонажа</option>{ageSelection==='legacy'&&<option disabled value="legacy">Сохранённый стиль</option>}{Object.entries(ages).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>
  <Button variant="ghost" disabled={disabled||!ageReference?.visual_age} onClick={()=>setAge('auto')}>Вернуть возраст по персонажу</Button></div>
- <label>Основа тела<Choice aria-label="Основа тела" disabled={disabled} value={value.version===1?'':value.body_frame} onValueChange={v=>change({...modern(),base_version:2,body_frame:v as BodyFrame})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(bodyFrames).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>
+ {adult(value)&&<label>Основа тела<Choice aria-label="Основа тела" disabled={disabled} value={value.version===1?'':value.body_frame} onValueChange={v=>change({...modern(),base_version:2,body_frame:v as BodyFrame})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(bodyFrames).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>}
  {anatomyReference?.facial_hair_allowed&&adult(value)&&<label>Растительность на лице<Choice aria-label="Растительность на лице" disabled={disabled} value={value.version===1?'':value.facial_hair} onValueChange={v=>change({...modern(),facial_hair:v as FacialHair})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(facialHairStyles).map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>}
  <label>Аксессуары<Choice aria-label="Аксессуары" disabled={disabled} value={value.accessory===4||value.accessory===6?0:value.accessory} onValueChange={v=>change({...value,accessory:Number(v)})}>{accessories.map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>
  <label>Палитра фона<Choice aria-label="Палитра фона" disabled={disabled} value={value.palette} onValueChange={v=>change({...value,palette:Number(v)})}>{backgrounds.map((v,i)=><option value={i} key={v}>{v}</option>)}</Choice></label></>}</>}
  <details className="portrait-literary-reference"><summary>Свериться с описанием внешности</summary><p>{appearance||'Внешность пока не описана.'}</p></details>
- {commission?.(p=>{setValue(p);setSelected('procedural');setSource('Предложение модели');setError('')})}
+
  </fieldset></div>
- <footer>{error&&<p role="alert">{error}</p>}
+ <footer>{descriptor.version===1&&value.version===3&&value.base_version===2&&<p>Новая основа тела также меняет посадку исходной одежды. Сравните варианты перед сохранением.</p>}{error&&<p role="alert">{error}</p>}
  <Button variant="ghost" aria-label="Сбросить несохранённые изменения" title="Сбросить несохранённые изменения" disabled={disabled||!dirty} onClick={reset}><RotateCcw size={16}/></Button>
  <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(false)}}>Отмена</Button>
  <Button disabled={disabled||!dirty} onClick={async()=>{try{await onSave(value,selected)}catch(e){setError(String(e))}}}>{disabled?'Сохранение…':'Сохранить иллюстрацию'}</Button>

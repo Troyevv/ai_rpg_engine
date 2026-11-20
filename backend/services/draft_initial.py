@@ -584,7 +584,7 @@ def cross_record_errors(state):
     return problems
 
 
-def inspect_candidate(raw, *, for_start=False):
+def inspect_candidate(raw, *, for_start=False, portrait_version=3):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
@@ -598,12 +598,12 @@ def inspect_candidate(raw, *, for_start=False):
         if independent_errors:
             raise DraftErrors(independent_errors)
         cosmetic_warnings = []
-        state=draft_world.prepare(state, portrait_warnings=cosmetic_warnings)
+        state=draft_world.prepare(state, portrait_warnings=cosmetic_warnings,portrait_version=portrait_version)
         report=draft_world.validate(state,canonical=False)
         if report['errors']:
             return state,dict(report,diagnostics=[error('/',e,'validation') for e in report['errors']])
         canonical_check(state,advisory_age=for_start)
-        report['warnings'].extend(cosmetic_warnings)
+        advisories.extend(dict(path='/characters',category='portrait_traits',message=w) for w in cosmetic_warnings)
         advisories.extend(portrait_errors)
         report['warnings'].extend(e['path']+': '+e['message'] for e in advisories)
         return state,dict(report,diagnostics=[],semantic_warnings=advisories)

@@ -100,11 +100,13 @@ def response_slot(journal, record, request_key):
 
 
 def develop(state, author_context, journal, call, save, *, request_key=None):
+    art_version=journal.get('generation_contract',{}).get('portrait_version',2)
+    art_job=journal.get('binding',{}).get('job_id') if art_version==3 else None
     record = journal.get('creative')
     if record and record.get('status') == 'applied':
         # Recover a crash between the journal checkpoint and version append.
         if candidate_hash(state) == record['before_hash'] and record['after_hash'] != record['before_hash']:
-            enhanced, _ = apply_proposal(state, json.dumps(record['proposal'], ensure_ascii=False))
+            enhanced, _ = apply_proposal(state, json.dumps(record['proposal'], ensure_ascii=False),portrait_version=art_version,creation_job=art_job)
             journal['candidate_text'] = json.dumps(enhanced, ensure_ascii=False)
             save()
             return enhanced
@@ -151,7 +153,9 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
                 answer, normalization = proposal_text(answer)
                 if normalization:
                     record['normalization'] = normalization
-                enhanced, proposal = apply_proposal(state, answer)
+                warnings=[]
+                enhanced, proposal = apply_proposal(state, answer,portrait_version=art_version,creation_job=art_job,warnings=warnings)
+                if warnings: record['warnings']=warnings
                 break
             except ValueError as invalid:
                 allowed = correction.scope(state, answer, invalid)

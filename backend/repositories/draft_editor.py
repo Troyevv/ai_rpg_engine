@@ -34,7 +34,7 @@ class DraftEditorStorage:
                 extra['calendar_conflicts']=[i['path']+': '+i['message'] for i in report.get('semantic_warnings',[])]
         # A reservation consumes the revision even if the provider returns fast.
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
-        return dict(editor=dict(status='running',base=base,base_version=head['id'],base_revision=revision+1,
+        return dict(editor=dict(status='running',workspace_id=wid,base=base,base_version=head['id'],base_revision=revision+1,
             before_hash=candidate_hash(base['state']),instruction=config['_draft_input'],
             request_id=config['_editor_request_id'],slot='editor_proposal',**extra))
 
@@ -167,7 +167,7 @@ class DraftEditorStorage:
                             proposal['changes'][i]['value']=value
                         retained=[i for i in range(len(proposal['changes'])) if i not in removed]
                         proposal['changes']=[proposal['changes'][i] for i in retained]
-                        updated=draft_editor.preview(current['state'],draft_editor.EditorialProposal.model_validate(proposal))
+                        updated=draft_editor.preview(current['state'],draft_editor.EditorialProposal.model_validate(proposal),workspace_id=wid)
                         if updated['status']=='unapplied':raise ValueError(updated['failure'])
                         edit.setdefault('original_proposal',edit['proposal'])
                         amended=set(edit.get('amended_indices',[]))|set(values or {})

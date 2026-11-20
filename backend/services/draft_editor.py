@@ -116,7 +116,7 @@ def family_impacts(before, after):
     return impacts
 
 
-def preview(state, packet):
+def preview(state, packet, *, workspace_id=None):
     """One authoring boundary for suggestions, review fixes and local amendments."""
     from backend.services.draft_initial import DraftErrors
     raw=packet.model_dump()
@@ -126,7 +126,7 @@ def preview(state, packet):
     raw['rationale']=raw['rationale'] or 'Предложение к этой версии мира.'
     warnings=[]
     try:
-        candidate,proposal=apply_proposal(state,json.dumps(raw),editing=True,warnings=warnings)
+        candidate,proposal=apply_proposal(state,json.dumps(raw),editing=True,warnings=warnings,workspace_id=workspace_id)
     except (ValueError,KeyError,IndexError,TypeError) as exc:
         paths=[item['path'] for item in exc.errors] if isinstance(exc,DraftErrors) else getattr(exc,'world_paths',[])
         indices={int(p.split('/')[2]) for p in getattr(exc,'proposal_paths',[]) if p.startswith('/changes/')}
@@ -284,6 +284,6 @@ def finish_proposal(repo,jid,journal,reply,epoch):
     edit=journal['editor']
     # Previously completed technical corrections remain reusable on recovery.
     packet=EditorialProposal.model_validate(strict_loads(edit.get('corrected_reply',reply)))
-    edit.update(preview(edit['base']['state'],packet))
+    edit.update(preview(edit['base']['state'],packet,workspace_id=edit.get('workspace_id')))
     repo.save_response_journal(jid,journal)
     repo.finish_world_edit(jid,epoch)

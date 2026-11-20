@@ -91,3 +91,89 @@ def test_uncertain_response_is_never_reissued(api,outcome):
             assert response.json()['status']=='interrupted'
         assert wire.call_count==1
     assert client.get(url+'?author=true').json()['revision']==d['revision']
+
+
+def test_creative_refines_only_current_creation_and_unedited_art():
+    from test_initial_draft_v4 import rich
+    from backend.services.draft_initial import inspect_candidate
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_changes import apply_proposal
+    raw=rich(); cid=raw['characters'][0]['id']
+    raw['portrait_world_id']='creation-1'
+    raw['world']['characters'][cid].update(birth_date=None,developmental_stage='adult')
+    raw['characters'][0]['portrait_traits']=dict(hair='pixie',eyes='grey_blue')
+    base,report=inspect_candidate(raw);assert not report['errors']
+    art=base['world']['characters'][cid]['procedural_portrait']
+    def creative(state,job):
+        packet=dict(candidate_hash=candidate_hash(state),rationale='Образ',changes=[
+            dict(op='replace',path=f'/characters/{cid}/fields/Внешность',value='Волосы заплетены в косу.',reason='Уточнение'),
+            dict(op='add',path=f'/characters/{cid}/portrait_traits',value=dict(hair='braid'),reason='Причёска')])
+        return apply_proposal(state,json.dumps(packet),creation_job=job)[0]['world']['characters'][cid]['procedural_portrait']
+    result=creative(base,'creation-1')
+    assert result['hairstyle']=='braid' and result['eyes']==art['eyes'] and result['seed']==art['seed']
+    assert creative(base,'another-job')==art
+    base.setdefault('authoring',{}).setdefault('manual_portraits',{})[cid]=True
+    assert creative(base,'creation-1')==art
+
+
+def test_closed_appearance_blocks_commission_before_dispatch(api):
+    from secret183_fixture import candidate
+    client,_=api;state=candidate()
+    state['card_field_facts']={'sonya':{'Внешность':['fact_sonya_love']}}
+    url,d=create(client,state);base='/api/portrait-proposals/workspace/'+url.split('/')[3]
+    with patch('llm.chat_stream',side_effect=AssertionError('unexpected dispatch')):
+        response=client.post(base,json=dict(revision=d['revision'],config=REMOTE,ids=['sonya']))
+    assert response.status_code==409 and 'fact_sonya_love' not in response.text
+
+
+def test_runtime_rollback_and_alternate_variant_restore_own_illustration(tmp_path):
+    from backend.repositories import portraits
+    from backend.repositories.preparation import Repository
+    from devtools.narrative_test_world import load_fixture,ACTOR_ID
+    from test_narrative_test_world import ordinary_job,CONFIG
+    from runtime_v3_fixture import execute
+    repo=Repository(tmp_path/'portraits.sqlite')
+    sid=load_fixture(repo,'family')['save']
+    art=default_descriptor(ACTOR_ID,'adult',version=3,hints={'hair':'braid','clothing':'hoodie'},world_id='family')
+    def edit(value):
+        portraits.edit(repo,sid,ACTOR_ID,repo.get_save(sid)['revision'],descriptor=value,mode='procedural')
+    def saved():
+        return repo.get_snapshot(sid)['world_state']['characters'][ACTOR_ID]['procedural_portrait']
+    edit(art);ordinary_job(repo,sid,'start')
+    opening=repo.list_turns(sid)[0]
+    edited=dict(art,garment='cloak')
+    edit(edited);ordinary_job(repo,sid)
+    repo=Repository(repo.path)
+    assert saved()==edited
+    repo.rollback_last(sid,repo.get_save(sid)['revision'])
+    assert saved()==edited
+    jid=repo.begin_job(sid,'','regenerate',CONFIG)
+    camera=json.loads(repo.get_job(jid)['before_json'])['world_state']['camera']
+    execute(repo,jid,dict(final_scene=dict(location_id=camera['location_id'],
+        present_character_ids=camera['present_character_ids'])),'Разговор продолжается.')
+    assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    assert saved()==art
+    edit(dict(art,hairstyle='bun'))
+    repo.select_variant(sid,opening['id'],opening['active_variant_id'],repo.get_save(sid)['revision'])
+    assert saved()==art
+
+
+def test_cancel_active_batch_rejects_duplicate_dispatch(api):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    client,_=api;url,d=create(client);cid=d['state']['characters'][0]['id']
+    base='/api/portrait-proposals/workspace/'+url.split('/')[3]
+    q=client.post(base,json=dict(ids=[cid],revision=d['revision'],config=REMOTE))
+    ticket=base+'/'+q.json()['id']; started=Event()
+    def slow(**kwargs):
+        started.set()
+        assert kwargs['cancel_event'].wait(5)
+        yield '{}'
+    with patch('llm.chat_stream',side_effect=slow) as wire, ThreadPoolExecutor() as executor:
+        pending=executor.submit(client.post,ticket+'/generate',json={'api_key':'test'})
+        assert started.wait(5)
+        assert client.post(ticket+'/generate',json={}).json()['status']=='running'
+        assert client.post(ticket+'/cancel').json()['status']=='cancelled'
+        assert pending.result(timeout=5).json()['status']=='cancelled'
+        assert wire.call_count==1
+    assert client.get(url+'?author=true').json()['revision']==d['revision']

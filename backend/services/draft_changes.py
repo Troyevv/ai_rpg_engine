@@ -183,7 +183,7 @@ def resolve_card_paths(state, proposal, *, editing=False):
                             proposal_paths=[f'/changes/{i}/path' for i in errors], path_errors=errors)
 
 
-def apply_proposal(state, reply, *, editing=False, warnings=None):
+def apply_proposal(state, reply, *, editing=False, warnings=None, portrait_version=3, creation_job=None, workspace_id=None):
     proposal = Proposal.model_validate(strict_loads(reply))
     if proposal.conflicts and not editing:
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
@@ -299,18 +299,22 @@ def apply_proposal(state, reply, *, editing=False, warnings=None):
         remaining={c['id'] for c in trial['characters']}
         trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
         if not trial['card_field_facts']:trial.pop('card_field_facts')
-    normalized = validate_transition(state, trial, editing=editing, warnings=warnings)
+    new_ids = trial['world']['characters'].keys() - state['world']['characters'].keys()
+    if new_ids and workspace_id:
+        trial.setdefault('portrait_world_id',workspace_id)
+    normalized = validate_transition(state, trial, editing=editing, warnings=warnings,portrait_version=portrait_version)
     # Creative can refine only the provisional illustration of this creation job.
-    if not editing and state.get('portrait_generation_version') == 3:
+    if creation_job and state.get('portrait_world_id') == creation_job:
         from backend.services.draft_portraits import refine_automatic
         for card in trial['characters']:
-            if card.get('portrait_traits') and card['id'] in state['world']['characters']:
-                refine_automatic(normalized, card['id'], card['portrait_traits'])
+            cid=card['id']
+            if cid in state['world']['characters']:
+                refine_automatic(normalized,cid,card.get('portrait_traits'),warnings)
 
     new_ids = normalized['world']['characters'].keys() - state['world']['characters'].keys()
     if new_ids:
         from backend.services.draft_portraits import initialize
-        initialize(normalized, version=3, character_ids=new_ids)
+        initialize(normalized, version=portrait_version, character_ids=new_ids)
     return normalized, proposal.model_dump()
 
 
@@ -340,14 +344,14 @@ def validate_removals(before, after):
     if problems:raise DraftErrors(problems)
 
 
-def validate_transition(state, trial, *, editing=False, warnings=None):
+def validate_transition(state, trial, *, editing=False, warnings=None, portrait_version=3):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     trial = author_value(state, trial)
-    return validate_candidate(state, trial, editing=editing, warnings=warnings)
+    return validate_candidate(state, trial, editing=editing, warnings=warnings,portrait_version=portrait_version)
 
 
-def validate_candidate(state, trial, *, editing=False, warnings=None):
+def validate_candidate(state, trial, *, editing=False, warnings=None, portrait_version=3):
     """Validate server-normalized candidates; raw LLM boundaries use author_value.
 
     No provenance bypass for model replies: proposal/semantic repair entry points
@@ -383,7 +387,7 @@ def validate_candidate(state, trial, *, editing=False, warnings=None):
         raise ValueError('Телефонная книга не входит в авторские изменения.')
     if editing:
         validate_removals(state,trial)
-    normalized, report = inspect_candidate(trial, for_start=editing)
+    normalized, report = inspect_candidate(trial, for_start=editing,portrait_version=portrait_version)
     if warnings is not None:
         warnings.extend(report.get('semantic_warnings',[]))
     if report['errors']:

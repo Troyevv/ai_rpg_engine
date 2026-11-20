@@ -60,4 +60,19 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  await expect(avatar).toBeVisible();expect((await avatar.boundingBox())!.width).toBeLessThanOrEqual(32);
  await expect(avatar.locator('img')).toHaveAttribute('src',saved!);
  expect(await avatar.evaluate(el=>getComputedStyle(el).borderRadius)).toBe('50%');
+ await editor();
+ await page.getByRole('button',{name:'Одежда',exact:true}).click();
+ await page.getByRole('button',{name:'Плащ',exact:true}).click();
+ const inGame=await preview.getAttribute('src');
+ await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();
+ await expect(avatar.locator('img')).toHaveAttribute('src',inGame!);
+ await editor();
+ await page.getByRole('button',{name:'Создать по описанию',exact:true}).click();
+ await page.getByRole('button',{name:'Рассчитать расход',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить запрос',exact:true}).click();
+ await page.getByRole('button',{name:'В предпросмотр',exact:true}).click();
+ await expect(page.locator('.portrait-comparison')).toContainText('Предложение модели');
+ await page.getByRole('button',{name:'Отмена',exact:true}).click();
+ await page.keyboard.press('Escape');await expect(avatar.locator('img')).toHaveAttribute('src',inGame!);
+
 });

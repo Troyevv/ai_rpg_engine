@@ -227,8 +227,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 draft_initial.validate_generated_input(raw)
             if isinstance(raw,dict):
                 if not recovered_candidate:
-                    raw['portrait_generation_version']=journal['generation_contract'].get('portrait_version',1)
-                    raw['portrait_world_id']=jid
+                    raw.pop('portrait_world_id',None)
+                    if journal['generation_contract'].get('portrait_version') == 3:
+                        raw['portrait_world_id']=jid
                     raw['creation_settings']=config.get('_creation_settings',{})
                     raw.pop('authoring',None)  # Model cannot mint server provenance.
                     actors=raw.get('world',{}).get('characters',{}) if isinstance(raw.get('world'),dict) else {}
@@ -251,7 +252,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                         if isinstance(event,dict):
                             event['time_semantics']='explicit'
                             if event.get('time_reference_minute') is None:event['time_reference_minute']=raw['world_clock']['minute']
-            state,report=draft_initial.inspect_candidate(raw)
+            state,report=draft_initial.inspect_candidate(raw,portrait_version=journal['generation_contract'].get('portrait_version',2))
+            cosmetic=[d for d in report.get('semantic_warnings',[]) if d.get('category')=='portrait_traits']
+            if cosmetic: journal['portrait_warnings']=cosmetic
             errors=report['diagnostics']
             # Resume must reuse the exact versioned candidate and review signature.
             if not errors and journal['generation_contract'].get('portrait_version', 1) in (2,3):

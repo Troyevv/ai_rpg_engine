@@ -120,5 +120,52 @@
       "dress",
       "coveralls"
     ]
+  },
+  "skin_materials": {
+    "light": [
+      "#ffe4d1",
+      "#eac5af",
+      "#c8967e"
+    ],
+    "warm": [
+      "#eec99e",
+      "#d4a579",
+      "#a87551"
+    ],
+    "beige": [
+      "#ddba9c",
+      "#bc9074",
+      "#946950"
+    ],
+    "deep": [
+      "#a66e52",
+      "#82503d",
+      "#583529"
+    ],
+    "olive": [
+      "#c7ad7e",
+      "#aa8d65",
+      "#806b49"
+    ],
+    "peach": [
+      "#f5c6ab",
+      "#dcaa90",
+      "#b77c69"
+    ],
+    "sand": [
+      "#daba8a",
+      "#bd986a",
+      "#95724f"
+    ]
+  },
+  "eye_colors": {
+    "hazel": "#786344",
+    "green": "#53704f",
+    "grey": "#778082",
+    "brown": "#553f31",
+    "grey_green": "#6c7b68",
+    "blue": "#577d9c",
+    "light_green": "#8c9c69",
+    "grey_blue": "#6f8998"
   }
 }

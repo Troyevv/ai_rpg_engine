@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
+import {chooseOption} from './choice-navigation';
 import {authorView,workshopNav} from './workshop-navigation';
 
 test('portrait catalogue, local edits and quoted batch commissions',async({page,request},info)=>{
@@ -21,20 +22,32 @@ test('portrait catalogue, local edits and quoted batch commissions',async({page,
  await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
  const button=(name:string)=>page.getByRole('button',{name,exact:true});
  const tile=button('Досье Анна');
+ if(mobile)await button('Разделы мастерской').click();
+ await page.locator(mobile?'.ww-menu-dialog':'.ww-sidebar').getByRole('button',{name:'Оформление',exact:true}).click();
+ await chooseOption(page.getByRole('combobox',{name:'Тема мира',exact:true}),mobile?'parchment':'graphite');
+ await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской'})).toHaveCount(0);
+ if(mobile){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0)}
  await tile.scrollIntoViewIfNeeded();
- await page.locator('.ww-characters-grid').screenshot({path:info.outputPath('cards.png')});
+ await page.locator('.ww-characters-grid').screenshot({path:info.outputPath('cards.png'),scale:'css'});
+ if(!mobile){
+   const first=await tile.boundingBox(),last=await page.locator('.ww-character-card').nth(3).boundingBox();
+   if(!first||!last)throw new Error('Карточки недоступны');
+   await page.screenshot({path:info.outputPath('card-row.jpg'),type:'jpeg',quality:86,scale:'css',
+    clip:{x:first.x,y:first.y,width:last.x+last.width-first.x,height:first.height}});
+ }
  await tile.click();
  const open=async()=>{await button('Редактировать портрет').click();await button('Настроить иллюстрацию').click()};
  await open();
  const desired=button('Коса');
  await desired.click();await expect(desired).toHaveAttribute('aria-pressed','true');
  await button('Одежда').click();await button('Плащ').click();
- await page.locator('.studio-open').screenshot({path:info.outputPath('studio.png')});
+ await page.locator('.studio-open').screenshot({path:info.outputPath('studio.png'),scale:'css'});
  const preview=page.locator('.portrait-comparison figure').last().locator('img');
  const expected=await preview.getAttribute('src');
  if(mobile)await page.setViewportSize({width:393,height:500});
  const inViewport=async()=>{const box=await button('Сохранить иллюстрацию').boundingBox();expect(box!.y+box!.height).toBeLessThanOrEqual(page.viewportSize()!.height);expect(await page.locator('.studio-open').evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true)};
  await inViewport();
+ if(mobile)await page.locator('.studio-open').screenshot({path:info.outputPath('studio-393.png'),scale:'css'});
  await page.route('**/portraits/procedural',r=>r.fulfill({status:409,json:{detail:'Проверка ошибки сохранения'}}),{times:1});
  await button('Сохранить иллюстрацию').click();await expect(page.getByRole('alert')).toContainText('Проверка ошибки');
  await expect(preview).toHaveAttribute('src',expected!);

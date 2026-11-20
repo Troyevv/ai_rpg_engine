@@ -492,6 +492,7 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
     garment: str | None = None
     visage: str | None = None
     skin_swatch: bool = False
+    eye_swatch: bool = False
 
     @model_validator(mode='after')
     def catalogue_layers(self):

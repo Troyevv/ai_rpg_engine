@@ -213,7 +213,8 @@ class DraftStorage(DraftEditorStorage):
                 if source.get('origin_job')==jid and candidate_hash(source['state'])==base_hash:break
             else:raise ValueError('Исходная версия этого дополнения не найдена. Текущий мир сохранён.')
             text,normalization=draft_creative.proposal_text(record['current_reply'])
-            trial,proposal=draft_changes.apply_proposal(source['state'],text)
+            trial,proposal=draft_changes.apply_proposal(source['state'],text,creation_job=jid,
+                portrait_version=journal.get('generation_contract',{}).get('portrait_version',2))
             head=json.loads(self._draft_head(db,wid)['content'])
             same=head.get('origin_job')==jid and candidate_hash(head['state'])==base_hash
             mode='current' if same else 'copy'
@@ -352,7 +353,11 @@ class DraftStorage(DraftEditorStorage):
                 same_review={k:v for k,v in old_review.items() if k!='checked_revision'}=={k:v for k,v in review.items() if k!='checked_revision'}
                 review=dict(review,checked_revision=old_review.get('checked_revision',job['revision']+1) if same_review else job['revision']+1)
             if previous.get('origin_job')==jid and previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
-            record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
+            journal=json.loads(job['response_journal'] or '{}')
+            cosmetic=[*journal.get('portrait_warnings',[]),*(journal.get('creative') or {}).get('warnings',[])]
+            warnings=[w['path']+': '+w['message'] for w in cosmetic if w.get('category')=='portrait_traits']
+            record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),
+                        warnings=list(dict.fromkeys(warnings)),diagnostics=diagnostics,review=review)
             from backend.services.draft_review_tracking import observe
             tracking=observe(previous.get('review_tracking') if previous.get('origin_job')==jid else None,value,review)
             if tracking.get('pending') or tracking.get('fixed'):record['review_tracking']=tracking
@@ -408,6 +413,8 @@ class DraftStorage(DraftEditorStorage):
                 raise ValueError('JSON не содержит корректный World State.')
             report=None
             try:
+                if any(isinstance(c,dict) and c.get('portrait_traits') for c in state.get('characters',[])):
+                    state.setdefault('portrait_world_id',wid)
                 state=domain.prepare(state)
                 report=domain.validate(state)
                 json.dumps(state,allow_nan=False)

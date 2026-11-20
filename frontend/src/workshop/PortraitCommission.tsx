@@ -44,7 +44,7 @@ export function PortraitCommission({workspaceId,saveId,revision,cards,disabled,o
  <Dialog open={open} onOpenChange={v=>{if(!pending)setOpen(v)}}><DialogContent className="portrait-commission"><DialogTitle>{title}</DialogTitle>
  <DialogDescription>Модель подберёт параметры иллюстрации по сохранённой внешности. Перед применением вы увидите результат.</DialogDescription>
  {error&&<p role="alert">{error}</p>}
- {!ticket&&<>{!onPreview&&<fieldset><legend>Персонажи · {ids.length}</legend>{cards.map(c=><label key={c.id}><input type="checkbox" checked={ids.includes(c.id)} onChange={()=>setIds(toggle(ids,c.id))}/>{c.name}</label>)}</fieldset>}
+ {!ticket&&<>{!onPreview&&<fieldset><legend>Персонажи · {ids.length} из 64</legend>{cards.map(c=><label key={c.id}><input type="checkbox" checked={ids.includes(c.id)} disabled={!ids.includes(c.id)&&ids.length>=64} onChange={()=>setIds(toggle(ids,c.id))}/>{c.name}</label>)}</fieldset>}
  <p>{config.model} · Thinking {config.thinking}</p><Button disabled={pending||!ids.length} onClick={()=>void quote()}>Рассчитать расход</Button></>}
  {ticket&&<><p><strong>{ticket.model}</strong> · Thinking {ticket.thinking}</p>
  <p>Персонажей — {ticket.count}, запросов — {ticket.requests}. Вход ≈ {ticket.input} токенов, на ответ до {ticket.output}.
@@ -54,6 +54,7 @@ export function PortraitCommission({workspaceId,saveId,revision,cards,disabled,o
  <Button variant="outline" onClick={async()=>{try{setTicket(await api<Ticket>(base+'/'+ticket.id+'/cancel',{}))}catch(e){setError(String(e))}}}>Остановить запрос</Button>
  {!sending&&<Button onClick={()=>void task(async()=>setTicket(await api<Ticket>(base+'/'+ticket.id)))}>Обновить состояние</Button>}</>}
  {ticket.message&&<p role="status">{ticket.message}</p>}
+ {ticket.status==='interrupted'&&!ticket.message&&<p role="status">Отправка прервана. Списание может быть неизвестно. Доступные предложения сохранены.</p>}
  {ticket.status==='cancelled'&&<p>Запрос остановлен.</p>}
  {Object.entries(ticket.errors||{}).map(([cid,reason])=><p key={cid}>{label(cid)} · {reason}</p>)}
  {results.map(([cid,row])=><div className="commission-result" key={cid}>
