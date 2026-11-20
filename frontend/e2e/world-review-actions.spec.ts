@@ -95,3 +95,42 @@ for(const scenario of ['empty-conflicts','invalid-write']){
     }
   });
 }
+
+test('family dates and invented details are visible before accepting the complete chronology',async({page,request},info)=>{
+  const {panel,url,before,openReview}=await setupReview(page,request,info.project.name==='mobile','family');
+  await panel.getByRole('button',{name:'Исправить замечания с помощью ИИ'}).click();
+  const family=panel.getByRole('region',{name:'Семейная хронология'});
+  await expect(family.getByText('Новые вымышленные детали')).toBeVisible();
+  await expect(family).toContainText('2015-06-12');
+  await expect(family).toContainText('возраст при родах: 19');
+  await expect(family).toContainText('возраст при родах: 18');
+  await expect(family).toContainText('Дата окончания брака');
+  await openReview();
+  await expect(family).toContainText('191');
+  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
+  await family.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  await page.screenshot({path:info.outputPath('chronology.png'),scale:'css'});
+  await panel.getByRole('button',{name:'Применить пакет…'}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Подтвердить изменения'}).click();
+  await expect(panel.getByRole('heading',{name:'Применено',exact:true})).toBeVisible();
+  const saved=await(await request.get(url+'?author=true')).json();
+  expect(saved.state.world.characters.character_2.birth_date).toBe('2015-06-12');
+  expect(saved.state.world.characters.character_3.death_date).toBe('2015-06-12');
+  expect(saved.state.world.objective_relations.old_marriage.until_date).toBe('2015-06-12');
+});
+
+test('author refines a legacy paid date proposal offline',async({page,request},info)=>{
+  const {panel,url,before}=await setupReview(page,request,info.project.name==='mobile','legacy-family');
+  await expect(panel.getByRole('button',{name:'Применить пакет…'})).toBeDisabled();
+  await panel.getByText('Лиза · сведения о родителе').click();
+  const fields=panel.locator('details[open]').filter({hasText:'Лиза · сведения о родителе'});
+  await fields.getByLabel('Подтверждённый год рождения родителя').fill('1996');
+  await fields.getByRole('combobox',{name:'Связь с родами · Лиза'}).click();
+  await page.getByRole('option',{name:'Смерть при этих родах',exact:true}).click();
+  await fields.getByRole('checkbox').check();
+  await panel.getByRole('button',{name:'Пересчитать без нового запроса'}).click();
+  await expect(panel.getByRole('region',{name:'Семейная хронология'})).toContainText('191');
+  await expect(panel.getByRole('button',{name:'Применить пакет…'})).toBeEnabled();
+  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
+});

@@ -93,6 +93,14 @@ class EditDecision(Revision):
     accept_warnings: bool = False
 
 
+from backend.services.draft_review_chronology import FamilyConfirmation
+
+
+class WorldEditDecision(EditDecision):
+    decision: Literal['accept','reject','recalculate_dates']
+    family: list[FamilyConfirmation] = Field(default_factory=list)
+
+
 def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft/edits')
     def edits(wid:str,author:bool=False):return repo.world_edits(wid,author)
@@ -110,8 +118,8 @@ def install(app,repo,preparation,credentials,job):
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/draft/edits/{jid}')
-    def decide(wid:str,jid:str,body:EditDecision):
-        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings)
+    def decide(wid:str,jid:str,body:WorldEditDecision):
+        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings,body.family)
         return repo.draft(wid,True)
 
     @app.get('/api/communication/presets')

@@ -193,7 +193,9 @@ def apply_proposal(state, reply, *, editing=False, review_fix=False):
             record_schema = (schema['world']['properties'][parts[1]].get('additionalProperties', {})
                              if root == 'world' else schema[root].get('items', {}) if root in ('characters', 'locations') else {})
             field_index = 3 if root == 'world' else 2
-            if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
+            # The review calendar may materialize an already established death at childbirth.
+            review_death = review_fix and len(parts)==4 and parts[:2]==['world','characters'] and parts[3]=='death_date'
+            if not review_death and root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
                 raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
             value_path = path
             if path in ('/characters/-','/locations/-'):

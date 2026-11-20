@@ -78,7 +78,7 @@ class DraftEditorStorage:
                 (json.dumps(journal,ensure_ascii=False),'preview' if result['status']=='preview' else 'saved',jid))
 
     def world_edits(self,wid,author=False):
-        from backend.services.draft_review_actions import historical_assessment
+        from backend.services.draft_review_actions import historical_assessment, superseded_year_preview
         with self.connect() as db:
             db.execute('BEGIN')
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
@@ -89,7 +89,11 @@ class DraftEditorStorage:
             result=[]
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
-                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure')}
+                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies')}
+                if superseded_year_preview(edit):
+                    from backend.services.draft_review_chronology import legacy_families
+                    item['superseded_dates']=True
+                    item['legacy_families']=legacy_families(edit)
                 if historical_assessment(edit):
                     item.update(status='assessed', failure=None, diff=[])
                 if edit.get('action') and not edit.get('outcomes') and row['status'] in ('error','stopped'):
@@ -104,7 +108,7 @@ class DraftEditorStorage:
                 result.append(item)
             return dict(edits=result,started=started)
 
-    def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False):
+    def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False,family=()):
         from backend.repositories.drafts import candidate_hash
         from backend.services.draft_editor import accepted_state,manual_conflicts,differences
         from backend.services.draft_changes import validate_candidate
@@ -113,6 +117,8 @@ class DraftEditorStorage:
             job=db.execute("SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=? AND kind='draft_editor'",(jid,wid)).fetchone()
             if not job:raise ValueError('Предложение не принадлежит черновику.')
             journal=json.loads(job['response_journal']);edit=journal['editor']
+            if decision=='recalculate_dates' and edit.get('calendar_recalculated'):
+                return
             if edit.get('action') and edit['status'] not in ('preview','accepted','rejected'):
                 raise ValueError('Нет пакета изменений для применения.')
             if edit['status'] in ('accepted','rejected'):
@@ -128,6 +134,30 @@ class DraftEditorStorage:
                 if job['status']!='saved' or edit['status']!='preview':raise ValueError('Предложение ещё не проверено.')
                 current=json.loads(head['content'])
                 if candidate_hash(current['state'])!=edit['before_hash']:raise ValueError('Кандидат изменился.')
+                from backend.services.draft_review_actions import superseded_year_preview
+                if decision=='recalculate_dates':
+                    if not superseded_year_preview(edit):
+                        raise ValueError('В этом предложении нет прежнего расчёта по году рождения.')
+                    from backend.services.draft_review_actions import saved_reply, proposal_result
+                    from backend.services.draft_response import join_fragments
+                    saved=saved_reply(journal)
+                    if not saved:raise ValueError('Исходный ответ для локального пересчёта недоступен.')
+                    raw=join_fragments(saved['parts'],saved.get('assembly'),terminal=True)
+                    from backend.services.draft_review_chronology import confirmed_reply
+                    evidence,packet=confirmed_reply(edit,raw,family)
+                    updated=proposal_result(evidence,packet)
+                    if updated['status']=='unapplied':
+                        raise ValueError(updated['failure'])
+                    edit['family_confirmation']=[row.model_dump() for row in family]
+                    # The old preview on another device cannot approve the recalculated values.
+                    for field in ('candidate','proposal','outcomes','diff','calendar_decisions','failure'):
+                        edit.pop(field,None)
+                    edit.update(updated,base_revision=revision+1,calendar_recalculated=True)
+                    db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+                    db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
+                    return
+                if superseded_year_preview(edit):
+                    raise ValueError('Сначала пересчитайте семейные даты и просмотрите обновлённое предложение.')
                 fix=edit.get('action')=='fix'
                 trial=validate_candidate(current['state'],edit['candidate'],editing=not fix,review_fix=fix)
                 if differences(current['state'],trial)!=edit['diff']:raise ValueError('Предпросмотр изменился.')
@@ -145,7 +175,14 @@ class DraftEditorStorage:
                     review=dict(current.get('review') or {},status='stale',advisory=True,
                         reason='Предложенные правки сохранены. Можно повторно проверить эту версию.',
                         issues=[issue_from_finding(n) for n in edit['findings']])
+                    from backend.services.draft_review_chronology import validate_review
+                    timelines = edit.get('chronologies') or []
+                    validate_review(current['state'],trial,timelines)
                     accept_calendar_updates(current['state'],trial,edit.get('calendar_decisions'))
+                    if timelines:
+                        metadata=trial.setdefault('authoring',{}).setdefault('calendar_completion',{})
+                        agreed=metadata.setdefault('family_chronologies',{})
+                        agreed.update({t['child']:t for t in timelines})
                     current['state']=trial
                     current.update(review=review)
                 else:

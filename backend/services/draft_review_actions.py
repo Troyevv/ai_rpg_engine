@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from backend.repositories.drafts import candidate_hash
 from backend.services import draft_completeness, draft_editor
+from backend.services import draft_review_chronology as chronology
 from backend.services.draft_changes import Change, Proposal, apply_proposal
 from backend.services.draft_response import strict_loads
 
@@ -54,9 +55,13 @@ class BirthdayMonthDay(BaseModel):
 
 class BirthYearOnly(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    kind: Literal['year_only']
+    kind: Literal['creative_year', 'year_only']
     year: int = Field(ge=1, le=9999)
     quote: str = Field(min_length=1)
+    preferred_date: str | None = None
+    parents: list[chronology.ParentAtBirth] = Field(default_factory=list)
+    conditional_marriages: list[chronology.ConditionalMarriage] = Field(default_factory=list)
+    event_ids: list[str] = Field(default_factory=list)
 
 
 class ReviewChange(Change):
@@ -172,11 +177,19 @@ replace с value=null и date_basis. Если день рождения прих
 kind=birthday_at_start, quote — дословные слова автора об этом, age_quote — дословная
 цитата о возрасте этого персонажа на начало. Если автор указал месяц и день,
 kind=month_day, month, day и обе цитаты. Сервер вычислит год и точную дату.
-Если установлен только год рождения, kind=year_only, year и дословная quote из
-замысла или карточки этого персонажа: сервер предложит снять недостоверную точную
-дату, сохранив год. Не используй год смерти другого персонажа как дату рождения.
-Если источники расходятся, оставь ambiguous, без операции. Не передвигай брак
-или смерть и не меняй биографию для формального закрытия замечания."""
+Если автор установил год, но не день рождения, предложи одну творческую датировку
+(kind=creative_year, year, quote, preferred_date). Это новое авторское предложение.
+Не стирай известный год или точную производную дату. Для ребёнка заполни parents:
+actor_id, quote о родах или родительстве, age только при наличии источника, died_at_birth
+только при смерти именно при этих родах. Если известен год рождения родителя, добавь
+birth_year и birth_year_quote. Не приписывай отцу возраст матери. Точные даты других
+персонажей с прямым авторским основанием предложи тем же пакетом.
+В conditional_marriages перечисли relation_id и цитату об условности дат окончания
+браков, завершившихся этой смертью. В event_ids перечисли события именно этих родов
+и смерти, не последующее воспоминание. Сервер проверит календарь, возраст родителей,
+окончание брака и подготовит все зависимые поля одним предложением. Не дублируй эти
+поля отдельными операциями. При несовместимых источниках объясни неоднозначность.
+Не отмечай предлагаемые новые подробности как установленные автором факты."""
     else:
         request = draft_completeness.advisory_messages(base['state'], '')
         payload = json.loads(request[1]['content'])
@@ -254,6 +267,60 @@ def check_scope(state, change, dates, birth_updates):
     raise ValueError('Этот путь затрагивает канон, права персонажа или хронологию: '+change['path'])
 
 
+def compile_review_changes(base, packet, outcomes):
+    """Resolve birthdays anchored by the author before solving dependent family dates."""
+    from backend.services.draft_calendar import review_birth_date
+    state = base['state']
+    updates, dependent, reports, indices = {}, {}, [], {}
+    result = packet.model_dump(exclude={'decisions','changes'})
+    rows = result['changes'] = []
+    deferred = []
+    for i, change in enumerate(packet.changes):
+        row = change.model_dump(exclude={'date_basis'})
+        basis = change.date_basis
+        if basis is not None:
+            if not re.fullmatch(r'/world/characters/[^/]+/birth_date',change.path) or change.op not in ('add','replace'):
+                raise ValueError('Календарное основание относится только к дате рождения персонажа.')
+            cid = change.path.split('/')[3].replace('~1','/').replace('~0','~')
+            if isinstance(basis,BirthYearOnly):
+                if change.value is not None:
+                    if not isinstance(change.value,str):
+                        raise ValueError('Предлагаемая дата должна быть календарной датой.')
+                    if basis.preferred_date is None:
+                        basis = basis.model_copy(update={'preferred_date':change.value})
+                deferred.append((i,cid,change,basis))
+                continue
+            record = review_birth_date(base, change.path, basis.model_dump())
+            if change.value is not None and change.value != record['value']:
+                raise ValueError('Предложение расходится с вычислением календаря.')
+            updates[cid] = record
+            row.update(value=record['value'], reason=row['reason']+' Основание: «'+basis.quote+'». Возраст: «'+basis.age_quote+'».')
+        indices[i] = [len(rows)]
+        rows.append(row)
+    for i,cid,change,basis in deferred:
+        computed, linked, report = chronology.plan_birth(base,cid,basis,{k:v['value'] for k,v in updates.items()})
+        if computed.keys() & updates.keys():
+            raise ValueError('Для одного персонажа предложено несколько дат рождения.')
+        updates.update(computed)
+        dependent.update(linked)
+        reports.append(report)
+        indices[i]=[]
+        values = {chronology.birth_path(k):v['value'] for k,v in computed.items()}
+        for path,value in {**values,**linked}.items():
+            parent,field = path.rsplit('/',1)
+            container = draft_completeness.pointer(state,parent)
+            if container.get(field)==value:continue
+            indices[i].append(len(rows))
+            rows.append(dict(op='replace' if field in container else 'add',path=path,value=value,
+                             reason=change.reason+' Согласовано с рождением '+report['name']+' ('+report['date']+').'))
+        if not indices[i]:
+            raise ValueError('Предложение полностью повторяет сохранённую семейную хронологию.')
+    for row in outcomes:
+        if row.get('change_indices'):
+            row['change_indices']=[k for i in row['change_indices'] for k in indices[i]]
+    return result,updates,dependent,reports
+
+
 def proposal_result(edit, reply):
     state = edit['base']['state']
     packet = ReviewProposal.model_validate(strict_loads(reply))
@@ -271,40 +338,32 @@ def proposal_result(edit, reply):
         if packet.candidate_hash != fingerprint:
             raise ValueError('Разбор замечаний относится к другой версии мира.')
         return dict(status='assessed', outcomes=outcomes, proposal=packet.model_dump(exclude={'decisions'}), diff=[])
-    proposal_data = packet.model_dump(exclude={'decisions', 'changes'})
-    proposal_data['changes'] = []
-    birth_updates = {}
     try:
-        from backend.services.draft_calendar import review_birth_date
-        for change in packet.changes:
-            row = change.model_dump(exclude={'date_basis'})
-            if change.date_basis is not None:
-                record = review_birth_date(edit['base'], change.path, change.date_basis.model_dump())
-                if change.op != 'replace' or (change.value is not None and change.value != record['value']):
-                    raise ValueError('Правка не соответствует вычислению календаря.')
-                cid = change.path.split('/')[3].replace('~1','/').replace('~0','~')
-                birth_updates[cid] = record
-                row['value'] = record['value']
-                basis = record['basis']
-                row['reason'] += ' Основание: «'+basis['quote']+'».'
-                if basis['kind'] == 'year_only':
-                    row['reason'] += f" Будет сохранён год {basis['year']}; точные месяц и день неизвестны."
-                else:
-                    row['reason'] += ' Возраст на начало истории: «'+basis['age_quote']+'».'
-            proposal_data['changes'].append(row)
+        proposal_data, birth_updates, dependent, timelines = compile_review_changes(edit['base'], packet, outcomes)
         trial, proposal = apply_proposal(state, json.dumps(proposal_data), review_fix=True)
         dates = calendar_evidence(state)
         for change in proposal['changes']:
-            check_scope(state, change, dates, birth_updates)
+            if change['path'] not in dependent:
+                check_scope(state, change, dates, birth_updates)
+            elif dependent[change['path']] != change['value']:
+                raise ValueError('Связанные изменения хронологии расходятся.')
             if change['op']=='replace' and draft_completeness.pointer(state,change['path'])==change['value']:
                 raise ValueError('Предложение повторяет исходное значение: '+change['path'])
+        chronology.validate_review(state,trial,timelines)
     except ValueError as exc:
         for row in outcomes:
             if row['outcome']=='proposed':
                 row['outcome']='unapplied'
         return dict(status='unapplied', outcomes=outcomes, failure=str(exc), proposal=packet.model_dump(exclude={'decisions'}))
     return dict(status='preview', candidate=trial, proposal=proposal,
-                outcomes=outcomes, calendar_decisions=birth_updates, diff=draft_editor.differences(state, trial))
+                outcomes=outcomes, calendar_decisions=birth_updates, chronologies=timelines, diff=draft_editor.differences(state, trial))
+
+
+def superseded_year_preview(edit):
+    """Do not accept an old pending proposal that would erase an exact generated date."""
+    return (edit.get('action')=='fix' and edit.get('status')=='preview' and 'chronologies' not in edit
+            and any(record.get('source')=='unknown' and record.get('known_year') and record.get('value') is None
+                    for record in (edit.get('calendar_decisions') or {}).values()))
 
 
 def historical_assessment(edit):
@@ -327,8 +386,8 @@ def accept_calendar_updates(before, trial, decisions=None):
             record = decisions.get(cid)
             if not record or record['value'] != actor['birth_date']:
                 raise ValueError('Дата не соответствует подтверждённому предпросмотру.')
-            trial['authoring']['calendar_completion']['birth_dates'][cid] = record
-            actor['birth_date_provenance'] = dict(actor.get('birth_date_provenance') or {}, source=record['source'])
+            trial.setdefault('authoring',{}).setdefault('calendar_completion',{}).setdefault('birth_dates',{})[cid] = record
+            actor['birth_date_provenance'] = dict(actor.get('birth_date_provenance') or {}, source='authoring_automatic' if record['source']=='review_creative' else record['source'])
             continue
         # Existing previews from the original review contract retain their recorded calculation.
         if calculated is None:

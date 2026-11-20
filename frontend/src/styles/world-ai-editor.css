@@ -22,3 +22,7 @@
 .ai-review-outcomes .ai-review-note { display: grid; gap: .25rem; min-width: 0; }
 .ai-review-note > strong { color: var(--accent); }
 .ai-review-note > span { color: var(--foreground); overflow-wrap: anywhere; }
+
+.ai-family-chronology{margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.65rem;background:var(--surface-1);overflow-wrap:anywhere}.ai-family-chronology h5{margin-top:0}.ai-family-chronology ul{padding-inline-start:1.3rem}
+
+.ai-family-chronology fieldset{display:grid;gap:.8rem;min-width:0;padding:.8rem;border:0}.ai-family-chronology fieldset>label:not(.ai-confirm-option){display:grid;gap:.35rem}.ai-family-chronology input[type=number]{width:100%;min-height:44px;background:var(--bg);border:1px solid var(--border);color:inherit;padding:.5rem}

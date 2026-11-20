@@ -140,7 +140,7 @@ def test_recheck_omissions_and_persistent_date_conflict_are_not_fixes(api):
 @pytest.mark.parametrize('basis,expected', [
     (dict(kind='birthday_at_start',quote='Сегодня у Марины день рождения',age_quote='Марине 36 лет'), '1990-10-23'),
     (dict(kind='month_day',month=11,day=27,quote='Её день рождения 27 ноября',age_quote='Марине 36 лет'), '1989-11-27'),
-    (dict(kind='year_only',quote='Марина родилась в 1990 году',year=1990), None),
+    (dict(kind='year_only',quote='Марина родилась в 1990 году',year=1990), '1990-05-29'),
 ])
 def test_automatic_birthday_resolved_by_author_evidence(api, basis, expected):
     from backend.services.draft_calendar import complete
@@ -178,7 +178,7 @@ def test_automatic_birthday_resolved_by_author_evidence(api, basis, expected):
     assert len(calls)==1 and old!=expected
     resolution=updated['state']['authoring']['calendar_completion']['birth_dates'][card['id']]
     assert resolution['value']==expected and resolution['basis']==basis
-    if expected is None:
+    if basis['kind']=='year_only':
         assert resolution['known_year']==1990
     assert updated['state']['world']['characters'][card['id']]['birth_date']==expected
     assert complete(updated['state'])['world']['characters'][card['id']]['birth_date']==expected
@@ -436,8 +436,6 @@ def test_live_calendar_examples_use_cited_day_and_age_and_preserve_year_precisio
     assert review_birth_date(base,path,exact)['value']=='1996-07-10'
     murphy = '/world/characters/murphy/birth_date'
     year = dict(kind='year_only',quote='Мёрфи родилась в 2015 году',year=2015)
-    record = review_birth_date(base,murphy,year)
-    assert record['value'] is None and record['known_year']==2015
     for wrong in (dict(exact,quote=year['quote']),dict(exact,age_quote='В 19 лет'),
                   dict(kind='month_day',month=1,day=1,quote=year['quote'],age_quote=exact['age_quote'])):
         with pytest.raises(ValueError):
@@ -447,3 +445,147 @@ def test_live_calendar_examples_use_cited_day_and_age_and_preserve_year_precisio
     actors['ilya']['birth_date_provenance']['source']='manual'
     with pytest.raises(ValueError):
         review_birth_date(base,path,exact)
+
+
+@pytest.mark.parametrize('both_nineteen,expected,choices',[(False,'2015-06-12',191),(True,'2015-07-10',1)])
+def test_family_chronology_is_previewed_and_committed_atomically(api,both_nineteen,expected,choices):
+    from review_actions_fixture import seed_family,family_reply
+    from backend.runtime_v3.calendar import age_on
+    client,app=api;repo=app.state.repository
+    wid=seed_family(repo,both_nineteen=both_nineteen)['wid']
+    url=f'/api/workspaces/{wid}/draft'
+    base=repo.draft(wid,True)
+    def answer(**kw):
+        yield json.dumps(family_reply(json.loads(kw['messages'][-1]['content'])))
+    with patch('backend.services.preparation.chat_stream',side_effect=answer) as transport:
+        job=submit(client,url,base,'fix','family').json()
+        assert 'id' in job,job
+        assert wait_job(client,job['id'])['status']=='saved'
+        assert transport.call_count==1
+    preview=Repository(repo.path).world_edits(wid,True)['edits'][0]
+    assert preview['status']=='preview',preview['failure']
+    report=preview['chronologies'][0]
+    assert report['options']==choices and report['date']==expected
+    assert report['inventions']
+    paths=[d['path'] for d in preview['proposal']['changes']]
+    assert len(paths)==len(set(paths))==5
+    assert repo.draft(wid,True)['state']==base['state']
+    fresh=repo.draft(wid,True)
+    accepted=client.post(url+'/edits/'+job['id'],json=dict(revision=fresh['revision'],decision='accept'))
+    assert accepted.is_success,accepted.text
+    final=accepted.json()
+    father,child,mother=[final['state']['world']['characters'][k['id']] for k in base['state']['characters'][:3]]
+    assert father['birth_date']=='1996-07-10'
+    assert child['birth_date']==mother['death_date']==expected
+    assert age_on(child['birth_date'],'2026-07-10')==11
+    assert age_on(mother['birth_date'],expected)==19
+    assert age_on(father['birth_date'],expected)==(19 if both_nineteen else 18)
+    assert final['state']['world']['objective_relations']['old_marriage']['until_date']==expected
+    for group in ('knowledge','events','facts'):
+        assert final['state']['world'][group]==base['state']['world'][group]
+    restored=client.patch(url,json=dict(operation='restore',revision=final['revision'],source_id=base['version_id'])).json()
+    assert restored['state']==base['state']
+
+
+def test_family_chronology_protects_manual_and_dated_records(api):
+    from review_actions_fixture import seed_family,family_reply
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_review_actions import proposal_result
+    from copy import deepcopy
+    _,app=api;repo=app.state.repository
+    base=repo.draft(seed_family(repo,both_nineteen=True)['wid'],True)['state']
+    from review_actions_fixture import FAMILY_SOURCE
+    source=FAMILY_SOURCE+' Илье при рождении дочери было 19 лет.'
+    notes=[dict(issue_id='family',message='Противоречие дат',paths=[])]
+    for case in ('manual_marriage','fixed_death','manual_mother','event'):
+        state=deepcopy(base)
+        mother=state['characters'][2]['id']
+        if case=='manual_marriage':
+            state['authoring'].setdefault('manual_paths',[]).append('/world/objective_relations/old_marriage/until_date')
+        elif case=='manual_mother':
+            state['world']['characters'][mother]['birth_date_provenance']={'source':'manual'}
+        elif case=='fixed_death':
+            state['world']['characters'][mother]['death_date']='2015-01-01'
+        packet=family_reply(dict(candidate=state,candidate_hash=candidate_hash(state),findings=notes,author_context=dict(original_idea=source)))
+        if case=='event':
+            eid=next(iter(state['world']['events']))
+            state['world']['events'][eid].update(participants=[mother],minute=state['world_clock']['minute'])
+            packet['candidate_hash']=candidate_hash(state)
+            packet['changes'][0]['date_basis']['event_ids']=[eid]
+        result=proposal_result(dict(base=dict(state=state,source=source),findings=notes),json.dumps(packet))
+        assert result['status']=='unapplied',case
+        assert 'candidate' not in result and candidate_hash(state)==packet['candidate_hash']
+
+
+def test_previous_year_only_assessment_can_receive_a_coherent_date(api):
+    from review_actions_fixture import FAMILY_SOURCE, seed_family, family_reply
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_review_actions import proposal_result
+    _,app=api;repo=app.state.repository
+    state=repo.draft(seed_family(repo)['wid'],True)['state']
+    child=state['characters'][1]['id']
+    actor=state['world']['characters'][child]
+    actor.update(birth_date=None,birth_date_provenance=dict(source='unknown'))
+    state['authoring']['calendar_completion']['birth_dates'][child]=dict(source='unknown',value=None,known_year=2015)
+    father=state['characters'][0]['id']
+    state['world']['characters'][father].update(birth_date='1996-07-10',birth_date_provenance=dict(source='explicit'))
+    notes=[dict(issue_id='review',message='Восстановить хронологию',paths=[])]
+    packet=family_reply(dict(candidate=state,candidate_hash=candidate_hash(state),findings=notes,
+                             author_context=dict(original_idea=FAMILY_SOURCE)))
+    packet['changes']=packet['changes'][:1]
+    packet['decisions'][0]['change_indices']=[0]
+    result=proposal_result(dict(base=dict(state=state,source=FAMILY_SOURCE),findings=notes),json.dumps(packet))
+    assert result['status']=='preview',result.get('failure')
+    assert result['candidate']['world']['characters'][child]['birth_date']=='2015-06-12'
+    assert not result['chronologies'][0]['parents'][0]['quote']
+
+
+def test_old_pending_null_preview_recalculates_offline_and_fences_previous_tab(api):
+    from review_actions_fixture import seed_family,legacy_year_packet,legacy_year_result
+    client,app=api;repo=app.state.repository
+    wid=seed_family(repo)['wid'];url=f'/api/workspaces/{wid}/draft'
+    base=repo.draft(wid,True)
+    def answer(**kw):
+        yield json.dumps(legacy_year_packet(json.loads(kw['messages'][-1]['content'])))
+    with patch('backend.services.preparation.chat_stream',side_effect=answer) as provider:
+        with patch('backend.services.draft_review_actions.proposal_result',side_effect=legacy_year_result):
+            job=submit(client,url,base,'fix','oldpreview').json()
+            assert wait_job(client,job['id'])['status']=='saved'
+        receipts=repo.world_edits(wid,True)['edits'][0]['requests']
+        child=base['state']['characters'][1]['id']
+        mother=base['state']['characters'][2]['id']
+        previous=repo.draft(wid,True)
+        decision=url+'/edits/'+job['id']
+        assert not client.post(decision,json=dict(revision=previous['revision'],decision='accept')).is_success
+        calc=dict(revision=previous['revision'],decision='recalculate_dates')
+        assert not client.post(decision,json=calc).is_success
+        calc['family']=[dict(child=child,parent=mother,died_at_birth=True,age=19,birth_year=1996,
+                             conditional_marriages=['old_marriage'])]
+        response=client.post(decision,json=calc)
+        assert response.is_success,response.text
+        assert client.post(decision,json=calc).is_success
+        assert provider.call_count==1
+        updated=repo.draft(wid,True)
+        assert updated['version_id']==previous['version_id'] and updated['state']==base['state']
+        assert not client.post(decision,json=dict(revision=previous['revision'],decision='accept')).is_success
+        preview=repo.world_edits(wid,True)['edits'][0]
+        assert preview['status']=='preview' and preview['chronologies'][0]['options']==191
+        assert preview['requests']==receipts
+
+
+def test_manual_child_date_anchors_the_other_family_changes(api):
+    from review_actions_fixture import seed_family,FAMILY_SOURCE,family_reply
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_review_actions import proposal_result
+    _,app=api;repo=app.state.repository
+    state=repo.draft(seed_family(repo)['wid'],True)['state']
+    child=state['characters'][1]['id']
+    state['world']['characters'][child].update(birth_date='2015-04-10',birth_date_provenance=dict(source='manual'))
+    notes=[dict(issue_id='family',message='Проверить даты',paths=[])]
+    packet=family_reply(dict(candidate=state,candidate_hash=candidate_hash(state),findings=notes,author_context=dict(original_idea=FAMILY_SOURCE)))
+    result=proposal_result(dict(base=dict(state=state,source=FAMILY_SOURCE),findings=notes),json.dumps(packet))
+    assert result['status']=='preview',result.get('failure')
+    assert result['chronologies'][0]['date']=='2015-04-10'
+    assert result['chronologies'][0]['options']==1
+    assert not any(c['path'].endswith('/'+child+'/birth_date') for c in result['proposal']['changes'])
+    assert result['candidate']['world']['characters'][child]==state['world']['characters'][child]

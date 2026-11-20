@@ -1,3 +1,4 @@
+import {ReviewCalendarConfirmation,type LegacyFamily,type FamilyInput} from './workshop/ReviewCalendarConfirmation';
 import {requestId as newRequestId} from './lib/requestId';
 import {useEffect, useRef, useState} from 'react';
 import {WandSparkles, Plus, Minus, Pencil, Check, History, ArrowRight} from 'lucide-react';
@@ -13,7 +14,9 @@ type Diff = {section:string;id:string;name:string;operation:'add'|'replace'|'rem
 type ReviewAction = 'fix'|'recheck';
 const outcomeLabels:Record<string,string>={proposed:'Предложена правка',fixed:'Исправлено',remaining:'Осталось',ambiguous:'Отклонено как неоднозначное',disproved:'Замечание опровергнуто',unapplied:'Не удалось применить'};
 const findingLabels:Record<string,string>={contradiction:'Подтверждённое противоречие',incomplete_description:'Неполное описание',uncertainty:'Неопределённость',false_positive:'Ложное замечание'};
-type Edit = {action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
+type FamilyChronology = {child:string;name:string;date:string;age:number|null;reference:string;options:number;first:string;last:string;
+  parents:{id:string;name:string;age:number|null;birth_date:string|null;died:boolean;quote:string}[];marriage_ids:string[];inventions:{name:string;date:string}[]};
+type Edit = {superseded_dates?:boolean;legacy_families?:LegacyFamily[];chronologies?:FamilyChronology[];action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
   references?:Parameters<typeof resolver>[0];
   requests?:{id:string;stage:string;status:string;input_tokens:number|null;output_tokens:number|null;cost_usd:string|null}[];
   proposal?:{rationale:string;conflicts?:string[];changes:{path:string;reason:string}[]};diff?:Diff[];conflicts?:string[];
@@ -75,8 +78,8 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const appliedFix=current?.action==='recheck'&&history.find(e=>e.action==='fix'&&e.applied_version===current.base_version);
  const samePreview=current?.status==='preview'&&!current.stale&&current.instruction===instruction;
  useEffect(()=>{if(job && !active(job))requestId.current=null},[job?.status]);
- const decision=(choice:'accept'|'reject')=>execute(async()=>{
-  await api(`/workspaces/${wid}/draft/edits/${current.id}`,{revision,decision:choice,accept_conflicts:conflicts,accept_warnings:warnings});
+ const decision=(choice:'accept'|'reject'|'recalculate_dates',family?:FamilyInput[])=>execute(async()=>{
+  await api(`/workspaces/${wid}/draft/edits/${current.id}`,{revision,decision:choice,family,accept_conflicts:conflicts,accept_warnings:warnings});
   if(alive.current){setConfirm(false);requestId.current=null;await load();await refresh()}
  });
  return <section className="world-ai-editor" aria-labelledby="world-ai-title">
@@ -120,6 +123,13 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    </section>}
    {current.status==='reviewed'&&!current.review?.issues.length&&!current.outcomes?.length&&<p>Замечаний к этой версии нет.</p>}
    {appliedFix&&onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(appliedFix.base_version)}>Посмотреть версию до исправления и откатить</Button>}
+   {current.chronologies?.map(family=><section className="ai-family-chronology" aria-label="Семейная хронология" key={family.child}>
+    <h5>Семейная хронология</h5><p><strong>{family.date}</strong> · Рождение: {family.name}{family.age!==null&&<> · возраст на {family.reference}: {family.age}</>}</p>
+    <p>{family.options===1?'Единственная совместимая дата.':<>Предложен один из допустимых дней ({family.options}). Границы выбора: {family.first} — {family.last}.</>}</p>
+    {family.inventions.length>0&&<div><strong>Новые вымышленные детали</strong><ul>{family.inventions.map(item=><li key={item.name+item.date}>{item.name} · дата рождения {item.date}</li>)}</ul></div>}
+    <ul>{family.parents.map(parent=><li key={parent.id}>{parent.name}{parent.age!==null&&<> · возраст при родах: {parent.age}</>}{parent.died&&<> · смерть при родах {family.date}</>}{parent.quote&&<details><summary>Основание</summary><p>{parent.quote}</p></details>}</li>)}</ul>
+    {family.marriage_ids.length>0&&<p>Дата окончания брака по смерти супруга: {family.date}.</p>}
+   </section>)}
    {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p>{current.proposal.changes.length>0&&<details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{c.path}</small></li>)}</ol></details>}</>}
    {current.error && <p role="alert">{current.error}</p>}
    {current.status==='preview' && current.stale && <p className="ai-editor-error" role="alert">Предпросмотр устарел: мир изменился. Отправьте инструкцию заново.</p>}
@@ -140,7 +150,8 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {!!current.proposal?.conflicts?.length&&<section aria-label="Неоднозначности"><h5>Что требует решения автора</h5><ul>{current.proposal.conflicts.map((text,i)=><li key={i}>{text}</li>)}</ul></section>}
    {current.status==='assessed'&&onCharacters&&current.outcomes?.some(row=>row.outcome==='ambiguous')&&<Button variant="outline" disabled={disabled} onClick={onCharacters}>Уточнить данные в карточках персонажей</Button>}
    {blocked && <p>Уточните инструкцию с учётом противоречий. Применение заблокировано.</p>}
-   {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||blocked||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
+   {current.superseded_dates&&<ReviewCalendarConfirmation key={current.id} families={current.legacy_families||[]} disabled={disabled||current.stale} onCalculate={family=>void decision('recalculate_dates',family)}/>}
+   {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||current.superseded_dates||blocked||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
    {current.status==='accepted' && <section><p role="status">Изменения сохранены в версии #{current.applied_version}.</p>{onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(current.base_version)}>{reviewMode?'Посмотреть исходную версию и откатить':'Посмотреть исходную версию'}</Button>}{onObject&&changed.filter(d=>d.operation!=='remove').map(d=><Button key={d.section+d.id} variant="ghost" onClick={()=>onObject(d.section,d.id)}>Открыть: {d.name}</Button>)}</section>}
    {!!current.requests?.length && <details><summary>Запросы и расходы · {current.requests.length}</summary>{current.requests.map((r,i)=><p key={r.id}>Запрос {i+1}: {r.input_tokens ?? 'неизвестно'} входных / {r.output_tokens ?? 'неизвестно'} выходных токенов · {r.cost_usd===null?'стоимость неизвестна':`оценка $${Number(r.cost_usd).toFixed(6)}`}</p>)}</details>}
    <Button variant="ghost" disabled={busy} onClick={()=>void execute(async()=>{download(JSON.stringify(current,null,2),'world-edit.json')})}>{current.action==='recheck'?'Скачать отчёт':'Скачать предложение'}</Button>

@@ -894,7 +894,11 @@ if __name__ == '__main__':
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
     @app.post('/test/review-actions')
     def review_actions_seed(scenario: str = ''):
-        from review_actions_fixture import seed
+        from review_actions_fixture import seed, seed_family, seed_legacy_family
+        if scenario=='legacy-family':
+            return seed_legacy_family(app.state.repository)
+        if scenario=='family':
+            return seed_family(app.state.repository)
         return seed(app.state.repository,scenario)
 
     @app.post('/test/generation266')

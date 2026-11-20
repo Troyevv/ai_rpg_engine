@@ -241,17 +241,14 @@ def manual_edit(state, path, old_minute=None):
 
 def review_birth_date(base, path, basis):
     """Resolve cited birthday evidence on the frozen candidate, for author confirmation."""
-    from backend.runtime_v3.birth_identity import is_game_birth
+    from backend.services.draft_review_chronology import editable_birth
     state = base['state']
     parts = path.split('/')
     if len(parts) != 5 or parts[1:3] != ['world', 'characters'] or parts[-1] != 'birth_date':
         raise ValueError('Основание календаря допустимо только для даты рождения.')
     cid = parts[3].replace('~1', '/').replace('~0', '~')
     actor = state['world']['characters'].get(cid, {})
-    prior = state.get('authoring', {}).get('calendar_completion', {}).get('birth_dates', {}).get(cid, {})
-    if (not actor.get('birth_date') or prior.get('source') != 'automatic'
-            or prior.get('value') != actor['birth_date'] or dob_metadata(actor).get('source') != 'authoring_automatic'
-            or is_game_birth(state['world'], cid)):
+    if not actor or not editable_birth(state,cid):
         raise ValueError('По замечанию можно пересчитать только ранее назначенную автоматическую дату рождения.')
     card = next(c for c in state['characters'] if c['id'] == cid)
     fields = card['fields']
@@ -259,11 +256,6 @@ def review_birth_date(base, path, basis):
     source = base.get('source') or ''
     if not quote or not any(quote in text for text in (source, str(fields.get('Биография', '')), actor.get('biography') or '')):
         raise ValueError('Цитата о дне рождения отсутствует в замысле и биографии персонажа.')
-    if basis['kind'] == 'year_only':
-        if not re.search(r'(?<!\d)'+str(basis['year'])+r'(?!\d)', quote):
-            raise ValueError('В цитате отсутствует указанный год рождения.')
-        return dict(source='unknown', value=None, known_year=basis['year'], basis=basis,
-                    notice=f"Известен {basis['year']} год. Месяц и день не установлены.")
     if actor.get('life_status') == 'dead':
         raise ValueError('Возраст на начало истории нельзя использовать для умершего персонажа.')
     age_text = str(fields.get('Возраст', '')).strip()
