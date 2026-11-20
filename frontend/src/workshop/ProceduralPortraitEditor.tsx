@@ -46,11 +46,12 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
    const beyondOriginal=Object.keys(catalog.styles[group]).indexOf(id)>={hair:16,face:7,clothing:15}[group];
    const figure=art.face_revision===3||art.face_revision===4;
    const upgrade=(!figure && (group==='face'||beyondOriginal)) || (group==='face' && beyondOriginal && art.face_revision!==4);
-   return {...art,form:'human',[layers[group]]:id,...(upgrade?{face_revision:4,eye_revision:2}:{})};
+   return {...art,form:'human',[layers[group]]:id,...(group==='face'?{cheek_revision:2 as const}:{}),...(upgrade?{face_revision:4,eye_revision:2}:{})};
  };
  const featureEdit=(key:keyof FeatureChoices,id:string)=>{
    const art=modern();
    if(id==='auto'){const next={...art};delete next[key];return next}
+   if(key==='nose_shape')return {...art,[key]:id as FeatureChoices['nose_shape'],nose_revision:2 as const};
    const newer=(figureFeatures[key] as readonly string[]).indexOf(id)>=3;
    return {...art,[key]:id,...(newer?{eye_revision:2 as const}:{}),
      ...(newer&&key!=='eye_shape'?{face_revision:4 as const}:{})};
@@ -89,6 +90,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  })}</div></>})()}
  {section==='face'&&<div className="studio-face-details">
 
+ {value.version===3&&(value.face_revision===3||value.face_revision===4)&&!value.nose_revision&&<Button variant="outline" onClick={()=>change({...value,nose_revision:2})}>Примерить новую форму носа</Button>}
  {value.version===3&&(value.face_revision===3||value.face_revision===4)&&!value.eye_revision&&<Button variant="outline" onClick={()=>change({...value,eye_revision:2})}>Примерить новую посадку глаз</Button>}
  {value.version===3&&(value.face_revision===3||value.face_revision===4)?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
  <Choice aria-label={detailNames[key]} optionPreview={id=>id==='auto'?null:thumbnail(featureEdit(key,id),'feature')} value={value[key]||'auto'} onValueChange={id=>change(featureEdit(key,id))}><option value="auto">По рисунку</option>

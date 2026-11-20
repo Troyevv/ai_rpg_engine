@@ -145,4 +145,23 @@ test('previewing the corrected eyes keeps the saved cast until explicit confirma
   for(const card of included) {
     expect(after.portraits[card.id].procedural_portrait).toEqual({...before.portraits[card.id].procedural_portrait,eye_revision:2});
   }
+
+  const card=included[0], approved=after.portraits[card.id].procedural_portrait;
+  await button('Досье '+card.name).click();
+  await button('Редактировать портрет').click();
+  const previewNose=async()=>{
+    await button('Настроить иллюстрацию').click();
+    await button('Лицо').click();
+    await button('Примерить новую форму носа').click();
+  };
+  await previewNose();
+  await button('Отмена').click();
+  expect((await saved()).portraits[card.id].procedural_portrait).toEqual(approved);
+  await previewNose();
+  await button('Сохранить иллюстрацию').click();
+  await expect(page.locator('.portrait-dialog')).toHaveCount(0);
+  // Manual save also materializes the three existing v3 model defaults on sparse imports.
+  expect((await saved()).portraits[card.id].procedural_portrait).toEqual({
+    base_version:2, skin_swatch:false, eye_swatch:false, ...approved, nose_revision:2,
+  });
 });

@@ -198,13 +198,17 @@ def proposed(cid,traits,reference,style=None):
         extended = any(field in fields and fields[field] >= len(LEGACY_STYLES[field])
                        for field in ('hair', 'clothing', 'face', 'facial_hair'))
         new_features = any(field in fields and fields[field] in CLASSIC_OPTIONS[field][3:]
-                           for field in ('eye_shape', 'nose_shape', 'lip_shape'))
+                           for field in ('eye_shape', 'lip_shape'))
         if (not figure and (extended or set(fields).intersection(CATALOG['features']) or 'accent_color' in fields)
                 or result.get('face_revision') != 4 and (new_features or 'body_build' in fields
                     or 'face' in fields and fields['face'] >= len(LEGACY_STYLES['face']))):
             result.update(face_revision=4, eye_revision=2)
         elif new_features and 'eye_shape' in fields:
             result['eye_revision'] = 2
+        if 'nose_shape' in fields:
+            result['nose_revision'] = 2
+        if 'face' in fields:
+            result['cheek_revision'] = 2
         if result['form'] == 'neutral':
             result.update(body_frame='neutral', facial_hair='clean_shaven')
         art = ProceduralPortraitV3.model_validate(result).model_dump()

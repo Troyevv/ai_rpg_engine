@@ -92,3 +92,17 @@ it('projects both pupils onto one baseline with one gaze vector and iris diamete
   }
  }
 });
+
+it('keeps the whole eye pair intact when opting into any projected nose',()=>{
+ const eyes=(doc:Document)=>['far-orbit','near-orbit'].map(id=>doc.getElementById(id)!.parentElement!.parentElement!.outerHTML);
+ const parse=(p:ProceduralPortrait)=>new DOMParser().parseFromString(svg(p),'image/svg+xml');
+ for(const face_revision of [3,4] as const) for(const byte of ['14','e4']) {
+  const head={...modern,version:3,face_revision,eye_revision:2,seed:byte.repeat(16)} as const;
+  for(const nose_shape of ['straight','rounded','arched','upturned','broad_base','aquiline'] as const) {
+   const stored={...head,nose_shape}, original=parse(stored), preview=parse({...stored,nose_revision:2});
+   expect(original.querySelector('[data-part="nose"]')).toBeNull();
+   expect(preview.querySelector('[data-part="nose"]')).not.toBeNull();
+   expect(eyes(preview)).toEqual(eyes(original));
+  }
+ }
+});

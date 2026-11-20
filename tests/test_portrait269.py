@@ -19,18 +19,21 @@ def test_new_classic_faces_have_independent_persisted_features():
         assert {p[field] for p in cast} == set(options)
         assert set(input_schema()['properties'][field]['enum']) == set(options)
     for p in cast:
-        assert p['eye_revision'] == 2
+        assert p['eye_revision'] == p['cheek_revision'] == p['nose_revision'] == 2
         assert (p['visage'], p['hairstyle'], p['garment'], p['face_revision']) == ('broad','parted','shirt',4)
     assert cast[0] == default_descriptor('0','adult',hints=hints,version=3,world_id='same')
     old = deepcopy(cast[0])
     old['face_revision'] = 3
+    del old['nose_revision']
+    del old['cheek_revision']
     del old['body_build']
     state = fixture()
     cid = state['characters'][0]['id']
     state['world']['characters'][cid]['procedural_portrait'] = old
     initialize(state, version=3)
     assert state['world']['characters'][cid]['procedural_portrait'] == old
-    assert 'body_build' not in ProceduralPortraitV3.model_validate(old).model_dump()
+    restored = ProceduralPortraitV3.model_validate(old).model_dump()
+    assert 'body_build' not in restored and 'cheek_revision' not in restored and 'nose_revision' not in restored
 
 
 @pytest.mark.parametrize('editing',[True,False])
@@ -151,3 +154,17 @@ def test_full_classic_catalog_is_reachable_without_hints_and_survives_reload():
     infants = [default_descriptor(str(i),'infant',version=3,profile='modern') for i in range(64)]
     assert all(p['eyewear']=='none' and p['facial_hair']=='clean_shaven' for p in infants)
     assert outfits.union(p['garment'] for p in infants) == set(CATALOG['styles']['clothing'])
+
+
+@pytest.mark.parametrize('revision', [3, 4])
+def test_a_nose_proposal_preserves_saved_eyes_and_other_layers(revision):
+    from backend.services.portrait_proposals import proposed
+    old = default_descriptor('dossier','adult',version=3,world_id='original')
+    old['face_revision'] = revision
+    for key in ('nose_revision','eye_revision','cheek_revision'):
+        old.pop(key)
+    ref = dict(existing=old, art_style='legacy', approved={}, actor={}, world_id='imported',
+               stage='adult', age='young_adult', profile='modern')
+    for shape in CATALOG['features']['nose_shape']:
+        art = proposed('dossier', {'nose_shape':shape}, ref)['descriptor']
+        assert art == {**old, 'nose_shape':shape, 'nose_revision':2}

@@ -78,32 +78,45 @@ function landmarks(p: Human, shape: Face) {
   const jaw = mix(angle + build * 2.4, 45, convergence) + (elder ? refined ? 4 : 1.7 : 0) + fullness,
     chinWidth = mix(chin, 18, convergence);
   const depth = (refined ? length * (1 - youth * 0.31) : mix(length, 58, youth)) + (elder ? 2 : 0);
+  const projected = p.nose_revision===2;
   const noseStyle = p.nose_shape || features.nose_shape[Math.floor(v(8) * 2.99)];
-  const nose =
-      depth * mix(0.45, refined ? 0.30 : 0.36, youth) + (refined && elder ? 3.4 : 0) +
-      (noseStyle === 'arched' ? 3.5 : noseStyle==='aquiline'?7:noseStyle==='upturned'?-7:noseStyle==='broad_base'?-1.5:noseStyle === 'rounded' ? -2.5 : 0) * (1 - youth),
-    mouth = nose + (depth - nose) * mix(refined && elder ? .48 : 0.42, 0.45, youth);
+  const midface = depth * mix(0.45, refined ? 0.30 : 0.36, youth) + (refined && elder ? 3.4 : 0);
+  const nose = midface +
+      (noseStyle === 'arched' ? 3.5 : noseStyle==='aquiline'?7:noseStyle==='upturned'?-7:noseStyle==='broad_base'?-1.5:noseStyle === 'rounded' ? -2.5 : 0) * (1 - youth*(projected?.72:1)),
+    philtrumAnchor = projected ? midface : nose,
+    mouth = philtrumAnchor + (depth - philtrumAnchor) * mix(refined && elder ? .48 : 0.42, 0.45, youth);
   const crown = refined ? mix(-77, -90, youth) + (v(1) - 0.5) * 8 : mix(-87, -101, youth) + (v(1) - 0.5) * 5;
   const temple = cheek * (templeWidths[shape] ?? .92),
     eyeSpacing = refined ? cheek * 0.39 + (v(2) - 0.5) * 6 : mix(26.8 + (v(2) - 0.5) * 4, 26, youth);
   const axis = refined ? -3 - v(3)*13 : -9 - v(3) * 4,
-    tip = axis - mix(noseStyle === 'arched' ? 10.7 : noseStyle==='aquiline'?13:noseStyle==='upturned'?8.8:noseStyle === 'rounded' ? 5.4 : 7, 3, youth),
+    tip = projected ? axis - headYaw(cheek,axis).sinYaw * noseReliefs[noseStyle].tip * mix(1 + (elder ? .08 : 0), .48, youth) :
+      axis - mix(noseStyle === 'arched' ? 10.7 : noseStyle==='aquiline'?13:noseStyle==='upturned'?8.8:noseStyle === 'rounded' ? 5.4 : 7, 3, youth),
     lipX = axis + 2;
   const cx = lipX + 1,
     corner = depth * mix(0.72, 0.68, youth) + (elder ? 1 : 0);
   const earX = temple - 1,
     earY = -5 - youth * 2,
-    earH = nose + 4;
+    earH = (projected ? midface : nose) + 4;
   const cheekY = (shape === 'angular' || shape==='diamond' ? 14 : shape==='pear' ? 29 : 21) + youth * 7 + (elder ? 4 : 0);
   const jawY = corner + (elder && refined ? 6 : 0) + (shape === 'broad' ? 1 : shape === 'round' ? -4 : shape==='square'||shape==='oblong'?6:shape==='heart'?-4:0);
+  // In a short lower face the adult cheek controls can pass below the angle
+  // of the jaw and turn upwards. Keep the child contour tangent at the cheek
+  // and descend continuously to the chin without changing the skull or pose.
+  const softCheeks = refined && p.cheek_revision===2 && (infant || child);
+  const rightCheek = softCheeks
+    ? `C${cheek} ${mix(cheekY,depth,.42)} ${jaw*.84} ${mix(cheekY,depth,.77)} ${cx+chinWidth*.43} ${depth-.5}`
+    : `C${cheek-1} ${cheekY+13} ${jaw+3+fullness} ${jawY-6} ${jaw} ${jawY}
+ C${jaw-5} ${jawY+8} ${cx+chinWidth*.88} ${depth-3} ${cx+chinWidth*.43} ${depth-.5}`;
+  const leftCheek = softCheeks
+    ? `C${-jaw*.91} ${mix(cheekY,depth,.77)} ${-cheek+1} ${mix(cheekY,depth,.32)} ${-cheek+2} ${cheekY-5}`
+    : `C${cx-chinWidth} ${depth-4} ${-jaw-2} ${jawY+6} ${-jaw-5} ${jawY-2}
+ Q${-cheek} ${cheekY+12} ${-cheek+2} ${cheekY-5}`;
   const outline = refined ? `M${axis*.22} ${crown}
  C${temple*.6} ${crown-2} ${temple+6} ${crown*.63} ${temple} -15
  C${temple-1} -4 ${cheek+1} 9 ${cheek} ${cheekY}
- C${cheek-1} ${cheekY+13} ${jaw+3+fullness} ${jawY-6} ${jaw} ${jawY}
- C${jaw-5} ${jawY+8} ${cx+chinWidth*.88} ${depth-3} ${cx+chinWidth*.43} ${depth-.5}
+ ${rightCheek}
  Q${cx+1} ${depth+2} ${cx-chinWidth*.47} ${depth-1}
- C${cx-chinWidth} ${depth-4} ${-jaw-2} ${jawY+6} ${-jaw-5} ${jawY-2}
- Q${-cheek} ${cheekY+12} ${-cheek+2} ${cheekY-5}
+ ${leftCheek}
  Q${-cheek+4} 1 ${-temple} -12 C${-temple-6} ${crown*.67} ${-temple*.58} ${crown-1} ${axis*.22} ${crown}Z`
     : `M0 ${crown} C${temple * 0.65} ${crown - 2} ${temple + 8} ${crown * 0.66} ${temple} -16
  C${temple - 1} -3 ${cheek + 1} 8 ${cheek} 20 C${cheek - (elder ? -1 : 1)} ${elder ? 42 : 35} ${jaw + (elder ? 7 : 4)} ${corner - 7} ${jaw} ${corner}
@@ -115,7 +128,7 @@ function landmarks(p: Human, shape: Face) {
   return {
     age,
     refined,
-    noseStyle,
+    projected, noseStyle,
     infant,
     child,
     teen,
@@ -188,10 +201,13 @@ function eye(h: Head, p: Paint, x: number, side: number, kind: string) {
 // Two sockets on one curved orbital plane. The nose bridge is its centre;
 // horizontal yaw foreshortens the far orbit. Roll and mirroring are applied
 // once later, to the complete head, so they cannot change binocular alignment.
+function headYaw(cheek: number, axis: number) {
+  const radius = cheek * .87;
+  const sinYaw = -axis / radius;
+  return {radius, sinYaw, cosYaw:Math.sqrt(1 - sinYaw * sinYaw)};
+}
 function orbitalPair(h: Head) {
-  const radius = h.cheek * .87;
-  const sinYaw = -h.axis / radius;
-  const cosYaw = Math.sqrt(1 - sinYaw * sinYaw);
+  const {radius,sinYaw,cosYaw} = headYaw(h.cheek,h.axis);
   const spacing = h.cheek * (.40 + h.youth * .018) + (h.v(2) - .5) * 2.6;
   const depth = Math.sqrt(radius * radius - spacing * spacing);
   const middle = h.axis + (radius - depth) * sinYaw;
@@ -199,7 +215,7 @@ function orbitalPair(h: Head) {
     side, x: middle + side * spacing * cosYaw,
     widthScale: cosYaw + side * (spacing / depth) * sinYaw,
   });
-  return { near: orbit(1), far: orbit(-1), halfWidth: spacing * .52,
+  return { sinYaw, cosYaw, near: orbit(1), far: orbit(-1), halfWidth: spacing * .52,
     gaze: (h.v(13) - .5) * .20 - sinYaw * .52 };
 }
 
@@ -248,6 +264,96 @@ function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair
     ${path(brow,tone(paint.hair[1],paint.skin[2],.31+h.youth*.15),.82-h.youth*.28)}</g>`;
 }
 
+// Measurements in skull space. Relief is distance in front of the facial plane.
+// A raised tip exposes the underside; a descending tip covers part of the septum.
+type NoseShape = NonNullable<Human['nose_shape']>;
+type NoseRelief = { bridge: number; ridge: number; tip: number; bulb: number; ala: number; lift: number };
+const noseReliefs: Record<NoseShape, NoseRelief> = {
+  straight:   {bridge:4.4, ridge:8,  tip:15, bulb:5.0, ala:10.0, lift:0},
+  rounded:    {bridge:4.9, ridge:5,  tip:13, bulb:7.7, ala:11.5, lift:.2},
+  arched:     {bridge:4.3, ridge:19, tip:14, bulb:4.7, ala:9.2,  lift:-.7},
+  upturned:   {bridge:3.9, ridge:5,  tip:14, bulb:5.3, ala:9.4,  lift:3.2},
+  broad_base: {bridge:6.0, ridge:5,  tip:11, bulb:6.4, ala:14.2, lift:.2},
+  aquiline:   {bridge:3.9, ridge:17, tip:22, bulb:4.6, ala:9.9,  lift:-4.1},
+};
+
+function projectedNose(h: Head, paint: Paint) {
+  const type = noseReliefs[h.noseStyle];
+  const {sinYaw, cosYaw} = headYaw(h.cheek,h.axis);
+  const y = h.nose, youth = h.youth;
+  const project = (side: number, depth: number) => h.axis + side*cosYaw - depth*sinYaw;
+  const relief = mix(1 + (h.elder ? .08 : 0), .48, youth);
+  const ridge = type.ridge*relief, tipDepth = type.tip*relief;
+  const width = type.bridge*(1-youth*.26);
+  const bulb = mix(type.bulb, 4.4, youth*.52);
+  const ala = mix(type.ala, 7.3, youth*.61);
+  const lift = mix(type.lift, 1.2, youth*.67);
+  const root = project(0,0), mid = project(0,ridge), tip = h.tip;
+  const tipY = y-3.7-lift, septumY = y+.7-lift*.43, wingY=y-2.6;
+  const wingDepth = tipDepth*.28, far = project(-ala,wingDepth), near = project(ala,wingDepth);
+  const start = mix(2,7,youth), midY = mix(start,tipY,.54);
+  // The high point of a convex dorsum catches light above the tip. In a
+  // turned-up nose the bridge recedes into the glabella and the lobule is lit.
+  const prominence = type.ridge/type.tip;
+  const bonyWidth = width*(1+Math.max(0,prominence-1)*1.55);
+  const crestY = mix(start,tipY,.74-prominence*.32);
+  const underside = 1.9+lift*.38 + (h.noseStyle==='rounded' ? 1.25 : 0);
+  const shadow = tone(paint.skin[2], '#514044', .12);
+  const light = tone(paint.skin[0], '#ffead9', .15);
+  const ink = tone(paint.skin[2], '#3d292b', .52);
+  // A side wall blends into the near cheek. Its edge ends at the near ala;
+  // the ridge itself has no ink outline, even for a convex bridge.
+  const sideWall = `M${root+width*.18} ${start}
+    C${root+width*.65} ${midY*.8} ${mid+width*.12} ${midY} ${mid+width*.17} ${midY+1}
+    Q${tip+width*.24} ${tipY-6} ${tip+bulb*.42} ${tipY+1}
+    Q${project(ala*.63,wingDepth)} ${wingY-4.3} ${near} ${wingY}
+    Q${near-1} ${wingY-5} ${mid+bonyWidth*1.46} ${midY+3}
+    Q${root+width*1.2} ${start+3} ${root+width*.18} ${start}Z`;
+  const dorsalLight = `M${root-width*.3} ${start+2}
+    Q${mid-bonyWidth*.82} ${midY} ${tip-bulb*.65} ${tipY}
+    Q${tip-bulb*.26} ${tipY-2.5} ${tip+bulb*.08} ${tipY-2.9}
+    Q${mid+width*.1} ${midY-1} ${root-width*.3} ${start+2}Z`;
+  const farBulb = project(-bulb,tipDepth*.8), nearBulb = project(bulb,tipDepth*.8);
+  const baseShade = `M${far+.6} ${wingY-.4}
+    Q${far+.4} ${wingY+2.2} ${project(-ala*.65,wingDepth)} ${wingY+1.6}
+    Q${farBulb-.5} ${tipY+1.1} ${farBulb+.6} ${tipY+.2}
+    Q${tip} ${tipY+underside} ${nearBulb-.5} ${tipY-.15}
+    Q${nearBulb+1} ${wingY+.8} ${project(ala*.66,wingDepth)} ${wingY+1.5}
+    Q${near-1.2} ${wingY+2.3} ${near} ${wingY-.4}
+    Q${near+1} ${wingY+3.1} ${project(ala*.62,wingDepth)} ${y+.7}
+    Q${tip+bulb*.45} ${y+.25} ${tip} ${septumY+.6}
+    Q${tip-bulb*.44} ${septumY+.4} ${project(-ala*.60,wingDepth)} ${y+.6}
+    Q${far+.1} ${y+.7} ${far+.6} ${wingY-.4}Z`;
+  const nostril = (side: number) => {
+    const x = project(side*ala*.615,tipDepth*.47);
+    const w = ala*.21*(cosYaw+side*sinYaw*.60);
+    const height = (1.04 + lift*.24)*(1-youth*.16);
+    // The medial end is lower than the lateral end on both wings.
+    return `<g transform="translate(${x} ${y-.32-lift*.14}) scale(${side} 1)">`+
+      path(`M${-w} .43Q${-w*.40} ${-height} ${w*.46} ${-height*.87}Q${w} ${-height*.72} ${w} -.32Q${w*.18} .46 ${-w} .43Z`,ink,.76-youth*.13)+'</g>';
+  };
+  const cheekCreases = h.elder || h.age==='mature_adult'
+    ? line(`M${far-1.3} ${wingY+3}Q${far-5} ${y+6} ${h.lipX-16} ${h.mouth-.8}
+            M${near+1.7} ${wingY+2}C${near+6} ${y+4} ${h.lipX+21} ${h.mouth-5} ${h.lipX+22} ${h.mouth+3}`,
+            shadow, h.elder?1.65:1.05, h.elder?.48:.27) : '';
+  const alarCrease = `M${near-1.8} ${wingY-3.3}Q${near+2.0} ${wingY-1} ${near-.3} ${wingY+1.6}`;
+  const alaVolume = (x:number, side:number) => {
+    const radius = (ala-bulb)*.63+1;
+    return ellipse(x-side*radius*.43,wingY+.2,radius*1.17,3.4,'url(#alarShade)')+
+      ellipse(x-side*radius*.30-.55,wingY-1.3,radius*.90,2.9,'url(#alarLight)');
+  };
+  return `<g data-part="nose"><defs>${wash('alarShade',shadow,.54)}${wash('alarLight',light,.57)}
+    ${wash('dorsalLight',light,.32+prominence*.14)}${wash('dorsalShade',shadow,.39)}</defs><g filter="url(#glaze)">`+
+    path(sideWall,shadow,.53-youth*.16)+path(dorsalLight,light,.39-youth*.05)+'</g>'+
+    ellipse(mid-.7,crestY,bonyWidth*(.64+prominence*.40),(tipY-start)*.25,'url(#dorsalLight)')+
+    ellipse(mid+bonyWidth*.88,crestY+3.2,bonyWidth*.9,(tipY-start)*(.12+prominence*.12),'url(#dorsalShade)')+
+    alaVolume(far,-1)+alaVolume(near,1)+
+    ellipse(tip+.8,tipY+1,bulb*1.06,3.9+bulb*.18,'url(#alarShade)')+
+    ellipse(tip-.5,tipY-.9,bulb*.90,2.6+bulb*.22,'url(#alarLight)')+
+    path(baseShade,shadow,.49-youth*.09)+nostril(-1)+nostril(1)+cheekCreases+
+    line(alarCrease,shadow,1.10,.57-youth*.14)+'</g>';
+}
+
 function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
   const { axis, tip, nose: y, mouth: m, lipX: x } = h;
   const wide =
@@ -259,7 +365,7 @@ function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
   const ink = tone(p.skin[2], '#422d30', 0.56),
     red = tone(p.skin[1], h.refined ? '#91494e' : '#934e51', (h.refined ? .56 : .48) - h.build * 0.05 - h.youth * 0.07);
   const smile = h.refined ? (h.v(10) - .46) * 9 - (h.elder ? 2 : 0) : 2 + h.v(10) * 2.8;
-  const nose =
+  const nose = h.projected ? '' :
     `<g filter="url(#glaze)">` +
     path(
       `M${axis + 1} 0 C${axis + 3} ${y * 0.28} ${tip + 4} ${y * 0.66} ${tip - arch - 1} ${y - 6}
@@ -306,6 +412,7 @@ function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
     line(crease, ink, 1.15, 0.8) +
     line(`M${x - 3} ${m + 4.3 * upperFull}q4.7 1.1 9-.6`, p.skin[0], 1.5, 0.49) +
     ellipse(x + 2, m + 9 * full, 9, 2.4, 'url(#socket)');
+  if (h.projected) return {nose:projectedNose(h,p),lips};
   if (!h.refined) return { nose, lips };
   // Model a bridge, tip and two wings in the same three-quarter projection as the eyes.
   const bulb = (noseStyle === 'rounded' ? 7.4 : noseStyle === 'arched' ? 4.3 : 5.3) * (1-h.youth*.26);
@@ -504,8 +611,7 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
     ellipse(farEye - 5, 22, 13, 8, 'url(#malar)') +
     ellipse(nearEye - 8, 1, 20, 16, 'url(#socket)') +
     ellipse(farEye + 5, -1, 14, 13, 'url(#socket)') +
-    ellipse(a + 6, 11, 7, 21, 'url(#socket)') +
-    ellipse(h.tip + 7, n + 2, 9, 4, 'url(#socket)') +
+    (h.projected ? '' : ellipse(a + 6, 11, 7, 21, 'url(#socket)') + ellipse(h.tip + 7, n + 2, 9, 4, 'url(#socket)')) +
     ellipse(x + 3, m + 9, 15, 4, 'url(#socket)') +
     path(
       `M${nearEye - 15} -9 Q${nearEye + 6} -23 ${nearEye + 23} -11 Q${nearEye + 22} -3 ${nearEye + 17} 1 Q${nearEye + 8} -7 ${nearEye - 15} -3Z`,
@@ -519,7 +625,7 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
   const folds =
     h.elder || h.age === 'mature_adult'
       ? line(
-          `M${h.tip - 5} ${n + 4} Q${x - 21} ${m - 5} ${x - 18} ${m + 5} M${h.tip + 20} ${n + 1}Q${x + 24} ${m - 7} ${x + 25} ${m + 5} M${nearEye - 9} 10q12 7 25-1`,
+          h.projected ? `M${nearEye - 9} 10q12 7 25-1` : `M${h.tip - 5} ${n + 4} Q${x - 21} ${m - 5} ${x - 18} ${m + 5} M${h.tip + 20} ${n + 1}Q${x + 24} ${m - 7} ${x + 25} ${m + 5} M${nearEye - 9} 10q12 7 25-1`,
           ink,
           1.12,
           h.elder ? 0.37 : 0.14,
@@ -528,11 +634,11 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
   const ageVolume = h.elder
     ? ellipse(nearEye + 4, 11, 18, 5, 'url(#socket)') +
       ellipse(farEye, 10, 13, 4, 'url(#socket)') +
-      path(
+      (h.projected ? '' : path(
         `M${h.tip + 15} ${n}Q${x + 28} ${m - 8} ${x + 24} ${m + 8} Q${x + 30} ${m + 1} ${x + 32} ${m - 7}Q${x + 25} ${n + 4} ${h.tip + 15} ${n}Z`,
         skin[2],
         0.23,
-      )
+      ))
     : '';
   const lowerLid = (eyeX:number, span:number) =>
     path(`M${eyeX-span} 5q${span} 7 ${span*2} -.8q${-span*.65} 13 ${-span*1.42} 9.6q${-span*.57} -1.4 ${-span*.58} -8.8Z`,skin[2],.37) +
@@ -540,7 +646,7 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
   const cheekFold = h.refined && h.elder
     ? lowerLid(nearEye,16)+lowerLid(farEye,12) +
       path(`M${t-5} -51Q${c-9} -20 ${nearEye+15} -14Q${nearEye+26} -36 ${t-5} -51Z`,skin[2],.21) +
-      path(`M${h.tip+12} ${n+1}Q${x+22} ${n+2} ${x+25} ${m+9}Q${x+27} ${m-6} ${x+19} ${n+1}Z`,skin[2],.47) +
+      (h.projected ? '' : path(`M${h.tip+12} ${n+1}Q${x+22} ${n+2} ${x+25} ${m+9}Q${x+27} ${m-6} ${x+19} ${n+1}Z`,skin[2],.47)) +
       path(`M${c-3} 16Q${c-12} 28 ${x+28} ${m-8}Q${x+21} ${m-1} ${x+21} ${m+10} Q${x+31} ${m+9} ${h.jaw+3} ${h.corner+2}Q${c} 40 ${c-3} 16Z`,skin[2],.23)
       + line(`M${nearEye-10} 10q15 9 27-2m-4-1 7-1m-8 4 5 1 M${farEye-9} 6q8 8 17 4 M${x-14} ${m+3}q-3 5-2 9m33-11q4 3 4 7`,ink,1.2,.4)
     : '';

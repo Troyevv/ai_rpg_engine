@@ -132,7 +132,7 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
         if eligible and 'facial_hair' not in authored:
             style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4, 5, 6))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=face, face_revision=4, eye_revision=2, skin_swatch=True,eye_swatch=True,
+            visage=face, face_revision=4, eye_revision=2, cheek_revision=2, nose_revision=2, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
             facial_hair=STYLES['facial_hair'][style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,
@@ -192,6 +192,8 @@ def refine_automatic(state, cid, hints, warnings=None):
     old.update(stage=generated['stage'],visual_age=generated.get('visual_age'),body_frame=generated['body_frame'])
     if not beard_eligible(actor,generated['stage']): old['facial_hair']='clean_shaven'
     if old['visual_age'] is None: old.pop('visual_age')
+    if 'nose_shape' in fields and old.get('face_revision') in (3,4):
+        old['nose_revision'] = 2
     for field in fields:
         old[field] = generated[field]
         layer = {'hair':'hairstyle','clothing':'garment','face':'visage'}.get(field)

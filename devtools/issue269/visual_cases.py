@@ -34,6 +34,20 @@ def cases():
          'visual_age':age, 'stage':age if age in ages[:3] else 'adult'}}
         for build in CATALOG['features']['body_build']
         for age, outfit in [('child','parka'), ('young_adult','kimono'), ('mature_adult','tech_shell'), ('elderly','lamellar')]]
+    # Each row keeps the same person, pose, tone and eyes across all six noses.
+    groups['nose_matrix'] = []
+    groups['nose_previous'] = []
+    tones = [0, 3, 6, 2, 5, 1, 4, 3]
+    faces = ['round','broad','heart','oblong','diamond','pear','angular','square']
+    for index, (tone, face) in enumerate(zip(tones, faces)):
+        age = ages[index % 6] if index < 6 else ['young_adult','elderly'][index-6]
+        person = {**population[index]['portrait'], 'skin':tone, 'visage':face, 'visual_age':age,
+                  'stage':age if age in ages[:3] else 'adult', 'hairstyle':'parted', 'garment':'shirt',
+                  'facial_hair':'clean_shaven','eyewear':'none','face_detail':'none','eye_shape':'almond'}
+        for shape, label in CATALOG['features']['nose_shape'].items():
+            art = {**person, 'nose_shape':shape}
+            groups['nose_matrix'].append({'label':label, 'portrait':art})
+            groups['nose_previous'].append({'label':label, 'portrait':{k:v for k,v in art.items() if k!='nose_revision'}})
     return groups
 
 
