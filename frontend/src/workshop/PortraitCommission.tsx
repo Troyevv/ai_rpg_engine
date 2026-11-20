@@ -94,8 +94,8 @@ export function PortraitCommission({
     active = useRef(cacheKey);
   active.current = cacheKey;
   const byId = new Map(cards.map((c) => [c.id, c]));
-  const avatar = (c: PortraitSubject, size: number) => (
-    <CharacterAvatar subject={c} workspaceId={workspaceId} saveId={saveId} author size={size} />
+  const avatar = (c: PortraitSubject, size: number, framing: 'avatar'|'plate'='avatar') => (
+    <CharacterAvatar framing={framing} subject={c} workspaceId={workspaceId} saveId={saveId} author size={size} />
   );
   function select(values: string[]) {
     setIds(values);
@@ -341,7 +341,7 @@ export function PortraitCommission({
                         onChange={() => select(toggle(ids, c.id))}
                       />
                       <span className="cast-art">
-                        {avatar(c, 80)}
+                        {avatar(c, 80,'plate')}
                         <i aria-hidden="true">{ids.includes(c.id) && <Check size={15} />}</i>
                       </span>
                       <span className="cast-name">{c.name}</span>
@@ -452,9 +452,9 @@ export function PortraitCommission({
                     return (
                       <div className="commission-result" key={id} data-selected={chosen.includes(id)}>
                         <div className="result-pair">
-                          {avatar(c, 76)}
+                          {avatar(c, 76,'plate')}
                           <ArrowRight size={15} />
-                          {avatar({ id, name: c.name, procedural_portrait: row.descriptor }, 76)}
+                          {avatar({ id, name: c.name, procedural_portrait: row.descriptor }, 76,'plate')}
                         </div>
                         <strong>{c.name}</strong>
                         {row.warnings.length > 0 && <small>{row.warnings.join(' ')}</small>}

@@ -4,6 +4,10 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.collection-actions > .ww-primary {
+  flex: none;
+  white-space: nowrap;
+}
 .portrait-album-trigger {
   min-height: 44px;
 }

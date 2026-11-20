@@ -4,7 +4,10 @@ import {Choice} from '../components/ui/choice';
 import {Button} from '../components/ui/button';
 import catalog from '../../../shared/portrait-catalog.json';
 import {proceduralPortrait,type ProceduralPortrait,type Layers} from './proceduralPortrait';
+import {figureFeatures,type FeatureChoices} from './portraitFigure';
 import {bodyFrames,facialHairStyles,type BodyFrame,type FacialHair} from './portraitAnatomy';
+const detailNames={eye_shape:'Разрез глаз',nose_shape:'Форма носа',lip_shape:'Форма губ'};
+const featureLabels={almond:'Миндалевидные',open:'Открытые',hooded:'Прикрытые веком',straight:'Прямой',rounded:'Округлый',arched:'С горбинкой',defined:'Выраженный контур',full:'Полные',fine:'Тонкие'};
 
 export type AnatomyReference={body_frame:BodyFrame;facial_hair_allowed:boolean};
 type Age=NonNullable<ProceduralPortrait['visual_age']>;
@@ -34,7 +37,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const modern=():Extract<ProceduralPortrait,{version:3}>=>value.version===3?value:{...value,version:3,base_version:value.version,
     body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
     facial_hair:value.version===2?value.facial_hair:'clean_shaven'};
- const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:2}:{})} as ProceduralPortrait);
+ const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:3}:{})} as ProceduralPortrait);
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
  const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
  const adult=(p:ProceduralPortrait)=>['adult','young_adult','mature_adult','elderly'].includes(p.visual_age||p.stage);
@@ -54,11 +57,18 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
   <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
  {section in layers&&(()=>{const group=section as keyof typeof layers;
- const current=value.version===3 && (group!=='face'||value.face_revision===2)?value[layers[group] as keyof Layers]:null;
+ const current=value.version===3 && (group!=='face'||value.face_revision===3)?value[layers[group] as keyof Layers]:null;
  return <div className="studio-gallery" aria-label={categories[group]}>{Object.entries(catalog.styles[group]).map(([id,label])=>{
   const art=withLayer(group,id);return <button type="button" key={id} aria-pressed={current===id} onClick={()=>change(art)}>
   <img alt="" loading="lazy" decoding="async" src={proceduralPortrait(art)||undefined}/><span>{label}</span>{current===id&&<Check size={14} aria-hidden="true"/>}</button>
  })}</div>})()}
+ {section==='face'&&<div className="studio-face-details">
+ {value.version===3&&value.face_revision===3?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
+ <Choice aria-label={detailNames[key]} value={value[key]||'auto'} onValueChange={id=>{
+ const next={...value};if(id==='auto')delete next[key];else Object.assign(next,{[key]:id});change(next)}}><option value="auto">По рисунку</option>
+ {figureFeatures[key].map(id=><option key={id} value={id}>{featureLabels[id]}</option>)}</Choice></label>):
+ <p>Выберите форму лица, чтобы примерить новый рисунок. Сохранённый портрет виден рядом.</p>}
+ </div>}
  {section==='color'&&(Object.keys(swatches) as (keyof typeof swatches)[]).map(field=><div key={field} className="studio-colors" role="group" aria-label={swatchLabels[field]}>
  <h3>{swatchLabels[field]}</h3>{Object.values(catalog.styles[field]).map((label,i)=><button key={label} type="button" title={label} aria-label={label} aria-pressed={value[field]===i}
  onClick={()=>change({...modern(),form:'human',[field]:i,...(field==='skin'?{skin_swatch:true}:field==='eyes'?{eye_swatch:true}:{})})}><i style={{backgroundColor:swatches[field][i]}}/>{label}</button>)}</div>)}

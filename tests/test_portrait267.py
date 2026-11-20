@@ -19,7 +19,7 @@ def test_world_scoped_catalogue_and_wardrobe():
     assert {p['eyes'] for p in first}==set(range(8))
     assert all(p['accessory']==0 for p in first)
     from backend.runtime_v3.models import ProceduralPortraitV3
-    assert all(p['face_revision']==2 for p in first)
+    assert all(p['face_revision']==3 for p in first)
     historical=dict(first[0])
     historical.pop('face_revision')
     assert 'face_revision' not in ProceduralPortraitV3.model_validate(historical).model_dump()

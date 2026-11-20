@@ -70,7 +70,7 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
    <header className="ww-dossier-header"><DialogTitle>Досье персонажа</DialogTitle>
     <DialogDescription>Мастерская миров · {author?'авторское редактирование':'просмотр игрока'}</DialogDescription></header>
    {card&&<div className="ww-dossier"><aside className="ww-dossier-aside">
-    {author?<PortraitControl key={wid+card.id} card={card} workspaceId={wid} refresh={refresh} disabled={locked}/>:<CharacterAvatar subject={card} workspaceId={wid} size="100%"/>}
+    {author?<PortraitControl key={wid+card.id} card={card} workspaceId={wid} refresh={refresh} disabled={locked}/>:<CharacterAvatar framing="plate" subject={card} workspaceId={wid} size="100%"/>}
     {!card.portrait&&card.procedural_portrait&&<small className="ww-dossier-illustration-note">Стилизованная иллюстрация</small>}
     <div className="ww-dossier-identity"><h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p></div>
     <div className="ww-dossier-switcher"><label>Найти персонажа<input type="search" aria-label="Найти персонажа в досье" value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Другие персонажи<Choice aria-label="Переключить досье" value={card.id} onValueChange={selectedValue => onSelect(selectedValue)}>

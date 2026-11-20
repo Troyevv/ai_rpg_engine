@@ -53,5 +53,12 @@ it('keeps the v2 plate intact through a layer-preserving v3 preview',()=>{
 it('preserves approved v3 faces until a revised face is chosen',()=>{
  const art={...modern,version:3,base_version:2,hairstyle:'short',garment:'shirt',visage:'broad'} as const;
  expect(createHash('sha256').update(svg(art)).digest('hex')).toBe('8cfa54629097ce5e4515c2b66f7bd04164421d77b32949e6a26ec4f6439565af');
- expect(svg({...art,face_revision:2})).not.toBe(svg(art));
+ const revision21=svg({...art,face_revision:2});
+ expect(createHash('sha256').update(revision21).digest('hex')).toBe('7514857b217d039f4671d76f78d669e574abab76bd7791864b1d88116a0ddb85');
+ const current={...art,face_revision:3} as const;
+ expect(svg(current)).not.toBe(revision21);
+ for(const body_frame of ['female','male','neutral'] as const){
+  const options=['straight','arched','rounded'].map(nose_shape=>svg({...current,body_frame,nose_shape} as ProceduralPortrait));
+  expect(new Set(options).size).toBe(3);
+ }
 });

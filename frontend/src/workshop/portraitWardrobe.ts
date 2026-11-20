@@ -6,8 +6,8 @@ import catalog from '../../../shared/portrait-catalog.json';
 type Garment = keyof typeof catalog.styles.clothing;
 type Hair = keyof typeof catalog.styles.hair;
 const dark='#20262a', ivory='#f2debf';
-const shape=(d:string, fill:string, opacity=1)=>`<path d="${d}" fill="${fill}" opacity="${opacity}"/>`;
-const seam=(d:string,color=dark,width=2,opacity=.65)=>`<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+export const shape=(d:string, fill:string, opacity=1)=>`<path d="${d}" fill="${fill}" opacity="${opacity}"/>`;
+export const seam=(d:string,color=dark,width=2,opacity=.65)=>`<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
 const buttons=(x:number,y:number,count:number)=>Array.from({length:count},(_,i)=>`<circle cx="${x}" cy="${y+23*i}" r="3" fill="#ead4ac"/><circle cx="${x+.5}" cy="${y+23*i+.5}" r="1" fill="#473c32"/>`).join('');
 const lapels=shape('M171 319L141 340 156 348 144 359 199 430Z M229 319L259 340 244 348 256 359 201 430Z',ivory,.35);
 const collar=shape('M171 315L197 340 178 355 157 333Z M229 315L203 340 222 355 243 333Z',ivory,.72);
@@ -44,13 +44,13 @@ const cuts: Record<Garment,[string,string]> = {
  cloak:['M169 309Q196 332 231 309l23 16q52 17 70 62l56 123H20l56-123q18-45 70-62Z',
  shape('M166 312q36 19 66-3 9 85 94 201H134q94-116 32-198Z',dark,.32)+seam('M164 317q-7 72-55 157m126-158q8 60 59 130',ivory,4,.35)+'<circle cx="215" cy="332" r="8" fill="#c7a469"/><circle cx="215" cy="332" r="4" fill="#795f46"/>'],
 };
-export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string) {
+export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null) {
  const [outline,details]=cuts[id];
  const width=young?.85:frame==='male'?1.12:frame==='female'?.89:1;
  const arms=(id==='tshirt'||id==='dress') ?
    shape(id==='tshirt'?'M79 397L112 411 103 461 98 510H60L68 460Z M321 397L288 411 297 461 302 510H340L332 460Z':'M93 375L123 388 116 459 112 510H77L84 447Z M307 375L277 388 284 459 288 510H323L316 447Z','url(#skin)'):'';
  const folds=seam('M118 358q7 22 9 36m145-36q-7 22-8 36M145 441l-5 60m111-56 8 56',ivory,1.6,.15);
- const neck=shape(neckPath||'M174 263h52l4 55q4 14 43 24l-4 35H131l-4-35q39-10 43-24Z','url(#neck)');
+ const neck=neckPath===null?'':shape(neckPath||'M174 263h52l4 55q4 14 43 24l-4 35H131l-4-35q39-10 43-24Z','url(#neck)');
  return `<g transform="translate(200 0) scale(${width} 1) translate(-200 0)">${arms}${neck}${shape(outline,'url(#cloth)')}${folds}${details}</g>`;
 }
 

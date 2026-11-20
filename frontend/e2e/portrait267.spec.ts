@@ -77,7 +77,7 @@ test('same v3 illustration stays legible in phone contacts and family nodes',asy
   const path='/api/saves/'+selected.save+'/characters/qa_timur/portraits';
   const listing=await(await request.get(path)).json();
   const descriptor={...listing.descriptor,version:3,base_version:2,form:'human',body_frame:'male',
-   facial_hair:'clean_shaven',hairstyle:'bun',garment:'cloak',visage:'angular',visual_age_mode:'manual',visual_age:'young_adult'};
+   facial_hair:'clean_shaven',hairstyle:'bun',garment:'cloak',visage:'angular',face_revision:3,visual_age_mode:'manual',visual_age:'young_adult'};
   const result=await request.put(path+'/procedural',{data:{descriptor,revision:listing.revision,mode:'procedural'}});
   expect(result.ok(),await result.text()).toBeTruthy();
   await page.goto('/');await page.evaluate(selection=>localStorage.setItem('selection',JSON.stringify(selection)),selected);
@@ -96,4 +96,50 @@ test('same v3 illustration stays legible in phone contacts and family nodes',asy
   await row.scrollIntoViewIfNeeded();
   await row.screenshot({path:info.outputPath(surface+'-round.png'),scale:'css'});
  }
+});
+
+test('workshop fits the cast by age and preserves a revision-21 portrait until confirmed',async({page,request},info)=>{
+ const mobile=info.project.name==='mobile';
+ await page.setViewportSize({width:mobile?360:1280,height:mobile?800:850});
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const cast=[
+  ['Илья Волков',30,'male','oval','parted','shirt','clean_shaven'],
+  ['Мёрфи Волкова',11,'female','round','ponytail','tshirt','clean_shaven'],
+  ['Тимур Савельев',35,'male','broad','short','blazer','stubble'],
+  ['Соня Величкина',25,'female','long','wavy','dress','clean_shaven'],
+  ['Виктор Левин',72,'male','angular','receding','cardigan','full_beard'],
+  ['Нина Маркова',70,'female','soft','bun','smock','clean_shaven'],
+  ['Лев Фомин',40,'male','narrow','curly','vest','mustache'],
+  ['Даниил Шаров',16,'male','oval','fringe','hoodie','clean_shaven'],
+ ] as const;
+ state.characters.forEach((card:{id:string;name:string;fields:Record<string,string>;portrait_traits?:unknown},i:number)=>{
+  const [name,age,sex,face,hair,clothing,facial_hair]=cast[i],actor=state.world.characters[card.id];
+  card.name=name;card.fields['Возраст']=String(age);card.portrait_traits={face,hair,clothing,facial_hair,form:'human',skin:['peach','light','beige','warm'][i%4],hair_color:['brown','brown','black','red'][i%4]};
+  Object.assign(actor,{biological_sex:sex,birth_date:(2026-age)+'-02-01',developmental_stage:age===11?'child':age<18?'adolescent':'adult'});
+  if(i===0)actor.procedural_portrait={seed:'ab'.repeat(16),version:3,base_version:2,form:'human',stage:'adult',visual_age:'young_adult',body_frame:'male',facial_hair,face:0,skin:2,eyes:3,hair:0,clothing:0,accessory:0,palette:2,visage:face,hairstyle:hair,garment:clothing,face_revision:2};
+ });
+ const w=await(await request.post('/api/workspaces',{data:{name:'Семейный альбом'}})).json();
+ const url='/api/workspaces/'+w.id+'/draft',pid=state.characters[0].id,path=url+'/characters/'+pid+'/portraits?author=true';
+ const res=await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}});expect(res.ok(),await res.text()).toBe(true);
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+ await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ const button=(name:string)=>page.getByRole('button',{name,exact:true});
+ const studio=async()=>{await button('Редактировать портрет').click();await button('Настроить иллюстрацию').click();await button('Лицо').click()};
+ const stored=async()=>await(await request.get(path)).json();
+ const original=await stored();expect(original.descriptor.face_revision).toBe(2);
+ const child=await(await request.get(url+'/characters/'+state.characters[1].id+'/portraits?author=true')).json();
+ expect(child.age_reference.age).toBe(11);expect(child.descriptor.visual_age).toBe('child');
+ await button('Досье Илья Волков').click();await studio();await button('Овальное').click();
+ await chooseOption(page.getByLabel('Форма носа',{exact:true}),'arched');
+ await button('Отмена').click();expect((await stored()).descriptor).toEqual(original.descriptor);
+ await button('Настроить иллюстрацию').click();await button('Лицо').click();await button('Овальное').click();
+ await chooseOption(page.getByLabel('Форма носа',{exact:true}),'arched');await chooseOption(page.getByLabel('Разрез глаз',{exact:true}),'hooded');
+ await chooseOption(page.getByLabel('Форма губ',{exact:true}),'fine');
+ await button('Сохранить иллюстрацию').click();await expect(page.locator('.studio-open')).toHaveCount(0);
+ expect((await stored()).descriptor).toMatchObject({face_revision:3,nose_shape:'arched',eye_shape:'hooded',lip_shape:'fine'});
+ await button('Готово').click();
+ const grid=page.locator('.ww-characters-grid');
+ await grid.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>(img as HTMLImageElement).decode())));
+ await grid.screenshot({path:info.outputPath('family-cards.png'),scale:'css'});
+ await button('Досье Илья Волков').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('family-screen.jpg'),scale:'css'});
 });

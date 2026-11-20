@@ -1,10 +1,11 @@
 // Trusted vector layers from the approved #175 artwork. Version 1 is immutable.
 // Never accept SVG, paths, colors or markup from the server/user.
 import catalog from '../../../shared/portrait-catalog.json';
+import {portraitFigure,type FeatureChoices} from './portraitFigure';
 import {portraitFace} from './portraitFace';
 import {coiffure,garmentLayer} from './portraitWardrobe';
 export type Styles = typeof catalog.styles;
-export type Layers = {face_revision?:2;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
+export type Layers = FeatureChoices & {face_revision?:2|3;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
 export type ProceduralPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair} | ({version:3;body_frame:BodyFrame;facial_hair:FacialHair} & Layers)) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
@@ -120,6 +121,14 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
   const juvenile=['infant','child','adolescent'].includes(age);
   const skinColors=layers?.skin_swatch?Object.values(catalog.skin_materials)[p.skin]:skin.skin||parts[1].skin;
   const iris=layers?.eye_swatch?Object.values(catalog.eye_colors)[p.eyes]:p.eyes===7?'#6f8998':parts[p.eyes].iris;
+  if(layers?.face_revision===3){
+   const ids=catalog.styles;
+   const result=portraitFigure(layers,layers.visage||Object.keys(ids.face)[p.face] as keyof Styles['face'],
+    layers.hairstyle||Object.keys(ids.hair)[p.hair] as keyof Styles['hair'],
+    layers.garment||Object.keys(ids.clothing)[p.clothing] as keyof Styles['clothing'],
+    {skin:skinColors,hair:hairColor||hair.hair,cloth:clothColor||parts[p.palette].cloth,bg,iris});
+   return cachePortrait(key,result);
+  }
   const revised=layers?.face_revision===2 && layers.visage ? portraitFace(layers.visage,age,layers.body_frame,skinColors,hairColor||hair.hair,iris) : undefined;
   const bust=layers?.garment?garmentLayer(layers.garment,layers.body_frame,juvenile,revised?.neckPath):base===2 && p.version!==1?dressedBust(p.body_frame,juvenile,tintLayers(outfit?.tailoring||'',clothColor),(skin.skin||parts[1].skin)[2],!outfit,revised?.neckPath):undefined;
   const facialHair=p.version!==1 && ['adult','young_adult','mature_adult','elderly'].includes(age) ? p.facial_hair : undefined;
@@ -158,6 +167,9 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
    body, bust, facialHair,
    accessories:p.accessory===0?'':(parts[(p.accessory-1)%7] as Art).accessories||'',extraFace:base===2 && p.face===6 ? face.extraFace : '',brows:undefined});
  } else return null;
+ return cachePortrait(key,svg);
+}
+function cachePortrait(key:string,svg:string){
  // Each SVG is an image document: gradient IDs cannot collide between cards.
  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
  if(cache.size>=512)cache.delete(cache.keys().next().value!);cache.set(key,url);return url;

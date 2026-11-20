@@ -161,6 +161,8 @@ def proposed(cid,traits,reference):
     art=drafts.default_descriptor(cid,reference['stage'],reference['actor'],merged,reference['age'],
          version=3,world_id=reference['world_id'],profile=reference['profile'],warnings=warnings)
     old=reference['existing']
+    if reference['approved']:
+        art.update({key:old[key] for key in ('eye_shape','nose_shape','lip_shape') if key in old})
     if old.get('visual_age_mode'): art['visual_age_mode']=old['visual_age_mode']
     return dict(descriptor=art,warnings=warnings)
 

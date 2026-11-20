@@ -243,6 +243,6 @@ test('game portrait collection protects a newer revision and refreshes the dossi
   await button('Применить выбранные · 1').click();
   await expect(page.locator('.portrait-dialog')).toHaveCount(0);
   const now = await saved();
-  expect(now.descriptor.face_revision).toBe(2);
+  expect(now.descriptor.face_revision).toBe(3);
   expect(now.descriptor.hairstyle).toBe('bun');
 });

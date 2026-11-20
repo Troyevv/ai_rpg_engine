@@ -24,7 +24,7 @@ function cropStyle(p:PortraitRef):CSSProperties {
  return {width:'100%',height:'100%',maxWidth:'none',left:0,top:0,objectFit:'cover',
   objectPosition:`${c.x*100}% ${c.y*100}%`,transform:`scale(${c.zoom})`,transformOrigin:`${c.x*100}% ${c.y*100}%`};
 }
-export function CharacterAvatar({subject,saveId,workspaceId,author=false,onClick,size=48}:{subject:PortraitSubject;saveId?:number;workspaceId?:string;author?:boolean;onClick?:()=>void;size?:number|string}) {
+export function CharacterAvatar({subject,saveId,workspaceId,author=false,onClick,size=48,framing='avatar'}:{framing?:'avatar'|'plate';subject:PortraitSubject;saveId?:number;workspaceId?:string;author?:boolean;onClick?:()=>void;size?:number|string}) {
  const p=subject.portrait;
  // Keep failed requests tied to their identity: a late error cannot hide a new owner's image.
  const imageKey=`${workspaceId||saveId}:${author}:${subject.id}:${p?.asset_id}`;
@@ -34,8 +34,10 @@ export function CharacterAvatar({subject,saveId,workspaceId,author=false,onClick
  const silhouette=subject.silhouette==='male'||subject.silhouette==='female'?subject.silhouette:'neutral';
  const initials=subject.name.trim().split(/\s+/).slice(0,3).map(s=>Array.from(s)[0]).join('').toUpperCase()||'?';
  const style={'--avatar-size':typeof size==='number'?`${size}px`:size} as CSSProperties;
- const generated=proceduralPortrait(subject.procedural_portrait);
- const content=hasImage?<img key={imageKey} alt="" loading="lazy" decoding="async" src={portraitUrl(saveId,subject.id,p!,workspaceId,author)} style={cropStyle(p!)} onError={()=>setFailedKey(imageKey)}/>:generated?<img className="procedural-portrait" src={generated} alt="" loading="lazy" decoding="async"/>:<>
+ const descriptor=subject.procedural_portrait;
+ const generated=proceduralPortrait(descriptor);
+ const faceCrop=framing==='avatar'&&descriptor?.version===3&&descriptor.face_revision===3;
+ const content=hasImage?<img key={imageKey} alt="" loading="lazy" decoding="async" src={portraitUrl(saveId,subject.id,p!,workspaceId,author)} style={cropStyle(p!)} onError={()=>setFailedKey(imageKey)}/>:generated?<img className={faceCrop?"procedural-portrait face-framing":"procedural-portrait"} src={generated} alt="" loading="lazy" decoding="async"/>:<>
   <svg viewBox="0 0 100 100" aria-hidden="true" data-silhouette={silhouette}>
    {silhouette==='female'?<>
     <path d="M67 27 C92 20 84 47 91 57 C77 59 69 49 73 35Z"/>
@@ -89,13 +91,13 @@ export function PortraitControl({card,save,workspaceId,refresh,disabled=false,co
  const source=preview||(selected?portraitUrl(sid,card.id,selected,workspaceId,true):'');
  const loadFile=(f:File|undefined)=>{if(!f)return;setError('');if(f.size>10*1024*1024||!['image/png','image/jpeg','image/webp'].includes(f.type)){setError('Нужен PNG, JPEG или WebP до 10 MiB.');return}setFile(f);setCrop(cropDefault)};
  return <div className="portrait-control">
-  <CharacterAvatar subject={card} saveId={sid} workspaceId={workspaceId} author size="var(--dossier-portrait-size)" onClick={()=>{if(card.portrait){setSelected(card.portrait);setMode('view')}}}/>
+  <CharacterAvatar framing={workspaceId?'plate':'avatar'} subject={card} saveId={sid} workspaceId={workspaceId} author size="var(--dossier-portrait-size)" onClick={()=>{if(card.portrait){setSelected(card.portrait);setMode('view')}}}/>
   <button type="button" className="portrait-pencil" aria-label="Редактировать портрет" disabled={disabled} onClick={()=>void open()}><span className="portrait-pencil-face"><Pencil size={16}/></span></button>
   {mode==='view'&&selected&&<OriginalViewer p={selected} sid={sid} wid={workspaceId} cid={card.id} onClose={()=>setMode(null)}/>}
   <Dialog open={mode==='edit'} onOpenChange={v=>{if(!v&&!busy)setMode(null)}}><DialogContent className={'portrait-dialog'+(studio?' studio-open':'')}><DialogTitle>Портрет персонажа</DialogTitle><DialogDescription hidden={studio}>PNG, JPEG или WebP · до 10 MiB · Размер автоматически приводится к 256–4096 px по каждой стороне без обрезки и искажения. Рекомендуется 3:4.</DialogDescription>
    {!data&&!error&&<p role="status">Загрузка портретов…</p>}
    {error&&!studio&&<p role="alert">{error}</p>}
-   {data&&<>{data.descriptor&&<ProceduralPortraitEditor open={studio} onOpen={setStudio} savedPreview={<CharacterAvatar subject={{...card,portrait:data.portrait,procedural_portrait:data.procedural_portrait}} workspaceId={workspaceId} saveId={sid} author size={130}/>} commission={accept=><PortraitCommission cards={[card]} workspaceId={workspaceId} saveId={sid} revision={data.revision} onPreview={accept} disabled={busy}/>} renderPreview={descriptor=><CharacterAvatar subject={{...card,portrait:null,procedural_portrait:descriptor}} size={130}/>} appearance={[card.fields?.['Исходное описание внешности'],card.fields?.['Внешность']].filter(Boolean).join('\n')} anatomyReference={data.anatomy_reference} ageReference={data.age_reference} descriptor={data.descriptor} mode={data.portrait_mode||'auto'} disabled={busy} onSave={async(descriptor,mode)=>{setBusy(true);setError('');try{await api(path(sid,card.id,workspaceId)+'/procedural',{revision:data.revision,descriptor,mode},'PUT');await refresh();setMode(null)}catch(e){
+   {data&&<>{data.descriptor&&<ProceduralPortraitEditor open={studio} onOpen={setStudio} savedPreview={<CharacterAvatar framing="plate" subject={{...card,portrait:data.portrait,procedural_portrait:data.procedural_portrait}} workspaceId={workspaceId} saveId={sid} author size={130}/>} commission={accept=><PortraitCommission cards={[card]} workspaceId={workspaceId} saveId={sid} revision={data.revision} onPreview={accept} disabled={busy}/>} renderPreview={descriptor=><CharacterAvatar framing="plate" subject={{...card,portrait:null,procedural_portrait:descriptor}} size={130}/>} appearance={[card.fields?.['Исходное описание внешности'],card.fields?.['Внешность']].filter(Boolean).join('\n')} anatomyReference={data.anatomy_reference} ageReference={data.age_reference} descriptor={data.descriptor} mode={data.portrait_mode||'auto'} disabled={busy} onSave={async(descriptor,mode)=>{setBusy(true);setError('');try{await api(path(sid,card.id,workspaceId)+'/procedural',{revision:data.revision,descriptor,mode},'PUT');await refresh();setMode(null)}catch(e){
      const latest=await api<Listing>(path(sid,card.id,workspaceId)+(workspaceId?'?author=true':'')).catch(()=>null);
      if(latest&&latest.revision!==data.revision){
       setData(latest);
