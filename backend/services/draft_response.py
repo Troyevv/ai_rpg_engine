@@ -283,18 +283,24 @@ def stage_output_limit(slot, messages, config):
     return stage_output_plan(slot,messages,config)['output_limit']
 
 
-def effective_slot(journal,slot):
-    redirects=journal.get('response_retries',{});seen=set()
+def response_slots(journal, slot):
+    redirects = journal.get('response_retries', {})
+    path = [slot]
+    seen = {slot}
     while slot in redirects:
-        if slot in seen:raise TransportError('Повреждена история повторных проверок.')
-        seen.add(slot);slot=redirects[slot]
-    return slot
+        slot = redirects[slot]
+        if slot in seen:
+            raise TransportError('Повреждена история повторных проверок.')
+        path.append(slot)
+        seen.add(slot)
+    return path
 
 
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     # A confirmed retry gets a new response slot. Historical parts are immutable.
     logical_slot=slot
-    slot=effective_slot(journal,slot)
+    slots=response_slots(journal,slot)
+    slot=slots[-1]
     saved=journal.get('responses',{}).get(slot,{})
     if logical_slot.startswith('creative_') and not saved.get('complete') and saved.get('parts'):
         first=saved['parts'][0].get('request_id')
@@ -387,7 +393,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             prior.get('failure') and prior.get('parts')
             and prior.get('assembly',{}).get('sha256')==record.get('assembly',{}).get('sha256')
             and all(prior['parts'][-1].get('effective_config',{}).get(k)==v for k,v in effective.items())
-            for prior in (journal['responses'][key] for key in seen | {slot}))
+            for prior in (journal['responses'][key] for key in slots))
         fingerprint=digest(json.dumps([request,effective,config.get('temperature')],ensure_ascii=False,sort_keys=True))
         if (record['failure'].get('code') in ('reasoning_budget_exhausted','empty_output_limit')
                 and last.get('finish_reason')=='length' and changed and not known_policy and limit>=256

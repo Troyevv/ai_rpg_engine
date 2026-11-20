@@ -295,11 +295,11 @@ def response_key(edit):
 
 
 def saved_reply(journal):
-    from backend.services.draft_response import effective_slot
+    from backend.services.draft_response import response_slots
     edit=journal.get('editor') or {}
     if not edit.get('action') or journal.get('pending'):
         return None
-    slot=effective_slot(journal,response_key(edit))
+    slot=response_slots(journal,response_key(edit))[-1]
     record=journal.get('responses',{}).get(slot,{})
     if record.get('parts') and not record.get('failure') and record['parts'][-1]['text'].strip():
         return record
