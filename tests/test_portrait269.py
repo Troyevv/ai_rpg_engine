@@ -19,7 +19,8 @@ def test_new_classic_faces_have_independent_persisted_features():
         assert {p[field] for p in cast} == set(options)
         assert set(input_schema()['properties'][field]['enum']) == set(options)
     for p in cast:
-        assert p['eye_revision'] == p['cheek_revision'] == p['nose_revision'] == p['body_revision'] == 2
+        assert p['eye_revision'] == p['cheek_revision'] == p['nose_revision'] == 2
+        assert p['body_revision'] == 3
         assert (p['visage'], p['hairstyle'], p['garment'], p['face_revision']) == ('broad','parted','shirt',4)
     assert cast[0] == default_descriptor('0','adult',hints=hints,version=3,world_id='same')
     old = deepcopy(cast[0])
@@ -111,6 +112,8 @@ def test_figure_update_preserves_other_traits_photos_and_old_versions(api, layer
     for i, cid in enumerate(ids):
         art = default_descriptor(cid, 'adult', version=3, world_id='previous')
         art.pop(field)
+        if field == 'body_revision' and i == 1:
+            art[field] = 2
         art['face_revision'] = 3 if i == 0 else 2 if i == 2 else 4
         actors[cid].update(procedural_portrait=art, portrait_mode='procedural')
     url, draft = create(client, state)
@@ -127,7 +130,7 @@ def test_figure_update_preserves_other_traits_photos_and_old_versions(api, layer
     assert update(before['revision']).status_code == 409
     after=client.get(url+'?author=true').json()
     for i,cid in enumerate(ids):
-        assert art(after,cid)==({**art(before,cid), field:2} if i<2 else art(before,cid))
+        assert art(after,cid)==({**art(before,cid), field:3 if layer=='body' else 2} if i<2 else art(before,cid))
         assert after['state']['world']['characters'][cid]['portrait_mode']==before['state']['world']['characters'][cid]['portrait_mode']
     assert update(after['revision']).json() == {'updated':0}
     restored=client.patch(url,json=dict(revision=after['revision'],operation='restore',source_id=before['version_id']))

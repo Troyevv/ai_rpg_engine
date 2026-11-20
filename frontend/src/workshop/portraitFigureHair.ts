@@ -178,6 +178,20 @@ const croppedCuts: Partial<Record<HairStyle, Partial<Cut>>> = {
  bun:{back:'M31-65Q49-90 72-79Q95-71 85-44Q78-27 54-32Z',backLines:'M49-70q17-12 28 3m-25 9q20-10 26 2'},
  curly:{front:'M-61 7Q-75 8-71-9Q-87-12-77-31Q-88-43-74-56Q-77-73-58-76Q-56-93-39-88Q-31-106-14-96Q-2-110 14-98Q33-108 44-95Q64-97 68-79Q87-78 80-61Q99-53 87-37Q94-19 76-14Q78 2 62 9Q57 18 52 11L50-4Q35-1 37-16Q22-13 20-26Q8-17 2-29Q-12-16-23-27Q-32-12-44-20Q-44-4-55-7Z'},
 };
+// The sweeping bob turns around the temple before descending. The stepped
+// sidelocks of the hime cut keep their blunt ends lateral to the eye sockets.
+// Keep the framing lengths of these styles between ear and cheek. Only
+// their crown and fringe sit in front of the face. The two contours meet at
+// the temple, so the visible cheek never becomes an island inside a lock.
+const templeFront:Partial<Record<HairStyle,string>>={
+  medium:curtains, long:curtains, wavy:curtains, bob:curtains, locs:curtains,
+  asym_bob:'M-63 9Q-76-6-70-46Q-66-82-35-92Q-6-105 24-91Q67-86 70-50Q75-23 60 0L53-13 49-36Q34-48 21-64C8-46-19-39-39-27Q-57-17-63 9Z',
+  blunt_long:'M-65 9Q-71-1-68-42Q-65-82-26-92Q4-101 33-89Q70-78 73-38Q74-14 62 11L55-25Q21-19 6-22L3-27 1-22Q-27-19-50-25Z',
+  hime:'M-64 9L-68-38Q-65-79-32-90Q0-102 26-91Q66-82 70-48Q75-18 61 12L52-25Q29-31 19-52Q4-32-19-30L-32-29-31-35Q-46-29-53-23Z',
+};
+// The side panels of these cuts fall in front of the ears. Shoulder-length
+// and loose long cuts already carry their entire side length in the rear mass.
+const sidePanels=new Set<HairStyle>(['bob','asym_bob','blunt_long','hime','locs']);
 // Extents of cuts that rise above or extend well outside the fitted skull,
 // in the same 61 × 87 reference space as the locks.
 const extent: Partial<Record<HairStyle, readonly [number,number]>> = {
@@ -196,6 +210,7 @@ export function figureHair(
   light: string,
   dark: string,
   fit?: {infant: boolean; part: number},
+  outerEye?: number,
 ) {
   const coated = style === 'ponytail' || style === 'braid' || style === 'bun';
   const parted =
@@ -207,18 +222,41 @@ export function figureHair(
       : '';
   if (fit?.infant && (style === 'buzz' || style === 'short')) {
     const wisps = 'M-40-61Q-32-80-13-83Q-17-89-10-92Q-9-85-2-83Q13-85 26-74 M-27-73q10-10 22-8m-9 5q12-3 23 3';
-    return {back:'',front:`<g transform="scale(${temple/61} ${-crown/87})">${line(wisps,dark,1.65,.62)}</g>`};
+    return {back:'',side:'',front:`<g transform="scale(${temple/61} ${-crown/87})">${line(wisps,dark,1.65,.62)}</g>`};
   }
-  const cut = fit ? {...cuts[style], ...croppedCuts[style]} : cuts[style],
-    wrap = (s: string) => `<g transform="scale(${(temple + 1) / 61} ${-crown / 87})">${s}</g>`;
+  const cut = fit ? {...cuts[style], ...croppedCuts[style]} : cuts[style];
+  const corrected=outerEye!==undefined;
+  // The visible temple edge in these paths begins 52 units from the part.
+  // Size both masses on the same skull, allowing room for the outer canthus.
+  const width=Math.max((temple+1)/61, (outerEye??0)/52);
+  const wrap=(art:string)=>`<g transform="scale(${width} ${-crown/87})">${art}</g>`;
+  // Medium, long and wavy hair already have side lengths in their rear mass.
+  // Their extra foreground ribbons ran across the far orbit. Keep the parted
+  // crown in front and let the cheek and ear occlude the lengths naturally.
+  const front=corrected ? templeFront[style]??cut.front : cut.front;
+  // Closed locks were authored independently and can wind in opposite
+  // directions. A compound nonzero path subtracts those overlaps. A clip
+  // with separate silhouettes is their union, for both pigment and lighting.
+  const pieces=corrected ? front.match(/M[^M]*/g) || [] : [front];
+  const outline=pieces.map(d=>`<path d="${d}"/>`).join('');
+  const rearLines=line(cut.backLines || '',light,2.3,.5);
+  const rearDetail=corrected && cut.backLines
+    ? `<defs><clipPath id="rearLocks">${(cut.back?.match(/M[^M]*/g)||[]).map(d=>`<path d="${d}"/>`).join('')}</clipPath></defs><g clip-path="url(#rearLocks)">${rearLines}</g>`
+    : rearLines;
+  const side=corrected && sidePanels.has(style)
+    ? wrap((cut.front.match(/M[^M]*/g)||[]).map(d=>path(d,'url(#hairMass)')).join(''))
+    : '';
   return {
+    side,
     back: cut.back
-      ? wrap(path(cut.back, 'url(#hairMass)') + line(cut.backLines || '', light, 2.3, 0.5))
+      ? wrap(path(cut.back, 'url(#hairMass)') + rearDetail)
       : '',
-    front: cut.front
+    front: front
       ? wrap(
-          `<defs><clipPath id="locks"><path d="${cut.front}"/></clipPath></defs>` +
-            path(cut.front, 'url(#hairMass)') +
+          `<defs><clipPath id="locks">${outline}</clipPath></defs>` +
+            (corrected && pieces.length>1
+              ? '<rect x="-130" y="-140" width="260" height="280" fill="url(#hairMass)" clip-path="url(#locks)"/>'
+              : path(front, 'url(#hairMass)')) +
             `<g clip-path="url(#locks)">` +
             path(cut.shine || '', light, 0.22) +
             line(cut.strokes || '', light, 1.35, 0.58) +

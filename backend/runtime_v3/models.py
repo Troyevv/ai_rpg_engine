@@ -496,7 +496,7 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
     eye_revision: Literal[2] | None = None
     cheek_revision: Literal[2] | None = None
     nose_revision: Literal[2] | None = None
-    body_revision: Literal[2] | None = None
+    body_revision: Literal[2, 3] | None = None
     hair_color: int | None = Field(default=None, ge=0, le=15)
     clothing_color: int | None = Field(default=None, ge=0, le=19)
     accent_color: int | None = Field(default=None, ge=0, le=19)

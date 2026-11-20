@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
+import { inspectHair } from './portrait-hair-review.mjs';
 import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -16,6 +17,7 @@ const repo = path.dirname(path.resolve(frontend));
 const { values } = parseArgs({ options: {
   out: { type: 'string' }, eyes: { type:'boolean' }, current: {type:'boolean'}, 'mobile-width': {type:'string'}, groups: { type: 'string' }, cases: { type: 'string' },
   'full-size': { type: 'boolean', default: false },
+  'check-hair': {type:'boolean', default:false},
 }});
 if (!values.out) throw new Error('Provide an output directory with --out');
 const revisions = values.current ? ['current'] : values.eyes ? ['original-eyes','aligned-eyes'] : [3,4];
@@ -64,6 +66,10 @@ try {
       await page.waitForFunction(() => typeof window.renderPortraitCases === 'function');
       await page.evaluate(([rows, revision, full]) => window.renderPortraitCases(rows, revision, full),
                           [groups[group], revision, values['full-size']]);
+      if (values['check-hair']) {
+        const errors = await page.locator('.ww-card-art img').evaluateAll(inspectHair);
+        if (errors.length) throw new Error(group+' '+JSON.stringify(errors));
+      }
       const stem = `${group}-${typeof revision==='number'?'r':''}${revision}`;
       const file = stem+'.jpg';
       const bounds = await page.locator('article').evaluateAll(items=>items.map(el=>{

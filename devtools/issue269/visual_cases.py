@@ -44,6 +44,19 @@ def cases():
             **base, 'body_build': build, 'garment': probes[(i+j) % len(probes)],
             'visual_age': age, 'stage': age if i < 3 else 'adult'}}
         for i, age in enumerate(ages) for j, build in enumerate(CATALOG['features']['body_build'])]
+    # Both turns for every age. Change one seed byte, leaving the rest of
+    # the person's landmarks alone. Each sheet holds that sitter fixed.
+    faces = list(CATALOG['styles']['face'])
+    for i, age in enumerate(ages):
+        for mirrored in range(2):
+            sitter = population[i * 6 + i]['portrait']
+            yaw = '00' if mirrored == 0 else 'ff'
+            seed = sitter['seed'][:28] + yaw + sitter['seed'][30:]
+            person = {**sitter, 'seed': seed, 'visage': faces[i * 2 + mirrored],
+                      'skin': (i + mirrored) % 7, 'body_revision': 3}
+            groups[f'hair_{age}_{mirrored}'] = [
+                {'label': label, 'portrait': {**person, 'hairstyle': style}}
+                for style, label in CATALOG['styles']['hair'].items()]
     # Each row keeps the same person, pose, tone and eyes across all six noses.
     groups['nose_matrix'] = []
     groups['nose_previous'] = []

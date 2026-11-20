@@ -407,13 +407,13 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const characters = (state?.characters || []).map(c=>({...c,...draft?.portraits?.[c.id]}));
     const activeLayer = author && figurePreview?.workspace===id && figurePreview?.revision===draft?.revision ? figurePreview?.layer : undefined;
     const figureEdits = [
-      {layer:'eyes',eligible:'can_update_eyes',field:'eye_revision',tryLabel:'Примерить новую посадку глаз',saveLabel:'Сохранить посадку глаз'},
-      {layer:'body',eligible:'can_update_body',field:'body_revision',tryLabel:'Примерить погрудные портреты',saveLabel:'Сохранить погрудные портреты'},
+      {layer:'eyes',eligible:'can_update_eyes',field:'eye_revision',revision:2,tryLabel:'Примерить новую посадку глаз',saveLabel:'Сохранить посадку глаз'},
+      {layer:'body',eligible:'can_update_body',field:'body_revision',revision:3,tryLabel:'Примерить погрудные портреты',saveLabel:'Сохранить погрудные портреты'},
     ] as const;
     const previewEdit = figureEdits.find(edit=>edit.layer===activeLayer);
     const collectionCards = previewEdit ? characters.map(c=>{
         const art=c.procedural_portrait;
-        return c[previewEdit.eligible] && art?.version===3 ? {...c,procedural_portrait:{...art,[previewEdit.field]:2 as const}} : c;
+        return c[previewEdit.eligible] && art?.version===3 ? {...c,procedural_portrait:{...art,[previewEdit.field]:previewEdit.revision}} : c;
     }) : characters;
     const actor = state?.controlled_actor_id;
     const resolve = resolver(state || {characters:[],locations:[],world:{}});

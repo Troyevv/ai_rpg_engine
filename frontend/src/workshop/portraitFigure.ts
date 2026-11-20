@@ -567,6 +567,13 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
   const ink = tone(skin[2], '#4b3338', 0.61);
   const styleEye = p.eye_shape || features.eye_shape[Math.floor(h.v(7) * 2.99)];
   const styleLip = p.lip_shape || features.lip_shape[Math.floor(h.v(11) * 2.99)];
+  const orbits = p.eye_revision === 2 ? orbitalPair(h) : undefined;
+  const nearEye = orbits?.near.x ?? (a + h.eyeSpacing + 3),
+    farEye = orbits?.far.x ?? (a - h.eyeSpacing * 0.87);
+  const outerEye=Math.max(
+    Math.abs(farEye)+(orbits ? orbits.halfWidth*orbits.far.widthScale : 16),
+    Math.abs(nearEye)+(orbits ? orbits.halfWidth*orbits.near.widthScale : 17),
+  )+4;
   const locks = figureHair(
     hairstyle,
     t,
@@ -574,10 +581,8 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
     tone(hair[0], '#f4d3a5', 0.32),
     tone(hair[1], '#201a21', 0.38),
     h.refined ? { infant: h.infant, part: h.v(6) } : undefined,
+    p.body_revision===3 ? outerEye : undefined,
   );
-  const orbits = p.eye_revision === 2 ? orbitalPair(h) : undefined;
-  const nearEye = orbits?.near.x ?? (a + h.eyeSpacing + 3),
-    farEye = orbits?.far.x ?? (a - h.eyeSpacing * 0.87);
   const ears = (near: boolean) => {
     const size = (near ? 1 : 0.67) * (h.elder ? 1.06 : 1);
     const px = near ? earX : -t + 1,
@@ -658,11 +663,11 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
     ? ellipse(earX + 3, earY + earH - 2, 2.7, 3, '#d9b879') +
       (p.accessory === 3 ? line(`M${earX + 3} ${earY + earH}l.4 9`, '#dec892', 1.7) : '')
     : '';
+  const revisedLayers=p.body_revision===3;
   return {
-    back: locks.back,
+    back:locks.back,
     head:
-      ears(false) +
-      ears(true) +
+      ears(false) + ears(true) + (revisedLayers ? earJewels : '') + locks.side +
       structure +
       ageVolume +
       cheekFold +
@@ -674,8 +679,7 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
       '</g>' +
       whiskers(h, p.facial_hair, paint) +
       spectacles(h,p.eyewear,nearEye,farEye,paint) +
-      locks.front +
-      earJewels,
+      locks.front + (revisedLayers?'':earJewels),
   };
 }
 
@@ -737,14 +741,14 @@ export function portraitFigure(
   const torso = h.infant || h.child ? 'neutral' : p.body_frame;
   const shoulders = bodyScale * (torso === 'male' ? 1.12 : torso === 'female' ? 0.89 : 1);
   const neckLine = `M${center - neck} 253 Q${center - neck + 3} 287 ${center - neck - 2} 304 Q${200 - 29 * shoulders} 316 ${200 - 35 * shoulders} 323 L${200 - 63 * shoulders} 342 L${200 - 54 * shoulders} 376H${200 + 54 * shoulders}L${200 + 63 * shoulders} 342 L${200 + 35 * shoulders} 323 Q${200 + 29 * shoulders} 316 ${center + neck} 305 Q${center + neck - 3} 288 ${center + neck + 3} 250Z`;
-  const body = p.body_revision===2 ? '' : h.refined
+  const body = p.body_revision ? '' : h.refined
     ? garmentLayer(garment, torso, false, null, { build: p.body_build || 'average', youth: h.youth, collarY, turn },paint.accent)
     : `<g transform="translate(200 ${317 + collarY}) skewX(${2.8 * turn}) scale(${bodyScale} 1) translate(-200 -317)">${garmentLayer(garment, torso, false, null, undefined, paint.accent)}</g>`;
   const chain = [1, 2, 5, 7].includes(p.accessory)
     ? line('M172 310Q195 357 225 311', '#b29769', 1.6, 0.92) +
       (p.accessory === 1 ? '' : ellipse(199, 337, 3, 5, '#d7b476'))
     : '';
-  const fitted = p.body_revision===2 ? portraitBust({frame:torso,build:p.body_build||'average',
+  const fitted = p.body_revision ? portraitBust({frame:torso,build:p.body_build||'average',
     youth:h.youth,elderly:h.elder,chinY:eyeY+h.depth*scale,halfHead:h.cheek*scale,
     center:headX+turn*2,turn},garment,paint.accent) : null;
   const neckSurface = fitted ? `<g transform="${fitted.transform}">${fitted.neck}</g>` : path(neckLine,'url(#neck)');

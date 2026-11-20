@@ -103,11 +103,12 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  {Object.values(catalog.styles[colorField==='accent_color'?'clothing_color':colorField]).map((label,i)=><button key={label} type="button" title={label} aria-label={label} aria-pressed={modern()[colorField]===i}
  onClick={()=>change({...modern(),form:'human',[colorField]:i,...(colorField==='skin'?{skin_swatch:true}:colorField==='eyes'?{eye_swatch:true}:colorField==='accent_color'&&!(value.version===3&&(value.face_revision===3||value.face_revision===4))?{face_revision:4,eye_revision:2}:{})})}><i style={{backgroundColor:swatches[colorField][i]}}/>{label}</button>)}</div></>}
  {section==='details'&&<>
+ {value.version===3&&value.body_revision===2&&<Button variant="outline" onClick={()=>change({...value,body_revision:3})}>Примерить исправленную посадку волос</Button>}
  {value.version===3&&(value.face_revision===3||value.face_revision===4)&&
    <Button variant="outline" onClick={()=>{
      const next={...value};
      if(next.body_revision) delete next.body_revision;
-     else next.body_revision=2;
+     else next.body_revision=3;
      change(next);
    }}>{value.body_revision?'Вернуть прежнюю композицию':'Примерить погрудный портрет'}</Button>}
  {(['body_build','eyewear','face_detail'] as const).map(key=>{

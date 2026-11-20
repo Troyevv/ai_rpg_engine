@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { nav } from './navigation';
+import { inspectHair } from './portrait-hair-review.mjs';
 import { authorView, workshopNav } from './workshop-navigation';
 import { chooseOption } from './choice-navigation';
 
@@ -160,6 +161,7 @@ test(`previewing the ${layer} keeps the saved cast until explicit confirmation`,
       } finally { svg.remove(); }
     }));
     expect(bustFits).toBe(true);
+    expect(await grid.locator('.ww-card-art img').evaluateAll(inspectHair)).toEqual([]);
   }
   expect(await pictures()).not.toEqual(initial);
   expect((await saved()).revision).toBe(before.revision);
@@ -170,7 +172,7 @@ test(`previewing the ${layer} keeps the saved cast until explicit confirmation`,
   await expect(button(previewLabel)).toHaveCount(0);
   const after=await saved();
   for(const card of included) {
-    expect(after.portraits[card.id].procedural_portrait).toEqual({...before.portraits[card.id].procedural_portrait,[field]:2});
+    expect(after.portraits[card.id].procedural_portrait).toEqual({...before.portraits[card.id].procedural_portrait,[field]:bust?3:2});
   }
 
   const card=included[0], approved=after.portraits[card.id].procedural_portrait;
