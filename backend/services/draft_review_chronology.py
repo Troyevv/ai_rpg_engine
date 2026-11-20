@@ -198,12 +198,19 @@ def plan_birth(base, cid, basis, exact_dates):
         known_year = metadata.get('birth_dates',{}).get(pid,{}).get('known_year')
         if parent_year and known_year and parent_year!=known_year:
             raise ValueError('Указанный год рождения родителя расходится с ранее подтверждённым.')
+        parent_year = parent_year or known_year
         options = [current] if current else []
         missing_generated = (not current and not dob_metadata(actor).get('source')
                              and not protected(state,birth_path(pid)) and not is_game_birth(world,pid)
                              and (base.get('generated') or base.get('origin_job')))
-        if parent_year and (editable_birth(state,pid) or missing_generated) and pid not in exact_dates:
-            options = year_days(parent_year,profile)
+        years = []
+        if parent_year:
+            years = [parent_year]
+        elif required is not None:
+            # At delivery the parent's birthday either has or has not passed that year.
+            years = [y for y in (basis.year-required-1, basis.year-required) if y>=1]
+        if years and (editable_birth(state,pid) or missing_generated) and pid not in exact_dates:
+            options = [day for year in years for day in year_days(year,profile)]
             parent_now = exact_age(cards[pid])
             if not died and parent_now is not None:
                 ref_date = age_reference_date(actor,clock)
@@ -214,7 +221,7 @@ def plan_birth(base, cid, basis, exact_dates):
             raise ValueError('Для проверки возраста родителя нужна дата рождения или подтверждённый год.')
         if options:
             dates = [day for day in dates if has_compatible_birthday(options,day,required)]
-        parents.append((pid,died,required,options,current))
+        parents.append((pid,died,required,options,current,parent_year))
     if sum(died for _,died,*_ in parents)>1:
         raise ValueError('Указано несколько умерших при родах матерей. Уточните источник.')
     approx = {a.relation_id:a for a in basis.conditional_marriages}
@@ -246,19 +253,23 @@ def plan_birth(base, cid, basis, exact_dates):
         raise ValueError('Нет общей даты, согласующей год рождения, возраст и связанные события. Требуется решение автора.')
     chosen = basis.preferred_date if basis.preferred_date in dates else dates[len(dates)//2]
     def creative(key,value,year):
-        updates[key]=dict(source='review_creative',known_year=year,value=value,basis=basis.model_dump(exclude_defaults=True))
+        updates[key]=dict(source='review_creative',value=value,basis=basis.model_dump(exclude_defaults=True))
+        if year is not None:
+            updates[key]['known_year']=year
     if writable:
         creative(cid,chosen,basis.year)
     ages = []
     inventions = []
     if len(dates)>1:
         inventions.append(dict(name=child['name'],date=chosen))
-    for pid,died,required,options,current in parents:
+    for pid,died,required,options,current,parent_year in parents:
         start,end=birthday_range(options,chosen,required)
         legal=options[start:end]
         birth = current if current in legal else legal[len(legal)//2] if legal else None
         if birth and birth!=current:
-            creative(pid,birth,int(birth[:4]))
+            if current:
+                birth=next((d for d in legal if d[4:]==current[4:]),birth)
+            creative(pid,birth,parent_year)
             if len(legal)>1:
                 inventions.append(dict(name=cards[pid]['name'],date=birth))
         if died:

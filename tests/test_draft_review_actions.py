@@ -589,3 +589,29 @@ def test_manual_child_date_anchors_the_other_family_changes(api):
     assert result['chronologies'][0]['options']==1
     assert not any(c['path'].endswith('/'+child+'/birth_date') for c in result['proposal']['changes'])
     assert result['candidate']['world']['characters'][child]==state['world']['characters'][child]
+
+
+def test_childbirth_age_without_an_authorial_birth_year(api):
+    from backend.repositories.drafts import candidate_hash
+    from backend.runtime_v3.calendar import age_on
+    from backend.services.draft_review_actions import proposal_result
+    from review_actions_fixture import FAMILY_SOURCE, family_reply, seed_family
+
+    _,app=api
+    repo=app.state.repository
+    state=repo.draft(seed_family(repo)['wid'],True)['state']
+    mother=state['characters'][2]['id']
+    source=FAMILY_SOURCE.removesuffix(' Лиза родилась в 1996 году.')
+    notes=[dict(issue_id='family',message='Проверить совместимость дат',paths=[])]
+    packet=family_reply(dict(candidate=state,candidate_hash=candidate_hash(state),findings=notes,
+                             author_context=dict(original_idea=source)))
+    evidence=packet['changes'][0]['date_basis']['parents'][0]
+    del evidence['birth_year'],evidence['birth_year_quote']
+    result=proposal_result(dict(base=dict(state=state,source=source),findings=notes),json.dumps(packet))
+    assert result['status']=='preview',result.get('failure')
+    report=result['chronologies'][0]
+    assert report['date']=='2015-06-12' and report['options']==191
+    birthday=result['candidate']['world']['characters'][mother]['birth_date']
+    assert age_on(birthday,report['date'])==19
+    assert dict(name='Лиза',date=birthday) in report['inventions']
+    assert result['calendar_decisions'][mother].get('known_year') is None
