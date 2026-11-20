@@ -1,4 +1,3 @@
-import {PortraitCommission} from './workshop/PortraitCommission';
 import {StorySecretBrowser} from './StorySecretBrowser';
 import {personalRelationships} from './lib/personalRelationships';
 import {personalRelationshipLabel} from './lib/dossier';
@@ -47,7 +46,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
  const conditionRows=(rows:typeof conditions)=>rows.map(r=><div className="dossier-condition" key={r.id}><strong>{r.description}</strong><span className="pill">{t(r.status as 'active')}</span>{r.duration==='persistent'&&<p>{t('persistent')}</p>}{r.since!=null&&<p className="muted small">{worldTime(r.since,state.world_clock?.calendar)}{r.until!=null?` → ${worldTime(r.until,state.world_clock?.calendar)}`:''}</p>}{r.restrictions.map(k=><p key={k}>{capabilityLabel(k)}</p>)}{r.evidence&&<Reveal title={t('evidence')} text={r.evidence} preview={false}/>}</div>);
  return <article className="inspector-content character-profile" aria-label={t('dossier')}>
   <header className="character-header dossier-header">
-   {save&&refresh?<PortraitControl key={`${save.id}:${actor}:${card.id}`} card={card} save={save} refresh={refresh}/>:<CharacterAvatar subject={card} size="var(--dossier-portrait-size)"/>}
+   {save&&refresh?<PortraitControl key={`${save.id}:${actor}:${card.id}`} card={card} save={save} refresh={refresh} collection={state.characters}/>:<CharacterAvatar subject={card} size="var(--dossier-portrait-size)"/>}
    <div className="dossier-identity"><p className="eyebrow">{t('dossier')}</p><div className="dossier-name"><h2>{card.name}</h2>{(sex==='male'||sex==='female')&&<span className={`dossier-sex ${sex}`} role="img" aria-label={t(sex)} title={t(sex)}>{sex==='male'?'♂':'♀'}</span>}</div>
     <div className="inspect-chips">{card.id===main&&<span className="pill">{t('protagonist')}</span>}{card.id===actor&&<span className="pill">{t('controlled')}</span>}{card.id===state.camera?.subject_id&&state.camera.mode==='observer'&&<span className="pill">{t('observed')}</span>}{age!==undefined&&age!==''&&<span className="pill">{t('age')}: {age}</span>}</div>
     {tab==='overview'&&<div className="dossier-personal" role="group" aria-label={t('personal')}>
@@ -60,7 +59,6 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     <p className="dossier-location"><MapPin size={15} aria-hidden="true"/>{c?.location||card.fields['Место']||t('unknown')}</p>
    </div>
   </header>
-  {save&&refresh&&<PortraitCommission cards={state.characters} saveId={save.id} revision={save.revision} refresh={refresh}/>}
   <SectionTabs items={items} value={tab} onChange={setTab} label={t('tabs')} tablist panelId={panelId} className="dossier-tabs"/>
   <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${tab}`} tabIndex={0} className="dossier-panel" key={`${card.id}:${actor}:${tab}`}>
    {tab==='overview'&&<div className="dossier-columns"><div className="dossier-column">

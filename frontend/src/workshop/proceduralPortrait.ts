@@ -1,9 +1,10 @@
 // Trusted vector layers from the approved #175 artwork. Version 1 is immutable.
 // Never accept SVG, paths, colors or markup from the server/user.
 import catalog from '../../../shared/portrait-catalog.json';
+import {portraitFace} from './portraitFace';
 import {coiffure,garmentLayer} from './portraitWardrobe';
 export type Styles = typeof catalog.styles;
-export type Layers = {base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
+export type Layers = {face_revision?:2;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
 export type ProceduralPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair} | ({version:3;body_frame:BodyFrame;facial_hair:FacialHair} & Layers)) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
@@ -29,12 +30,12 @@ function draw(p: Art): string {
       <radialGradient id="light"><stop stop-color="${p.glow || '#e4bf91'}" stop-opacity=".26"/><stop offset="1" stop-color="${p.glow || '#e4bf91'}" stop-opacity="0"/></radialGradient>
     </defs>`;
     const age = p.visualAge;
-    const headTransform = p.youngHead || (age==='infant'?'translate(-32 -25) scale(1.16 1.12)':age==='child'?'translate(-8 -2) scale(1.04 1.02)':age==='adolescent'?'translate(-4 -6) scale(1.02 1.01)':'');
-    const aging = age==='elderly'?'<path d="M151 221l14 6m69-6l14-6M166 170q34-12 67 0m-65 9q31-9 63 0M178 244l-5 13m50-13l6 13M180 279q20 10 40 0" fill="none" stroke="#633e35" opacity=".4" stroke-width="2"/>':age==='mature_adult'?'<path d="M150 219l12 4m75-4l12-4M177 243l-3 9m49-9l3 9" fill="none" stroke="#633e35" opacity=".22" stroke-width="1.5"/>':'';
-    const ears = (p.earShift?`<g transform="translate(200 0) scale(${p.earShift} 1) translate(-200 0)">`:'') + `<path d="M137 195 C120 183 120 212 126 229 Q131 240 141 232Z" fill="${skin[1]}"/><path d="M263 195 C280 183 280 212 274 229 Q269 240 259 232Z" fill="${skin[2]}"/><path d="M131 203 Q127 211 134 222 M269 203 Q273 211 266 222" fill="none" stroke="${line}" stroke-opacity=".27" stroke-width="3" stroke-linecap="round"/>` + (p.earShift?'</g>':'');
-    const facePath = p.paintedHead || (age==='infant'?'M140 145 C151 115 249 115 260 145 C275 174 272 237 254 270 Q237 302 200 304 Q163 302 146 270 C128 237 125 174 140 145Z':age==='child'?'M142 145 C157 124 242 124 258 145 C270 177 265 225 252 249 Q232 295 201 297 Q169 295 148 249 C135 225 130 177 142 145Z':teen?'M144 144 C161 124 239 124 256 145 C266 174 263 219 252 247 Q232 286 201 292 Q170 286 148 247 C137 219 134 174 144 144Z':p.face || 'M144 142 C160 125 239 125 256 147 C267 175 263 220 253 247 C245 270 225 295 202 299 C177 297 155 274 146 248 C136 224 132 172 144 142Z');
-    const facialHair = p.facialHair ? beardLayer(p.facialHair, facePath, p.hair) : '';
-    const face = `<path d="${facePath}" fill="url(#skin)"/>
+    const headTransform = p.revised?.headTransform || p.youngHead || (age==='infant'?'translate(-32 -25) scale(1.16 1.12)':age==='child'?'translate(-8 -2) scale(1.04 1.02)':age==='adolescent'?'translate(-4 -6) scale(1.02 1.01)':'');
+    const aging = p.revised?'':age==='elderly'?'<path d="M151 221l14 6m69-6l14-6M166 170q34-12 67 0m-65 9q31-9 63 0M178 244l-5 13m50-13l6 13M180 279q20 10 40 0" fill="none" stroke="#633e35" opacity=".4" stroke-width="2"/>':age==='mature_adult'?'<path d="M150 219l12 4m75-4l12-4M177 243l-3 9m49-9l3 9" fill="none" stroke="#633e35" opacity=".22" stroke-width="1.5"/>':'';
+    const ears = p.revised?.ears ?? ((p.earShift?`<g transform="translate(200 0) scale(${p.earShift} 1) translate(-200 0)">`:'') + `<path d="M137 195 C120 183 120 212 126 229 Q131 240 141 232Z" fill="${skin[1]}"/><path d="M263 195 C280 183 280 212 274 229 Q269 240 259 232Z" fill="${skin[2]}"/><path d="M131 203 Q127 211 134 222 M269 203 Q273 211 266 222" fill="none" stroke="${line}" stroke-opacity=".27" stroke-width="3" stroke-linecap="round"/>` + (p.earShift?'</g>':''));
+    const facePath = p.revised?.outline || p.paintedHead || (age==='infant'?'M140 145 C151 115 249 115 260 145 C275 174 272 237 254 270 Q237 302 200 304 Q163 302 146 270 C128 237 125 174 140 145Z':age==='child'?'M142 145 C157 124 242 124 258 145 C270 177 265 225 252 249 Q232 295 201 297 Q169 295 148 249 C135 225 130 177 142 145Z':teen?'M144 144 C161 124 239 124 256 145 C266 174 263 219 252 247 Q232 286 201 292 Q170 286 148 247 C137 219 134 174 144 144Z':p.face || 'M144 142 C160 125 239 125 256 147 C267 175 263 220 253 247 C245 270 225 295 202 299 C177 297 155 274 146 248 C136 224 132 172 144 142Z');
+    const facialHair = p.facialHair ? beardLayer(p.facialHair, facePath, p.hair,p.revised?.beardOffset) : '';
+    const face = p.revised?.face ?? `<path d="${facePath}" fill="url(#skin)"/>
       <path d="M245 157 Q268 199 250 247 Q235 281 207 293 Q235 276 236 247 C231 224 251 202 245 157Z" fill="${skin[2]}" opacity=".27"/>
       <path d="M149 166 C143 192 146 218 152 233 C159 222 165 221 175 219 Q156 197 161 166Z" fill="${skin[0]}" opacity=".27"/>
       <path d="M155 238 Q168 229 184 239 Q168 246 155 238Z M216 239 Q234 229 247 236 Q235 247 216 239Z" fill="${p.blush || '#b96d60'}" opacity=".16"/>
@@ -56,13 +57,13 @@ function draw(p: Art): string {
       <ellipse cx="92" cy="126" rx="245" ry="232" fill="url(#light)"/>
       <path d="M0 405 L400 274 V500 H0Z" fill="#1c2424" opacity=".08"/>
       <path d="M328 0 V500 M342 0 V500" stroke="#f8dfb1" stroke-opacity=".07"/>
-      ${age?`<g transform="${headTransform}">${p.backHair || ''}</g>`:p.backHair || ''}
+      ${(age||p.revised)?`<g transform="${headTransform}">${p.backHair || ''}</g>`:p.backHair || ''}
       ${age==='infant'?'<g transform="translate(56 0) scale(.72 1)">':age==='child'?'<g transform="translate(28 0) scale(.86 1)">':age==='adolescent'?'<g transform="translate(12 0) scale(.94 1)">':''}
-${p.bust ?? `      <path d="M176 271 L174 322 L151 340 Q199 378 248 339 L225 323 L225 271Z" fill="url(#neck)"/>
+${p.bust ?? `      <path d="${p.revised?.neckPath||'M176 271 L174 322 L151 340 Q199 378 248 339 L225 323 L225 271Z'}" fill="url(#neck)"/>
       <path d="M177 284 Q198 310 224 284 L225 306 Q199 321 176 299Z" fill="${skin[2]}" opacity=".38"/>
       ${p.body}`}
       ${['infant','child','adolescent'].includes(age)?'</g>':''}
-      ${p.visualAge?`<g transform="${headTransform}">${ears}${face}${aging}${facialHair}${p.frontHair || ''}${p.accessories || ''}</g>`:`${ears}${face}${facialHair}${p.frontHair || ''}${p.accessories || ''}`}
+      ${(p.visualAge||p.revised)?`<g transform="${headTransform}">${ears}${face}${aging}${facialHair}${p.frontHair || ''}${p.accessories || ''}</g>`:`${ears}${face}${facialHair}${p.frontHair || ''}${p.accessories || ''}`}
       <path d="M0 499 H400" stroke="#162020" opacity=".2"/>
     </svg>`);
   };
@@ -117,13 +118,15 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
   const lockColor=base===2 || layers?.hairstyle?hairColor:undefined;
   const age=p.visual_age || p.stage;
   const juvenile=['infant','child','adolescent'].includes(age);
-  const bust=layers?.garment?garmentLayer(layers.garment,layers.body_frame,juvenile):base===2 && p.version!==1?dressedBust(p.body_frame,juvenile,tintLayers(outfit?.tailoring||'',clothColor),(skin.skin||parts[1].skin)[2],!outfit):undefined;
+  const skinColors=layers?.skin_swatch?Object.values(catalog.skin_materials)[p.skin]:skin.skin||parts[1].skin;
+  const iris=layers?.eye_swatch?Object.values(catalog.eye_colors)[p.eyes]:p.eyes===7?'#6f8998':parts[p.eyes].iris;
+  const revised=layers?.face_revision===2 && layers.visage ? portraitFace(layers.visage,age,layers.body_frame,skinColors,hairColor||hair.hair,iris) : undefined;
+  const bust=layers?.garment?garmentLayer(layers.garment,layers.body_frame,juvenile,revised?.neckPath):base===2 && p.version!==1?dressedBust(p.body_frame,juvenile,tintLayers(outfit?.tailoring||'',clothColor),(skin.skin||parts[1].skin)[2],!outfit,revised?.neckPath):undefined;
   const facialHair=p.version!==1 && ['adult','young_adult','mature_adult','elderly'].includes(age) ? p.facial_hair : undefined;
   const outline=base===1?face.face:p.hair===7 && !juvenile?face.baldFace:face.faceV2 || face.face;
-  const skinColors=layers?.skin_swatch?Object.values(catalog.skin_materials)[p.skin]:skin.skin||parts[1].skin;
   const styledHair=layers?.hairstyle && coiffure(layers.hairstyle);
   const features:Art={};
-  if(layers?.visage){
+  if(layers?.visage && !revised){
    const youth=age==='infant'?1:age==='child'?.55:age==='adolescent'?.2:0;
    const width=[64,58,66,71,60,70,63][faceIndex]+4*youth;
    features.earShift=width/64;
@@ -147,7 +150,7 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
    features.designedlips=`<path d="M${200-lip} ${y}q${lip*.7} -${[5,3,2,4,3,6,7][faceIndex]} ${lip} -2q4-2 ${lip} 2q-${lip} ${[11,8,6,9,7,14,13][faceIndex]} -${lip*2} 0Z" fill="${face.lipColor||'#ab7064'}"/>`;
    features.eyes=!youth && [1,2,4].includes(faceIndex)?'sharp':'round';
   }
-  svg=draw({...face,face:outline,visualAge:p.visual_age || (base===2 && juvenile ? p.stage : undefined),artisticAge:!!p.visual_age_mode,name:'',bg,skin:skinColors,iris:layers?.eye_swatch?Object.values(catalog.eye_colors)[p.eyes]:p.eyes===7?'#6f8998':parts[p.eyes].iris,
+  svg=draw({...face,revised,face:outline,visualAge:p.visual_age || (base===2 && juvenile ? p.stage : undefined),artisticAge:!!p.visual_age_mode,name:'',bg,skin:skinColors,iris,
    hair:hairColor || (layers?.hairstyle ? parts[p.hair%7].hair : hair.hair),
    frontHair:hairIndex===7?'':tintLayers(hair.frontHair,lockColor),backHair:hairIndex===7?'':tintLayers(hair.backHair,lockColor),
    ...styledHair, ...features, cloth:clothColor||parts[p.palette].cloth,

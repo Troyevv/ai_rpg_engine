@@ -73,7 +73,7 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
         choices.setdefault('hair_color',int(seed[16:18],16)%len(STYLES['hair_color']))
         choices.setdefault('clothing_color',int(seed[18:20],16)%len(STYLES['clothing_color']))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=STYLES['face'][choices['face']], skin_swatch=True,eye_swatch=True,
+            visage=STYLES['face'][choices['face']], face_revision=2, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
             facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,

@@ -462,7 +462,7 @@ class ProceduralPortrait(StrictModel):
     @model_serializer(mode='wrap')
     def _sparse_colors(self, handler):
         result=handler(self)
-        for key in ('hair_color','clothing_color','visual_age','visual_age_mode'):
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision'):
             if result.get(key) is None: result.pop(key,None)
         return result
 
@@ -491,6 +491,7 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
     hairstyle: str | None = None
     garment: str | None = None
     visage: str | None = None
+    face_revision: Literal[2] | None = None
     skin_swatch: bool = False
     eye_swatch: bool = False
 

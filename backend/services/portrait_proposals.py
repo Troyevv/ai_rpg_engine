@@ -127,7 +127,7 @@ def quote(repo,scope,owner,revision,ids,config,key):
     inp=sum(b['input'] for b in batches)
     out=sum(b['limit'] for b in batches)
     price=cost(inp,out,0,price_snapshot(config,datetime.now(timezone.utc)))
-    public=dict(id=rid,revision=revision,count=len(ids),requests=len(batches),model=config['model'],
+    public=dict(id=rid,revision=revision,ids=ids,count=len(ids),requests=len(batches),model=config['model'],
                 thinking=config['thinking'],input=inp,output=out,cost=price)
     request=dict(ids=ids,config=prepared,batches=batches,quote=public)
     with repo.connect() as db:
@@ -146,7 +146,7 @@ def inspect(repo,scope,owner,rid):
     with repo.connect() as db:
         row,request=receipt(db,scope,owner,rid)
         sources(repo,db,scope,owner,request['ids'],row['revision'])
-        return dict(**request['quote'],status=row['status'],**json.loads(row['result_json']))
+        return {**request['quote'],'ids':request['ids'],'status':row['status'],**json.loads(row['result_json'])}
 
 
 def proposed(cid,traits,reference):
@@ -170,7 +170,7 @@ def generate(repo,scope,owner,rid,credentials,provided_key=None):
         row,request=receipt(db,scope,owner,rid)
         if row['status']!='quoted':
             sources(repo,db,scope,owner,request['ids'],row['revision'])
-            return dict(**request['quote'],status=row['status'],**json.loads(row['result_json']))
+            return {**request['quote'],'ids':request['ids'],'status':row['status'],**json.loads(row['result_json'])}
         config=request['config']
     key=credentials.resolve(config['provider'],provided_key if config['provider']=='deepseek' else None)
     if config['provider']=='deepseek': key=llm.deepseek_key(key)

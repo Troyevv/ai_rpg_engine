@@ -803,7 +803,8 @@ def authoring_stream(**kwargs):
     global chat_cancel_next
     if kwargs['messages'][0]['content'].startswith('Выбирай графику по открытой внешности'):
         cards=json.loads(kwargs['messages'][1]['content'])['cards']
-        yield json.dumps(dict(version=3,characters={cid:dict(hair='bun',clothing='blouse') for cid in cards}))
+        yield json.dumps(dict(version=3,characters={cid:dict(hair='bun',clothing='blouse') for cid,card in cards.items()
+                                            if card['description']!='QA_SKIP_PORTRAIT'}))
         kwargs['on_usage'](dict(prompt_tokens=400,completion_tokens=82,prompt_cache_hit_tokens=0))
         kwargs['on_finish']('stop')
         return

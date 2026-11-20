@@ -58,9 +58,9 @@ test('portrait catalogue, local edits and quoted batch commissions',async({page,
  await expect(page.locator('.portrait-comparison')).toContainText('Предложение модели');
  const generated=await preview.getAttribute('src');await button('Сохранить иллюстрацию').click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await open();await expect(preview).toHaveAttribute('src',generated!);await page.keyboard.press('Escape');
- await button('Готово').click();await button('Создать портреты по описаниям').click();
+ await button('Готово').click();await button('Портреты').click();
  await page.getByRole('checkbox',{name:'Анна',exact:true}).check();await page.getByRole('checkbox',{name:'Борис',exact:true}).check();
- await button('Рассчитать расход').click();await expect(page.locator('.portrait-commission')).toContainText('Персонажей — 2, запросов — 1');
+ await button('Рассчитать расход').click();await expect(page.locator('.portrait-commission')).toContainText('Запросов: 1');
  await button('Подтвердить запрос').click();await expect(page.locator('.commission-result')).toHaveCount(2);
  await page.locator('.commission-result').last().getByRole('checkbox').check();await button('Применить выбранные · 1').click();
  await expect(page.locator('.portrait-commission')).toHaveCount(0);
