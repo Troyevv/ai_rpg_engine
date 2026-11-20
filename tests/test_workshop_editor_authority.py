@@ -91,6 +91,8 @@ def test_original_failed_job_can_be_reopened_and_amended_offline(api):
         assert reopened.json()['state']==base['state']
         preview=Repository(repo.path).world_edits(wid,True)['edits'][0]
         assert preview['proposal']['conflicts']==packet['conflicts']
+        related=next(r for r in preview['related_records'] if r['section']=='world/characters' and r['id']=='character_2')
+        assert {'kind':'events','id':'delivery'} in related['links']
         assert 'date_basis' not in preview['proposal']['changes'][0]
         assert [a['age'] for a in preview['family_impacts']]==[18,19]
         fresh=reopened.json()['revision']
@@ -107,6 +109,7 @@ def test_original_failed_job_can_be_reopened_and_amended_offline(api):
         assert result.is_success,result.text
         applied=result.json()
         assert client.post(route,json=decision).json()['version_id']==applied['version_id']
+        assert packet['conflicts'][0] in [issue['message'] for issue in applied['review']['issues']]
         world=applied['state']['world']
         assert world['characters']['character_2']['birth_date']=='2015-07-10'
         assert world['characters']['character_3']['death_date']==world['objective_relations']['old_marriage']['until_date']=='2015-06-15'

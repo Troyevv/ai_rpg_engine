@@ -72,6 +72,23 @@ class EditorialProposal(Proposal):
     rationale: str = ''
 
 
+def related_records(before, candidate, diff):
+    """List incoming references from the same dependency walker used by deletions."""
+    from backend.services.draft_world import dependencies, GROUPS
+    kinds={section:kind for kind,section in GROUPS.items()}
+    kinds.update(characters='character', locations='location')
+    result=[]
+    for change in diff:
+        section=change['section'].removeprefix('world/')
+        if section=='campaign':continue
+        kind=kinds.get(section,section)
+        state=before if change['operation']=='remove' else candidate
+        links=dependencies(state,kind,change['id'])
+        if links:
+            result.append(dict(section=change['section'],id=change['id'],links=links))
+    return result
+
+
 def family_impacts(before, after):
     """Display consequences of the shown dates, without deriving more operations."""
     from backend.runtime_v3.calendar import age_on
@@ -118,7 +135,8 @@ def preview(state, packet):
         row['detail']=original.detail
     diff=differences(state,candidate)
     return dict(status='preview' if diff else 'assessed',proposal=proposal,candidate=candidate,diff=diff,
-                conflicts=manual_conflicts(state,candidate),family_impacts=family_impacts(state,candidate),warnings=warnings)
+                conflicts=manual_conflicts(state,candidate),family_impacts=family_impacts(state,candidate),
+                related_records=related_records(state,candidate,diff),warnings=warnings)
 
 
 def messages(base, instruction):

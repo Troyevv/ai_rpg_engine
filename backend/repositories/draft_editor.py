@@ -89,7 +89,7 @@ class DraftEditorStorage:
             result=[]
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
-                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies','warnings','diagnostics','family_impacts','amended_indices','original_proposal')}
+                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies','warnings','diagnostics','family_impacts','related_records','amended_indices','original_proposal')}
                 if edit.get('proposal'):
                     item['author_idea']=edit['base'].get('source','')
                 if edit.get('status')=='unapplied' and edit.get('action')=='fix':
@@ -218,6 +218,14 @@ class DraftEditorStorage:
                         trial['authoring']['manual_paths'].append(path)
                 previous=current.get('review') or {}
                 issues=[issue_from_finding(n) for n in edit['findings']] if fix else previous.get('issues',[])
+                issues=list(issues)
+                messages={issue['message'] for issue in issues}
+                advisory=[*review.get('issues',[]),*(edit.get('warnings') or [])]
+                advisory.extend(dict(message=text) for text in edit['proposal'].get('conflicts',[]))
+                for issue in advisory:
+                    if issue['message'] not in messages:
+                        issues.append(dict(issue,severity='warning'))
+                        messages.add(issue['message'])
                 current.update(state=trial,candidate=True,diagnostics=[],review=dict(previous,status='stale',advisory=True,
                     reason='Изменения сохранены. Можно повторно проверить эту версию.',issues=issues))
                 self._record_document(db,'world_draft',wid,json.dumps(current,ensure_ascii=False),True,'ai_edit',head['id'])
