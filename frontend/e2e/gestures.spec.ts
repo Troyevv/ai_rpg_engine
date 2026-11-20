@@ -422,3 +422,30 @@ test('long workshop records can be dragged, cancelled and reordered without savi
   const persisted = await (await request.get(path + '?author=true')).json();
   expect(persisted.state.world.characters.ilya.goals).toEqual(goals);
 });
+
+test('large text and reduced motion keep controls usable by button and keyboard', async ({
+  page,
+  request,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await narrative(page, request);
+  await page.addStyleTag({ content: 'html { font-size: 150% !important }' });
+  const menu = page.getByRole('button', { name: 'Меню игры', exact: true });
+  await menu.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.mobile-game-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeFocused();
+  await nav(page, 'Настройки');
+  const settings = page.locator('.gesture-settings');
+  await settings.locator(':scope > summary').click();
+  await settings.getByLabel('Управление жестами').uncheck();
+  await settings.getByText('Управление и жесты', { exact: true }).click();
+  const repeat = settings.getByRole('button', { name: 'Повторить обучение' });
+  await repeat.focus();
+  await expect(repeat).toBeFocused();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(390);
+});

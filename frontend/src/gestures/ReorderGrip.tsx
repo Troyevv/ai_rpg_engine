@@ -74,6 +74,8 @@ export function ReorderGrip({ move }: { move: (index: number) => void }) {
     },
     reset: () => {
       cancelAnimationFrame(frame);
+      frame = 0;
+      scroller = null;
       rows.forEach((row) => {
         row.removeAttribute('data-insert-before');
         row.removeAttribute('data-insert-after');
