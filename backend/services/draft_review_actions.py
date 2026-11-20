@@ -58,6 +58,13 @@ def findings(base, report):
     return [row for row in rows.values() if row['message'] not in dismissed]
 
 
+def issue_from_finding(row):
+    issue = dict(message=row['message'], severity='warning', related_paths=row['paths'], patch_paths=[])
+    if row.get('reported_match'):
+        issue['record_match'] = row['reported_match']
+    return issue
+
+
 def dismissed_hints(base):
     review = base.get('review') or {}
     if not review.get('outcomes') or review.get('candidate_hash') != candidate_hash(base['state']):
@@ -262,7 +269,7 @@ def review_result(edit, reply):
     if not isinstance(decisions, list):
         raise ValueError('Ожидался список решений по замечаниям.')
     outcomes = assessments(edit['findings'], [ReadAssessment.model_validate(d) for d in decisions])
-    known = {i['message'] for i in issues}
+    known = {i['message']: i for i in issues}
     for row in outcomes:
         if row['outcome']=='fixed' and (edit['base'].get('review') or {}).get('candidate_hash')==edit['before_hash']:
             row['outcome']='disproved'
@@ -270,10 +277,14 @@ def review_result(edit, reply):
                 or row['outcome']=='disproved' and row['message'] in edit['calendar_conflicts']):
             row.update(outcome='remaining', reason='Условие замечания сохраняется в текущей ревизии.')
     for row in outcomes:
-        if row['outcome'] in ('remaining','ambiguous') and row['message'] not in known:
-            issues.append(dict(message=row['message'], severity='warning', patch_paths=[]))
-        elif row['outcome'] in ('fixed','disproved') and row['message'] in known:
-            row.update(outcome='remaining', reason='Замечание повторилось в новом отчёте.')
+        existing = known.get(row['message'])
+        if existing is not None:
+            # A reader may restate a finding without its original object references.
+            existing.update(issue_from_finding(row), severity=existing['severity'])
+            if row['outcome'] in ('fixed','disproved'):
+                row.update(outcome='remaining', reason='Замечание повторилось в новом отчёте.')
+        elif row['outcome'] in ('remaining','ambiguous'):
+            issues.append(issue_from_finding(row))
     return dict(status='reviewed', outcomes=outcomes, review=dict(status='completed', advisory=True,
                 candidate_hash=edit['before_hash'], issues=issues))
 

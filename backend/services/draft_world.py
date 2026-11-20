@@ -297,11 +297,8 @@ def review_initial(state,source=''):
         warnings.append('Между значимыми персонажами не описано ни одного отношения. Проверь, достаточно ли связей для начала игры.')
     if len(cards)>2 and not world['threads']:
         warnings.append('Не создано открытых сюжетных линий. Проверь, есть ли у мира естественный потенциал для развития.')
-    connected=set(scene.get('participants',[]));secrets=secret_holders(state)
-    connected.update(cid for r in world['relationships'].values() for cid in (r.get('source_id'),r.get('target_id')))
-    connected.update(cid for t in world['threads'].values() for cid in t.get('character_ids',[]))
     for card in cards:
-        cid=card['id'];fields=card['fields'];character=world['characters'].get(cid,{})
+        fields=card['fields']
         weak=[field for field in DETAIL_MIN if weak_card_field(fields.get(field,''),field,source)]
         if weak:warnings.append(f"{card['name']}: недостаточно раскрыты поля карточки ({', '.join(weak)}).")
         if not appearance_is_detailed(fields.get('Внешность','')):

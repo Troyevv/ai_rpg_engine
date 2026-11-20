@@ -93,7 +93,6 @@ class DraftStorage(DraftEditorStorage):
                 report['warnings']=[text for text in report['warnings'] if text not in dismissed]
             if block and author:report['warnings'].append(block)
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
-            latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             quality_status=json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
             if quality_status not in ('running','accepted','partial','rejected','cancelled'):quality_status=None
             if author and quality_status in ('rejected','partial'):

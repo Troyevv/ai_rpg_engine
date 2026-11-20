@@ -325,3 +325,17 @@ def test_archived_candidate_review_and_rollback(api):
     restored = client.patch(url, json=dict(revision=reviewed['revision'], operation='restore', source_id=original['version_id'])).json()
     assert restored['state']==state and restored['review']==original['review']
     assert calls==[True,False]
+
+
+def test_still_open_findings_keep_their_original_targets_on_reread():
+    from backend.services.draft_review_actions import findings, review_result
+    match = dict(kind='friend', source_id='a', target_id='b')
+    path = '/world/objective_relations'
+    base = dict(state={}, review=dict(issues=[dict(message='Пропущена связь.', path=path, record_match=match),
+                                              dict(message='Проверить карточку.', path='/characters/1')]))
+    notes = findings(base, {})
+    edit = dict(findings=notes, base=base, current_hints=[], calendar_conflicts=[], before_hash='initial')
+    # The reviewer repeats one note in prose and omits the other entirely.
+    reply = json.dumps(dict(issues=[dict(message=notes[0]['message'])], decisions=[]))
+    report = review_result(edit, reply)['review']
+    assert findings(dict(state={}, review=report), {}) == notes

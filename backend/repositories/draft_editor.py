@@ -138,12 +138,10 @@ class DraftEditorStorage:
                 if (conflicts or any(d['operation']=='remove' for d in edit['diff'])) and not accept_conflicts:
                     raise ValueError('Подтвердите удаления и замену ручных авторских решений.')
                 if fix:
+                    from backend.services.draft_review_actions import accept_calendar_updates, issue_from_finding
                     review=dict(current.get('review') or {},status='stale',advisory=True,
                         reason='Предложенные правки сохранены. Можно повторно проверить эту версию.',
-                        issues=[dict(message=n['message'],severity='warning',related_paths=n['paths'],
-                                     **({'record_match':n['reported_match']} if n.get('reported_match') else {}))
-                                for n in edit['findings']])
-                    from backend.services.draft_review_actions import accept_calendar_updates
+                        issues=[issue_from_finding(n) for n in edit['findings']])
                     accept_calendar_updates(current['state'],trial)
                     current['state']=trial
                     current.update(review=review)
