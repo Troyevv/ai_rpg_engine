@@ -15,7 +15,7 @@ type Structure = {
   nose: number;
   mouth: number;
 };
-const forms: Record<Face, Structure> = {
+const forms: Partial<Record<Face, Structure>> = {
   oval: {
     cheek: 66,
     jaw: 52,
@@ -105,7 +105,7 @@ export function portraitFace(
   hair: readonly string[],
   iris: string,
 ) {
-  const f = forms[form],
+  const f = forms[form] || forms.oval!,
     baby = age === 'infant',
     child = age === 'child',
     teen = age === 'adolescent';

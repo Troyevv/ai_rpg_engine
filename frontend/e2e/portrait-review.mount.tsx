@@ -10,7 +10,7 @@ interface ReviewCase {
   portrait: Extract<LegacyPortrait, {version: 3}>;
 }
 
-export async function render(cases: ReviewCase[], revision: 3 | 4 | 'original-eyes' | 'aligned-eyes', fullSize: boolean) {
+export async function render(cases: ReviewCase[], revision: 3 | 4 | 'current' | 'original-eyes' | 'aligned-eyes', fullSize: boolean) {
   const rootElement = document.getElementById('review')!;
   const width = fullSize ? 400 : 160;
   const columns = Math.min(fullSize ? 3 : 6, cases.length);

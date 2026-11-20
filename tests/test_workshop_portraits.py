@@ -169,7 +169,8 @@ def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_
     from unittest.mock import patch
     client,_=api;raw=rich();card=raw['characters'][0];cid=card['id']
     card['fields']['Возраст']='30 лет'
-    card['portrait_traits']=dict(facial_hair='short_beard',hair='short',hair_color='black',eyes='grey',clothing='shirt',clothing_color='dark')
+    card['portrait_traits']=dict(facial_hair='goatee',hair='quiff',hair_color='black',eyes='grey',clothing='tech_shell',clothing_color='dark',
+                                accent_color='bronze',face_detail='freckles',face='diamond')
     raw['world']['characters'][cid].update(biological_sex='male',birth_date=None,developmental_stage='adult',
         procedural_portrait={'seed':'MODEL-CANNOT-ISSUE-AN-ID'},portraits=[{'asset_id':'forged'}],portrait_mode='procedural')
     calls=[]
@@ -185,8 +186,9 @@ def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_
     assert len(calls)==1 and 'portrait_traits' in calls[0]
     draft=client.get(path+'?author=true').json()
     desc=draft['portraits'][cid]['procedural_portrait']
-    assert desc['form']=='human' and desc['eyes']==2 and desc['clothing']==2 and desc['hair_color']==desc['clothing_color']==0
-    assert (desc['version'],desc['body_frame'],desc['facial_hair'])==(3,'male','short_beard')
+    assert desc['form']=='human' and desc['eyes']==2 and desc['garment']=='tech_shell' and desc['hair_color']==desc['clothing_color']==0
+    assert (desc['version'],desc['body_frame'],desc['facial_hair'])==(3,'male','goatee')
+    assert (desc['accent_color'],desc['face_detail'],desc['visage'],desc['hairstyle']) == (19,'freckles','diamond','quiff')
     assert 'MODEL-CANNOT-ISSUE-AN-ID' not in desc['seed']
     assert not draft['state']['world']['characters'][cid].get('portraits')
     assert draft['state']['world']['characters'][cid].get('portrait_mode','auto')=='auto'

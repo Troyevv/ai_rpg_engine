@@ -462,7 +462,7 @@ class ProceduralPortrait(StrictModel):
     @model_serializer(mode='wrap')
     def _sparse_colors(self, handler):
         result=handler(self)
-        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision','eye_revision','eye_shape','nose_shape','lip_shape','body_build'):
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision','eye_revision','eye_shape','nose_shape','lip_shape','body_build','accent_color','face_detail','eyewear'):
             if result.get(key) is None: result.pop(key,None)
         return result
 
@@ -486,6 +486,7 @@ class ProceduralPortraitV2(ProceduralPortrait):
 
 class ProceduralPortraitV3(ProceduralPortraitV2):
     version: Literal[3]
+    facial_hair: FacialHair | Literal['goatee', 'sideburns']
     # Keep each unedited layer of a historical plate exactly as it was painted.
     base_version: Literal[1, 2] = 2
     hairstyle: str | None = None
@@ -493,10 +494,15 @@ class ProceduralPortraitV3(ProceduralPortraitV2):
     visage: str | None = None
     face_revision: Literal[2, 3, 4] | None = None
     eye_revision: Literal[2] | None = None
-    body_build: Literal['slender','average','broad','full'] | None = None
-    eye_shape: Literal['almond','open','hooded'] | None = None
-    nose_shape: Literal['straight','rounded','arched'] | None = None
-    lip_shape: Literal['defined','full','fine'] | None = None
+    hair_color: int | None = Field(default=None, ge=0, le=15)
+    clothing_color: int | None = Field(default=None, ge=0, le=19)
+    accent_color: int | None = Field(default=None, ge=0, le=19)
+    face_detail: Literal['none','freckles','beauty_mark','brow_scar','cheek_scar','dimples'] | None = None
+    eyewear: Literal['none','round_wire','rectangular','cat_eye'] | None = None
+    body_build: Literal['slender','average','broad','full','athletic','stocky'] | None = None
+    eye_shape: Literal['almond','open','hooded','upturned','downturned','deep_set'] | None = None
+    nose_shape: Literal['straight','rounded','arched','upturned','broad_base','aquiline'] | None = None
+    lip_shape: Literal['defined','full','fine','cupid','wide','lower_full'] | None = None
     skin_swatch: bool = False
     eye_swatch: bool = False
 

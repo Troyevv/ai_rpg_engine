@@ -13,6 +13,7 @@ type Paint = {
   cloth: readonly string[];
   bg: readonly string[];
   iris: string;
+  accent?: string;
 };
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const tone = (a: string, b: string, t: number) =>
@@ -33,6 +34,8 @@ const ellipse = (x: number, y: number, rx: number, ry: number, color: string) =>
 // Width at the cheek, jaw and chin, then length between the eye and chin.
 // These are skeletal landmarks; hair, eyes and ears never select a separate face.
 const shapes: Record<Face, [number, number, number, number]> = {
+  heart:[68,36,11,79], diamond:[73,40,14,83], pear:[59,61,29,78],
+  square:[69,61,33,75], oblong:[59,48,24,95],
   oval: [66, 46, 22, 83],
   narrow: [59, 40, 18, 84],
   angular: [70, 50, 21, 82],
@@ -43,14 +46,17 @@ const shapes: Record<Face, [number, number, number, number]> = {
 };
 // Revision four keeps each face's skeletal proportions through childhood.
 const classicShapes: typeof shapes = {
+  heart:[67,35,10,79], diamond:[75,40,13,82], pear:[62,53,28,81],
+  square:[70,59,32,77], oblong:[58,49,25,97],
   oval: [65, 43, 21, 78], narrow: [55, 33, 13, 86],
   angular: [71, 52, 15, 80], broad: [73, 63, 30, 74],
   long: [61, 44, 22, 94], round: [73, 53, 27, 65], soft: [68, 40, 19, 73],
 };
+const templeWidths: Partial<Record<Face, number>> = {heart:1.04, diamond:.83, pear:.86, square:.98, oblong:1.01};
 const features = {
-  eye_shape: ['almond', 'open', 'hooded'],
-  nose_shape: ['straight', 'rounded', 'arched'],
-  lip_shape: ['defined', 'full', 'fine'],
+  eye_shape: ['almond','open','hooded','upturned','downturned','deep_set'],
+  nose_shape: ['straight','rounded','arched','upturned','broad_base','aquiline'],
+  lip_shape: ['defined','full','fine','cupid','wide','lower_full'],
 } as const;
 export type FeatureChoices = { [K in keyof typeof features]?: (typeof features)[K][number] };
 export { features as figureFeatures };
@@ -75,21 +81,21 @@ function landmarks(p: Human, shape: Face) {
   const noseStyle = p.nose_shape || features.nose_shape[Math.floor(v(8) * 2.99)];
   const nose =
       depth * mix(0.45, refined ? 0.30 : 0.36, youth) + (refined && elder ? 3.4 : 0) +
-      (noseStyle === 'arched' ? 3.5 : noseStyle === 'rounded' ? -2.5 : 0) * (1 - youth),
+      (noseStyle === 'arched' ? 3.5 : noseStyle==='aquiline'?7:noseStyle==='upturned'?-7:noseStyle==='broad_base'?-1.5:noseStyle === 'rounded' ? -2.5 : 0) * (1 - youth),
     mouth = nose + (depth - nose) * mix(refined && elder ? .48 : 0.42, 0.45, youth);
   const crown = refined ? mix(-77, -90, youth) + (v(1) - 0.5) * 8 : mix(-87, -101, youth) + (v(1) - 0.5) * 5;
-  const temple = cheek * 0.92,
+  const temple = cheek * (templeWidths[shape] ?? .92),
     eyeSpacing = refined ? cheek * 0.39 + (v(2) - 0.5) * 6 : mix(26.8 + (v(2) - 0.5) * 4, 26, youth);
   const axis = refined ? -3 - v(3)*13 : -9 - v(3) * 4,
-    tip = axis - mix(noseStyle === 'arched' ? 10.7 : noseStyle === 'rounded' ? 5.4 : 7, 3, youth),
+    tip = axis - mix(noseStyle === 'arched' ? 10.7 : noseStyle==='aquiline'?13:noseStyle==='upturned'?8.8:noseStyle === 'rounded' ? 5.4 : 7, 3, youth),
     lipX = axis + 2;
   const cx = lipX + 1,
     corner = depth * mix(0.72, 0.68, youth) + (elder ? 1 : 0);
   const earX = temple - 1,
     earY = -5 - youth * 2,
     earH = nose + 4;
-  const cheekY = (shape === 'angular' ? 14 : 21) + youth * 7 + (elder ? 4 : 0);
-  const jawY = corner + (elder && refined ? 6 : 0) + (shape === 'broad' ? 1 : shape === 'round' ? -4 : 0);
+  const cheekY = (shape === 'angular' || shape==='diamond' ? 14 : shape==='pear' ? 29 : 21) + youth * 7 + (elder ? 4 : 0);
+  const jawY = corner + (elder && refined ? 6 : 0) + (shape === 'broad' ? 1 : shape === 'round' ? -4 : shape==='square'||shape==='oblong'?6:shape==='heart'?-4:0);
   const outline = refined ? `M${axis*.22} ${crown}
  C${temple*.6} ${crown-2} ${temple+6} ${crown*.63} ${temple} -15
  C${temple-1} -4 ${cheek+1} 9 ${cheek} ${cheekY}
@@ -201,12 +207,14 @@ function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair
                       orbit: ReturnType<typeof orbitalPair>['near'], kind: string) {
   const { side, x, widthScale } = orbit;
   const w = pair.halfWidth * (kind === 'hooded' ? 1.045 : kind === 'open' ? .97 : 1);
-  const rise = .55 + h.v(4) * 1.35 + (kind === 'almond' ? .65 : 0);
-  const opening = (kind === 'open' ? .40 : kind === 'hooded' ? .29 : .33) *
+  const rise = .55 + h.v(4) * 1.35 + (kind === 'almond' ? .65 : kind==='upturned'?3.4:kind==='downturned'?-4.1:0);
+  const opening = (kind === 'open' ? .40 : kind === 'hooded' ? .29 : kind==='deep_set'?.30:kind==='downturned'?.365:.33) *
     w * (1 + h.youth * .15) * (h.elder ? .93 : 1);
   // Both canthi and both Bézier arcs are expressed about the same optical
   // centre. The upper lid covers more of the iris on a hooded eye.
-  const lid = `M${-w} .8 C${-w*.64} ${-opening*.95} ${-w*.18} ${-opening*1.25} 0 ${-opening*1.19}
+  const lid = kind==='upturned' || kind==='downturned'
+    ? `M${-w} .8 Q${-w*.44} ${-opening*2.1} ${w*.28} ${-opening} Q${w*.78} ${-opening*.8} ${w} ${-rise}`
+    : `M${-w} .8 C${-w*.64} ${-opening*.95} ${-w*.18} ${-opening*1.25} 0 ${-opening*1.19}
     C${w*.42} ${-opening*1.25} ${w*.76} ${-opening*.66} ${w} ${-rise}`;
   const lower = `Q${w*.18} ${opening*1.38} ${-w} .8`;
   const aperture = lid + ' ' + lower + 'Z';
@@ -218,7 +226,7 @@ function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair
   const pupilX = pair.gaze * radius * side / widthScale;
   const irisX = radius / widthScale;
   const pupilY = -.55;
-  const browY = -opening - 5.5 - h.v(5) * 1.7 + (h.elder ? 1.2 : 0);
+  const browY = -opening - (kind==='deep_set'?3.2:5.5) - h.v(5) * 1.7 + (h.elder ? 1.2 : 0);
   const thick = mix(3.3 + h.build * .7 + h.v(6) * 1.3, 1.6, h.youth);
   const arch = 2.5 + h.v(5) * 2.9;
   const brow = `M${-w} ${browY+1}
@@ -228,7 +236,7 @@ function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair
     Q${-w*.35} ${browY-.8+thick*.52} ${-w} ${browY+1+thick*.72}Z`;
   return `<g transform="translate(${x} 0) scale(${side*widthScale} 1)">
     <defs><clipPath id="${id}"><path d="${aperture}"/></clipPath></defs>
-    ${ellipse(0,browY+3,w+3,6,'url(#socket)')}${path(aperture,tone(paint.skin[0],'#fff2e4',.79))}
+    ${kind==='deep_set'?path(`M${-w-4} 4Q${-w-3} -18 3 -19Q${w+6} -20 ${w+4} -4Q0 -13 ${-w-4} 4Z`,paint.skin[2],.44):''}${ellipse(0,browY+3,w+3,6,'url(#socket)')}${path(aperture,tone(paint.skin[0],'#fff2e4',.79))}
     <g clip-path="url(#${id})">
     ${ellipse(pupilX,pupilY,irisX,radius,ink)}
     ${ellipse(pupilX,pupilY,irisX*.83,radius*.86,paint.iris)}
@@ -243,10 +251,10 @@ function projectedEye(h: Head, paint: Paint, pair: ReturnType<typeof orbitalPair
 function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
   const { axis, tip, nose: y, mouth: m, lipX: x } = h;
   const wide =
-    (h.refined ? (noseStyle === 'rounded' ? 15.5 : noseStyle === 'arched' ? 7.6 : 10.5) : (noseStyle === 'rounded' ? 11 : noseStyle === 'arched' ? 8.2 : 9.3)) * (1 - h.youth * 0.18);
+    (h.refined ? (noseStyle === 'rounded' ? 15.5 : noseStyle==='broad_base'?19:noseStyle==='upturned'?9:noseStyle==='aquiline'?8.3:noseStyle === 'arched' ? 7.6 : 10.5) : (noseStyle === 'rounded' ? 11 : noseStyle === 'arched' ? 8.2 : 9.3)) * (1 - h.youth * 0.18);
   const arch = noseStyle === 'arched' ? (h.refined ? 7 : 4) : 0,
     wing = tip + wide + 2;
-  const lip = (h.refined ? (lipStyle === 'fine' ? 19 : lipStyle === 'full' ? 16 : 17) + (h.v(9) - .5) * 8 : 16 + h.v(9) * 4) * (1 - h.youth * 0.27),
+  const lip = (h.refined ? (lipStyle==='wide'?24:lipStyle==='cupid'?13:lipStyle==='lower_full'?17.5:lipStyle === 'fine' ? 19 : lipStyle === 'full' ? 16 : 17) + (h.v(9) - .5) * 8 : 16 + h.v(9) * 4) * (1 - h.youth * 0.27),
     full = (lipStyle === 'full' ? (h.refined ? 1.65 : 1.35) : lipStyle === 'fine' ? (h.refined ? 0.49 : 0.75) : 1) * (1 + h.youth * 0.04) * (h.refined && h.elder ? .78 : 1);
   const ink = tone(p.skin[2], '#422d30', 0.56),
     red = tone(p.skin[1], h.refined ? '#91494e' : '#934e51', (h.refined ? .56 : .48) - h.build * 0.05 - h.youth * 0.07);
@@ -280,21 +288,23 @@ function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
   const left = x - lip * 0.86,
     right = x + lip;
   const crease = `M${left} ${m + 1} C${x - 8} ${m + 0.4} ${x - 5} ${m - 0.5} ${x - 1} ${m + 0.4} C${x + 4} ${m + 1.7} ${x + 12} ${m - 0.7} ${right} ${m - smile * 0.52}`;
+  const upperFull=lipStyle==='cupid'?1.65:lipStyle==='wide'?.56:lipStyle==='lower_full'?.69:full;
+  const lowerFull=lipStyle==='lower_full'?1.68:lipStyle==='cupid'?.88:lipStyle==='wide'?.72:full;
   const lips =
     path(
-      `M${left} ${m + 1} C${x - 11} ${m - 0.4} ${x - 6} ${m - 4.8 * full} ${x - 3} ${m - 4.1 * full}
- Q${x - 1} ${m - 3.8 * full} ${x + 1} ${m - 2.6 * full} Q${x + 4} ${m - 4.3 * full} ${x + 6} ${m - 3.9 * full}
- C${x + 10} ${m - 3.5 * full} ${right - 3} ${m - 1.2} ${right} ${m - smile * 0.52} Q${x + 5} ${m + 2} ${x - 1} ${m + 1}Z`,
+      `M${left} ${m + 1} C${x - 11} ${m - 0.4} ${x - 6} ${m - 4.8 * upperFull} ${x - 3} ${m - 4.1 * upperFull}
+ Q${x - 1} ${m - 3.8 * upperFull} ${x + 1} ${m - 2.6 * upperFull} Q${x + 4} ${m - 4.3 * upperFull} ${x + 6} ${m - 3.9 * upperFull}
+ C${x + 10} ${m - 3.5 * upperFull} ${right - 3} ${m - 1.2} ${right} ${m - smile * 0.52} Q${x + 5} ${m + 2} ${x - 1} ${m + 1}Z`,
       red,
       0.88,
     ) +
     path(
       crease +
-        ` C${x + 13} ${m + 2.2} ${x + 8} ${m + 6.4 * full} ${x + 2} ${m + 6 * full} Q${x - 5} ${m + 6.8 * full} ${left} ${m + 1}Z`,
+        ` C${x + 13} ${m + 2.2} ${x + 8} ${m + 6.4 * lowerFull} ${x + 2} ${m + 6 * lowerFull} Q${x - 5} ${m + 6.8 * lowerFull} ${left} ${m + 1}Z`,
       tone(red, p.skin[1], 0.46),
     ) +
     line(crease, ink, 1.15, 0.8) +
-    line(`M${x - 3} ${m + 4.3 * full}q4.7 1.1 9-.6`, p.skin[0], 1.5, 0.49) +
+    line(`M${x - 3} ${m + 4.3 * upperFull}q4.7 1.1 9-.6`, p.skin[0], 1.5, 0.49) +
     ellipse(x + 2, m + 9 * full, 9, 2.4, 'url(#socket)');
   if (!h.refined) return { nose, lips };
   // Model a bridge, tip and two wings in the same three-quarter projection as the eyes.
@@ -308,7 +318,20 @@ function expressions(h: Head, p: Paint, noseStyle: string, lipStyle: string) {
     Q${tip+4} ${y-3.4} ${tip+7} ${y-2.4} Q${near} ${y-6} ${near+1} ${y-3}
     Q${near} ${y-.3} ${tip+7} ${y-.1} Q${tip+2} ${y+2.4} ${far+1} ${y-.7}Z`;
   const inkNose = tone(p.skin[2], ink, .46);
-  const modeledNose = path(bridge,'url(#nosePlane)',.73-h.youth*.32) +
+  const plane = path(bridge,'url(#nosePlane)',.73-h.youth*.32);
+  if (noseStyle==='upturned' || noseStyle==='broad_base' || noseStyle==='aquiline') {
+    const up = noseStyle==='upturned', broad = noseStyle==='broad_base';
+    const base = broad
+      ? `M${tip-8} ${y-5}q-5 4-2 6q5 1 10-1q8 4 17 0q4-3 2-7q-3 4-8 4q-5-2-9-.5q-4 1-10-1Z`
+      : up ? `M${tip-5} ${y-4}q4-3 9-1q6 2 10-1q-2 5-8 6q-7 2-11-4Z` : lower;
+    const nostrils = broad ? `M${tip-8} ${y}q2-2 5-.7m14 1q2-3 5-2` :
+      up ? `M${tip-1} ${y-.3}q1.7-3 3.8-.8m3-.5q1.8-2.9 4-.8` :
+      `M${tip} ${y+.3}q2-2 4-.6m3-1q2-2 4-1`;
+    const ridge = noseStyle==='aquiline' ? line(`M${axis} ${start+5}Q${axis+1} ${y*.35} ${tip-2} ${y*.64}Q${tip-6} ${y*.82} ${tip-3} ${y-3}`,p.skin[2],1.7,.51-h.youth*.2) : '';
+    return {nose:plane+ridge+ellipse(tip+1,y-(up?6:5),broad?7:bulb,3.7,'url(#litSkin)')+
+      path(base,p.skin[2],.46)+line(nostrils,inkNose,1.45,.78-h.youth*.23),lips};
+  }
+  const modeledNose = plane +
     ellipse(tip+1,y-5,bulb,4,'url(#litSkin)') + path(lower,p.skin[2],.53) +
     line(`M${tip+1} ${y-.9}q1.8-1.7 3.6-.5m${wide*.42} -1q2-2.2 4.4-1`,inkNose,1.35,.75-h.youth*.25) +
     line(`M${axis+.5} ${y*.4}Q${tip+(noseStyle==='arched'?-2:2)} ${y*.75} ${far+1} ${y-5.8}`,p.skin[2],1.15,h.youth>.5?.17:.47);
@@ -328,6 +351,18 @@ function whiskers(h: Head, style: Human['facial_hair'], p: Paint) {
     path(h.refined ? partedMustache : moustache, 'url(#beardMass)', 0.93) +
     line(`M${x - 5} ${y - 6}q-5 .7-9 4m22-4.3q5 1 9 3.4`, p.hair[0], 0.95, 0.65);
   if (style === 'mustache') return must;
+  if (style === 'goatee') {
+    const tuft = `M${x-9} ${y+7} Q${x} ${y+11} ${x+10} ${y+6}
+      Q${x+11} ${d-10} ${cx+18} ${d-8} Q${cx+13} ${d+3} ${cx} ${d+5}
+      Q${cx-13} ${d+1} ${cx-17} ${d-8} Q${x-9} ${d-12} ${x-9} ${y+7}Z`;
+    return must + path(tuft, 'url(#beardMass)', .93) + line(`M${cx-8} ${d-9}q2 6 4 8m6-10q3 5 1 10m5-9-2 6`, p.hair[0], 1, .55);
+  }
+  if (style === 'sideburns') {
+    const sides = `M${-c+3} 1 Q${-c+6} 17 ${-j-6} ${corner-8} Q${-j+1} ${corner-6} ${-j+5} ${corner-10}
+      Q${-c+15} 23 ${-c+9} 0 Z M${earX-6} -2 Q${c-10} 23 ${j-8} ${corner-11}
+      Q${j-4} ${corner-5} ${j+5} ${corner-7} Q${c+1} 22 ${earX+1} 1Z`;
+    return `<g clip-path="url(#headShape)">${path(sides,'url(#beardMass)',.91)}</g>`;
+  }
   const stubble = style === 'stubble',
     full = style === 'full_beard';
   const fall = full ? (h.refined ? 6 + h.v(13)*11 : 12 + h.v(13) * 8) : stubble ? 0 : 2;
@@ -376,6 +411,46 @@ function whiskers(h: Head, style: Human['facial_hair'], p: Paint) {
     '</g></g>' +
     (stubble ? path(moustache, p.hair[1], 0.09) : must)
   );
+}
+
+function faceMarks(h: Head, kind: Human['face_detail'], paint: Paint, near: number, far: number) {
+  if (!kind || kind==='none') return '';
+  const ink=tone(paint.skin[2], '#714336', .55);
+  if(kind==='beauty_mark') return ellipse(near+7,h.mouth-6,1.9,1.55,ink);
+  if(kind==='dimples') return line(`M${h.lipX-22} ${h.mouth-3}q-3 3-1 6 M${h.lipX+24} ${h.mouth-2}q2 3-2 7`,ink,1.5,.47);
+  if(kind==='brow_scar'||kind==='cheek_scar'){
+    const x=near+(kind==='brow_scar'?7:12), y=kind==='brow_scar'?-22:14;
+    const scar=`M${x} ${y}q-4 5-4 9l-4 6`;
+    return line(scar,ink,2.3,.55)+`<g transform="translate(.9 .3)">${line(scar,paint.skin[0],1.4,.79)}</g>`;
+  }
+  let marks='';
+  // Scatter a band across both malar planes; the bridge has fewer, smaller spots.
+  let state=Math.round(h.v(0)*65535+h.v(11)*255)+11;
+  const jitter=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296};
+  for(let i=0;i<42;i++){
+    const side=i%2===0?1:-1, offset=(jitter()+jitter()-1)*20;
+    const x=(side===1?near:far)+side*(5+offset), y=11+jitter()*11+Math.abs(offset)*.15;
+    const radius=.45+jitter()*.88;
+    marks+=ellipse(x,y,radius,radius*.79,ink);
+  }
+  for(let i=0;i<7;i++)marks+=ellipse(h.axis+(jitter()-.5)*18,11+jitter()*6,.63,.53,ink);
+  return `<g opacity=".60">${marks}</g>`;
+}
+
+function spectacles(h: Head, kind: Human['eyewear'], near:number, far:number, paint:Paint) {
+  if (!kind || kind==='none') return '';
+  const pair=orbitalPair(h);const r=pair.halfWidth+4;
+  const frame=kind==='round_wire'?'#645847':tone(paint.hair[1],'#282c35',.67);
+  const weight=kind==='round_wire'?1.65:2.8;
+  const lens=kind==='round_wire'
+    ? `M${-r} 0C${-r} ${-r*1.08} ${r} ${-r*1.08} ${r} 0C${r} ${r*1.13} ${-r} ${r*1.13} ${-r} 0Z`
+    :kind==='cat_eye'?`M${-r} -3Q-5 -9 ${r+3} -13Q${r-1} 8 4 9Q${-r*.7} 14 ${-r} -3Z`
+    :`M${-r} -8Q0 -11 ${r} -8L${r-1} 5Q${r-2} 11 0 10Q${-r+1} 10 ${-r+1} 4Z`;
+  const front=(x:number,scale:number)=>`<g transform="translate(${x} 0) scale(${scale} 1)">${path(lens,'#dfeccf',.07)}${line(lens,frame,weight,.97)}</g>`;
+  const outer=kind==='cat_eye'?-11:-4;
+  return line(`M${far-r*pair.far.widthScale} ${outer}L${-h.temple+1} -7 M${near+r*pair.near.widthScale} ${outer}L${h.earX+3} -5`,frame,weight,.89)+
+    line(`M${far+r*pair.far.widthScale} -3Q${(far+near)/2} -9 ${near-r*pair.near.widthScale} -3`,frame,weight)+
+    front(far,-pair.far.widthScale)+front(near,pair.near.widthScale);
 }
 
 function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
@@ -485,11 +560,13 @@ function renderHead(p: Human, h: Head, paint: Paint, hairstyle: HairStyle) {
       ageVolume +
       cheekFold +
       nose +
+      faceMarks(h,p.face_detail,paint,nearEye,farEye) +
       folds +
       forehead +
       lips +
       '</g>' +
       whiskers(h, p.facial_hair, paint) +
+      spectacles(h,p.eyewear,nearEye,farEye,paint) +
       locks.front +
       earJewels,
   };
@@ -546,7 +623,7 @@ export function portraitFigure(
     `<filter id="glaze" x="-25%" y="-15%" width="150%" height="135%"><feGaussianBlur stdDeviation="1.5"/></filter><clipPath id="headShape"><path d="${h.outline}"/></clipPath>`;
   // Both mastoids sit inside the head. The short visible neck widens toward the
   // clavicles; the garment is sized separately and cannot compress the neck again.
-  const neck = h.refined ? (23 + h.jaw * .09 + (p.body_build === 'full' ? 5 : p.body_build === 'slender' ? -4 : 0)) * (1 - h.youth * .31) : 27 + h.build * 4 - h.youth * 4,
+  const neck = h.refined ? (23 + h.jaw * .09 + (p.body_build === 'full' ? 5 : p.body_build === 'slender' ? -4 : p.body_build==='athletic'?3:p.body_build==='stocky'?6.5:0)) * (1 - h.youth * .31) : 27 + h.build * 4 - h.youth * 4,
     center = headX + turn * 5;
   const bodyScale = h.infant ? 0.69 : h.child ? 0.86 : h.teen ? 0.95 : 1,
     collarY = h.refined ? (h.infant ? -14 : h.child ? -11 : h.elder ? -9 : -6) : h.infant ? -7 : h.child ? -5 : -2;
@@ -554,8 +631,8 @@ export function portraitFigure(
   const shoulders = bodyScale * (torso === 'male' ? 1.12 : torso === 'female' ? 0.89 : 1);
   const neckLine = `M${center - neck} 253 Q${center - neck + 3} 287 ${center - neck - 2} 304 Q${200 - 29 * shoulders} 316 ${200 - 35 * shoulders} 323 L${200 - 63 * shoulders} 342 L${200 - 54 * shoulders} 376H${200 + 54 * shoulders}L${200 + 63 * shoulders} 342 L${200 + 35 * shoulders} 323 Q${200 + 29 * shoulders} 316 ${center + neck} 305 Q${center + neck - 3} 288 ${center + neck + 3} 250Z`;
   const body = h.refined
-    ? garmentLayer(garment, torso, false, null, { build: p.body_build || 'average', youth: h.youth, collarY, turn })
-    : `<g transform="translate(200 ${317 + collarY}) skewX(${2.8 * turn}) scale(${bodyScale} 1) translate(-200 -317)">${garmentLayer(garment, torso, false, null)}</g>`;
+    ? garmentLayer(garment, torso, false, null, { build: p.body_build || 'average', youth: h.youth, collarY, turn },paint.accent)
+    : `<g transform="translate(200 ${317 + collarY}) skewX(${2.8 * turn}) scale(${bodyScale} 1) translate(-200 -317)">${garmentLayer(garment, torso, false, null, undefined, paint.accent)}</g>`;
   const chain = [1, 2, 5, 7].includes(p.accessory)
     ? line('M172 310Q195 357 225 311', '#b29769', 1.6, 0.92) +
       (p.accessory === 1 ? '' : ellipse(199, 337, 3, 5, '#d7b476'))

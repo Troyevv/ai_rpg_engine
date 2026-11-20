@@ -247,4 +247,15 @@ test('game portrait collection protects a newer revision and refreshes the dossi
   expect(now.descriptor.face_revision).toBe(original.descriptor.face_revision);
   expect(now.descriptor.seed).toBe(original.descriptor.seed);
   expect(now.descriptor.hairstyle).toBe('bun');
+  await button('Редактировать портрет').click();
+  await button('Настроить иллюстрацию').click();
+  await button('Одежда').click();
+  await page.getByRole('searchbox', {name:'Поиск · Одежда'}).fill('фартук');
+  await button('Рабочий фартук').click();
+  await button('Сохранить иллюстрацию').click();
+  await expect(page.locator('.portrait-dialog')).toHaveCount(0);
+  const edited = (await saved()).descriptor;
+  expect(edited).toMatchObject({garment:'work_apron', hairstyle:'bun', seed:original.descriptor.seed});
+  await page.reload();
+  expect((await saved()).descriptor).toEqual(edited);
 });

@@ -3,7 +3,7 @@
 export const bodyFrames = {male:'Мужская', female:'Женская', neutral:'Нейтральная'} as const;
 export const facialHairStyles = {
  clean_shaven:'Гладко выбрит', stubble:'Щетина', mustache:'Усы',
- short_beard:'Короткая борода', full_beard:'Полная борода',
+ short_beard:'Короткая борода', full_beard:'Полная борода', goatee:'Эспаньолка', sideburns:'Бакенбарды',
 } as const;
 export type BodyFrame = keyof typeof bodyFrames;
 export type FacialHair = keyof typeof facialHairStyles;

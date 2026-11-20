@@ -3,7 +3,7 @@ from typing import get_args
 from backend.runtime_v3.models import FacialHair
 
 FACIAL_HAIR = get_args(FacialHair)
-from backend.runtime_v3.portrait_catalog import CATALOG, STYLES, CLASSIC_OPTIONS, ILLUSTRATION_STYLES
+from backend.runtime_v3.portrait_catalog import CATALOG, LEGACY_STYLES, CLASSIC_OPTIONS, ILLUSTRATION_STYLES
 
 
 def input_diagnostics(cards, version=3):
@@ -12,7 +12,7 @@ def input_diagnostics(cards, version=3):
     The optional hint object is the repair unit: unsupported features can be
     omitted without inventing a replacement or changing literary appearance.
     """
-    options = dict(ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else STYLES, form=('human', 'neutral'))
+    options = dict(ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else LEGACY_STYLES, form=('human', 'neutral'))
     errors = []
     for index, card in enumerate(cards if isinstance(cards, list) else []):
         if not isinstance(card, dict) or 'portrait_traits' not in card:
@@ -43,6 +43,7 @@ _TYPED = {
     'tattoo': ('detail', {}),
     'build': ('build', {'худощавый':'slim','полный':'full','коренастый':'stocky','широкоплечий':'broad','атлетичный':'athletic','средний':'average'}),
     'skin': ('skin', {'светлая':'light','смуглая':'deep','оливковая':'olive'}),
+    'eyewear': ('eyewear', {}), 'freckles': ('face_detail', {'веснушки':'freckles'}),
     'eye_color': ('eyes', {
         'ореховые':'hazel', 'зелёные':'green', 'зеленые':'green', 'серые':'grey',
         'карие':'brown', 'серо-зелёные':'grey_green', 'голубые':'blue', 'синие':'blue',
@@ -51,20 +52,20 @@ _TYPED = {
 
 
 _LABEL_IDS = {field:{label.casefold():key for key,label in options.items()}
-              for field,options in CATALOG['styles'].items()}
+              for field,options in {**CATALOG['styles'], **CATALOG['features']}.items()}
 
 
 def input_schema(version=3):
-    options = ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else STYLES
+    options = ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else LEGACY_STYLES
     return {'type':'object', 'properties':{'form':{'enum':['human','neutral']},
             **{k:{'enum':list(v)} for k,v in options.items()}}, 'additionalProperties':False}
 
 
 def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None, catalog_labels=False, semantic=False):
-    styles=ILLUSTRATION_STYLES if semantic else CLASSIC_OPTIONS if catalog_labels else STYLES
+    styles=ILLUSTRATION_STYLES if semantic else CLASSIC_OPTIONS if catalog_labels else LEGACY_STYLES
     typed = _TYPED
     if catalog_labels and not semantic:
-        typed = {**_TYPED, 'build': ('body_build', {'худощавый':'slender','худощавое':'slender','полный':'full','полное':'full','широкоплечий':'broad','широкоплечее':'broad','средний':'average','среднее':'average'})}
+        typed = {**_TYPED, 'scar':('face_detail',{'шрам на скуле':'cheek_scar','шрам у брови':'brow_scar'}), 'build': ('body_build', {'худощавый':'slender','худощавое':'slender','полный':'full','полное':'full','широкоплечий':'broad','широкоплечее':'broad','средний':'average','среднее':'average','атлетичное':'athletic','атлетичный':'athletic','коренастое':'stocky','коренастый':'stocky'})}
     def value(field, token):
         return token if semantic or field in CATALOG['features'] else styles[field].index(token)
     approved = {}

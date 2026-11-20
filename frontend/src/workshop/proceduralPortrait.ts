@@ -5,7 +5,7 @@ import {portraitFigure,type FeatureChoices} from './portraitFigure';
 import {portraitFace} from './portraitFace';
 import {coiffure,garmentLayer} from './portraitWardrobe';
 export type Styles = typeof catalog.styles;
-export type Layers = FeatureChoices & {face_revision?:2|3|4;eye_revision?:2;body_build?:keyof typeof catalog.features.body_build;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
+export type Layers = FeatureChoices & {face_revision?:2|3|4;eye_revision?:2;accent_color?:number;eyewear?:keyof typeof catalog.features.eyewear;face_detail?:keyof typeof catalog.features.face_detail;body_build?:keyof typeof catalog.features.body_build;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
 import {type Illustration,validIllustration} from "./portraitV4/illustration";
@@ -75,14 +75,8 @@ ${p.bust ?? `      <path d="${p.revised?.neckPath||'M176 271 L174 322 L151 340 Q
 
 // New optional swatches do not change unconfigured v1 illustrations. Their
 // order is part of the persisted descriptor contract (portrait_traits.py).
-const hairColors=[
- ['#3b3738','#201d20'],['#795737','#45362b'],['#e5ca93','#a68b60'],['#99876c','#685b4b'],
- ['#ad6742','#653c32'],['#aaa6a0','#67686a'],['#f1ead8','#b7b2a9'],
-];
-const clothingColors=[
- ['#393b40','#20242a'],['#e7e1d7','#b9b2a5'],['#637c97','#35475e'],['#788673','#435448'],
- ['#876651','#533e33'],['#a4665c','#673d3c'],['#c4b395','#8d7c60'],
-];
+const hairColors=catalog.hair_materials;
+const clothingColors=catalog.cloth_materials;
 function tintLayers(body:string,swatch:string[]|undefined):string {
  if(!swatch || !body)return body;
  // Keep contrast in the trusted, illustrated collar/seams of the garment.
@@ -105,7 +99,10 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(!p || (p.version!==1 && p.version!==2 && p.version!==3) || !/^[a-f0-9]{32}$/.test(p.seed))return null;
  const keys=['face','hair','skin','eyes','clothing','accessory','palette'] as const;
  if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','eyes','clothing','accessory'].includes(k)?7:6)))return null;
- if([p.hair_color,p.clothing_color].some(c=>c!=null&&(!Number.isInteger(c)||c<0||c>6)))return null;
+ const colorsValid=(c:number|undefined,n:number)=>c==null||(Number.isInteger(c)&&c>=0&&c<n);
+ if(!colorsValid(p.hair_color,p.version===3?hairColors.length:7)||
+    !colorsValid(p.clothing_color,p.version===3?clothingColors.length:7)||
+    (p.version===3&&!colorsValid(p.accent_color,clothingColors.length)))return null;
  const layers=p.version===3?p:undefined;
  if(layers && ((layers.hairstyle && !Object.hasOwn(catalog.styles.hair,layers.hairstyle)) ||
     (layers.garment && !Object.hasOwn(catalog.styles.clothing,layers.garment)) ||
@@ -119,7 +116,7 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(p.form==='human') {
   const hairIndex=layers?.hairstyle ? Object.keys(catalog.styles.hair).indexOf(layers.hairstyle) : p.hair;
   const faceIndex=layers?.visage ? Object.keys(catalog.styles.face).indexOf(layers.visage) : p.face;
-  const face=parts[faceIndex] as Art, hair=parts[hairIndex%7] as Art, skin=parts[p.skin] as Art;
+  const face=parts[faceIndex%7] as Art, hair=parts[hairIndex%7] as Art, skin=parts[p.skin] as Art;
   const clothColor=p.clothing_color==null?undefined:clothingColors[p.clothing_color];
   const outfit=p.clothing===0?null:parts[p.clothing-1];
   const tunic='<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>';
@@ -130,12 +127,22 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
   const juvenile=['infant','child','adolescent'].includes(age);
   const skinColors=layers?.skin_swatch?Object.values(catalog.skin_materials)[p.skin]:skin.skin||parts[1].skin;
   const iris=layers?.eye_swatch?Object.values(catalog.eye_colors)[p.eyes]:p.eyes===7?'#6f8998':parts[p.eyes].iris;
-  if(layers?.face_revision===3 || layers?.face_revision===4){
+  // Imported descriptors may combine new catalogue IDs with a pre-figure base.
+  // Only artwork introduced after those revisions needs the newer drawing.
+  const extended = layers && (faceIndex >= 7 || hairIndex >= 16 ||
+    (layers.garment && Object.keys(catalog.styles.clothing).indexOf(layers.garment) >= 15) ||
+    layers.accent_color != null || (layers.eyewear && layers.eyewear!=='none') ||
+    (layers.face_detail && layers.face_detail!=='none') || ['goatee','sideburns'].includes(layers.facial_hair) ||
+    ['stocky','athletic'].includes(layers.body_build || '') ||
+    (['eye_shape','nose_shape','lip_shape'] as const).some(k=>Object.keys(catalog.features[k]).indexOf(layers[k] || '')>=3));
+  if(layers && (layers.face_revision===3 || layers.face_revision===4 || extended)){
    const ids=catalog.styles;
-   const result=portraitFigure(layers,layers.visage||Object.keys(ids.face)[p.face] as keyof Styles['face'],
+   const figure = extended && layers.face_revision!==3 && layers.face_revision!==4
+     ? {...layers,face_revision:4 as const,eye_revision:2 as const} : layers;
+   const result=portraitFigure(figure,layers.visage||Object.keys(ids.face)[p.face] as keyof Styles['face'],
     layers.hairstyle||Object.keys(ids.hair)[p.hair] as keyof Styles['hair'],
     layers.garment||Object.keys(ids.clothing)[p.clothing] as keyof Styles['clothing'],
-    {skin:skinColors,hair:hairColor||hair.hair,cloth:clothColor||parts[p.palette].cloth,bg,iris});
+    {skin:skinColors,hair:hairColor||hair.hair,cloth:clothColor||parts[p.palette].cloth,bg,iris,accent:layers.accent_color==null?undefined:clothingColors[layers.accent_color][0]});
    return cachePortrait(key,result);
   }
   const revised=layers?.face_revision===2 && layers.visage ? portraitFace(layers.visage,age,layers.body_frame,skinColors,hairColor||hair.hair,iris) : undefined;

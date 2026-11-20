@@ -231,7 +231,7 @@ def prompt_schema(*, initial_portraits=False, portrait_version=3):
     if initial_portraits:
         from backend.services.portrait_traits import input_schema
         schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema(portrait_version)
-        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']+(['fantasy','futuristic'] if portrait_version==4 else [])}
+        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']+(['fantasy','futuristic'] if portrait_version in (3,4) else [])}
     return schema
 
 

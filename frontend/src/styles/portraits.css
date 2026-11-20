@@ -119,3 +119,13 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
  .studio-reference .portrait-comparison figure{flex-basis:min(23vw,16dvh)}
  .studio-reference .portrait-comparison figure:last-child{flex-basis:min(25vw,18dvh)}
 }
+
+.portrait-catalog-filters{display:grid;gap:8px;margin:8px 0 12px}
+.portrait-catalog-filters input{width:100%;min-height:40px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);color:inherit}
+.portrait-catalog-filters div{display:flex;gap:4px;flex-wrap:wrap}
+.portrait-catalog-filters button{min-height:34px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);font-size:12px}
+.portrait-catalog-filters button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:currentColor}
+.portrait-option-crop{display:inline-block;flex:none;width:50px;height:38px;overflow:hidden;border-radius:5px}
+.portrait-option-crop img{display:block;width:100%;height:100%;object-fit:cover}
+.portrait-option-crop.feature img{transform:scale(2.15);transform-origin:50% 39%}
+.portrait-option-crop.body img{object-position:50% 86%}

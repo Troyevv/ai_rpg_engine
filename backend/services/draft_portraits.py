@@ -55,12 +55,12 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
     actor = actor or {}
     eligible = (version >= 2 and form == 'human' and beard_eligible(actor, stage)
                 and age_style not in ('infant', 'child', 'adolescent'))
+    # Each draw depends only on the world, character and named trait.
+    def pick(field, pool):
+        digest = hashlib.sha256(f'{seed}:{field}'.encode()).digest()
+        return tuple(pool)[int.from_bytes(digest[:8], 'big') % len(pool)]
+
     if version==4:
-        # Domain-separated draws make individual choices independent. Persist
-        # every selected ID, so reopening never depends on the current catalog.
-        def pick(field, pool):
-            digest=hashlib.sha256((seed+':'+field).encode()).digest()
-            return tuple(pool)[int.from_bytes(digest[:8],'big') % len(pool)]
         traits={key:pick(key,options) for key,options in ILLUSTRATION_STYLES.items()}
         traits.update(clothing=pick('clothing',ILLUSTRATION['wardrobes'].get(profile, ILLUSTRATION['wardrobes']['neutral'])),
                       hair_color=pick('hair_color', ILLUSTRATION['natural_hair']), detail='none', expression='neutral')
@@ -81,18 +81,38 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
     if version == 3:
         from backend.runtime_v3.portrait_catalog import CATALOG, STYLES
         wardrobes = CATALOG['wardrobes']
-        pool = wardrobes.get(profile, wardrobes['neutral']) if isinstance(profile,str) else wardrobes['neutral']
-        hair = STYLES['hair'][authored.get('hair', values[1] % len(STYLES['hair']))]
-        garment = STYLES['clothing'][authored['clothing']] if 'clothing' in authored else pool[values[4] % len(pool)]
-        choices.update(hair=min(STYLES['hair'].index(hair),7), clothing=min(STYLES['clothing'].index(garment),7),
-                       eyes=authored.get('eyes',values[3] % len(STYLES['eyes'])))
-        choices.setdefault('hair_color',int(seed[16:18],16)%len(STYLES['hair_color']))
-        choices.setdefault('clothing_color',int(seed[18:20],16)%len(STYLES['clothing_color']))
-        def pick(field, pool):
-            digest = hashlib.sha256(f'{seed}:{field}'.encode()).digest()
-            return tuple(pool)[int.from_bytes(digest[:4], 'big') % len(pool)]
+        outfits = wardrobes.get(profile, wardrobes['neutral']) if isinstance(profile,str) else wardrobes['neutral']
+        if (age_style or stage) == 'child' and 'clothing' not in authored:
+            uniforms = {'chef', 'blazer', 'flight_suit', 'lamellar', 'trench'}
+            outfits = [garment for garment in outfits if garment not in uniforms]
+        face = STYLES['face'][authored['face']] if 'face' in authored else pick('visage', STYLES['face'])
+        hair = STYLES['hair'][authored['hair']] if 'hair' in authored else pick('hairstyle', STYLES['hair'])
+        garment = STYLES['clothing'][authored['clothing']] if 'clothing' in authored else pick('outfit', outfits)
+        # Numeric fields remain valid fallbacks for clients reading old descriptors.
+        choices.update(face=min(STYLES['face'].index(face),6), hair=min(STYLES['hair'].index(hair),7),
+                       clothing=min(STYLES['clothing'].index(garment),7),eyes=authored.get('eyes',values[3] % len(STYLES['eyes'])))
+        color_count = len(STYLES['clothing_color'])
+        choices.setdefault('clothing_color', pick('fabric',range(color_count)))
+        fabric = choices['clothing_color']
+        neutral_trim = (0, 1, 6, 7, 18)
+        color_families = ((2, 7, 8, 13, 15, 18), (4, 5, 6, 9, 10, 14, 19),
+                          (3, 8, 10, 13, 16, 19), (5, 9, 11, 12, 14, 17))
+        trim = range(color_count) if fabric in neutral_trim else dict.fromkeys(
+            (*neutral_trim, *(i for family in color_families if fabric in family for i in family)))
+        choices.setdefault('accent_color', pick('lining', [i for i in trim if i != fabric]))
+        natural = range(len(STYLES['hair_color'])) if profile in ('modern','fantasy','futuristic') else range(14)
+        choices.setdefault('hair_color',pick('hair-dye',natural))
         for field, options in CATALOG['features'].items():
-            choices.setdefault(field, pick(field, options))
+            pool = list(options)
+            if field == 'eyewear':
+                if profile in ('historical', 'fantasy'):
+                    pool = ['none', 'round_wire']
+                pool += ['none'] * (30 if (age_style or stage) in ('child','adolescent') else 13)
+                if stage == 'infant': pool = ['none']
+            if field == 'face_detail':
+                pool += ['none'] * 6
+                if stage in ('infant','child'): pool = ['none','none','freckles','beauty_mark','dimples']
+            choices.setdefault(field, pick(field, pool))
         # Keep explicit choices. Pattern baldness and adult beard presets are poor defaults for children.
         age = age_style or stage
         if age == 'infant':
@@ -100,21 +120,21 @@ def default_descriptor(cid,stage,actor=None,hints=None,age_style=None, *, versio
                 hair = pick('infant-hair', ('short','buzz','bald','curly','fringe'))
                 choices['hair'] = min(STYLES['hair'].index(hair), 7)
             if 'clothing' not in authored:
-                garment = pick('infant-garment', ('smock','plain','jumper') if profile == 'modern' else ('smock','plain'))
+                garment = pick('infant-garment', ('romper','wrap_blanket','smock','plain','jumper') if profile in ('modern','futuristic') else ('wrap_blanket','smock','plain'))
                 choices['clothing'] = min(STYLES['clothing'].index(garment), 7)
         if age in ('child', 'adolescent') and 'hair' not in authored and hair == 'receding':
             hair = pick('juvenile-hair', ('short', 'curly', 'fringe', 'medium', 'bob'))
             choices['hair'] = min(STYLES['hair'].index(hair), 7)
         if age in ('infant','child','adolescent') and 'hair_color' not in authored:
-            choices['hair_color'] = pick('juvenile-color', (0,1,2,3,4))
+            choices['hair_color'] = pick('juvenile-color', (0,1,2,3,4,7,8,9,10,11))
         if age == 'elderly' and 'hair_color' not in authored:
-            choices['hair_color'] = pick('age-hair', (0, 1, 3, 5, 5, 5, 6))
+            choices['hair_color'] = pick('age-hair', (0,1,3,5,5,6,7,11,12,13,13))
         if eligible and 'facial_hair' not in authored:
-            style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4))
+            style = pick('beard', (0, 0, 0, 1, 1, 2, 3, 4, 5, 6))
         return ProceduralPortraitV3(**common, **choices, version=3, hairstyle=hair, garment=garment,
-            visage=STYLES['face'][choices['face']], face_revision=4, eye_revision=2, skin_swatch=True,eye_swatch=True,
+            visage=face, face_revision=4, eye_revision=2, skin_swatch=True,eye_swatch=True,
             body_frame=body_frame(actor) if form=='human' else 'neutral',
-            facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()
+            facial_hair=STYLES['facial_hair'][style] if eligible else 'clean_shaven').model_dump()
     return ProceduralPortraitV2(**common, **choices, version=2,
         body_frame=body_frame(actor) if form == 'human' else 'neutral',
         facial_hair=FACIAL_HAIR[style] if eligible else 'clean_shaven').model_dump()

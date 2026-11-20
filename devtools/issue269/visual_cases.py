@@ -8,23 +8,32 @@ from backend.services.draft_portraits import default_descriptor
 def cases():
     ages = ["infant", "child", "adolescent", "young_adult", "mature_adult", "elderly"]
     population = []
-    for i in range(36):
+    for i in range(60):
         age = ages[i % len(ages)]
         stage = age if age in ages[:3] else "adult"
         world = i // 6
         actor = {"biological_sex": ["male", "female"][(i + world) % 2]}
         p = default_descriptor(f"npc-{i}", stage, actor, age_style=age, version=3,
-                               world_id=f"classic-{world}", profile=["modern", "historical", "neutral"][world % 3])
+                               world_id=f"classic-{world}", profile=["modern", "historical", "neutral", "fantasy", "futuristic"][world % 5])
         population.append({"portrait": p, "label": f"{i + 1:02} · {age}"})
     base = {**population[3]["portrait"], "facial_hair": "clean_shaven", "visage": "oval", "hairstyle": "parted",
             "garment": "shirt", "eye_shape": "almond", "nose_shape": "straight", "lip_shape": "defined",
-            "body_frame": "male", "skin": 1, "hair_color": 1, "clothing_color": 2, "body_build": "average"}
+            "body_frame": "male", "skin": 1, "hair_color": 1, "clothing_color": 2, "accent_color": 1, "eyewear":"none", "face_detail":"none", "body_build": "average"}
     groups = {"population": population}
     for name, key in [("face", "visage"), ("hair", "hairstyle"), ("clothing", "garment"), ("facial_hair", "facial_hair")]:
         groups[name] = [{"label": label, "portrait": {**base, key: code}} for code, label in CATALOG["styles"][name].items()]
     groups["age"] = [{"label": age, "portrait": {**base, "visual_age": age, "stage": age if age in ages[:3] else "adult"}} for age in ages]
     for name, options in CATALOG.get("features", {}).items():
         groups[name] = [{"label": label, "portrait": {**base, name: code}} for code, label in options.items()]
+    for field in ('hair_color', 'clothing_color', 'accent_color'):
+        colors = CATALOG['styles']['clothing_color' if field=='accent_color' else field]
+        groups[field] = [{'label':label, 'portrait':{**base, 'garment':'sailor', field:i}}
+                         for i,label in enumerate(colors.values())]
+    groups['fit'] = [
+        {'label':f'{build} · {age}', 'portrait':{**base, 'body_build':build, 'garment':outfit,
+         'visual_age':age, 'stage':age if age in ages[:3] else 'adult'}}
+        for build in CATALOG['features']['body_build']
+        for age, outfit in [('child','parka'), ('young_adult','kimono'), ('mature_adult','tech_shell'), ('elderly','lamellar')]]
     return groups
 
 

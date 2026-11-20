@@ -14,11 +14,11 @@ import tailwindcss from '@tailwindcss/vite';
 const frontend = fileURLToPath(new URL('../', import.meta.url));
 const repo = path.dirname(path.resolve(frontend));
 const { values } = parseArgs({ options: {
-  out: { type: 'string' }, eyes: { type:'boolean' }, 'mobile-width': {type:'string'}, groups: { type: 'string' }, cases: { type: 'string' },
+  out: { type: 'string' }, eyes: { type:'boolean' }, current: {type:'boolean'}, 'mobile-width': {type:'string'}, groups: { type: 'string' }, cases: { type: 'string' },
   'full-size': { type: 'boolean', default: false },
 }});
 if (!values.out) throw new Error('Provide an output directory with --out');
-const revisions = values.eyes ? ['original-eyes','aligned-eyes'] : [3,4];
+const revisions = values.current ? ['current'] : values.eyes ? ['original-eyes','aligned-eyes'] : [3,4];
 const width = Number(values['mobile-width'] || 1280);
 if (![360,393,1280].includes(width)) throw new Error('Supported viewport widths: 360, 393, 1280');
 const groups = values.cases
@@ -67,7 +67,11 @@ try {
       const stem = `${group}-${typeof revision==='number'?'r':''}${revision}`;
       const file = stem+'.jpg';
       const bounds = await page.locator('article').evaluateAll(items=>items.map(el=>{
-        const rect = node=>{const {x,y,width,height}=node.getBoundingClientRect();return {x,y,width,height}};
+        const origin = el.closest('#review').getBoundingClientRect();
+        const rect = node => {
+          const {x,y,width,height} = node.getBoundingClientRect();
+          return {x:x-origin.x,y:y-origin.y,width,height};
+        };
         return {plate:rect(el.querySelector('.ww-card-art')),avatar:rect(el.lastElementChild.querySelector('img').parentElement)};
       }));
       await writeFile(path.join(destination,stem+'.json'),JSON.stringify(bounds));

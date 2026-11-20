@@ -43,11 +43,14 @@ def test_creative_and_editor_honor_classic_traits_in_existing_worlds(editing):
     state['creation_settings'] = {**state.get('creation_settings',{}), 'portrait_style':'semi_realistic'}
     packet = json.loads(sample['reply'])
     packet['candidate_hash'] = candidate_hash(state)
-    hints = dict(form='human',face='angular',eye_shape='hooded',body_build='full',nose_shape='arched',lip_shape='fine')
+    hints = dict(form='human',face='diamond', hair='crown_braid', clothing='mantle', eye_shape='downturned',
+                 body_build='athletic', nose_shape='broad_base', lip_shape='cupid', eyewear='round_wire',
+                 face_detail='beauty_mark', hair_color='white', clothing_color='plum', accent_color='bronze')
     packet['changes'][1]['value']['portrait_traits'] = hints
     updated,_ = apply_proposal(state,json.dumps(packet),editing=editing)
     art = updated['world']['characters']['olya']['procedural_portrait']
-    assert art['version'] == 3 and art['face_revision'] == 4 and art['visage'] == 'angular'
+    assert art['version'] == 3 and art['face_revision'] == 4 and art['visage'] == 'diamond'
+    assert (art['hairstyle'], art['garment'], art['hair_color'], art['clothing_color'], art['accent_color']) == ('crown_braid','mantle',6,11,19)
     assert all(art[k] == hints[k] for k in CATALOG['features'])
 
 
@@ -126,3 +129,25 @@ def test_explicit_gaze_update_preserves_every_other_trait_and_old_versions(api):
     restored=client.patch(url,json=dict(revision=after['revision'],operation='restore',source_id=before['version_id']))
     assert restored.status_code==200
     assert all(art(restored.json(),cid)==art(before,cid) for cid in ids)
+
+
+def test_full_classic_catalog_is_reachable_without_hints_and_survives_reload():
+    from collections import Counter
+    outfits = set()
+    for profile, wardrobe in CATALOG['wardrobes'].items():
+        adults = [default_descriptor(str(i), 'adult', {'biological_sex':'male'}, version=3,
+                                     world_id='sample-'+profile, profile=profile) for i in range(768)]
+        assert {p['garment'] for p in adults} == set(wardrobe)
+        outfits.update(wardrobe)
+        for key, layer in [('hair','hairstyle'), ('face','visage'), ('facial_hair','facial_hair')]:
+            counts = Counter(p[layer] for p in adults)
+            assert set(counts) == set(CATALOG['styles'][key]) and min(counts.values()) >= 3
+        assert len({(p['hairstyle'], p['visage'], p['garment']) for p in adults}) > 600
+        assert {p['clothing_color'] for p in adults} == {p['accent_color'] for p in adults} == set(range(20))
+        if profile == 'modern':
+            assert {p['hair_color'] for p in adults} == set(range(16))
+        for p in adults[:8]:
+            assert ProceduralPortraitV3.model_validate_json(json.dumps(p)).model_dump() == p
+    infants = [default_descriptor(str(i),'infant',version=3,profile='modern') for i in range(64)]
+    assert all(p['eyewear']=='none' and p['facial_hair']=='clean_shaven' for p in infants)
+    assert outfits.union(p['garment'] for p in infants) == set(CATALOG['styles']['clothing'])

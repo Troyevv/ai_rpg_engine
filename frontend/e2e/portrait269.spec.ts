@@ -31,10 +31,22 @@ test('classic portrait edits keep the revision, local controls and saved feature
   page.on('request', r=>{if (/portrait-proposals.*\/generate$/.test(r.url())) generations++});
   await button('Редактировать портрет').click();
   await button('Настроить иллюстрацию').click();
+  await page.getByRole('searchbox',{name:'Поиск · Волосы'}).fill('кроп');
+  await expect(page.locator('.studio-gallery button')).toHaveCount(1);
+  await button('Французский кроп').click();
+  await button('Одежда').click();
+  await button('Будущее').click();
+  await expect(page.locator('.studio-gallery button')).toHaveCount(2);
+  await button('Модульный технокостюм').click();
+  await button('Цвета').click();
+  await button('Цвет отделки').click();
+  await button('Бронзовый').click();
   await button('Лицо').click();
-  await chooseOption(page.getByRole('combobox',{name:'Форма носа'}),'arched');
+  await button('Ромбовидное').click();
+  await chooseOption(page.getByRole('combobox',{name:'Форма носа'}),'aquiline');
   await button('Образ').click();
-  await chooseOption(page.getByRole('combobox',{name:'Телосложение',exact:true}),'full');
+  await chooseOption(page.getByRole('combobox',{name:'Телосложение',exact:true}),'stocky');
+  await chooseOption(page.getByRole('combobox',{name:'Очки',exact:true}),'round_wire');
   if(mobile) await page.setViewportSize({width:393,height:500});
   const save=button('Сохранить иллюстрацию');
   const bounds=await save.boundingBox();
@@ -44,11 +56,11 @@ test('classic portrait edits keep the revision, local controls and saved feature
   await page.screenshot({path:info.outputPath('classic-editor.jpg'),scale:'css'});
   await save.click();
   await expect(page.locator('.portrait-dialog')).toHaveCount(0);
-  expect(await stored()).toEqual({...before,body_build:'full',nose_shape:'arched'});
+  expect(await stored()).toEqual({...before,visage:'diamond',hairstyle:'french_crop',garment:'tech_shell',accent_color:19,eyewear:'round_wire',body_build:'stocky',nose_shape:'aquiline'});
   await button('Редактировать портрет').click();
   await button('Настроить иллюстрацию').click();
   await button('Образ').click();
-  await expect(page.getByRole('combobox',{name:'Телосложение',exact:true})).toHaveText(/Полное/);
+  await expect(page.getByRole('combobox',{name:'Телосложение',exact:true})).toHaveText(/Коренастое/);
   expect(generations).toBe(0);
 });
 
