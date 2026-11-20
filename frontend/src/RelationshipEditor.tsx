@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -279,15 +280,13 @@ export function RelationshipEditor({
                   >
                     <label>
                       К кому
-                      <select
+                      <Choice
                         aria-label="Персонаж-адресат"
                         value={edit.target_id}
                         disabled={relations.some(
                           (r) => r.target_id === edit.target_id,
                         )}
-                        onChange={(e) =>
-                          setEdit({ ...edit, target_id: e.target.value })
-                        }
+                        onValueChange={selectedValue => setEdit({ ...edit, target_id: selectedValue })}
                       >
                         {targets
                           .filter(
@@ -300,7 +299,7 @@ export function RelationshipEditor({
                               {c.name}
                             </option>
                           ))}
-                      </select>
+                      </Choice>
                     </label>
                     <label>
                       Описание отношения

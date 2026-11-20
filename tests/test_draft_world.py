@@ -295,7 +295,7 @@ def test_failed_structural_repair_keeps_previous_version(api):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Идея',
                                                 'config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='error'
-    assert len(calls)==3
+    assert len(calls)==2
     current=client.get(path+'?author=true').json()
     assert current['candidate']['protagonist_id']=='missing'
     assert draft['version_id'] in [v['id'] for v in current['history']]
@@ -376,7 +376,11 @@ def test_field_regeneration_instruction_and_restart(api):
         r=client.post(path+'/generate',json={'revision':d['revision'],'task':'field','kind':'character','entity_id':cid,'field':'fields.Стиль общения','text':'Дай персонажу узнаваемый голос','config':REMOTE,'api_key':'test'})
         assert r.status_code==200,r.text
         assert wait_job(client,r.json()['id'])['status']=='saved'
-    after=client.get(path+'?author=true').json()['state']
+    staged=client.get(path+'?author=true').json()
+    assert staged['state']==before
+    accepted=client.post(path+'/field-proposals/'+r.json()['id'],json=dict(revision=staged['revision'],decision='accept',accept_warnings=True))
+    assert accepted.is_success,accepted.text
+    after=accepted.json()['state']
     assert after['world']==before['world']
     assert after['characters'][0]['fields']['Стиль общения']=='Говорит коротко, с сухими шутками.'
     assert after['characters'][0]['fields']['Внешность']==before['characters'][0]['fields']['Внешность']

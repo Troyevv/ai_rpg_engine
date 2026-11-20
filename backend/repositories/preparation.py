@@ -103,10 +103,31 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                  'response_diagnostic':public_diagnostic(record.get('failure') or record.get('http_failure')),
                  'empty_retry_token':Repository.empty_retry_token(journal) if job.get('status')=='error' else None,
                  'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
+            if config.get('_review_action'):
+                from llm import thinking_options
+                from backend.services.draft_review_actions import saved_reply
+                job['review_action']=config['_review_action']
+                job['review_reply_saved']=bool(saved_reply(journal)) if job['resumable'] else False
+                job['review_thinking']=thinking_options(config.get('provider','local'),config.get('model',''),config.get('thinking','off'))[0]
+            elif job['kind'] in ('draft_editor','draft_field','draft_character'):
+                from backend.services.draft_review_actions import saved_reply
+                job['review_reply_saved']=bool(saved_reply(journal)) if job['resumable'] else False
+            if job['kind']=='draft_world':
+                from llm import thinking_options
+                review_records=[v for k,v in journal.get('responses',{}).items() if k.startswith('completeness') and v.get('effective_config')]
+                job['review_thinking']=(review_records[-1]['effective_config']['thinking'] if review_records else
+                    thinking_options(config.get('provider','local'),config.get('model',''),config.get('thinking','off'))[0]
+                    if journal.get('generation_contract',{}).get('audit_policy')==2 else 'off' if journal.get('generation_contract') else None)
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
         if 'repairs' in job:
             job['repairs']=[{k:v for k,v in row.items() if k in ('repair_error_code','repair_error_type','stage','attempt','attempt_epoch','revision')} for row in job['repairs']]
         return {k: v for k, v in job.items() if k not in ('private_artifacts_json', 'config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal', 'repair_diagnostics_json')}
+
+    def preparation_request_messages(self,jid,rid):
+        """Original provider input for resuming a specific paid fragment."""
+        with self.connect() as db:
+            row=db.execute('SELECT context_json FROM llm_requests WHERE job_id=? AND id=?',(jid,rid)).fetchone()
+            return json.loads(row[0]) if row else None
 
     def save_response_journal(self, jid, journal):
         """Private response transport state; no new checkpoint table or world format."""
@@ -152,7 +173,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if any(r.get('input_hash')==fingerprint and r.get('contract_version')==CONTRACT_VERSION and r.get('policy')==RECOVERY_POLICY for r in journal.get('no_progress',[])):return True
             state=json.loads(journal['candidate_text'])
             source=journal['messages'][-1]['content']
-            signature=review_signature(messages(state,source),config)
+            effective = dict(config, **journal.get('budget_snapshot', {}))
+            signature=review_signature(messages(state,source),effective)
             if journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False):return True
             return any(record.get('failure') for slot,record in journal.get('responses',{}).items() if slot.startswith('completeness_'+signature+'_') and slot not in journal.get('response_retries',{}))
         except (ValueError,KeyError,IndexError,TypeError):return False
@@ -162,11 +184,16 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
             journal = json.loads(job['response_journal'])
-            if job['kind'] not in ('draft_world','draft_editor') or job['status'] not in ('error','stopped','saved') or not journal:
+            if job['kind'] not in ('draft_world','draft_editor','draft_field','draft_character') or job['status'] not in ('error','stopped','saved') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
+            if job['kind'] in ('draft_field','draft_character'):
+                if job['status']=='saved' or (revision is not None and job['revision']!=revision):
+                    raise ValueError('Предложение уже обработано или его ревизия устарела.')
             if job['kind']=='draft_editor':
                 head=self._draft_head(db,job['workspace_id'])
                 edit=journal['editor']
+                if edit.get('action') and edit['status'] != 'running':
+                    raise ValueError('Ответ уже обработан. Откройте сохранённый результат.')
                 if edit['status'] in ('accepted','rejected') or not head or head['id']!=edit['base_version']:
                     raise ValueError('Предложение устарело или уже закрыто.')
                 if revision is not None and revision!=edit['base_revision']:
@@ -185,7 +212,14 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 if previous:journal.setdefault('empty_retry_history',[]).append(dict(previous,fingerprint=retry_empty_response))
                 journal.setdefault('empty_retries',{})[retry_empty_response]=dict(slot=new_slot,epoch=expected_epoch+1,used=False,previous_slot=old_slot)
             config=json.loads(job['config_json'])
+            if 'token_budget' not in journal:
+                from backend.services.draft_response import MAX_FRAGMENTS
+                original = next(iter(journal.get('config_history') or [config]))
+                journal['token_budget'] = original.get('_draft_token_budget',
+                    3*MAX_FRAGMENTS*(original.get('context_length',32768)+original.get('max_tokens',12000)))
             proposed=dict(config,**(config_changes or {}))
+            if proposed != config and 'budget_snapshot' in journal:
+                journal.setdefault('budget_history', []).append(journal.pop('budget_snapshot'))
             if revision is None or revision==job['revision']:
                 if self.review_exhausted(journal,proposed):raise ValueError('Стратегии проверки этого кандидата исчерпаны. Повтор запроса не разрешён; сохранённые замечания доступны в редакторе.')
             if config_changes:
@@ -209,7 +243,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                     join_fragments(parts,dict(record['assembly']),schema=prompt_schema(),terminal=record.get('complete',False))
                 journal.setdefault('fragment_recoveries',[]).append(dict(part=parts.pop(),assembly=record.pop('assembly',None),reason=record.pop('assembly_error'),epoch=journal.get('recovery_epoch',0)))
                 record['complete']=False
-            if revision is not None and job['kind']!='draft_editor':
+            if revision is not None and job['kind']=='draft_world':
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     record=json.loads(head['content'])
@@ -251,16 +285,18 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 raise ValueError('Задача не найдена.')
             return dict(row)
 
-    def begin_preparation(self, wid, kind, text, config, revision):
+    def begin_preparation(self, wid, kind, text, config, revision, *, receipt=False):
         jid = 'prep_' + uuid.uuid4().hex
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if kind=='draft_editor':
-                for previous in db.execute("SELECT id,config_json FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor'",(wid,)):
+                for previous in db.execute("SELECT id,revision,config_json FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor'",(wid,)):
                     saved=json.loads(previous['config_json'])
                     if saved.get('_editor_request_id')==config.get('_editor_request_id'):
-                        if saved.get('_draft_input')!=config.get('_draft_input'):raise ValueError('Ключ запроса уже использован для другой инструкции.')
-                        return previous['id']
+                        if saved.get('_draft_input')!=config.get('_draft_input') or saved.get('_review_action')!=config.get('_review_action'):raise ValueError('Ключ запроса уже использован для другой инструкции.')
+                        if saved.get('_review_action') and revision+1!=previous['revision']:
+                            raise ValueError('Ключ запроса относится к другой ревизии.')
+                        return (previous['id'],False) if receipt else previous['id']
             w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (wid,)).fetchone()
             if not w or w['deleted'] or w['revision'] != revision:
                 raise ValueError('Подготовка изменилась. Обнови её перед запросом.')
@@ -284,7 +320,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
             if journal:db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
-        return jid
+        return (jid,True) if receipt else jid
 
     def preparation_progress(self, jid, narrative, status='generating', error=''):
         with self.connect() as db:

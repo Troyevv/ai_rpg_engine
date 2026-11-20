@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useEffect,useState} from 'react';
 import {toast} from 'sonner';
 import {api} from './api';
@@ -19,7 +20,7 @@ function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onCh
     return()=>{clearTimeout(timer);controller.abort()};
   },[v.provider,v.model]);
   return <fieldset><legend>{title}</legend><div className="chat-settings-grid">
-    <label>Провайдер<select value={v.provider} onChange={e=>change({provider:e.target.value as ChatModel['provider'],model:''})}><option value="local">Локальный (LM Studio)</option><option value="deepseek">DeepSeek</option><option value="compatible">OpenAI-совместимый</option></select></label>
+    <label>Провайдер<Choice value={v.provider} onValueChange={selectedValue => change({provider:selectedValue as ChatModel['provider'],model:''})}><option value="local">Локальный (LM Studio)</option><option value="deepseek">DeepSeek</option><option value="compatible">OpenAI-совместимый</option></Choice></label>
     <label>Модель<Input list={`chat-models-${stage}`} value={v.model} placeholder="Имя модели на сервере" onChange={e=>change({model:e.target.value})}/></label>
     <label className="chat-check"><input type="checkbox" checked={!!v.auto_context} onChange={e=>change({auto_context:e.target.checked,...(!e.target.checked&&info?.context_length?{context_length:info.context_length}:{})})}/> Автоматический контекст</label>
   </div>
@@ -31,7 +32,7 @@ function ModelEditor({value:v,onChange:change,stage,title}:{value:ChatModel;onCh
     <label className="chat-check"><input type="checkbox" checked={!!v.auto_output} onChange={e=>change({auto_output:e.target.checked})}/> Автоматический лимит ответа</label>
     <label>Максимум ответа<Input type="number" min={128} disabled={v.auto_output} value={v.auto_output?Math.min(stage==='reply'?4096:16384,Math.floor((v.auto_context&&info?.context_length?info.context_length:v.context_length)/3)):v.max_tokens} onChange={e=>change({max_tokens:Number(e.target.value)})}/></label>
     <label>Температура<Input type="number" step="0.1" min={0} max={2} value={v.temperature} onChange={e=>change({temperature:Number(e.target.value)})}/></label>
-    <label>Thinking<select value={v.thinking} onChange={e=>change({thinking:e.target.value as ChatModel['thinking']})}><option value="off">Выключен</option><option value="low">Low (если поддерживается)</option><option value="high">High (если поддерживается)</option></select></label>
+    <label>Thinking<Choice value={v.thinking} onValueChange={selectedValue => change({thinking:selectedValue as ChatModel['thinking']})}><option value="off">Выключен</option><option value="low">Low (если поддерживается)</option><option value="high">High (если поддерживается)</option></Choice></label>
   </div>{v.provider==='deepseek'&&<><p className="small">{info?.tokenizer||'Консервативная оценка UTF-8'}. Итог запроса остаётся оценкой; фактические токены сообщает провайдер.</p><Button className="chat-tokenizer-install" variant="outline" disabled={loading||!v.model} onClick={async()=>{setLoading(true);try{await api('/chat/tokenizer',v);setInfo(await api<Capability>('/chat/capabilities',v));toast.success('Официальный tokenizer установлен. Загрузка бесплатная, LLM-вызова нет.')}catch(e){toast.error((e as Error).message)}finally{setLoading(false)}}}>Установить tokenizer DeepSeek бесплатно</Button></>}</details></fieldset>;
 }
 

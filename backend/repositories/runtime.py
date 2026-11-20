@@ -355,7 +355,7 @@ class RuntimeStorage:
 
     def update_narrative_policy(self, save_id, revision, policy):
         from backend.services.narrative_policy import PolicyUpdate
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'} | ({'genre'} if 'genre' not in policy else set()))
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'} | ({'genre','narrative_detail'} - policy.keys()))
         self._update_game_policy(save_id, revision, validated, 'narrative_policy_changed')
 
     def configure_weather(self, save_id, revision, profile):
@@ -382,9 +382,9 @@ class RuntimeStorage:
             source=json.loads(row['state_json'])
             prior,_=migrate_snapshot(db,source)
             after=deepcopy(prior);meta=after['world_state']['meta']
-            previous={k:meta[k] for k in validated}
+            previous={k:meta.get(k, 'balanced' if k == 'narrative_detail' else None) for k in validated}
             if previous==validated:return
-            meta.update(validated)
+            meta.update({key: value for key, value in validated.items() if previous[key] != value})
             batch=dict(state_changes=[dict(kind=kind,before=previous,after=validated,
                 turn_id=meta['turn_id'],minute=meta['world_time'])])
             after['history_head']=append_history(db,prior.get('history_head'),batch)

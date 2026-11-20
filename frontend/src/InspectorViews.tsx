@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {RelationshipCard} from './RelationshipCard';
 import {relationshipRows} from './lib/relationshipRows';
 import { useState, type ReactNode } from 'react';
@@ -87,10 +88,10 @@ export function RelationsView({
         </label>
         <label>
           Персонаж
-          <select
+          <Choice
             aria-label="Участник отношений"
             value={person}
-            onChange={(e) => setPerson(e.target.value)}
+            onValueChange={selectedValue => setPerson(selectedValue)}
           >
             <option value="">Все персонажи</option>
             {state.characters
@@ -100,7 +101,7 @@ export function RelationsView({
                   {c.name}
                 </option>
               ))}
-          </select>
+          </Choice>
         </label>
         {person && onCharacter && (
           <button

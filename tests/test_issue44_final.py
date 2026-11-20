@@ -285,7 +285,7 @@ def test_model_player_goal_recovery_preserves_source_agency(api,authored):
     assert len(calls)==3
 
 
-def test_browser_provider_protocol_recovers_after_known_outage(api):
+def test_browser_provider_protocol_recovers_after_known_outage(archived_world_review,api):
     from draft_provider_fixture import protocol_review
     @accept_creative_unchecked
     def stream(**kw):
@@ -304,7 +304,7 @@ def test_browser_provider_protocol_recovers_after_known_outage(api):
     assert sum(r['stage']=='draft_world_validation' for r in rows)==4
 
 
-def test_value_cycle_is_persisted_across_resume_epoch(api):
+def test_value_cycle_is_persisted_across_resume_epoch(archived_world_review,api):
     client,app=api;s=rich();s['campaign']['title']='A'
     wid=client.post('/api/workspaces',json={'name':'Cycle recovery'}).json()['id'];url=f'/api/workspaces/{wid}/draft';calls=[];repairs=[]
     @accept_creative_unchecked

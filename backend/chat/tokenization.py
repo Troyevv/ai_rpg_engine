@@ -11,7 +11,7 @@ import zipfile
 
 import requests
 
-from backend.chat.capabilities import DEEPSEEK
+from backend.services.model_capabilities import DEEPSEEK
 
 URL = 'https://cdn.deepseek.com/api-docs/deepseek_v4_tokenizer.zip'
 ARCHIVE_SHA256 = 'e7310d1dafe0a86d8a5629fe78a7c763760f651db9b8682718a1781dcd6fe495'

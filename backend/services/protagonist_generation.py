@@ -57,6 +57,8 @@ def generate(repo,save_id,draft,path,instruction,config,api_key):
         'Все тексты на языке активной игры; если язык не задан — русский.'),
         dict(role='user',content=json.dumps(dict(path=path or 'whole_draft',draft=draft,context=context,
             schema=schema,instruction=instruction,language=snapshot.get('campaign',{}).get('campaign',{}).get('language','ru')),ensure_ascii=False))]
+    from backend.services.token_budget import prepare
+    config = prepare(config, 'character_draft', api_key=api_key)
     budget=min(config['max_tokens'],12000)
     if estimate(messages)+budget>config['context_length']: raise ValueError('Черновик не помещается в выбранный контекст. Увеличь лимит или выбери отдельное поле.')
     class Accounting:

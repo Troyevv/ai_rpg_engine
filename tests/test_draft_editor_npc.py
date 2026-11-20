@@ -129,13 +129,13 @@ def import_world(client):
     return url,client.get(url+'?author=true').json()
 
 
-def replay_stream(calls, *, fail=False, semantic_forge=False, semantic_refine=False):
+def replay_stream(calls, *, fail=False, semantic_forge=False, semantic_refine=False, original=False):
     def stream(**kw):
         system=kw['messages'][0]['content'];data=json.loads(kw['messages'][1]['content'])
         kw['on_usage']({'prompt_tokens':100,'completion_tokens':40});kw['on_finish']('stop')
         if system.startswith(draft_editor.MARKER):
             calls.append('proposal');assert 'Создай сестру Ильи' in data['author_context']
-            yield reply_for(data['candidate'])
+            yield reply_for(data['candidate'],clean=not (fail or semantic_forge or original))
         elif system.startswith('Адресная коррекция'):
             calls.append('correction')
             yield json.dumps(dict(proposal_hash=data['proposal_hash'],patches=[],drop_indices=[0] if fail else [15]))
@@ -155,13 +155,19 @@ def test_full_npc_pipeline_preview_accept_startgame_rollback(api,after_start):
         r=client.post(url+'/confirm',json={'revision':before['revision'],'version_id':before['version_id'],'accept_warnings':True});assert r.status_code==200,r.text
         sid=r.json()['save'];old=deepcopy(app.state.repository.get_snapshot(sid));before=client.get(url+'?author=true').json()
     calls=[]
-    with patch('backend.services.preparation.chat_stream',side_effect=replay_stream(calls)):
+    with patch('backend.services.preparation.chat_stream',side_effect=replay_stream(calls,original=True)):
         r=request(client,url,before,text='Создай сестру Ильи');assert r.status_code==200,r.text
         job=wait_job(client,r.json()['id']);assert job['status']=='saved',job.get('error')
-    assert calls==['proposal','correction','review']
+    assert calls==['proposal']
     current=client.get(url+'?author=true').json();assert current['state']==before['state'] and current['version_id']==before['version_id']
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
-    assert edit['status']=='preview' and len(edit['proposal']['changes'])==15 and edit['review']['issues']==[]
+    assert edit['status']=='unapplied' and edit['removable']==[15]
+    confirmed=decide(client,url,current,edit,'omit_invalid')
+    assert confirmed.is_success,confirmed.text
+    current=confirmed.json()
+    edit=client.get(url+'/edits?author=true').json()['edits'][0]
+    assert edit['omitted']==[15] and len(edit['requests'])==1
+    assert edit['status']=='preview' and len(edit['proposal']['changes'])==15 and edit['review'] is None
     assert decide(client,url,current,edit).status_code==200
     accepted=client.get(url+'?author=true').json();assert accepted['version_id']!=before['version_id']
     assert_vera(before['state'],accepted['state'])
@@ -188,7 +194,7 @@ def test_npc_failure_and_rejection_are_atomic(api,outcome):
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
     assert edit['instruction']=='Создай сестру Ильи'
     if outcome in ('bad_correction','semantic_forge'):
-        assert job['status']=='error' and job['error']
+        assert job['status']=='saved' and edit['status']=='unapplied' and edit['failure']
         assert decide(client,url,current,edit).status_code==409
     elif outcome=='reject':assert decide(client,url,current,edit,'reject').status_code==200
     else:
@@ -198,16 +204,16 @@ def test_npc_failure_and_rejection_are_atomic(api,outcome):
     assert not any(c['id']=='vera' for c in client.get(url+'?author=true').json()['state']['characters'])
 
 
-def test_semantic_goal_repair_preserves_server_defaults(api):
+def test_editor_preserves_original_goal_and_server_defaults(api):
     client,app=api;url,before=import_world(client);calls=[]
     with patch('backend.services.preparation.chat_stream',side_effect=replay_stream(calls,semantic_refine=True)):
         job=wait_job(client,request(client,url,before,text='Создай сестру Ильи').json()['id'])
     assert job['status']=='saved',job.get('error')
-    assert calls==['proposal','correction','review','semantic_repair','review']
+    assert calls==['proposal']
     current=client.get(url+'?author=true').json();edit=client.get(url+'/edits?author=true').json()['edits'][0]
     assert decide(client,url,current,edit).status_code==200
     goal=client.get(url+'?author=true').json()['state']['world']['characters']['vera']['goals'][0]
-    assert goal['text']=='Диплом.' and goal['revision']==0 and goal['review_required']==[]
+    assert goal['text']==json.loads(recorded()['reply'])['changes'][3]['value']['goals'][0]['text'] and goal['revision']==0 and goal['review_required']==[]
 
 
 def test_prompt_keeps_canon_but_excludes_motivation_authority_from_schema():

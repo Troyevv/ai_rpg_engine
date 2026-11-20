@@ -12,6 +12,16 @@ VERSION = 1
 WEEK = ('понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье')
 
 
+def age_reference_date(actor, clock):
+    """Age in a pre-game card is measured at death when life has ended."""
+    world = {'meta': {'world_time': clock['minute'], 'calendar': clock.get('calendar')}}
+    if actor.get('life_status') == 'dead':
+        if actor.get('death_date') or actor.get('death_minute') is None:
+            return actor.get('death_date')
+        return current_time(world, actor['death_minute'])['date']
+    return current_time(world)['date']
+
+
 def signature(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -227,3 +237,34 @@ def manual_edit(state, path, old_minute=None):
         if old_minute is not None:
             synchronize(state, old_minute, state['world_clock']['minute'], state['world_clock']['calendar'])
     return complete(state)
+
+
+def review_birth_date(base, path, basis):
+    """Resolve cited birthday evidence on the frozen candidate, for author confirmation."""
+    state = base['state']
+    parts = path.split('/')
+    if len(parts) != 5 or parts[1:3] != ['world', 'characters'] or parts[-1] != 'birth_date':
+        raise ValueError('Основание календаря допустимо только для даты рождения.')
+    cid = parts[3].replace('~1', '/').replace('~0', '~')
+    actor = state['world']['characters'].get(cid, {})
+    card = next(c for c in state['characters'] if c['id'] == cid)
+    age_match = re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?', str(card['fields'].get('Возраст','')).strip())
+    if not age_match:
+        raise ValueError('В прежнем предложении отсутствует точная дата; укажите её в предпросмотре.')
+    calendar = state['world_clock'].get('calendar') or {}
+    today = age_reference_date(actor, state['world_clock'])
+    if not today:
+        raise ValueError('Для вычисления даты рождения нужна установленная дата начала.')
+    profile = calendar.get('profile') or {}
+    year, current_month, current_day = date_parts(today, profile)
+    if basis['kind'] == 'birthday_at_start':
+        month, day = current_month, current_day
+    else:
+        month, day = basis['month'], basis['day']
+    age = int(age_match[1])
+    birth_year = year - age - int((current_month, current_day) < (month, day))
+    value = f'{birth_year:04d}-{month:02d}-{day:02d}'
+    date_parts(value, profile)
+    if age_on(value, today, profile) != age:
+        raise ValueError('Календарь не подтверждает возраст на указанную дату.')
+    return dict(source='explicit', value=value, basis=basis)

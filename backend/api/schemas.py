@@ -1,21 +1,36 @@
 from typing import Literal
 from backend.repositories.presentation import ThemeId
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 class DTO(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 class ModelConfig(DTO):
+    budget_mode: Literal['auto', 'manual'] | None = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def budget_default(cls, values):
+        if isinstance(values, dict) and values.get('budget_mode') == 'manual' and 'context_length' not in values:
+            raise ValueError('Укажите проверенное окно контекста для ручного режима.')
+        # Preserve the validation boundary of previously accepted payloads.
+        if isinstance(values, dict) and values.get('budget_mode') is None and isinstance(values.get('context_length'), int) and values['context_length'] < 8192:
+            raise ValueError('Для старой конфигурации контекст должен быть не меньше 8192. Для меньшего окна выберите ручной режим.')
+        # Old clients supplied numbers. Opt in only for genuinely new configs.
+        if isinstance(values, dict) and not values.keys() & {'budget_mode', 'context_length', 'max_tokens', 'update_tokens', 'auto_context'}:
+            return dict(values, budget_mode='auto')
+        return values
+
     provider: Literal['local', 'deepseek', 'compatible'] = 'local'
     model: str = Field(min_length=1, max_length=300)
-    context_length: int = Field(default=32768, ge=8192)
+    context_length: int = Field(default=32768, ge=2048)
     temperature: float = Field(default=0.8, ge=0, le=1.5)
-    max_tokens: int = Field(default=2000, ge=256, le=32000)
+    max_tokens: int = Field(default=2000, ge=256, le=1048576)
     thinking: Literal['off','low','high'] = 'off'
     auto_context: bool = False
     recent_turns: int = Field(default=6, ge=2, le=20)
     memory_batch: int = Field(default=4, ge=2, le=20, exclude=True)  # Accept old client preferences.
-    update_tokens: int = Field(default=4096, ge=1024, le=16000)
+    update_tokens: int = Field(default=4096, ge=1024, le=1048576)
 
 class Credential(DTO):
     api_key: SecretStr | None = None
@@ -94,6 +109,10 @@ class Scene(DTO):
     location: str = Field(max_length=200)
     present_ids: list[str] = Field(max_length=100)
     revision: int = Field(ge=0)
+
+class ModelIdentity(DTO):
+    provider: Literal['local', 'deepseek', 'compatible']
+    model: str = Field(min_length=1, max_length=300)
 
 class Models(Credential):
     provider: Literal['local', 'deepseek', 'compatible']

@@ -388,16 +388,21 @@ def validate_typed(state, *, advisory_age=False):
                             problems.append(error(f'/world/{section}/{escape(key)}/until_date','Конец предшествует началу.','chronology'))
                     except (ValueError,TypeError,KeyError):pass  # Exact date diagnostics collected above.
         for cid,record in world['characters'].items():
+            if record.get('death_date') is not None:
+                try:date_parts(record['death_date'],profile)
+                except (ValueError,TypeError,KeyError) as exc:
+                    problems.append(error('/world/characters/'+escape(cid)+'/death_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
             if record.get('birth_date') is not None:
                 try:
                     date_parts(record['birth_date'],profile)
-                    from backend.runtime_v3.calendar import age_on,current_time
-                    today=current_time({'meta':{'world_time':state['world_clock']['minute'],'calendar':calendar.model_dump() if calendar else None}})['date']
+                    from backend.runtime_v3.calendar import age_on
+                    from backend.services.draft_calendar import age_reference_date
+                    today=age_reference_date(record,dict(minute=state['world_clock']['minute'],calendar=calendar.model_dump() if calendar else None))
                     index=next((i for i,c in enumerate(state['characters']) if c['id']==cid),None)
                     age_text=str(state['characters'][index].get('fields',{}).get('Возраст','')).strip() if index is not None else ''
                     exact=re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?',age_text)
                     if today and exact and age_on(record['birth_date'],today,profile)!=int(exact[1]):
-                        problems.append(error('/world/characters/'+escape(cid)+'/birth_date','Дата рождения не соответствует указанному возрасту на текущую дату мира.','age_conflict',related_paths=[f'/characters/{index}/fields/Возраст','/world_clock/calendar'],expected_age=int(exact[1])))
+                        problems.append(error('/world/characters/'+escape(cid)+'/birth_date','Дата рождения не соответствует возрасту на дату смерти.' if record.get('life_status')=='dead' else 'Дата рождения не соответствует указанному возрасту на текущую дату мира.','age_conflict',related_paths=[f'/characters/{index}/fields/Возраст','/world_clock/calendar'],expected_age=int(exact[1])))
                 except (ValueError,TypeError,KeyError) as exc:
                     problems.append(error('/world/characters/'+escape(cid)+'/birth_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
     for field in ('protagonist_id','controlled_actor_id'):

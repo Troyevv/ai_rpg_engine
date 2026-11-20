@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, AbandonJob, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit, Presentation)
+                                 Models, ModelIdentity, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit, Presentation)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -489,6 +489,11 @@ def create_app(db_path=None, recover=True):
     def delete_key():
         credentials.delete('deepseek')
         return credentials.status()
+
+    @app.post('/api/capabilities')
+    def model_limits(body: ModelIdentity):
+        from backend.services.model_capabilities import discover
+        return discover(body.provider,body.model,credentials)
 
     @app.get('/api/capabilities')
     def capabilities():

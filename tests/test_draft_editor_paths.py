@@ -49,6 +49,27 @@ def test_duplicate_id_rejected():
     with pytest.raises(ProposalError,match='Неоднозначный'):apply_proposal(s,json.dumps(p),editing=True)
 
 
+def test_recorded_paths_resolve_only_unambiguous_existing_editor_targets():
+    from backend.services.draft_editor import EditorialProposal, preview
+    state=recorded()['base']['state']
+    state['characters'][0]['fields']['Архив.Дата']='2000'
+    def packet(*paths):
+        return dict(candidate_hash=candidate_hash(state),rationale='Адреса',
+                    changes=[dict(op='replace',path=p,value='2001',reason='Дата') for p in paths])
+    bad=packet('characters[0].fields.Архив.Дата','characters[-1].name','characters[999].name')
+    rejected=preview(state,EditorialProposal.model_validate(bad))
+    assert rejected['status']=='unapplied'
+    assert [r['operation'] for r in rejected['diagnostics']]==[1,2,3]
+    assert 'Неоднозначный' in rejected['diagnostics'][0]['message']
+    assert 'characters[-1]' not in rejected['diagnostics'][0]['message']
+    same=packet('characters[0].name','/characters/0/name')
+    with pytest.raises(ProposalError,match='Пересекающиеся'):apply_proposal(state,json.dumps(same),editing=True)
+    blocked=packet('authoring.manual_paths')
+    with pytest.raises(ProposalError):apply_proposal(state,json.dumps(blocked),editing=True)
+    with pytest.raises(ProposalError,match='JSON Pointer'):
+        apply_proposal(state,json.dumps(packet('characters[0].name')))
+
+
 def test_preceding_add_and_removed_entity():
     s={'characters':[{'id':'a','fields':{}}],'locations':[]}
     def op(kind,path,value):return dict(op=kind,path=path,value=value,reason='test')
@@ -83,7 +104,7 @@ def test_olya_job_preview_apply_start_and_restore(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         r=request(client,url,before,text='Создай сестру Ильи');assert r.status_code==200,r.text
         job=wait_job(client,r.json()['id']);assert job['status']=='saved',job.get('error')
-    assert calls==['proposal','review']
+    assert calls==['proposal']
     current=client.get(url+'?author=true').json();assert current['state']==before['state']
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
     assert edit['status']=='preview' and len(edit['proposal']['changes'])==13

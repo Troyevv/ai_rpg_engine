@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
 test("permanent transition and manual creation preview cancel commit", async ({
@@ -14,7 +15,7 @@ test("permanent transition and manual creation preview cancel commit", async ({
   await page.goto("/");
   await gameAction(page,'Сменить главного героя');
   const dialog = page.getByRole("dialog").last();
-  await dialog.getByLabel("Новый главный герой").selectOption("qa_asya");
+  await chooseOption(dialog.getByLabel("Новый главный герой"), "qa_asya");
   await dialog.getByRole("button", { name: "Проверить и посмотреть" }).click();
   await expect(dialog.getByText("Готово к подтверждению")).toBeVisible();
   await dialog.getByRole("button", { name: "Подтвердить смену" }).click();
@@ -36,9 +37,8 @@ test("permanent transition and manual creation preview cancel commit", async ({
     .click();
   await dialog.getByLabel("Имя", { exact: true }).fill("Новая героиня");
   await dialog.getByText("Каноническое состояние", { exact: true }).click();
-  await dialog
-    .getByLabel("Начальное место", { exact: true })
-    .selectOption({ label: "Озёрск — библиотека" });
+  await chooseOption(dialog
+    .getByLabel("Начальное место", { exact: true }), { label: "Озёрск — библиотека" });
   await dialog
     .getByLabel("Стартовая сцена / Обстоятельства появления", { exact: true })
     .fill("У дверей библиотеки, рядом с посетителями.");
@@ -130,7 +130,7 @@ test('control commit keeps actions locked until the refreshed revision arrives',
     await route.fulfill({response,json:value});
   });
   const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
-  if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption('character_2');
+  if(await page.getByLabel('Управляемый персонаж').isVisible())await chooseOption(page.getByLabel('Управляемый персонаж'), 'character_2');
   else{
     await page.locator('.mobile-pov button').first().click();
     await page.getByRole('dialog').last().getByRole('button',{name:before.state.characters.find((c:any)=>c.id==='character_2').name,exact:true}).click();

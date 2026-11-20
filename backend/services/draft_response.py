@@ -258,31 +258,96 @@ def join_fragments(parts, manifest=None, *, schema=None, terminal=False):
     return result
 
 
-def stage_output_limit(slot, messages, config):
+def stage_output_plan(slot, messages, config):
     stage='repair' if slot.startswith('creative_correction_') else 'creative' if slot.startswith(('creative_', 'editor_proposal')) else 'world' if slot=='world' else 'review' if slot.startswith(('completeness','quality_review')) else 'quality' if slot.startswith('quality') else 'repair'
+    if slot in ('draft_field','draft_character'):
+        return dict(requested_output=config['max_tokens'],visible_target=None,reasoning_allowance=None,output_limit=config['max_tokens'])
     # Output size follows candidate/scope size, bounded by the user's ceiling.
     size=estimate(messages)
     target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90,'creative':0.90}[stage])))
+    if stage=='world' and config.get('budget_mode')=='auto':
+        from backend.services.token_budget import world_output
+        target = world_output(config, messages)
     if stage=='review':target=min(8192,max(2048,int(size*0.30)))
+    if config.get('_world_budget_policy') == 2 and stage != 'world':
+        from backend.services.token_budget import structured_output
+        visible = min(target, max(4096,size//2)) if stage=='creative' else target
+        target = structured_output(config,visible)
     override=config.get('_draft_stage_output_limits',{}).get(stage)
-    return min(config['max_tokens'],target if override is None else override)
+    ratio=config.get('_world_reasoning_ratio')
+    visible=target//(1+ratio) if ratio else None
+    return dict(requested_output=target,visible_target=visible,
+                reasoning_allowance=target-visible if visible is not None else None,
+                output_limit=min(config['max_tokens'],target if override is None else override))
+
+
+def stage_output_limit(slot, messages, config):
+    return stage_output_plan(slot,messages,config)['output_limit']
+
+
+def response_slots(journal, slot):
+    redirects = journal.get('response_retries', {})
+    path = [slot]
+    seen = {slot}
+    while slot in redirects:
+        slot = redirects[slot]
+        if slot in seen:
+            raise TransportError('Повреждена история повторных проверок.')
+        path.append(slot)
+        seen.add(slot)
+    return path
 
 
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     # A confirmed retry gets a new response slot. Historical parts are immutable.
     logical_slot=slot
-    redirects=journal.get('response_retries',{});seen=set()
-    while slot in redirects:
-        if slot in seen:raise TransportError('Повреждена история повторных проверок.')
-        seen.add(slot);slot=redirects[slot]
-    # Provider capability is distinct from the app's intentionally smaller context.
-    # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
-    capabilities=config.get('_model_capabilities',{})
-    from llm import DEEPSEEK_WINDOWS
-    if config.get('provider')=='deepseek' and config.get('model') in DEEPSEEK_WINDOWS:
-        capabilities=dict(context_window=DEEPSEEK_WINDOWS[config['model']],max_output_tokens=393216)
-    context=min(context,capabilities.get('context_window',context))
-    output_limit=min(stage_output_limit(logical_slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
+    slots=response_slots(journal,slot)
+    slot=slots[-1]
+    saved=journal.get('responses',{}).get(slot,{})
+    if logical_slot.startswith('creative_') and not saved.get('complete') and saved.get('parts'):
+        first=saved['parts'][0].get('request_id')
+        if first and hasattr(repo,'preparation_request_messages'):
+            original=repo.preparation_request_messages(jid,first)
+            if original:messages=original
+    capabilities = config.get('_model_capabilities', {})
+    context = min(context, capabilities.get('context_window',context))
+    stage_plan = stage_output_plan(logical_slot,messages,config)
+    output_limit = min(stage_plan['output_limit'],capabilities.get('max_output_tokens',config['max_tokens']))
+
+    # An epoch may change the per-request limits; it never grants a new total.
+    budget = journal.setdefault('token_budget', config.get('_draft_token_budget',
+        3*MAX_FRAGMENTS*(context+config['max_tokens'])))
+    budget = min(budget, config.get('_draft_token_budget', budget))
+
+    def envelope(request):
+        bound = estimate(request) + 512
+        reservation = bound
+        limit = min(output_limit, context-bound)
+        if '_budget_caps' in config:
+            from backend.services.token_budget import plan_request
+            structured = config['provider']=='deepseek' and not any(m['role']=='assistant' for m in request)
+            plan = plan_request(config,logical_slot,request,output_limit,temperature=config['temperature'],
+                                response_format={'type':'json_object'} if structured else None)
+            limit = min(limit,plan['output_allowance'])
+            reservation = max(bound,plan['estimated_input']+plan['safety_margin'])
+            if config.get('budget_mode') == 'auto':
+                reservation = max(reservation,plan['reservation_input'])
+                remaining = budget-journal.get('actual_tokens',0)-journal.get('reserved_tokens',0)-reservation
+                if remaining < 256:
+                    raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
+                limit = min(limit,remaining)
+                cap = config.get('_draft_cost_budget_usd')
+                if cap is not None:
+                    from backend.services.usage import price_snapshot
+                    from datetime import datetime, timezone
+                    price = price_snapshot(config, datetime.now(timezone.utc))
+                    if price is None: raise TransportError('Тариф неизвестен: нельзя гарантировать бюджет расходов.')
+                    if price['version'] != 'local':
+                        funds = Decimal(str(cap))-Decimal(journal.get('actual_cost','0'))-Decimal(journal.get('reserved_cost','0'))
+                        affordable = int((funds*1000000-reservation*Decimal(price['input']))/Decimal(price['output']))
+                        if affordable < 256: raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
+                        limit = min(limit,affordable)
+        return reservation, limit
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
     if not record['complete'] and not record.get('failure'):record['output_limit']=output_limit
     schema=None
@@ -317,7 +382,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         request=deepcopy(messages)
         if text:request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
         from llm import thinking_options
-        limit=min(output_limit,context-estimate(request)-512)
+        _, limit = envelope(request)
         effective=dict(provider=config.get('provider'),model=config.get('model'),
             thinking=thinking_options(config.get('provider'),config.get('model'),config.get('thinking','off'))[0],
             max_tokens=limit)
@@ -330,7 +395,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             prior.get('failure') and prior.get('parts')
             and prior.get('assembly',{}).get('sha256')==record.get('assembly',{}).get('sha256')
             and all(prior['parts'][-1].get('effective_config',{}).get(k)==v for k,v in effective.items())
-            for prior in (journal['responses'][key] for key in seen | {slot}))
+            for prior in (journal['responses'][key] for key in slots))
         fingerprint=digest(json.dumps([request,effective,config.get('temperature')],ensure_ascii=False,sort_keys=True))
         if (record['failure'].get('code') in ('reasoning_budget_exhausted','empty_output_limit')
                 and last.get('finish_reason')=='length' and changed and not known_policy and limit>=256
@@ -345,6 +410,8 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             return response(repo,jid,journal,logical_slot,messages,config,context,generate,cancel)
         repo.save_response_journal(jid,journal)
         raise TransportError(record['failure']['message'])
+    single_request=logical_slot in ('draft_field','draft_character') or logical_slot.startswith(('completeness_advisory_', 'editor_proposal'))
+    if single_request and record['parts']:return text
     if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:
         record['complete']=False
@@ -364,13 +431,14 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         if text:
             request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
             repo.draft_phase(jid,'reviewing' if slot.startswith(('completeness','quality_review')) else 'developing' if slot.startswith('creative_') else 'continuing')
-        input_bound = estimate(request)+512
-        limit = min(output_limit,context-input_bound)
+        input_bound, limit = envelope(request)
         if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')
         from llm import thinking_options
         record['effective_config'] = dict(provider=config.get('provider'),model=config.get('model'),
             thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0],
             context_length=context,max_tokens=limit)
+        if config.get('_world_budget_policy'):
+            record['budget_plan']=dict(stage_plan,policy_version=config['_world_budget_policy'],output_allowance=limit)
         journal['active_response']=slot
         fingerprint=digest(json.dumps([request,{k:v for k,v in record['effective_config'].items() if k!='context_length'},config.get('temperature')],ensure_ascii=False,sort_keys=True))
         rejection=next((failure.get('diagnostic') for failure in reversed(journal.get('http_failures',[]))
@@ -390,7 +458,6 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             raise TransportError(record['failure']['message'])
         # A conservative reserved token envelope bounds even calls with missing
         # provider usage. Accounting remains actual usage in llm_requests.
-        budget = config.get('_draft_token_budget',3*MAX_FRAGMENTS*(context+config['max_tokens']))
         reserved = journal.get('reserved_tokens',0)
         if reserved+journal.get('actual_tokens',0)+input_bound+limit > budget: raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
         previous_cost=journal.get('reserved_cost','0')
@@ -444,7 +511,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             retries=record.get('http_retries',0)
             record['http_retries']=retries+1
             repo.save_response_journal(jid,journal)
-            if exc.status_code in (429,503) and not fragment and retries<2:
+            if not single_request and exc.status_code in (429,503) and not fragment and retries<2:
                 if cancel.wait(min(2**retries,4)):return None
                 continue
             raise TransportError(diagnostic['message'],diagnostic) from None
@@ -459,6 +526,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         settle(metadata)
         part = dict(provider=config.get('provider'),model=re.sub(r'[^A-Za-z0-9_./:-]','',str(config.get('model','')))[:128],request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=sum(len(p['text']) for p in record['parts']),requested_output_limit=limit,finish_reason='stop' if ended else 'length')
         part.update(effective_config=deepcopy(record['effective_config']),request_fingerprint=fingerprint)
+        if 'budget_plan' in record:part['budget_plan']=dict(record['budget_plan'])
         # Verify the prior manifest before extending it; retain every raw part.
         record.pop('assembly',None)
         record['parts'].append(part)
@@ -473,7 +541,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             journal.setdefault('empty_requests',{})[fingerprint]=dict(slot=slot,request_id=part['request_id'],failure=record['failure'])
             repo.save_response_journal(jid,journal)
             raise TransportError(record['failure']['message'])
-        if record['document_state']!='incomplete' or (ended and not text):
+        if single_request or record['document_state']!='incomplete' or (ended and not text):
             record['complete']=True
             repo.save_response_journal(jid,journal)
             return text

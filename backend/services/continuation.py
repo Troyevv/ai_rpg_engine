@@ -42,7 +42,7 @@ def request_context(original, text, context_length, requested_output, format_hin
     return messages,output
 
 
-def stream_document(original, context_length, max_tokens, generate, cancelled, format_hint='markdown'):
+def stream_document(original, context_length, max_tokens, generate, cancelled, format_hint='markdown', *, output_ceiling=32000):
     text=''
     requested=max_tokens
     while not cancelled.is_set():
@@ -57,7 +57,7 @@ def stream_document(original, context_length, max_tokens, generate, cancelled, f
             if cancelled.is_set():return
             if not fragment.strip():
                 # Thinking can consume a small output budget without visible text.
-                grown=min(32000,requested*2)
+                grown=min(output_ceiling,requested*2)
                 if grown<=requested or request_context(original,text,context_length,grown,format_hint)[1]<=limit:
                     raise ValueError('Модель исчерпала доступный ответ на размышления, не выдав текст. Уменьши Thinking или увеличь контекст.')
                 requested=grown

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page,type TestInfo,type APIRequestContext} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {themes} from '../src/lib/skins';
@@ -35,7 +36,7 @@ async function create(page:Page,name='Маяк — журнал долгой и�
 const campaign=async(page:Page,request:APIRequestContext)=>{const id=await page.evaluate(()=>localStorage.getItem('chat-selection'));return await(await request.get(`/api/chat/campaigns/${id}`)).json()};
 async function bookmark(page:Page,index:number,note:string){
   await page.locator('.chat-assistant').nth(index).getByRole('button',{name:'Добавить закладку',exact:true}).click();
-  await page.getByLabel('Заметка автора',{exact:true}).fill(note);await page.getByLabel('Приоритет при обновлении выжимки',{exact:true}).selectOption('2');await page.getByRole('button',{name:'Сохранить закладку',exact:true}).click();
+  await page.getByLabel('Заметка автора',{exact:true}).fill(note);await chooseOption(page.getByLabel('Приоритет при обновлении выжимки',{exact:true}), '2');await page.getByRole('button',{name:'Сохранить закладку',exact:true}).click();
   await expect(page.locator('.chat-bookmark-card').filter({hasText:note})).toBeVisible();await closeJournal(page);
 }
 
@@ -93,7 +94,7 @@ test('Chat tools: journal skins, errors, retry and untouched input',async({page,
   await journal(page);await expect(page.getByRole('alert')).toContainText('Тестовая недоступность');await fits(page);await shot(page,info,'13-journal-error');
   await page.unroute('**/api/chat/campaigns/*/bookmarks?*');await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await expect(page.getByRole('heading',{name:'Сохраните важный момент',exact:true})).toBeVisible();await closeJournal(page);
   for(const theme of themes){
-    await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(theme.id);await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('data-theme',theme.id);await journal(page,'Персонажи');await expect(page.locator('.chat-character-card')).toHaveCount(2);await fits(page);
+    await page.getByRole('button',{name:'Настройки RP-чата',exact:true}).click();await chooseOption(page.getByRole('combobox',{name:'Тема мира',exact:true}), theme.id);await page.keyboard.press('Escape');await expect(page.locator('html')).toHaveAttribute('data-theme',theme.id);await journal(page,'Персонажи');await expect(page.locator('.chat-character-card')).toHaveCount(2);await fits(page);
     const target=page.locator('.chat-character-card').filter({hasText:'Лена'});await page.keyboard.press('Tab');await target.focus();expect(await target.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');await target.click();await fits(page);
     if(['graphite','parchment','terminal'].includes(theme.id))await shot(page,info,`skin-${theme.id}`);await closeJournal(page);await expect(input).toHaveValue('Спросить Лену: «Ты ждёшь гостей?»');
   }
@@ -109,7 +110,12 @@ test('Chat tools: delayed and lost acknowledgements preserve a newer draft witho
   await input.fill('Новый черновик до подтверждения отправки.');release();await expect(page.locator('.chat-assistant')).toHaveCount(2);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Новый черновик до подтверждения отправки.');
   await page.unroute('**/api/chat/campaigns/*/generate');
   await page.route('**/api/chat/campaigns/*/generate',async route=>{await route.fetch();await route.abort('failed')});
-  await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
+  const lostAcknowledgement = page.waitForEvent('requestfailed', {
+    predicate: req => req.method() === 'POST' && req.url().endsWith('/generate'),
+  });
+  await input.fill('Второй отправленный ход.');await page.getByRole('button',{name:'Отправить',exact:true}).click();
+  await lostAcknowledgement;
+  await expect(page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true})).toBeEnabled();
   await input.fill('Черновик после сетевой ошибки.');await page.unroute('**/api/chat/campaigns/*/generate');await page.getByRole('button',{name:'Проверить отправку без повторного вызова',exact:true}).click();await expect(page.locator('.chat-assistant')).toHaveCount(3);await expect(page.locator('.chat-assistant').last().locator('header')).toContainText('Сохранено');await expect(input).toHaveValue('Черновик после сетевой ошибки.');
   const c=await campaign(page,request);expect(c.branch.head).toBe(5);await page.reload();await expect(input).toHaveValue('Черновик после сетевой ошибки.');expect((await campaign(page,request)).job.id).toBe(c.job.id);
 });

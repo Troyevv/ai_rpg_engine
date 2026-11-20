@@ -54,13 +54,18 @@ class ValidateWorld(Generate):
     name: str = Field(default='', max_length=120)
 
 class Resume(Credential):
+    budget_mode: Literal['auto','manual'] | None = None
     revision: int | None = None
-    max_tokens: int | None = Field(default=None,ge=256,le=65536)
-    context_length: int | None = Field(default=None,ge=8192)
+    max_tokens: int | None = Field(default=None,ge=256,le=1048576)
+    context_length: int | None = Field(default=None,ge=2048)
     acknowledge_unknown: bool = False
     retry_last_fragment: bool = False
     retry_empty_response: str | None = Field(default=None,pattern=r'^[0-9a-f]{64}$')
     expected_epoch: int | None = Field(default=None,ge=0)
+
+class CreativeRecovery(Revision):
+    destination: Literal['current','copy']
+
 
 class CandidateChange(Revision):
     path: str
@@ -76,7 +81,8 @@ class Confirm(Revision):
 
 
 class WorldEdit(Revision,Credential):
-    text: str = Field(min_length=1)
+    action: Literal['edit','fix','recheck'] = 'edit'
+    text: str = ''
     request_id: str = Field(min_length=1,max_length=100,pattern=r'^[a-zA-Z0-9_-]+$')
     config: ModelConfig
     budget: ResponseBudget = Field(default_factory=ResponseBudget)
@@ -87,22 +93,39 @@ class EditDecision(Revision):
     accept_warnings: bool = False
 
 
+from backend.services.draft_review_chronology import FamilyConfirmation
+
+
+class FieldEditDecision(EditDecision):
+    decision: Literal['accept','reject','revise']
+    value: Any = None
+
+
+class WorldEditDecision(EditDecision):
+    decision: Literal['accept','reject','recalculate_dates','revise','replay','omit_invalid']
+    values: dict[int,Any] = Field(default_factory=dict)
+    family: list[FamilyConfirmation] = Field(default_factory=list)
+
+
 def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft/edits')
     def edits(wid:str,author:bool=False):return repo.world_edits(wid,author)
 
     @app.post('/api/workspaces/{wid}/draft/edits')
     def propose(wid:str,body:WorldEdit):
-        if not body.text.strip():raise ValueError('Опишите желаемые изменения.')
-        config={**body.config.model_dump(),'_draft_task':'editor','_draft_input':body.text,'_editor_request_id':body.request_id}
+        from backend.services.draft_review_actions import TITLES
+        text=TITLES.get(body.action, body.text)
+        if not text.strip():raise ValueError('Опишите желаемые изменения.')
+        config={**body.config.model_dump(),'_draft_task':'editor','_draft_input':text,'_editor_request_id':body.request_id}
+        if body.action!='edit':config['_review_action']=body.action
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
         if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
-        jid=preparation.submit(wid,'draft_editor',body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
+        jid=preparation.submit(wid,'draft_editor',text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/draft/edits/{jid}')
-    def decide(wid:str,jid:str,body:EditDecision):
-        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings)
+    def decide(wid:str,jid:str,body:WorldEditDecision):
+        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings,body.family,body.values)
         return repo.draft(wid,True)
 
     @app.get('/api/communication/presets')
@@ -164,6 +187,19 @@ def install(app,repo,preparation,credentials,job):
         repo.merge_draft_relations(wid,body.revision,body.ids)
         return repo.draft(wid,True)
 
+    @app.post('/api/workspaces/{wid}/draft/finish/{jid}')
+    def finish_saved_candidate(wid:str,jid:str,body:Revision):
+        repo.finish_saved_candidate(wid,jid,body.revision)
+        return repo.draft(wid)
+
+    @app.get('/api/workspaces/{wid}/draft/creative/{jid}/{base_hash}')
+    def preview_creative(wid:str,jid:str,base_hash:str):
+        return repo.creative_recovery(wid,jid,base_hash)
+
+    @app.post('/api/workspaces/{wid}/draft/creative/{jid}/{base_hash}')
+    def recover_creative(wid:str,jid:str,base_hash:str,body:CreativeRecovery):
+        return repo.creative_recovery(wid,jid,base_hash,revision=body.revision,destination=body.destination)
+
     @app.get('/api/workspaces/{wid}/draft/raw')
     def raw(wid:str,job_id:str|None=None):
         current=repo.workspace(wid)['job']
@@ -172,7 +208,7 @@ def install(app,repo,preparation,credentials,job):
         if not saved or saved['workspace_id']!=wid:raise ValueError('Задание не принадлежит черновику.')
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
-        keys=('editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+        keys=('advisory','creative_recoveries','editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
               'active_response','empty_requests','empty_retries','empty_retry_history','response_retries',
               'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
@@ -189,6 +225,7 @@ def install(app,repo,preparation,credentials,job):
                 'current_diagnostics':draft['validation'].get('diagnostics',[]),'current_start_block_reason':draft.get('start_block_reason'),
                 'candidate_snapshot':draft.get('candidate') or draft.get('state'),'candidate_version':draft.get('version_id'),
                 'author_input':{'text':json.loads(saved['config_json']).get('_draft_source',json.loads(saved['config_json']).get('_draft_input','')),'source_text':draft.get('source_text'),'outline':draft.get('outline')},
+                'budget_policy':{key:journal.get('budget_snapshot',{}).get(key) for key in ('_policy_version','_world_budget_policy','_world_reasoning_ratio','max_tokens','context_length')},
                 'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
                 'revision':saved['revision'],'review':repo.draft(wid,True).get('review')}}
 
@@ -209,8 +246,8 @@ def install(app,repo,preparation,credentials,job):
         return repo.field_proposal(wid,jid,author)
 
     @app.post('/api/workspaces/{wid}/draft/field-proposals/{jid}')
-    def field_decision(wid:str,jid:str,body:EditDecision):
-        repo.decide_field_proposal(wid,jid,body.revision,body.decision,body.accept_warnings)
+    def field_decision(wid:str,jid:str,body:FieldEditDecision):
+        repo.decide_field_proposal(wid,jid,body.revision,body.decision,body.accept_warnings,body.value)
         return repo.draft(wid,True)
 
     @app.get('/api/workspaces/{wid}/draft/time')
@@ -252,7 +289,7 @@ def install(app,repo,preparation,credentials,job):
         if body.task=='world' and body.creation_settings.calendar_start.presets is None:
             body.creation_settings.calendar_start.presets=CalendarPresets()
         config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_preview_only':body.preview, '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+                '_preview_only':body.task in ('field','character') or body.preview, '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
         if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
         jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
@@ -264,8 +301,10 @@ def install(app,repo,preparation,credentials,job):
         if not current: raise ValueError('Нет задания.')
         saved=repo.preparation_job(current['id'])
         provider=json.loads(saved['config_json'])['provider']
-        preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
-            config_changes={k:getattr(body,k) for k in ('max_tokens','context_length') if getattr(body,k) is not None},
+        from backend.services.draft_review_actions import saved_reply
+        cached=saved_reply(json.loads(saved['response_journal'] or '{}'))
+        preparation.resume(current['id'],None if cached else credentials.resolve(provider,body.key()),revision=body.revision,
+            config_changes={k:getattr(body,k) for k in ('budget_mode','max_tokens','context_length') if getattr(body,k) is not None},
             acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment,
             retry_empty_response=body.retry_empty_response,expected_epoch=body.expected_epoch)
         return job(current['id'])

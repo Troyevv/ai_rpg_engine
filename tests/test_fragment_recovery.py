@@ -189,7 +189,7 @@ def test_stop_with_incomplete_prefix_continues_instead_of_inventing_brackets():
     assert j['responses']['world']['document_state']=='complete'
 
 
-def test_legacy_candidate_edit_lineage_is_retained(api):
+def test_legacy_candidate_edit_lineage_is_retained(archived_world_review,api):
     client,app=api;repo=app.state.repository
     wid=client.post('/api/workspaces',json={'name':'legacy edited candidate'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     calls=[]

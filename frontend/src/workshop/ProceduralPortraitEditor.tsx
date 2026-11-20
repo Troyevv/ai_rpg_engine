@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {useState,useId,type ReactNode} from 'react';
 import {type ProceduralPortrait} from './proceduralPortrait';
 import {bodyFrames,facialHairStyles,type BodyFrame,type FacialHair} from './portraitAnatomy';
@@ -32,11 +33,11 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  {compare&&<p>Сравните варианты с текстом и выберите поддерживаемые признаки ниже. Автоматическое распознавание текста здесь не выполняется. Изменения сохраняются только по подтверждению.</p>}
  <div className="portrait-age-reference">
  <p>Реальный возраст персонажа: {ageReference?.age!=null?new Intl.NumberFormat('ru',{style:'unit',unit:'year',unitDisplay:'long'}).format(ageReference.age):'не указан'}{ageReference?.visual_age?` · ${ageLabels[ageReference.visual_age]}`:''}.</p>
- <label>Визуальный возраст<select aria-label="Визуальный возраст" disabled={disabled} value={ageSelection} onChange={e=>selectAge(e.target.value)}>
+ <label>Визуальный возраст<Choice aria-label="Визуальный возраст" disabled={disabled} value={ageSelection ?? "legacy"} onValueChange={selectedValue => selectAge(selectedValue)}>
  <option value="auto" disabled={!ageReference?.visual_age}>Автоматически — по текущему возрасту персонажа</option>
  {ageSelection==='legacy'&&<option value="legacy" disabled>Сохранённый исходный стиль</option>}
  {Object.entries(ageLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
- </select></label>
+ </Choice></label>
  <p>Возраст на иллюстрации: {value.visual_age?ageLabels[value.visual_age]:'исходный стиль'}. {ageSelection==='auto'?'Категория определяется возрастом персонажа при сохранении.':'Художественный выбор автора.'} Дата рождения и жизненный цикл не меняются. Сохранённый рисунок не меняется сам при дне рождения.</p>
  <Button variant="ghost" disabled={disabled||!ageReference?.visual_age} onClick={()=>selectAge('auto')}>Вернуть возраст по персонажу</Button>
  </div>
@@ -45,17 +46,17 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <figure><figcaption>{dirty?'Предлагаемый вариант':'Текущий вариант'}</figcaption>{renderPreview(value)}</figure>
  <div className="portrait-literary-reference"><strong>Внешность</strong><p>{appearance||'Описание не задано. Неописанные признаки определяются по seed.'}</p></div>
  </div><div>
- <label>Предпочтение<select aria-label="Предпочтение" value={selected} onChange={e=>setSelected(e.target.value as typeof selected)}><option value="auto">Своя фотография, если применима</option><option value="procedural">Процедурная иллюстрация</option></select></label>
- <label>Вид изображения<select aria-label="Вид изображения" value={value.form} onChange={e=>{const form=e.target.value as ProceduralPortrait['form'];setValue(value.version===2&&form==='neutral'?{...value,form,facial_hair:'clean_shaven'}:{...value,form});setSelected('procedural')}}><option value="neutral">Нейтральный силуэт</option><option value="human">Человек · художественная условность</option></select></label>
+ <label>Предпочтение<Choice aria-label="Предпочтение" value={selected} onValueChange={selectedValue => setSelected(selectedValue as typeof selected)}><option value="auto">Своя фотография, если применима</option><option value="procedural">Процедурная иллюстрация</option></Choice></label>
+ <label>Вид изображения<Choice aria-label="Вид изображения" value={value.form} onValueChange={selectedValue => {const form=selectedValue as ProceduralPortrait['form'];setValue(value.version===2&&form==='neutral'?{...value,form,facial_hair:'clean_shaven'}:{...value,form});setSelected('procedural')}}><option value="neutral">Нейтральный силуэт</option><option value="human">Человек · художественная условность</option></Choice></label>
  {value.form==='human'&&<fieldset className="portrait-anatomy"><legend>Силуэт и лицо</legend>
- <label>Основа тела<select disabled={disabled} value={value.version===2?value.body_frame:''} onChange={e=>setAnatomy({body_frame:e.target.value as BodyFrame})}>
+ <label>Основа тела<Choice disabled={disabled} value={value.version===2?value.body_frame:''} onValueChange={selectedValue => setAnatomy({body_frame:selectedValue as BodyFrame})}>
  {value.version===1&&<option value="" disabled>Исходная иллюстрация</option>}
- {Object.entries(bodyFrames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
- {anatomyReference?.facial_hair_allowed&&adultArt(value)&&<label>Растительность на лице<select disabled={disabled} value={value.version===2?value.facial_hair:''} onChange={e=>setAnatomy({facial_hair:e.target.value as FacialHair})}>
+ {Object.entries(bodyFrames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></label>
+ {anatomyReference?.facial_hair_allowed&&adultArt(value)&&<label>Растительность на лице<Choice disabled={disabled} value={value.version===2?value.facial_hair:''} onValueChange={selectedValue => setAnatomy({facial_hair:selectedValue as FacialHair})}>
  {value.version===1&&<option value="" disabled>Исходная иллюстрация</option>}
- {Object.entries(facialHairStyles).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>}
+ {Object.entries(facialHairStyles).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></label>}
  </fieldset>}
- {value.form==='human'&&Object.entries(choices).map(([key,labels])=><label key={key}>{{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]}<select aria-label={{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]} value={value[key as keyof typeof choices]} onChange={e=>setValue({...value,[key]:Number(e.target.value)})}>{labels.map((label,i)=><option key={i} value={i}>{label}</option>)}</select></label>)}
- {value.form==='human'&&(Object.keys(colors) as (keyof typeof colors)[]).map(key=><label key={key}>{key==='hair_color'?'Цвет волос':'Цвет одежды'}<select value={value[key]??''} onChange={e=>{const next={...value};if(e.target.value==='')delete next[key];else next[key]=Number(e.target.value);setValue(next)}}><option value="">Как в исходном рисунке</option>{colors[key].map((name,i)=><option key={name} value={i}>{name}</option>)}</select></label>)}
+ {value.form==='human'&&Object.entries(choices).map(([key,labels])=><label key={key}>{{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]}<Choice aria-label={{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]} value={value[key as keyof typeof choices]} onValueChange={selectedValue => setValue({...value,[key]:Number(selectedValue)})}>{labels.map((label,i)=><option key={i} value={i}>{label}</option>)}</Choice></label>)}
+ {value.form==='human'&&(Object.keys(colors) as (keyof typeof colors)[]).map(key=><label key={key}>{key==='hair_color'?'Цвет волос':'Цвет одежды'}<Choice value={value[key]??''} onValueChange={selectedValue => {const next={...value};if(selectedValue==='')delete next[key];else next[key]=Number(selectedValue);setValue(next)}}><option value="">Как в исходном рисунке</option>{colors[key].map((name,i)=><option key={name} value={i}>{name}</option>)}</Choice></label>)}
  </div></div><div className="portrait-actions"><p role="status">{disabled?'Сохранение…':dirty?'Есть несохранённые изменения':status}</p><Button disabled={disabled||!dirty} onClick={async()=>{setStatus('');try{await onSave(value,selected);setStatus('Иллюстрация сохранена')}catch{setStatus('Не удалось сохранить. Ваши настройки оставлены в редакторе.')}}}>Сохранить иллюстрацию</Button><Button variant="ghost" disabled={disabled} onClick={()=>{setValue(descriptor);setSelected(mode)}}>Отменить настройки</Button></div></div></section>;
 }

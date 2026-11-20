@@ -739,6 +739,12 @@ hold_next_preparation = False
 
 def preparation_stream(**kwargs):
     global hold_next_preparation
+    if len(kwargs['messages'])==2 and '"calendar_evidence":' in kwargs['messages'][1]['content']:
+        from review_actions_fixture import reply
+        kwargs['on_usage']({'prompt_tokens':120,'completion_tokens':60})
+        kwargs['on_finish']('stop')
+        yield reply(kwargs['messages'])
+        return
     hold = hold_next_preparation
     hold_next_preparation = False
     for chunk in stream(**kwargs):
@@ -759,16 +765,14 @@ preparation.chat_stream = preparation_stream
 from backend.services import draft_generation
 _generation_run = draft_generation.run
 def generation_fixture(prep, jid, config, *args):
-    if 'TEST_RELEASE_QUALITY' in str(config.get('_draft_source', config.get('_draft_input', ''))):
+    source=str(config.get('_draft_source',config.get('_draft_input','')))
+    if any(marker in source for marker in ('TEST_RELEASE_QUALITY','TEST_REVIEW_PROTOCOL','TEST_REVIEW_AUTOMATIC','TEST_RELEASE_NESTED')):
         journal = json.loads(prep.repo.preparation_job(jid).get('response_journal') or '{}')
-        journal.setdefault('generation_contract', {'version': 5})
+        journal.setdefault('generation_contract', {'version':5} if 'TEST_RELEASE_QUALITY' in source else {'version':6,'portrait_version':2})
         prep.repo.save_response_journal(jid, journal)
     return _generation_run(prep, jid, config, *args)
 draft_generation.run = generation_fixture
 
-engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
-    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152, 'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536}.get(model, 32768)}
-}
 chat_cancel_next = False
 chat_markdown_release = threading.Event()
 CHAT_MARKDOWN = '''Лена ставит чашку на стол. За окном шумит дождь. «Кто-то стучал», — говорит она.
@@ -848,8 +852,22 @@ def authoring_stream(**kwargs):
 
 llm.chat_stream = authoring_stream
 llm.get_available_models = lambda: ['local-model','chat-fixture','chat-summary-fixture','chat-markdown-fixture','chat-mobile-fixture','chat-tools-fixture','chat-tools-summary-fixture']
-llm.get_models_info = lambda: {'models':[{'key':name,'loaded_instances':[{'id':name,'config':{'context_length':size}}]} for name,size in [('chat-fixture',65536),('chat-summary-fixture',65536),('chat-small-fixture',8192),('chat-markdown-fixture',65536),('chat-mobile-fixture',65536),('chat-tools-fixture',524288),('chat-tools-summary-fixture',524288)]]}
-llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
+# Exercise the same loaded-instance discovery for Chat, game jobs and authoring.
+# Values are fixture allocations, shared by metadata and the local transport.
+fixture_windows = {
+    'local-model': 32768, 'test': 32768, 'test-model': 32768,
+    'handoff-test': 131072, 'provenance-test': 40960, 'integrated-test': 49152,
+    'agency249-test': 49152, 'berezovsk-followup-test': 131072, 'scene255-test': 65536,
+    'lta250-test': 49152, 'policy252-test': 65536, 'scene263-test': 65536,
+    'frame263-test': 65536, 'blank263-test': 65536,
+    'chat-fixture': 65536, 'chat-summary-fixture': 65536, 'chat-small-fixture': 8192,
+    'chat-markdown-fixture': 65536, 'chat-mobile-fixture': 65536,
+    'chat-tools-fixture': 524288, 'chat-tools-summary-fixture': 524288,
+}
+llm.get_models_info = lambda: {'models': [
+    {'key': name, 'loaded_instances': [{'id': name, 'config': {'context_length': window}}]}
+    for name, window in fixture_windows.items()
+]}
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
 llm.load_model = lambda **_: {}
 llm.unload_all_models = lambda: 1
@@ -874,6 +892,20 @@ if __name__ == '__main__':
         assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
         (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
+    @app.post('/test/review-actions')
+    def review_actions_seed(scenario: str = ''):
+        from review_actions_fixture import seed, seed_family, seed_legacy_family
+        if scenario=='legacy-family':
+            return seed_legacy_family(app.state.repository)
+        if scenario in ('family','direct-family'):
+            return seed_family(app.state.repository,scenario=scenario)
+        return seed(app.state.repository,scenario)
+
+    @app.post('/test/generation266')
+    def generation266_seed():
+        from generation266_fixture import seed
+        return seed(app.state.repository)
+
     @app.post('/test/scene255-reset')
     def scene255_reset():
         global scene255_mode

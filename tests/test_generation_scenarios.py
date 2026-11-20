@@ -113,7 +113,7 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
         assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'}).status_code==200
         assert wait_job(client,jid)['status']=='saved'
     d=client.get(url+'?author=true').json()
-    confirmed=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']})
+    confirmed=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
     assert confirmed.status_code==200,confirmed.text
     sid=confirmed.json()['save'];before=repo.get_snapshot(sid);w=before['world_state']
     assert before['campaign']['campaign']['title']=='Автор: '+scenario['id']

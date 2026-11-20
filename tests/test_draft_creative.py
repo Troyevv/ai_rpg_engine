@@ -120,8 +120,9 @@ def test_generation_editor_start_turn_reload(api,repair):
         response=client.post(path+'/generate',json={'revision':0,'text':'В приморском городе после пожара восстанавливают мастерскую. Происхождение героя неизвестно.','config':dict(REMOTE,context_length=131072),'api_key':'offline'})
         job=wait_job(client,response.json()['id']);assert job['status']=='saved',job
     draft=client.get(path+'?author=true').json()
-    assert len(calls)==(5 if repair else 3) and draft['review']['status']=='completed'
-    expected='Реставрационная мастерская Веры' if repair else 'Мастерская Веры'
+    assert len(calls)==3 and draft['review']['status']=='completed'
+    assert bool(draft['review']['issues'])==repair
+    expected='Мастерская Веры'
     assert draft['state']['world']['organizations']['workshop']['name']==expected
     started=client.post(path+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id'],'accept_warnings':True})
     assert started.status_code==200,started.text

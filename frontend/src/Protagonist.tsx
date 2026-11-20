@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "./api";
@@ -288,11 +289,11 @@ function Editor({
       <div className="protagonist-field">
         <label>
           {label}
-          <select
+          <Choice
             aria-label={label}
             value={value || ""}
             disabled={busy}
-            onChange={(e) => onChange(e.target.value || null)}
+            onValueChange={selectedValue => onChange(selectedValue || null)}
           >
             <option value="">Не выбрано</option>
             {options.map((x: Json) => (
@@ -300,7 +301,7 @@ function Editor({
                 {x.name || x.text}
               </option>
             ))}
-          </select>
+          </Choice>
         </label>
         <Button
           type="button"
@@ -470,18 +471,18 @@ function Editor({
       <label>
         {label}
         {s.enum ? (
-          <select
+          <Choice
             aria-label={label}
             value={String(value)}
             disabled={busy}
-            onChange={(e) => onChange(e.target.value)}
+            onValueChange={selectedValue => onChange(selectedValue)}
           >
             {s.enum.map((v) => (
               <option key={String(v)} value={String(v)}>
                 {choices[String(v)] || String(v)}
               </option>
             ))}
-          </select>
+          </Choice>
         ) : typeof value === "boolean" ? (
           <input
             type="checkbox"
@@ -658,12 +659,12 @@ export function Protagonist({
         {!create ? (
           <label>
             Новый главный герой
-            <select
+            <Choice
               aria-label="Новый главный герой"
               value={actor}
               disabled={busy}
-              onChange={(e) => {
-                setActor(e.target.value);
+              onValueChange={selectedValue => {
+                setActor(selectedValue);
                 setPreview(false);
               }}
             >
@@ -678,7 +679,7 @@ export function Protagonist({
                     {c.name}
                   </option>
                 ))}
-            </select>
+            </Choice>
           </label>
         ) : draft && data ? (
           <>

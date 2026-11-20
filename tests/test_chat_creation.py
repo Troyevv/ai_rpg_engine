@@ -286,8 +286,10 @@ def test_retry_rechecks_loaded_window_without_calling_provider(env):
     assert client.get(url(c,'/jobs/'+jid)).json()['status']=='error'
 
 
-def test_compatible_metadata_never_guesses_from_training_maximum(env):
+def test_compatible_metadata_never_guesses_from_training_maximum(env, monkeypatch):
     from unittest.mock import MagicMock
+    import llm
+    monkeypatch.setitem(llm.PROVIDERS, 'compatible', llm.ProviderSpec('https://fixture.invalid/v1', 'COMPATIBLE_API_KEY'))
     client,app=env
     model=MagicMock();model.id='remote';model.model_dump.return_value={'id':'remote','max_context_length':200000}
     transport=MagicMock();transport.models.list.return_value.data=[model]
@@ -298,6 +300,10 @@ def test_compatible_metadata_never_guesses_from_training_maximum(env):
         assert capabilities.discover('compatible','remote',app.state.chat.credentials)['context_length']==16384
         config=ModelSettings(provider='compatible',model='remote',auto_context=False,context_length=131072).model_dump()
         assert capabilities.resolve(config,app.state.chat.credentials)['context_length']==16384
+        monkeypatch.setenv('COMPATIBLE_MODEL_LIMITS', json.dumps({'https://fixture.invalid/v1':{'remote':{'context_length':65536,'max_output':512}}}))
+        model.model_dump.return_value.update(max_output_tokens=1024)
+        bounded = capabilities.discover('compatible','remote',app.state.chat.credentials)
+        assert (bounded['context_length'], bounded['max_output']) == (16384, 512)
         assert not transport.chat.completions.create.called
 
 

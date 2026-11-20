@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {nav,diagnostics} from "./navigation";
 import {test,expect} from "@playwright/test";
 test("persistent key, thinking, memory, visible player actions, variants and accounting",async({page,request})=>{
@@ -6,9 +7,9 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');
  await nav(page,'Настройки');
- await page.getByLabel('Провайдер game').selectOption('deepseek');
+ await chooseOption(page.getByLabel('Провайдер game'), 'deepseek');
  await page.getByLabel('API-ключ DeepSeek').fill('persisted-test-key');
- await page.getByLabel('Thinking game').selectOption('low');
+ await chooseOption(page.getByLabel('Thinking game'), 'low');
  await page.getByRole('button',{name:'Сохранить настройки'}).click();
  await expect(page.getByRole('dialog')).toBeHidden();
  await page.reload();

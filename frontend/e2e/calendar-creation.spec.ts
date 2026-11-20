@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {generateIdea,ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -9,7 +10,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
  await page.goto('/');await nav(page,'Создать');
  await ideaGroup(page,'Календарь и начало');
  await expect(page.getByLabel('Дата начала',{exact:true})).toHaveValue('');
- await page.getByLabel('Календарь начала игры').selectOption('gregorian');
+ await chooseOption(page.getByLabel('Календарь начала игры'), 'gregorian');
  await page.getByLabel('Дата начала',{exact:true}).fill('1370-10-23');
  await page.getByLabel('Время начала',{exact:true}).fill('12:00');
  await page.reload();await nav(page,'Создать');
@@ -37,7 +38,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
 test('custom date and validation',async({page})=>{
  await page.goto('/');await nav(page,'Создать');
  await ideaGroup(page,'Календарь и начало');
- await page.getByLabel('Календарь начала игры').selectOption('custom');
+ await chooseOption(page.getByLabel('Календарь начала игры'), 'custom');
  await page.getByLabel('Длины месяцев',{exact:true}).fill('40');
  await page.getByLabel('Год начала',{exact:true}).fill('0042');
  await page.getByLabel('Месяц начала',{exact:true}).fill('01');

@@ -2,7 +2,6 @@
 import json
 import hashlib
 from backend.services import draft_world as domain
-from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
 
 
@@ -25,14 +24,18 @@ def messages_for(repo,job,config):
         instructions=idea_text(repo,job,config)
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(config.get('_creation_settings',{}))
-        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True),ensure_ascii=False)
+        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(exclude_none=True,exclude={'narrative_detail'}),ensure_ascii=False)
         if settings.communication is not None:instructions+='\nТехнологии связи communication заданы явно: не меняй каналы, доставку и дату по жанру или эпохе. author_note — антураж, не разрешение включить канал.'
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema, compact_schema, SECRET_AUTHORING_RULES
-        system=(config['_prompts']['draft_world_prompt.md']['content']+'\n'+SECRET_AUTHORING_RULES
+        from backend.repositories.documents import ROOT, is_builtin_prompt
+        name='draft_world_prompt.md'
+        selected=config['_prompts'][name]['content']
+        author_prompt=(ROOT/name).read_text(encoding='utf-8') if is_builtin_prompt(name,selected) else selected
+        system=(author_prompt+'\nФормат ответа задаёт текущая схема ниже.\n'+SECRET_AUTHORING_RULES
                 +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
                 +json.dumps(compact_schema(prompt_schema(initial_portraits=True)),ensure_ascii=False,separators=(',',':')))
@@ -83,9 +86,59 @@ def decode_result(text,state,config):
         from backend.services.world import CARD_FIELDS
         if not isinstance(card['fields'],dict) or not set(CARD_FIELDS)<=card['fields'].keys():
             raise ValueError('Перегенерация должна вернуть все постоянные поля карточки.')
-        for field,new in card.items():state=domain.patch(state,'character',target['id'],field,new)
-        return domain.prepare(state)
-    return domain.prepare(domain.patch(state,target['kind'],target['id'],target['field'],value['value']))
+        fields=card
+    else:
+        fields={target['field']:value['value']}
+    from backend.services.draft_changes import apply_proposal
+    from backend.services.draft_initial import escape
+    from backend.repositories.drafts import candidate_hash
+    kind=target['kind']
+    if kind in ('character','location'):
+        section='characters' if kind=='character' else 'locations'
+        base='/'+section+'/'+escape(target['id'])
+    elif kind=='campaign':
+        base='/campaign'
+    elif kind in domain.GROUPS:
+        base='/world/'+domain.GROUPS[kind]+'/'+escape(target['id'])
+    else:
+        raise ValueError('Служебный контекст недоступен для AI-редактирования.')
+    item=domain.entity(state,kind,target['id'])
+    changes=[]
+    for field,new in fields.items():
+        if field.startswith('fields.') and kind=='character':
+            name=field[7:]
+            owner=item['fields']
+            path=base+'/fields/'+escape(name)
+        else:
+            name=field
+            owner=item
+            path=base+'/'+escape(name)
+        changes.append(dict(path=path,op='replace' if name in owner else 'add',value=new,reason='Адресная правка.'))
+    packet=dict(candidate_hash=candidate_hash(state),changes=changes,rationale='Предложение к выбранному полю.')
+    validated,normalized=apply_proposal(state,json.dumps(packet),editing=True)
+    # A legacy world's normalized projections may differ outside this target.
+    # Publish only the checked field values, keeping its unrelated records verbatim.
+    from copy import deepcopy
+    from backend.services.draft_completeness import pointer
+    trial=deepcopy(state)
+    paths=trial.setdefault('authoring',{}).setdefault('manual_paths',[])
+    for change in normalized['changes']:
+        path=change['path']
+        parent,key=path.rsplit('/',1)
+        pointer(trial,parent)[key.replace('~1','/').replace('~0','~')]=pointer(validated,path)
+        if path not in paths:paths.append(path)
+    trial=domain.prepare(trial)
+    from backend.services.draft_review_actions import accept_calendar_updates
+    accept_calendar_updates(state,trial)
+    return trial
+
+
+def finish_scoped(repo,jid,result,original,config):
+    from backend.services.draft_response import strict_loads
+    state=decode_result(result,original,config)
+    report=domain.validate(state)
+    if report['errors']:raise ValueError('; '.join(report['errors']))
+    repo.finish_field_preview(jid,strict_loads(result)['value'],report['warnings'])
 
 
 def review_signature(messages, config):
@@ -103,28 +156,28 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     original=repo.draft(job['workspace_id'],author=True)['state']
     context=config['context_length']
     if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+    advisory_policy=False
     stage='draft_'+config['_draft_task']
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(messages,limit):
-        effective=review_config(config) if stage=='draft_world_validation' else config
+        effective=review_config(config) if stage=='draft_world_validation' and not advisory_policy else config
         structured=effective['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
         return tracked_stream(repo,stream_fn,jid,stage,effective,messages,model=effective['model'],provider=effective['provider'],api_key=api_key,
             temperature=effective['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
             **({'response_format':{'type':'json_object'}} if structured else {}))
     if config['_draft_task']!='world':
         repo.draft_phase(jid,'editing',reset_progress=True)
-        result=''
-        for chunk in stream_document(messages_for(repo,job,config),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
-            result+=chunk;repo.preparation_progress(jid,result)
-        if handle.cancel.is_set():return
-        state=decode_result(result,original,config);report=domain.validate(state)
-        if report['errors']:raise ValueError('; '.join(report['errors']))
-        if report['warnings'] and not config.get('_warnings_ack') and not config.get('_preview_only'):raise ValueError('; '.join(report['warnings']))
-        if config.get('_preview_only'):
-            repo.finish_field_preview(jid,strict_loads(result)['value'],report['warnings'])
-        else:repo.finish_draft_job(jid,state)
+        journal=json.loads(job.get('response_journal') or '{}')
+        messages=journal.get('messages')
+        if messages is None:
+            messages=messages_for(repo,job,config)
+            journal['messages']=messages
+            repo.save_response_journal(jid,journal)
+        result=response(repo,jid,journal,stage,messages,config,context,generate,handle.cancel)
+        if result is None or handle.cancel.is_set():return
+        finish_scoped(repo,jid,result,original,config)
         return
     journal=json.loads(job.get('response_journal') or '{}')
     repo.draft_phase(jid,'world')
@@ -136,7 +189,21 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             'portrait_version':1 if legacy else 2,
             'prompt_contract':'bundled' if config['_prompts']['draft_world_prompt.md']['content']==bundled else 'custom_unverified',
             'prompt_sha256':hashlib.sha256(config['_prompts']['draft_world_prompt.md']['content'].encode()).hexdigest()}
-    messages=journal.setdefault('messages',messages_for(repo,job,config))
+        if not legacy:
+            from backend.repositories.documents import is_builtin_prompt
+            chosen=config['_prompts']['draft_world_prompt.md']
+            builtin=is_builtin_prompt('draft_world_prompt.md',chosen['content'])
+            contract=journal['generation_contract']
+            contract.update(audit_policy=2, prompt_version_id=chosen.get('id'),
+                prompt_contract=('historical_builtin' if builtin and chosen['content']!=bundled else contract['prompt_contract']),
+                effective_prompt_sha256=hashlib.sha256((bundled if builtin else chosen['content']).encode()).hexdigest())
+    advisory_policy=journal['generation_contract'].get('audit_policy')==2
+    if 'messages' not in journal:
+        parts=journal.get('responses',{}).get('world',{}).get('parts',[])
+        first=parts[0].get('request_id') if parts else None
+        recorded=repo.preparation_request_messages(jid,first) if first and hasattr(repo,'preparation_request_messages') else None
+        journal['messages']=recorded or messages_for(repo,job,config)
+    messages=journal['messages']
     input_hash=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
     binding=dict(job_id=jid,input_hash=input_hash)
     if journal.get('binding',binding)!=binding:raise ValueError('Ответ принадлежит другому заданию или входу.')
@@ -150,7 +217,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     result=journal.get('candidate_text',result)
     epoch=journal.get('recovery_epoch',0)
     patch_failure=None
-    for attempt in range(3):
+    max_repairs=1 if advisory_policy else 2
+    for attempt in range(max_repairs+1):
         if handle.cancel.is_set():return
         repo.draft_phase(jid,'validating')
         try:
@@ -172,9 +240,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     raw=motivations(raw)
                 else:raw.setdefault('creation_settings',config.get('_creation_settings',{}))
                 from backend.services.communication_profile import apply_explicit
-                raw=apply_explicit(raw)
+                if not (recovered_candidate and advisory_policy):raw=apply_explicit(raw)
                 from backend.services.draft_calendar import complete
-                raw=complete(raw, config.get('_draft_source',config.get('_draft_input','')), seed=jid)
+                if not (recovered_candidate and advisory_policy):raw=complete(raw, config.get('_draft_source',config.get('_draft_input','')), seed=jid)
                 if not recovered_candidate:
                     schedules=raw.get('world',{}).get('scheduled_events',{}) if isinstance(raw.get('world'),dict) else {}
                     for event in (schedules.values() if isinstance(schedules,dict) else []):
@@ -223,6 +291,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if state is None:return
             result=journal['candidate_text']
             repo.save_draft_candidate(jid,state,[],review=dict(status='not_started',issues=[]),epoch=epoch)
+        if not errors and advisory_policy:
+            stage='draft_world_validation'
+            repo.draft_phase(jid,'reviewing',reset_progress=True)
+            def read_once(slot, request_messages):
+                return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+            notes=draft_completeness.read_advisory(state,messages[-1]['content'],journal,read_once)
+            if notes is None or handle.cancel.is_set():return
+            repo.save_response_journal(jid,journal)
+            repo.save_draft_candidate(jid,state,[],review=notes,epoch=epoch)
+            break
         if not errors:
             review_meta=dict(status='running',contract_version=draft_completeness.CONTRACT_VERSION,issues=[])
             if not patch_failure:repo.save_draft_candidate(jid,state,[],review=review_meta,epoch=epoch)
@@ -246,7 +324,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if not errors:break
             result=json.dumps(state,ensure_ascii=False)
         journal['errors']=errors;repo.save_response_journal(jid,journal)
-        if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
+        if attempt==max_repairs:raise ValueError('Исправление структуры не завершено. Ответ сохранён. '+str(errors))
         # A rejected trial remains uncommitted. Its newly revealed diagnostics
         # join the next bounded request against the original candidate, so the
         # model can resubmit a coherent patch rather than repeat the old scope.

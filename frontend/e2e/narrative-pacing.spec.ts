@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {gameAction} from './navigation';
 import {test,expect} from '@playwright/test';
 test('story policy presets custom risk and outcome persist without creating a turn',async({page,request})=>{
@@ -7,9 +8,9 @@ test('story policy presets custom risk and outcome persist without creating a tu
   const before=await(await request.get(`/api/saves/${selected.save}`)).json();
   await gameAction(page,'Политика истории');
   const dialog=page.getByRole('dialog').last();
-  await dialog.getByLabel('Профиль интенсивности').selectOption('intense');
-  await dialog.getByLabel('Профиль риска').selectOption('safe');
-  await dialog.getByLabel('Предпочтение исходов').selectOption('guaranteed_happy_path');
+  await chooseOption(dialog.getByLabel('Профиль интенсивности'), 'intense');
+  await chooseOption(dialog.getByLabel('Профиль риска'), 'safe');
+  await chooseOption(dialog.getByLabel('Предпочтение исходов'), 'guaranteed_happy_path');
   await dialog.getByRole('button',{name:'Сохранить настройки истории'}).click();
   await expect(dialog).toBeHidden();await page.reload();
   const after=await(await request.get(`/api/saves/${selected.save}`)).json();
@@ -17,8 +18,8 @@ test('story policy presets custom risk and outcome persist without creating a tu
   expect(after.state.narrative_policy.narrative_pacing.preset).toBe('intense');
   expect(after.state.narrative_policy.narrative_risk.protagonist_death).toBe(false);
   await gameAction(page,'Политика истории');
-  await expect(dialog.getByLabel('Предпочтение исходов')).toHaveValue('guaranteed_happy_path');
-  await dialog.getByLabel('Профиль риска').selectOption('custom');
+  await expect(dialog.getByLabel('Предпочтение исходов')).toHaveJSProperty('value', 'guaranteed_happy_path');
+  await chooseOption(dialog.getByLabel('Профиль риска'), 'custom');
   await dialog.getByLabel('Травмы',{exact:true}).check();
   await expect(dialog.getByLabel('Необратимые травмы',{exact:true})).not.toBeChecked();
   await dialog.getByRole('button',{name:'Сохранить настройки истории'}).click();

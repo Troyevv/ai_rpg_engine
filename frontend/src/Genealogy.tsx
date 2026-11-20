@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { useEffect, useMemo, useState, useRef, memo } from "react";
 import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import {
@@ -146,7 +147,7 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
   const activeEdges=graph?.edges.filter(e=>activeIds.includes(e.id)) || [];
   const personLink=(id:string)=>{const n=graph?.nodes.find(n=>n.id===id);return n&&<button className="family-relative" onClick={()=>{setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}} key={id}><CharacterAvatar subject={n} saveId={save.id} size={32}/><span>{n.name}</span></button>};
   return (
-    <section className="genealogy" aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={matchingRoots.some(c=>c.id===root)?root:""} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
+    <section className="genealogy" aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<Choice value={matchingRoots.some(c=>c.id===root)?root:""} onValueChange={selectedValue => {setGraph(null);setSelected(null);setRoot(selectedValue)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label></div>
       <p className="family-touch-hint">Перемещай дерево пальцем. Кнопка «Вся семья» покажет общий обзор.</p>
       <p className="family-reading-hint">Родители сверху, дети снизу. Общая ветвь объединяет только подтверждённых биологических родителей. Остальные связи подписаны отдельно.</p>
       <div className="family-view-tools"><div className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>

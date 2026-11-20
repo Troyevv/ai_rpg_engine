@@ -26,8 +26,10 @@ class Preparation:
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
         with self.lock:
-            jid = self.repo.begin_preparation(wid, kind, text, config, revision)
-            if jid in self.handles or self.repo.preparation_job(jid)['status']!='generating':return jid
+            jid, created = self.repo.begin_preparation(wid, kind, text, config, revision, receipt=True)
+            # Only the worker that inserted the job may dispatch the paid request.
+            if not created:
+                return jid
             handle = Handle()
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
@@ -38,7 +40,9 @@ class Preparation:
             if jid in self.handles: raise ValueError('Запрос ещё завершается.')
             job=self.repo.preparation_job(jid)
             config=json.loads(job['config_json'])
-            if config['provider']=='deepseek': api_key=deepseek_key(api_key)
+            from backend.services.draft_review_actions import saved_reply
+            if config['provider']=='deepseek' and not saved_reply(json.loads(job.get('response_journal') or '{}')):
+                api_key=deepseek_key(api_key)
             config=self.repo.resume_draft_response(jid,**options)
             handle=Handle(epoch=json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)+1);self.handles[jid]=handle
         threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
@@ -84,8 +88,26 @@ class Preparation:
 
     def run(self, jid, config, api_key, handle):
         narrative = ''
-        worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor') else None
+        worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor','field','character') else None
         try:
+            if config.get('_draft_task') in ('editor','field','character'):
+                from backend.services.draft_review_actions import saved_reply, finish
+                from backend.services.draft_response import join_fragments
+                journal=json.loads(self.repo.preparation_job(jid)['response_journal'])
+                cached=saved_reply(journal)
+                if cached:
+                    text=join_fragments(cached['parts'],cached.get('assembly'),terminal=True)
+                    if config.get('_review_action'):
+                        finish(self.repo,jid,journal['editor'],text,worker_epoch)
+                    elif config['_draft_task']=='editor':
+                        from backend.services.draft_editor import finish_proposal
+                        finish_proposal(self.repo,jid,journal,text,worker_epoch)
+                    else:
+                        from backend.services.draft_generation import finish_scoped
+                        job=self.repo.preparation_job(jid)
+                        base=self.repo.draft(job['workspace_id'],True)['state']
+                        finish_scoped(self.repo,jid,text,base,config)
+                    return
             with model_lease(config['provider']):
                 if handle.cancel.is_set():
                     return
@@ -98,6 +120,12 @@ class Preparation:
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
                 if worker_epoch is not None and json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
+                from backend.services.token_budget import prepare, snapshot
+                journal = json.loads(job.get('response_journal') or '{}')
+                config = prepare(dict(config, _budget_snapshot=journal.get('budget_snapshot')), job['kind'], loaded=loaded, api_key=api_key)
+                if worker_epoch is not None and config.get('budget_mode') and 'budget_snapshot' not in journal:
+                    journal['budget_snapshot'] = snapshot(config)
+                    self.repo.save_response_journal(jid, journal)
                 if job['kind']=='draft_editor':
                     from backend.services.draft_editor import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)
@@ -121,7 +149,7 @@ class Preparation:
                         temperature=config['temperature'],max_tokens=limit,require_complete=True,
                         cancel_event=handle.cancel,on_stream=on_stream)
                 last = 0.0
-                for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel):
+                for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel,output_ceiling=config['max_tokens']):
                     if handle.cancel.is_set():return
                     narrative += chunk
                     if time.monotonic() - last > 0.1:

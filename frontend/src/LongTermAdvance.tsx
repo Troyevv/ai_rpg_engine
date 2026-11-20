@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { formatDateLabel } from "./gameDate";
 import { useEffect, useRef, useState } from "react";
 import { Hourglass, ArrowRight } from "lucide-react";
@@ -168,20 +169,18 @@ export function LongTermAdvance({
               </label>
               <label className="management-field">
                 Единица
-                <select
+                <Choice
                   aria-label="Единица перехода"
                   value={request.unit}
-                  onChange={(e) =>
-                    setRequest({
+                  onValueChange={selectedValue => setRequest({
                       ...request,
-                      unit: e.target.value as AdvanceRequest["unit"],
-                    })
-                  }
+                      unit: selectedValue as AdvanceRequest["unit"],
+                    })}
                 >
                   <option value="weeks">Недели</option>
                   <option value="months">Месяцы</option>
                   <option value="years">Годы</option>
-                </select>
+                </Choice>
               </label>
             </div>
             <label className="management-field">

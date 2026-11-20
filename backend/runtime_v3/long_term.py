@@ -557,6 +557,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 'открытой сцены, каждое {"text":"…","facts":[]} с ID ранее известных POV сведений, '
                 'либо пустым списком для непосредственно видимой сцены.')
         narrative = ""
+        max_input = config.get("_budget_caps", {}).get("max_input")
         try:
             messages = build_context(
                 camera,
@@ -565,7 +566,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 "background",
                 config.get("context_length", 32768),
                 config.get("max_tokens", 2000),
-                prompts=config.get("_prompts"),
+                max_input=max_input, prompts=config.get("_prompts"),
                 world_history=history,
                 pacing_decision=group_policy, extraction_contract=version,
             )
@@ -574,6 +575,12 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 for message in messages:
                     if message['role'] == 'system':
                         message['content'] = message['content'].replace(PROSE_ONLY_OUTPUT, '')
+            from backend.services.token_budget import preflight_downstream, extraction_output, extraction_reserve
+            from context_builder import estimate
+            preflight_downstream(config, lambda reserve: build_context(camera, [], instruction, 'background',
+                config['context_length'],reserve,max_input=max_input,extraction_text='',extraction_contract=version,prompts=config.get('_prompts'),
+                world_history=history,pacing_decision=messages.selection['pacing'],initiative_decision=messages.selection['initiative']),
+                'long_term_extraction')
             report["llm_calls"] += 1
             from backend.services.letter_sources import generate_result
             narrative, artifacts = generate_result(generate, "long_term_narrative", messages,
@@ -596,6 +603,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 return None
             if not narrative.strip():
                 raise ValueError("Пустой результат длительного перехода.")
+            update = extraction_output(config,estimate([{'content':narrative}]))
             feedback = None
             from backend.runtime_v3.scene_repair import SceneCandidate
             semantic_candidate = SceneCandidate(resolution_state, narrative, '', turn,
@@ -611,8 +619,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         instruction,
                         "background",
                         config.get("context_length", 32768),
-                        config.get("update_tokens", 4096),
-                        extraction_text=narrative,
+                        extraction_reserve(config, update),
+                        max_input=max_input, extraction_text=narrative,
                         extraction_contract=config.get("_extraction_contract", 1),
                         validation_feedback=feedback,
                         pacing_decision=messages.selection["pacing"],
@@ -625,7 +633,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                         generate(
                             "long_term_extraction" if attempt == 0 else "long_term_repair",
                             messages,
-                            config.get("update_tokens", 4096),
+                            update,
                             0.1,
                             context_key=[c.id for c in group],
                             response_format={"type": "json_object"},

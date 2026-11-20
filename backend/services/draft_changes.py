@@ -15,12 +15,13 @@ from backend.services.draft_initial import inspect_candidate, prompt_schema, Dra
 
 
 class ProposalError(ValueError):
-    def __init__(self, message, *, proposal_paths=(), world_paths=(), drop_indices=(), remove_paths=()):
+    def __init__(self, message, *, proposal_paths=(), world_paths=(), drop_indices=(), remove_paths=(), path_errors=None):
         super().__init__(message)
         self.proposal_paths=list(proposal_paths)
         self.world_paths=list(world_paths)
         self.drop_indices=list(drop_indices)
         self.remove_paths=list(remove_paths)
+        self.path_errors=path_errors or {}
 
 
 class Change(BaseModel):
@@ -99,32 +100,60 @@ def author_value(old, new, path=""):
     return result
 
 
-def resolve_card_paths(state, proposal):
-    """Editor-only identity aliases; numeric addresses retain frozen-base semantics.
+def recorded_editor_pointer(state, address):
+    """Decode an unambiguous dot/bracket address of an existing field on this base."""
+    parts = []
+    node = state
+    segments = address.split('.')
+    for i, segment in enumerate(segments):
+        match = re.fullmatch(r'([\w-]+)(?:\[(0|[1-9]\d*)\])?', segment)
+        if not match or not isinstance(node, dict):
+            raise ValueError('Используйте JSON Pointer для этого адреса')
+        key, index = match.groups()
+        # A literal ID or field name may itself contain dots or brackets.
+        suffix = '.'.join(segments[i:])
+        if any(k != key and (suffix == k or suffix.startswith((k+'.', k+'['))) for k in node):
+            raise ValueError('Неоднозначный адрес. Укажите точный JSON Pointer')
+        if key not in node:
+            raise ValueError('Адрес не найден. Для нового поля или ID укажите JSON Pointer')
+        node = node[key]
+        parts.append(key)
+        if index is not None:
+            if not isinstance(node, list) or int(index) >= len(node):
+                raise ValueError('Индекс не указывает на элемент массива')
+            node = node[int(index)]
+            parts.append(index)
+    return '/' + '/'.join(parts)
+
+
+def resolve_card_paths(state, proposal, *, editing=False):
+    """Stable card identity aliases; numeric addresses retain frozen-base semantics.
 
     The shadow tracks prior additions/assignments and tombstones without shifting
     indices. It never escapes preflight or changes the shared JSON Pointer reader.
     """
     shadow = deepcopy(state)
     deleted = set()
-    errors = []
+    errors = {}
     for index, change in enumerate(proposal.changes):
         original = change.path
         try:
-            if not original.startswith('/') or re.search(r'~(?![01])', original):
+            address=recorded_editor_pointer(shadow,original) if editing and not original.startswith('/') else original
+            if not address.startswith('/') or re.search(r'~(?![01])', address):
                 raise ValueError('Некорректный JSON Pointer')
-            parts = [p.replace('~1', '/').replace('~0', '~') for p in original[1:].split('/')]
+            parts = [p.replace('~1', '/').replace('~0', '~') for p in address[1:].split('/')]
             if parts[0] not in ('characters', 'locations', 'world', 'campaign'):
+                change.path=address
                 continue  # Existing allowlist supplies the operation-drop scope.
             if parts[0] in ('characters', 'locations') and len(parts) >= 2:
                 rows = shadow[parts[0]]
                 token = parts[1]
                 if token != '-' and not re.fullmatch(r'0|[1-9]\d*', token):
-                    matches = [i for i, row in enumerate(rows) if row.get('id') == token]
+                    matches = [i for i, row in enumerate(rows) if isinstance(row, dict) and row.get('id') == token]
                     if len(matches) != 1:
                         raise ValueError('ID карточки не найден' if not matches else 'Неоднозначный ID карточки')
                     parts[1] = str(matches[0])
-                elif token.isdigit() and any(row.get('id') == token for row in rows):
+                elif token.isdigit() and any(isinstance(row, dict) and row.get('id') == token for row in rows):
                     raise ValueError('Неоднозначная адресация: числовой ID совпадает с индексом')
             path = '/' + '/'.join(p.replace('~', '~0').replace('/', '~1') for p in parts)
             if any(path == dead or path.startswith(dead + '/') for dead in deleted):
@@ -148,21 +177,19 @@ def resolve_card_paths(state, proposal):
             change.path = path
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             reason = str(exc) if isinstance(exc, ValueError) else 'Родительский объект не существует'
-            errors.append(f'Операция {index}, путь {original}: {reason}. Исправьте только path на существующий разрешённый адрес.')
+            errors[index]=reason
     if errors:
-        raise ProposalError('; '.join(errors), proposal_paths=[
-            f'/changes/{i}/path' for i, c in enumerate(proposal.changes)
-            if any(e.startswith(f'Операция {i},') for e in errors)])
+        raise ProposalError('; '.join(f'Операция {i}, путь {proposal.changes[i].path}: {reason}' for i,reason in errors.items()),
+                            proposal_paths=[f'/changes/{i}/path' for i in errors], path_errors=errors)
 
 
-def apply_proposal(state, reply, *, editing=False):
+def apply_proposal(state, reply, *, editing=False, warnings=None):
     proposal = Proposal.model_validate(strict_loads(reply))
     if proposal.conflicts and not editing:
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
-    if editing:
-        resolve_card_paths(state, proposal)
+    resolve_card_paths(state, proposal, editing=editing)
     trial = deepcopy(state)
     schema = prompt_schema()['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}
@@ -192,7 +219,9 @@ def apply_proposal(state, reply, *, editing=False):
             record_schema = (schema['world']['properties'][parts[1]].get('additionalProperties', {})
                              if root == 'world' else schema[root].get('items', {}) if root in ('characters', 'locations') else {})
             field_index = 3 if root == 'world' else 2
-            if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
+            # Death dates are editable historical fields in a confirmed author proposal.
+            review_death = editing and len(parts)==4 and parts[:2]==['world','characters'] and parts[3]=='death_date'
+            if not review_death and root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
                 raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
             value_path = path
             if path in ('/characters/-','/locations/-'):
@@ -214,46 +243,52 @@ def apply_proposal(state, reply, *, editing=False):
         path = change.path
         parts = [p.replace('~1', '/').replace('~0', '~') for p in path[1:].split('/')]
         root = parts[0]
-        if change.op == 'remove':
-            if not editing:
-                raise ValueError('Удаление разрешено только в предпросмотре AI-редактора.')
-            if not (root == 'world' and len(parts) == 3 or root in ('characters', 'locations') and len(parts) == 2):
-                raise ValueError('Удалять можно только целые сущности с зависимостями.')
-            if pointer(state, path) != change.value:
-                raise ValueError('Предусловие удаления не выполнено.')
-            if root == 'characters' and change.value.get('id') in (state.get('controlled_actor_id'), state.get('protagonist_id')):
-                raise ValueError('Нельзя удалить управляемого персонажа или протагониста.')
-            removals.append((parts, path))
-            continue
-        if root in ('characters', 'locations') and len(parts) == 2:
-            if change.op != 'add' or parts[1] != '-' or not isinstance(change.value, dict):
-                raise ValueError('Карточки добавляются через /-; существующие меняются по полям.')
-            ident = change.value.get('id')
-            if not isinstance(ident, str) or not re.fullmatch(r'[\w-]{1,100}', ident) or any(row['id'] == ident for row in trial[root]):
-                raise ValueError('Отсутствующий или занятый ID карточки.')
-            if root == 'characters' and change.value.get('is_player'):
-                raise ValueError('Нельзя передавать управление новому персонажу.')
-            trial[root].append(deepcopy(change.value))
-            continue
-        # A whole record replacement would hide identity/provenance changes.
-        if root == 'world' and len(parts) == 3:
-            if change.op != 'add' or parts[2] in trial['world'][parts[1]]:
-                raise ValueError('Новый ID занят; существующую запись меняйте по полям.')
-            if not isinstance(change.value, dict) or change.value.get('id', parts[2]) != parts[2]:
-                raise ProposalError('ID не совпадает с адресом записи.', proposal_paths=[f'/changes/{index}/value/id'])
-        elif parts[-1] in ('id', 'is_player'):
-            raise ValueError('Идентичность неизменна.')
-        parent_path = path.rsplit('/', 1)[0]
         try:
-            parent = pointer(trial, parent_path)
-            key = parts[-1]
-            if not isinstance(parent, dict):
-                raise ValueError('Меняйте список целиком, без сдвига адресов.')
-            if (key in parent) != (change.op == 'replace'):
-                raise ProposalError('Предусловие add/replace не выполнено.', proposal_paths=[f'/changes/{index}/op'])
-            parent[key] = deepcopy(change.value)
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ValueError('Родительский путь не существует: '+path) from exc
+            if change.op == 'remove':
+                if not editing:
+                    raise ValueError('Удаление разрешено только в предпросмотре AI-редактора.')
+                if not (root == 'world' and len(parts) == 3 or root in ('characters', 'locations') and len(parts) == 2):
+                    raise ValueError('Удалять можно только целые сущности с зависимостями.')
+                if pointer(state, path) != change.value:
+                    raise ValueError('Предусловие удаления не выполнено.')
+                if root == 'characters' and change.value.get('id') in (state.get('controlled_actor_id'), state.get('protagonist_id')):
+                    raise ValueError('Нельзя удалить управляемого персонажа или протагониста.')
+                removals.append((parts, path))
+                continue
+            if root in ('characters', 'locations') and len(parts) == 2:
+                if change.op != 'add' or parts[1] != '-' or not isinstance(change.value, dict):
+                    raise ValueError('Карточки добавляются через /-; существующие меняются по полям.')
+                ident = change.value.get('id')
+                if not isinstance(ident, str) or not re.fullmatch(r'[\w-]{1,100}', ident) or any(row['id'] == ident for row in trial[root]):
+                    raise ValueError('Отсутствующий или занятый ID карточки.')
+                if root == 'characters' and change.value.get('is_player'):
+                    raise ValueError('Нельзя передавать управление новому персонажу.')
+                trial[root].append(deepcopy(change.value))
+                continue
+            # A whole record replacement would hide identity/provenance changes.
+            if root == 'world' and len(parts) == 3:
+                if change.op != 'add' or parts[2] in trial['world'][parts[1]]:
+                    raise ValueError('Новый ID занят; существующую запись меняйте по полям.')
+                if not isinstance(change.value, dict) or change.value.get('id', parts[2]) != parts[2]:
+                    raise ProposalError('ID не совпадает с адресом записи.', proposal_paths=[f'/changes/{index}/value/id'])
+            elif parts[-1] in ('id', 'is_player'):
+                raise ValueError('Идентичность неизменна.')
+            parent_path = path.rsplit('/', 1)[0]
+            try:
+                parent = pointer(trial, parent_path)
+                key = parts[-1]
+                if not isinstance(parent, dict):
+                    raise ValueError('Меняйте список целиком, без сдвига адресов.')
+                if (key in parent) != (change.op == 'replace'):
+                    raise ProposalError('Предусловие add/replace не выполнено.', proposal_paths=[f'/changes/{index}/op'])
+                parent[key] = deepcopy(change.value)
+            except (KeyError, IndexError, TypeError) as exc:
+                raise ValueError('Родительский путь не существует: '+path) from exc
+        except (ValueError, KeyError, TypeError, IndexError) as exc:
+            if isinstance(exc, ProposalError):
+                exc.args=(f'Операция {index+1} ({path}): {exc}',)
+                raise
+            raise ValueError(f'Операция {index+1} ({path}): {exc}') from exc
     # Array indices always address the frozen base; remove only after assignments.
     for parts, path in sorted(removals, key=lambda item: int(item[0][1]) if item[0][0] in ('characters', 'locations') else -1, reverse=True):
         parent = pointer(trial, path.rsplit('/', 1)[0])
@@ -264,7 +299,7 @@ def apply_proposal(state, reply, *, editing=False):
         remaining={c['id'] for c in trial['characters']}
         trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
         if not trial['card_field_facts']:trial.pop('card_field_facts')
-    normalized = validate_transition(state, trial, editing=editing)
+    normalized = validate_transition(state, trial, editing=editing, warnings=warnings)
     new_ids = normalized['world']['characters'].keys() - state['world']['characters'].keys()
     if new_ids:
         from backend.services.draft_portraits import initialize
@@ -298,14 +333,14 @@ def validate_removals(before, after):
     if problems:raise DraftErrors(problems)
 
 
-def validate_transition(state, trial, *, editing=False):
+def validate_transition(state, trial, *, editing=False, warnings=None):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     trial = author_value(state, trial)
-    return validate_candidate(state, trial, editing=editing)
+    return validate_candidate(state, trial, editing=editing, warnings=warnings)
 
 
-def validate_candidate(state, trial, *, editing=False):
+def validate_candidate(state, trial, *, editing=False, warnings=None):
     """Validate server-normalized candidates; raw LLM boundaries use author_value.
 
     No provenance bypass for model replies: proposal/semantic repair entry points
@@ -315,9 +350,9 @@ def validate_candidate(state, trial, *, editing=False):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     actor = state['controlled_actor_id']
-    if actor not in trial['world']['characters']:
+    if actor is not None and actor not in trial['world']['characters']:
         raise ValueError('Нельзя удалить управляемого персонажа.')
-    for field in ('goals', 'short_goal', 'intentions', 'obligations', 'emotion'):
+    for field in ('goals', 'short_goal', 'intentions', 'obligations', 'emotion') if actor is not None and not editing else ():
         path = '/world/characters/'+actor.replace('~', '~0').replace('/', '~1')+'/'+field
         if field in state['world']['characters'][actor]:
             preserve(state, trial, path)
@@ -332,15 +367,18 @@ def validate_candidate(state, trial, *, editing=False):
             event.setdefault('time_reference_minute', state['world_clock']['minute'])
         elif event.get('time_semantics') != prior.get('time_semantics'):
             raise ValueError('Семантика времени существующего плана защищена.')
-        if event.get('commitment') and actor in event.get('participants', []) and event != state['world']['scheduled_events'].get(key):
+        if not editing and event.get('commitment') and actor in event.get('participants', []) and event != state['world']['scheduled_events'].get(key):
             raise ValueError('Новое обязательство игрока требует его решения.')
     if not editing:
         for path in state.get('authoring', {}).get('manual_paths', []):
             preserve(state, trial, path)
     if state.get('world',{}).get('contacts',{}) != trial.get('world',{}).get('contacts',{}):
         raise ValueError('Телефонная книга не входит в авторские изменения.')
-    if editing:validate_removals(state,trial)
-    normalized, report = inspect_candidate(trial)
+    if editing:
+        validate_removals(state,trial)
+    normalized, report = inspect_candidate(trial, for_start=editing)
+    if warnings is not None:
+        warnings.extend(report.get('semantic_warnings',[]))
     if report['errors']:
         raise DraftErrors(report['diagnostics'])
     if not editing:

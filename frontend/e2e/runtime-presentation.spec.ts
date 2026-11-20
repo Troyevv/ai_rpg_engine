@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -36,7 +37,7 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  await page.getByRole('button',{name:'Готово',exact:true}).click();
  await workshopNav(page,'Места и сообщества');
  await page.getByRole('button',{name:'Проживание',exact:true}).click();
- await page.getByLabel('Группировка проживания').selectOption('location');
+ await chooseOption(page.getByLabel('Группировка проживания'), 'location');
  await expect(page.getByRole('heading',{name:'Дом у реки',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Анна → Дом у реки',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Борис → Дом у реки',exact:true})).toBeVisible();

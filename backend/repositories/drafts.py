@@ -21,6 +21,9 @@ def review_metadata(record):
 def review_block(record):
     review=review_metadata(record)
     if not review:return 'Смысловая проверка не выполнена.' if record.get('origin_job') or record.get('generated') else None  # Manual imports retain their technical contract.
+    if review.get('advisory'):
+        if review.get('issues'):return 'В сохранённом мире есть замечания для автора.'
+        return None
     if review.get('status')!='completed':return 'Смысловая проверка не завершена: '+review.get('reason','повторите проверку.')
     if review.get('candidate_hash')!=candidate_hash(record['state']):return 'Смысловая проверка устарела. Повторите проверку.'
     if review.get('issues'):return 'Смысловая проверка обнаружила противоречия. Исправьте их и повторите проверку.'
@@ -52,6 +55,8 @@ class DraftStorage(DraftEditorStorage):
 
     def draft(self,wid,author=False):
         with self.connect() as db:
+            # SSE uses this job status to stop polling. Read its matching head and revision.
+            db.execute('BEGIN')
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
@@ -76,16 +81,30 @@ class DraftStorage(DraftEditorStorage):
                     state,report=inspect_candidate(state,for_start=True)
                 else:report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
+            review_count=0
+            if author and state and not report['errors']:
+                from backend.services.draft_review_actions import findings
+                review_count=len(findings(record,report))
             technical_valid=not report['errors'] if not candidate else not any(e.get('category')!='semantic_completeness' for e in report.get('diagnostics',[]))
             block=(review_block(record) if record else None) or ('Возраст в карточке не совпадает с датой рождения.' if report.get('semantic_warnings') else None)
+            if author and record and record.get('review',{}):
+                from backend.services.draft_review_actions import dismissed_hints
+                dismissed=dismissed_hints(record)
+                report['warnings']=[text for text in report['warnings'] if text not in dismissed]
             if block and author:report['warnings'].append(block)
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
-            latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             quality_status=json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
             if quality_status not in ('running','accepted','partial','rejected','cancelled'):quality_status=None
             if author and quality_status in ('rejected','partial'):
                 report['warnings'].append('Необязательное дополнение не принято или качество не завершено полностью. Проверенные данные сохранены; некоторые поля могут требовать содержательного дополнения.')
             creative_status=json.loads(latest['response_journal'] or '{}').get('creative',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
+            from backend.services.draft_creative import npc_gaps,recoverable
+            creator=latest if latest and latest['kind']=='draft_world' else (db.execute(
+                "SELECT * FROM preparation_jobs WHERE workspace_id=? AND id=? AND kind='draft_world'",
+                (wid,record.get('origin_job'))).fetchone() if record else None)
+            world_journal=json.loads(creator['response_journal'] or '{}') if creator else {}
+            packages=recoverable(world_journal) if creator and latest['status'] not in ('queued','generating') else {}
+            gaps=npc_gaps(raw) if raw and technical_valid and (world_journal.get('creative') or (record.get('generated') and not record.get('origin_job'))) else []
             if author and creative_status=='rejected':
                 report['warnings'].append('Необязательное творческое дополнение отклонено. Исходный мир сохранён и доступен для игры при корректной структуре.')
             if creative_status=='running' and latest['status']!='generating':creative_status='interrupted'
@@ -114,6 +133,13 @@ class DraftStorage(DraftEditorStorage):
             if author and record:
                 from backend.services.draft_review_tracking import fixed_decisions
                 review_decisions+=fixed_decisions(record.get('review_tracking'),candidate_hash(raw))
+            if author and record:
+                review=record.get('review') or {}
+                for outcome in review.get('outcomes',[]):
+                    if outcome['outcome'] in ('fixed','disproved'):
+                        review_decisions.append(dict(issue_id=outcome['issue_id'],signature=review['candidate_hash'],
+                            resolution=outcome['outcome'],message=outcome['message'],reason=outcome['reason'],
+                            paths=outcome['paths'],applies_to_current=review['candidate_hash']==candidate_hash(raw)))
             return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 # Safe lineage metadata: identifies the saved version, never its private content.
                 'version_origin_job_id':record.get('origin_job') if record else None,
@@ -126,10 +152,13 @@ class DraftStorage(DraftEditorStorage):
                 'state':visible,
                 'portraits':self._portrait_view(state,visible,author),
                 'validation':report if author else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':['У автора есть замечания к черновику.'] if report['warnings'] and not (record and (record.get('origin_job') or review_metadata(record))) else []},
-                'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
-                'review_decisions':review_decisions,
+                'review':review_metadata(record) if record and author else ({k:review_metadata(record).get(k) for k in ('status','advisory') if k in review_metadata(record)} if record and review_metadata(record) else None),
+                'review_decisions':review_decisions, 'review_finding_count':review_count,
                 'pending_editor':bool(latest and (json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview' or json.loads(latest['response_journal'] or '{}').get('field_proposal',{}).get('status')=='preview')),
-                'creative_status':creative_status,
+                'can_finish_candidate':bool(candidate and technical_valid and latest and latest['id']==record.get('origin_job') and latest['phase']=='reviewing' and latest['status'] in ('error','stopped')),
+                'has_review_notes':bool(record and (review_metadata(record) or {}).get('issues')),
+                'creative_status':creative_status,'creative_incomplete':bool(gaps),'npc_gaps':gaps if author else [],
+                'creative_job_id':creator['id'] if packages else None,'has_creative_recovery':bool(packages),'creative_packages':[dict(base_hash=k, recovered=world_journal.get('creative_recoveries',{}).get(k)) for k in packages] if author else [],
                 'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
                 'start_block_reason':None,
                 'start_warning':('Согласованность сюжета не подтверждена.' if block else None),
@@ -139,6 +168,83 @@ class DraftStorage(DraftEditorStorage):
                 'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':public_job,'author':author}
 
+    def finish_saved_candidate(self,wid,jid,revision):
+        """Finish a stopped review without spending or declaring its findings resolved."""
+        from backend.services.draft_initial import inspect_candidate
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._draft_workspace(db,wid,idle=True)
+            job=db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1",(wid,)).fetchone()
+            head=self._draft_head(db,wid)
+            record=json.loads(head['content']) if head else {}
+            if not job or jid!=job['id'] or record.get('origin_job')!=jid:
+                raise ValueError('Текущая версия относится к другому заданию.')
+            if job['status']=='saved' and not record.get('candidate'):return
+            self._draft_workspace(db,wid,revision)
+            if not record.get('candidate') or job['status'] not in ('stopped','error') or job['phase']!='reviewing':
+                raise ValueError('Этап недоступен для завершения.')
+            state,report=inspect_candidate(record['state'],for_start=True)
+            if report['errors']:raise ValueError('Сначала исправьте ошибки структуры мира.')
+            self._write_draft(db,wid,state,'finish_saved_candidate',record.get('source',''),record.get('warnings',[]),
+                head['id'],record.get('outline',''),True,review_metadata(record),jid)
+            journal=json.loads(job['response_journal'] or '{}')
+            journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+            db.execute("UPDATE preparation_jobs SET status='saved',phase='saving',revision=?,error='',response_journal=? WHERE id=?",(revision+1,dump(journal),jid))
+
+    def creative_recovery(self, wid, jid, base_hash, *, revision=None, destination=None):
+        """Preview paid text against its own version; a conflict can only fork."""
+        from uuid import uuid4
+        from backend.services import draft_creative, draft_changes
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE' if destination else 'BEGIN')
+            workspace=self._draft_workspace(db,wid,idle=True)
+            job=db.execute("SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=? AND kind='draft_world'",(jid,wid)).fetchone()
+            if not job or job['status'] not in ('saved','error','stopped'):
+                raise ValueError('Сначала дождитесь завершения задания.')
+            journal=json.loads(job['response_journal'] or '{}')
+            options=draft_creative.recoverable(journal)
+            if base_hash not in options:raise ValueError('Сохранённый пакет недоступен.')
+            saved=journal.get('creative_recoveries',{}).get(base_hash)
+            if saved:return saved
+            if destination and workspace['revision']!=revision:raise ValueError('Черновик изменился. Откройте предпросмотр ещё раз.')
+            record=options[base_hash]
+            for row in db.execute("SELECT id,content FROM document_versions WHERE owner=? AND kind='world_draft' ORDER BY id",(wid,)):
+                source=json.loads(row['content'])
+                if source.get('origin_job')==jid and candidate_hash(source['state'])==base_hash:break
+            else:raise ValueError('Исходная версия этого дополнения не найдена. Текущий мир сохранён.')
+            text,normalization=draft_creative.proposal_text(record['current_reply'])
+            trial,proposal=draft_changes.apply_proposal(source['state'],text)
+            head=json.loads(self._draft_head(db,wid)['content'])
+            same=head.get('origin_job')==jid and candidate_hash(head['state'])==base_hash
+            mode='current' if same else 'copy'
+            preview=dict(mode=mode,revision=workspace['revision'],base_version=row['id'],
+                rationale=proposal['rationale'],changes=[c['reason'] for c in proposal['changes']],
+                characters=len(trial['characters']),locations=len(trial['locations']),gaps=draft_creative.npc_gaps(trial))
+            if not destination:return preview
+            if destination!=mode:raise ValueError('Основа изменилась. Откройте предпросмотр ещё раз.')
+            target=wid
+            if not same:
+                target=uuid4().hex
+                db.execute('INSERT INTO preparation_workspaces(id,name) VALUES(?,?)',(target,workspace['name']+' · восстановленная версия'))
+                for kind in ('idea','summary'):self._record_document(db,kind,target,'',False,'created')
+                from backend.services.draft_portraits import handoff_assets
+                handoff_assets(db,wid,target,trial,scope='draft')
+            review=dict(review_metadata(head if same else source) or {},status='stale',reason='Дополнение восстановлено. Сохранённые замечания относятся к прежней версии.')
+            self._write_draft(db,target,trial,'creative_recovery',source.get('source',''),outline=source.get('outline',''),
+                source_id=row['id'],generated=True,origin_job=jid if same else None,review=review)
+            stored=self._draft_head(db,target)
+            outcome=dict(workspace_id=target,version_id=stored['id'],base_version=row['id'],
+                after_hash=candidate_hash(json.loads(stored['content'])['state']),mode=mode,validation_version=draft_creative.VALIDATION_VERSION,normalization=normalization)
+            journal.setdefault('creative_recoveries',{})[base_hash]=outcome
+            journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+            if same:
+                journal['candidate_text']=dump(trial)
+                record.update(status='applied',proposal=proposal,after_hash=outcome['after_hash'],
+                              validation_version=draft_creative.VALIDATION_VERSION,normalization=normalization)
+                db.execute("UPDATE preparation_jobs SET status='saved',phase='saving',error='',revision=? WHERE id=?",(revision+1,jid))
+            db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(dump(journal),jid))
+            return outcome
+
     def finish_field_preview(self,jid,value,warnings):
         """The existing scoped generator prepares a proposal without writing canon."""
         with self.connect() as db:
@@ -147,11 +253,11 @@ class DraftStorage(DraftEditorStorage):
             if not job or job['status']!='generating':return
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);head=self._draft_head(db,job['workspace_id'])
-            if not config.get('_preview_only') or config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
+            if config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
             target=config['_draft_target'];state=json.loads(head['content'])['state'];item=domain.entity(state,target['kind'],target['id'])
             before={key:item.get(key,[] if key=='aliases' else '') for key in ('name','aliases','fields')} if config['_draft_task']=='character' else item.get('fields',{}).get(target['field'][7:]) if target['field'].startswith('fields.') else item.get(target['field'])
             journal=json.loads(job['response_journal'] or '{}')
-            journal['field_proposal']={'status':'preview','base_version':head['id'],'target':target,'before':before,'value':value,'warnings':warnings}
+            journal['field_proposal']={'status':'preview','base_version':head['id'],'base_revision':job['revision'],'target':target,'before':before,'value':value,'warnings':warnings}
             db.execute("UPDATE preparation_jobs SET response_journal=?,status='saved',phase='preview' WHERE id=?",(dump(journal),jid))
 
     def field_proposal(self,wid,jid,author=False):
@@ -163,23 +269,31 @@ class DraftStorage(DraftEditorStorage):
             proposal=json.loads(job['response_journal'] or '{}').get('field_proposal')
             if not proposal:raise ValueError('Предложение ещё не готово.')
             head=self._draft_head(db,wid)
-            return dict(proposal,stale=not head or head['id']!=proposal['base_version'])
+            return dict(proposal,stale=not head or head['id']!=proposal['base_version'] or self._draft_workspace(db,wid,idle=False)['revision']!=proposal.get('base_revision',job['revision']))
 
-    def decide_field_proposal(self,wid,jid,revision,decision,accept_warnings=False):
+    def decide_field_proposal(self,wid,jid,revision,decision,accept_warnings=False,value=None):
         from backend.services.draft_generation import decode_result
         with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+            db.execute('BEGIN IMMEDIATE')
             job=db.execute('SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=?',(jid,wid)).fetchone()
             if not job:raise ValueError('Задание не принадлежит черновику.')
             journal=json.loads(job['response_journal'] or '{}');proposal=journal.get('field_proposal')
+            if proposal and (proposal['status'],decision) in (('accepted','accept'),('rejected','reject')):return
+            self._draft_workspace(db,wid,revision)
             if not proposal or proposal['status']!='preview':raise ValueError('Предложение уже рассмотрено или отсутствует.')
-            if decision=='accept':
+            if decision in ('accept','revise'):
                 head=self._draft_head(db,wid)
-                if not head or head['id']!=proposal['base_version']:raise ValueError('Предложение устарело. Мир изменился.')
+                if not head or head['id']!=proposal['base_version'] or revision!=proposal.get('base_revision',job['revision']):raise ValueError('Предложение устарело. Мир изменился.')
                 record=json.loads(head['content']);config=json.loads(job['config_json'])
-                state=decode_result(dump({'value':proposal['value']}),record['state'],config)
+                state=decode_result(dump({'value':value if decision=='revise' else proposal['value']}),record['state'],config)
                 report=domain.validate(state)
                 if report['errors']:raise ValueError('; '.join(report['errors']))
+                if decision=='revise':
+                    proposal.setdefault('original_value',proposal['value'])
+                    proposal.update(value=value,base_revision=revision+1,warnings=report['warnings'])
+                    db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+                    db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(dump(journal),jid))
+                    return
                 if report['warnings'] and not accept_warnings:raise ValueError('Подтвердите предупреждения перед применением.')
                 review=review_metadata(record)
                 if review:review=dict(review,status='stale',reason='Поле изменено автором.')

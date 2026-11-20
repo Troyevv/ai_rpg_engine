@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import { CommunicationSettings } from "./CommunicationSettings";
 import { WeatherSettings } from "./WeatherSettings";
 import { useEffect, useState, useRef } from "react";
@@ -116,10 +117,10 @@ function Chronology({ save }: { save: Save }) {
       </details>
       <label className="management-field">
         События персонажа
-        <select
+        <Choice
           value={actor}
-          onChange={(e) => {
-            setActor(e.target.value);
+          onValueChange={selectedValue => {
+            setActor(selectedValue);
             setPage(0);
           }}
         >
@@ -129,7 +130,7 @@ function Chronology({ save }: { save: Save }) {
               {c.name}
             </option>
           ))}
-        </select>
+        </Choice>
       </label>
       {error ? (
         <div className="management-state" role="alert">

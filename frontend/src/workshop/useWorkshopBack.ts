@@ -1,3 +1,4 @@
+import {requestId} from '../lib/requestId';
 import {useEffect,useRef} from 'react';
 
 /** Own one same-document Back entry; nested Radix dialogs close from the top. */
@@ -6,7 +7,7 @@ export function useWorkshopBack(onBack?:()=>void){
  useEffect(()=>{
   if(!back.current)return;
   let mounted=true;
-  const key=crypto.randomUUID();
+  const key=requestId();
   // StrictMode's probe must not create or pop a browser history entry.
   queueMicrotask(()=>{if(mounted)history.pushState({...history.state,worldWorkshop:key},'')});
   const pop=(event:PopStateEvent)=>{

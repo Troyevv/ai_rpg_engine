@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {gameAction} from './navigation';
 import {test,expect} from '@playwright/test';
 
@@ -32,7 +33,7 @@ test('209: father can play the delivery scene and advance again', async ({ page,
   async function advance() {
     await gameAction(page, 'Длительный переход');
     const dialog = page.getByRole('dialog').last();
-    await dialog.getByLabel('Единица перехода').selectOption('weeks');
+    await chooseOption(dialog.getByLabel('Единица перехода'), 'weeks');
     await dialog.getByLabel('Количество единиц перехода').fill('2');
     await dialog.getByText(/Подробности симуляции/).click();
     await dialog.getByLabel('Лимит обращений к модели').fill('0');

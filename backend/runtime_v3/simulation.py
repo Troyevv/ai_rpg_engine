@@ -1,4 +1,5 @@
 """Optional background uses exactly the same v3 resolver and current invariants."""
+from backend.services.token_budget import BudgetError, extraction_output, extraction_reserve, preflight_downstream
 from copy import deepcopy
 import json
 from backend.runtime_v3.camera import observe
@@ -44,7 +45,7 @@ def optional_generate(generate):
         import requests
         try:
             yield from generate(*args, **kwargs)
-        except (RuntimeError, OSError, requests.RequestException) as exc:
+        except (RuntimeError, OSError, requests.RequestException, BudgetError) as exc:
             raise BackgroundGenerationError(type(exc).__name__) from exc
     return wrapped
 
@@ -68,7 +69,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
     try:
         accepted, accepted_history = _simulate_candidate(result, history, candidate, batch,
             context_length, config, optional_generate(generate), cancelled, warnings, on_repair, world_history, on_candidate)
-    except (StructuralDeltaError, BackgroundGenerationError) as exc:
+    except (StructuralDeltaError, BackgroundGenerationError, BudgetError) as exc:
         if cancelled.is_set():
             return snapshot, history_batch
         # The independent candidate was never published; keep exactly foreground.
@@ -115,13 +116,19 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
         'elapsed_minutes=0. Не действуй за управляемого персонажа '+str(protected)+'. Не добавляй его в сцену. '
         'Намерение может остаться незавершённым. Не выдумывай события без причины.')
     if batch: instruction+=' Обработай одной группой только причинно обусловленные изменения интервала: '+json.dumps(batch,ensure_ascii=False)+'. Не обязаны завершиться все намерения.'
-    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],extraction_contract=contract_version,prompts=config.get('_prompts'),world_history=world_history)
+    max_input = config.get('_budget_caps', {}).get('max_input')
+    messages=background_context(camera,[],instruction,'background',context_length,config['max_tokens'],max_input=max_input,extraction_contract=contract_version,prompts=config.get('_prompts'),world_history=world_history)
     pacing_decision=messages.selection['pacing']
     initiative_decision=messages.selection['initiative']
     from backend.services.letter_sources import generate_result
+    from context_builder import estimate
+    preflight_downstream(config, lambda reserve: background_context(camera,[],instruction,'background',
+        context_length,reserve,max_input=max_input,extraction_text='',extraction_contract=contract_version,prompts=config.get('_prompts'),
+        world_history=world_history,pacing_decision=pacing_decision,initiative_decision=initiative_decision), 'world_simulation_delta')
     narrative, artifacts = generate_result(generate, 'world_simulation',messages,config['max_tokens'],config.get('temperature',0.8), camera['world_state'])
     if cancelled.is_set():return snapshot,history_batch
     if not narrative.strip():raise BackgroundGenerationError('empty_background')
+    update = extraction_output(config, estimate([{'content':narrative}]))
     feedback=None
     from backend.runtime_v3.scene_repair import SceneCandidate
     semantic_candidate = SceneCandidate(camera['world_state'], narrative, '', state['meta']['turn_id'],
@@ -129,8 +136,8 @@ def _simulate_candidate(snapshot, history_batch, candidate, batch, context_lengt
     for attempt in range(2):
         unavailable = False
         try:
-            messages=background_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
-            payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
+            messages=background_context(camera,[],instruction,'background',context_length,extraction_reserve(config,update),max_input=max_input,extraction_text=narrative,extraction_contract=contract_version,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
+            payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,update,0.1,response_format={'type':'json_object'}))
         except BackgroundGenerationError:
             if contract_version < 10:
                 raise

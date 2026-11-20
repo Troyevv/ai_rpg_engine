@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
   useEffect,
@@ -745,20 +746,20 @@ function SceneEditor({
             </label>
           ))}
           <label>Исправить место отдельного персонажа
-            <select value={movedActor} onChange={e=>setMovedActor(e.target.value)}>
+            <Choice value={movedActor} onValueChange={selectedValue => setMovedActor(selectedValue)}>
               <option value="">Выбрать персонажа</option>
               {save.state.characters.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
-            </select>
+            </Choice>
           </label>
           {movedActor && <label>Местонахождение персонажа
             <Input value={destination} maxLength={200} onChange={e=>setDestination(e.target.value)}/>
           </label>}
           <SocialCorrection state={save.state} value={social} onChange={setSocial}/>
           <label>Исправить знание
-            <select value={factId} onChange={e=>setFactId(e.target.value)}>
+            <Choice value={factId} onValueChange={selectedValue => setFactId(selectedValue)}>
               <option value="">Новое сведение</option>
               {Object.entries(save.state.world?.facts || {}).map(([id,f])=><option value={id} key={id}>{f.text}</option>)}
-            </select>
+            </Choice>
           </label>
           {!factId && <label>Сведение персонажа
             <Input value={fact} maxLength={2000} placeholder="Что именно известно?" onChange={e=>setFact(e.target.value)}/>
@@ -768,9 +769,9 @@ function SceneEditor({
             {save.state.characters.map(c=><label className="check" key={c.id}>
               <input type="checkbox" checked={holders.includes(c.id)} onChange={e=>setHolders(e.target.checked?[...holders,c.id]:holders.filter(id=>id!==c.id))}/>{c.name}
             </label>)}
-            <label>Статус знания <select value={status} onChange={e=>setStatus(e.target.value)}>
+            <label>Статус знания <Choice value={status} onValueChange={selectedValue => setStatus(selectedValue)}>
               <option value="known">Знает</option><option value="suspected">Предполагает</option><option value="refuted">Опровергнуто</option>
-            </select></label>
+            </Choice></label>
           </fieldset>}
           {error && <p role="alert">{error}</p>}
           <div className="actions">

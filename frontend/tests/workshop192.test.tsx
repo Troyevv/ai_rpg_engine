@@ -15,9 +15,9 @@ vi.mock('../src/api',()=>({api:vi.fn(async()=>({entity_id:'created'}))}));
 const roots:Root[]=[];
 async function mount(node:ReactNode){const host=document.createElement('div');document.body.append(host);const root=createRoot(host);roots.push(root);await act(()=>root.render(node));return root}
 const button=(name:string)=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent===name)!;
-async function type(element:HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement,value:string){
- const prototype=element instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:element instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype;
- await act(()=>{Object.getOwnPropertyDescriptor(prototype,'value')!.set!.call(element,value);element.dispatchEvent(new Event(element instanceof HTMLSelectElement?'change':'input',{bubbles:true}))});
+async function type(element:HTMLInputElement|HTMLTextAreaElement,value:string){
+ const prototype=element instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+ await act(()=>{Object.getOwnPropertyDescriptor(prototype,'value')!.set!.call(element,value);element.dispatchEvent(new Event('input',{bubbles:true}))});
 }
 afterEach(async()=>{await act(()=>roots.splice(0).forEach(r=>r.unmount()));sessionStorage.clear();document.body.innerHTML='';vi.clearAllMocks()});
 
@@ -45,9 +45,13 @@ it('opening and cancelling creation never writes; confirmation submits all field
 });
 it('relationship creation keeps selected source and requires an explicit different target',async()=>{
  await mount(<CreateRecordDialog wid="a" target={{kind:'relationship',source:'npc',revision:2}} characters={[{id:'hero',name:'Герой'},{id:'npc',name:'Сосед'}]} facts={[]} onClose={()=>{}} onCreated={async()=>{}}/>);
- const select=document.querySelectorAll('select');expect(select[0].value).toBe('npc');expect(select[1].value).toBe('');expect(button('Создать запись').disabled).toBe(true);
- await type(select[1],'npc');expect(button('Создать запись').disabled).toBe(true);
- await type(select[1],'hero');await act(()=>button('Создать запись').click());
+ const select=document.querySelectorAll<HTMLButtonElement>('button[role=combobox]');expect(select[0].value).toBe('npc');expect(select[1].value).toBe('');expect(button('Создать запись').disabled).toBe(true);
+ const choose=async(value:string)=>{
+   await act(()=>select[1].dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+   await act(()=>document.querySelector<HTMLElement>(`[role=option][data-value="${value}"]`)!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+ };
+ await choose('npc');expect(button('Создать запись').disabled).toBe(true);
+ await choose('hero');await act(()=>button('Создать запись').click());
  expect(api).toHaveBeenCalledWith('/workspaces/a/draft',expect.objectContaining({value:{source_id:'npc',target_id:'hero',context:''}}),'PATCH');
 });
 it('record edits persist an isolated buffer and commit several fields atomically',async()=>{

@@ -1,3 +1,4 @@
+import {chooseOption, openOptions} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {nav,actor,diagnostics} from './navigation';
 
@@ -16,7 +17,7 @@ test('general relationships support CRUD and follow POV without LLM for edits',a
  const panel=page.locator('.inspector-workspace');
  await panel.getByRole('button',{name:'+ Добавить отношение',exact:true}).click();
  const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Отношение персонажа',exact:true})});
- await editor.getByLabel('Персонаж-адресат').selectOption('character_2');
+ await chooseOption(editor.getByLabel('Персонаж-адресат'), 'character_2');
  await editor.getByLabel('Контекст отношения').fill('Саша доверяет другу');
  await editor.getByLabel('Доверие',{exact:true}).fill('55');
  await editor.getByRole('button',{name:'Сохранить',exact:true}).click();
@@ -100,13 +101,12 @@ test('repair reasons and sanitization have separate statistics per selected vari
  });
  await diagnostics(page);const dialog=page.getByRole('dialog');
  await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
- await dialog.getByLabel('Ход диагностики').selectOption('repair-variant');
+ await chooseOption(dialog.getByLabel('Ход диагностики'), 'repair-variant');
  await expect(dialog).toContainText('Причина repair');await expect(dialog).toContainText('StructuralDeltaError');
  await dialog.getByText('Статистика extraction · последние 2 ходов',{exact:true}).click();
  await expect(dialog).toContainText('Repair rate: 50.0%');
  await expect(dialog).toContainText('relationship_dimension_unknown: 1');
- const originalOption=await dialog.getByLabel('Ход диагностики').locator('option').last().getAttribute('value');
- await dialog.getByLabel('Ход диагностики').selectOption(originalOption!);
+ await (await openOptions(dialog.getByLabel('Ход диагностики'))).last().click();
  await expect(dialog).toContainText('Repair: не выполнялся');
  await expect(dialog.getByRole('heading',{name:'Причина repair',exact:true})).toHaveCount(0);
  await expect(dialog.locator('.delta-warnings')).toHaveCount(0);

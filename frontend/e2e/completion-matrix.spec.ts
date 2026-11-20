@@ -1,3 +1,4 @@
+import {chooseOption, openOptions} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {nav,pickCharacter} from './navigation';
 test.use({video:'off'});
@@ -45,11 +46,11 @@ test('T10-T13 separate family, known empty family, secrecy and accessible graph'
  const s=await seed(page,request,'ui-family');const before=await(await request.get(`/api/saves/${s.save}`)).json();
  for(const skin of ['graphite','parchment']){
   await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Родословная');const area=page.locator('.save-workspace');
-  await area.getByLabel('Семья персонажа').selectOption('qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(5);
+  await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(5);
   await expect(area).toContainText('Зоя');
   await page.screenshot({path:info.outputPath(`family-other-${skin}.png`),animations:'disabled'});
   await area.getByText('Доступный список связей',{exact:true}).click();await expect(area.getByRole('button',{name:'Роман Луговой',exact:true})).toBeVisible();
-  await area.getByLabel('Семья персонажа').selectOption('qa_oleg');await expect(area.getByText('Семейные связи не указаны.',{exact:true})).toBeVisible();
+  await chooseOption(area.getByLabel('Семья персонажа'), 'qa_oleg');await expect(area.getByText('Семейные связи не указаны.',{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath(`family-empty-${skin}.png`),animations:'disabled'});
   await page.keyboard.press('Escape');await expect(page.locator('.save-workspace')).toHaveCount(0);
  }
@@ -57,7 +58,7 @@ test('T10-T13 separate family, known empty family, secrecy and accessible graph'
 });
 test('T12 dense family is bounded and can be recentered from accessible list',async({page,request},info)=>{
  await seed(page,request,'ui-family-dense');await page.goto('/');await nav(page,'Родословная');const area=page.locator('.save-workspace');
- const start=Date.now();await area.getByLabel('Семья персонажа').selectOption('qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(80);
+ const start=Date.now();await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(80);
  await expect(area.getByText('Показана часть семьи.',{exact:false})).toBeVisible();
  await (await import('node:fs/promises')).writeFile(info.outputPath('graph-metrics.json'),JSON.stringify({viewport:page.viewportSize(),nodes:80,render_ms:Date.now()-start}));
  await area.getByRole('button',{name:'Увеличить',exact:true}).click();await area.getByRole('button',{name:'Вся семья',exact:true}).click();
@@ -77,11 +78,12 @@ test('T03 T11 contextual date and empty character card open the shared workspace
  await pickCharacter(page,'qa_oleg');
  await page.getByRole('tab',{name:'Семья',exact:true}).click();
  await page.getByRole('button',{name:'Открыть родословную',exact:true}).click();
- await expect(area.getByLabel('Семья персонажа')).toHaveValue('qa_oleg');
+ await expect(area.getByLabel('Семья персонажа')).toHaveJSProperty('value', 'qa_oleg');
  await expect(area.getByText('Семейные связи не указаны.',{exact:true})).toBeVisible();
  await area.getByLabel('Найти персонажа').fill('Зоя');
- await expect(area.getByLabel('Семья персонажа').locator('option')).toHaveCount(2);
- await expect(area.getByLabel('Семья персонажа')).toHaveValue('');
+ await expect(await openOptions(area.getByLabel('Семья персонажа'))).toHaveCount(2);
+ await page.keyboard.press('Escape');
+ await expect(area.getByLabel('Семья персонажа')).toHaveJSProperty('value', '');
  await page.screenshot({path:info.outputPath('empty-card-context-after.png'),animations:'disabled'});
 });
 
@@ -91,7 +93,7 @@ test('public family and birthday directory works without Knowledge or contacts',
  const calendar=await(await request.get(`/api/saves/${s.save}/calendar?start_date=2026-10-01&end_date=2026-10-31`)).json();
  expect(calendar.events.some((e:any)=>e.kind==='birthday'&&e.character_ids.includes('qa_zoya'))).toBe(true);
  await nav(page,'Родословная');const area=page.locator('.save-workspace');
- await area.getByLabel('Семья персонажа').selectOption('qa_zoya');await expect(area.locator('.react-flow__node')).toHaveCount(5);
+ await chooseOption(area.getByLabel('Семья персонажа'), 'qa_zoya');await expect(area.locator('.react-flow__node')).toHaveCount(5);
  await page.screenshot({path:info.outputPath('public-family.png'),animations:'disabled'});
  await page.keyboard.press('Escape');await nav(page,'Календарь');
  await area.getByRole('button',{name:'Год',exact:true}).click();await expect(area.locator('.calendar-mini')).toHaveCount(12);

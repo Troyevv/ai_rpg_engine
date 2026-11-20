@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import {Versions} from "./Versions";
 import {Diagnostics} from "./Diagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -122,10 +123,10 @@ function PreparationWorkspace({
         <Sparkles size={30} className="accent" />
       </div>
       <div className="workspace-bar">
-        <select
+        <Choice
           aria-label="Подготовка"
           value={id}
-          onChange={(e) => setId(e.target.value)}
+          onValueChange={selectedValue => setId(selectedValue)}
         >
           <option value="">Выбрать сценарий</option>
           {list.map((w) => (
@@ -133,7 +134,7 @@ function PreparationWorkspace({
               {w.name}
             </option>
           ))}
-        </select>
+        </Choice>
         <Input
           aria-label="Название сценария"
           value={name}

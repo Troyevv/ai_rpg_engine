@@ -190,13 +190,13 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
     return listing(repo,wid,cid,author=True)
 
 
-def handoff_assets(db,wid,world_id,state):
+def handoff_assets(db,wid,world_id,state,*,scope='world'):
     for actor in state['world']['characters'].values():
         for p in actor.get('portraits',[]):
             aid=p['asset_id']
             if not db.execute("SELECT 1 FROM portrait_asset_access WHERE asset_id=? AND scope='draft' AND owner=?",(aid,wid)).fetchone():
                 raise ValueError('Оригинал портрета недоступен этому черновику. Загрузите изображение заново.')
-            db.execute("INSERT OR IGNORE INTO portrait_asset_access VALUES(?,'world',?)",(aid,str(world_id)))
+            db.execute("INSERT OR IGNORE INTO portrait_asset_access VALUES(?,?,?)",(aid,scope,str(world_id)))
 
 
 def export_assets(repo,wid,state):

@@ -71,7 +71,7 @@ def test_optional_creative_rejection_finishes_valid_world_with_warnings(api):
     assert result.status_code==200,result.text
 
 
-def test_new_duplicate_diagnostic_updates_second_repair_scope_atomically(api):
+def test_new_duplicate_diagnostic_updates_second_repair_scope_atomically(archived_world_review,api):
     from backend.services import draft_completeness
     client,app=api;state=rich();cid=state['characters'][1]['id']
     state['world']['knowledge']={'original':dict(actor_id=cid,fact_id='ownership',status='known',evidence='Original'), 'unresolved':dict(actor_id='missing',fact_id='ownership',status='known',evidence='Different')}

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav,pickCharacter} from './navigation';
@@ -20,7 +21,7 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  const editor=async()=>{await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click()};
  await editor();
  const frame=page.getByLabel('Основа тела'),beard=page.getByLabel('Растительность на лице');
- await expect(frame).toHaveValue('');
+ await expect(frame).toHaveJSProperty('value', '');
  const preview=page.locator('.portrait-comparison figure').last().locator('img');
  const pixels=async()=>preview.evaluate(async(element:HTMLImageElement)=>{
   await element.decode();
@@ -28,24 +29,24 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
   c.getContext('2d')!.drawImage(element,0,0,c.width,c.height);return c.toDataURL();
  });
  const bodies=new Set<string>();
- for(const id of ['female','neutral','male']){await frame.selectOption(id);bodies.add(await pixels())}
+ for(const id of ['female','neutral','male']){await chooseOption(frame, id);bodies.add(await pixels())}
  expect(bodies.size).toBe(3);
  const faces=new Set<string>();
- for(const id of ['clean_shaven','stubble','mustache','short_beard','full_beard']){await beard.selectOption(id);faces.add(await pixels())}
+ for(const id of ['clean_shaven','stubble','mustache','short_beard','full_beard']){await chooseOption(beard, id);faces.add(await pixels())}
  expect(faces.size).toBe(5);
- await page.getByLabel('Визуальный возраст',{exact:true}).selectOption('child');await expect(beard).toHaveCount(0);
- await page.getByLabel('Визуальный возраст',{exact:true}).selectOption('elderly');await expect(beard).toHaveValue('clean_shaven');
- await beard.selectOption('full_beard');await page.getByRole('combobox',{name:'Цвет волос',exact:true}).selectOption('5');
+ await chooseOption(page.getByLabel('Визуальный возраст',{exact:true}), 'child');await expect(beard).toHaveCount(0);
+ await chooseOption(page.getByLabel('Визуальный возраст',{exact:true}), 'elderly');await expect(beard).toHaveJSProperty('value', 'clean_shaven');
+ await chooseOption(beard, 'full_beard');await chooseOption(page.getByRole('combobox',{name:'Цвет волос',exact:true}), '5');
  const saved=await preview.getAttribute('src');
  await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
- await editor();await expect(frame).toHaveValue('male');await expect(beard).toHaveValue('full_beard');
+ await editor();await expect(frame).toHaveJSProperty('value', 'male');await expect(beard).toHaveJSProperty('value', 'full_beard');
  await page.keyboard.press('Escape');await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'Готово',exact:true}).click();
  const mobile=info.project.name==='mobile';
  for(const theme of themes){
   if(mobile)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
   await page.locator(mobile?'.ww-menu-dialog':'.ww-sidebar').getByRole('button',{name:'Оформление',exact:true}).click();
-  await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(theme.id);
+  await chooseOption(page.getByRole('combobox',{name:'Тема мира',exact:true}), theme.id);
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme.id);
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской'})).toHaveCount(0);
   if(mobile){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0)}

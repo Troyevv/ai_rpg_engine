@@ -1,3 +1,4 @@
+import { Choice } from "@/components/ui/choice";
 import type {ReactNode} from 'react';
 import {SectionTabs} from "./components/ui/section-tabs";
 import {useEffect,useState} from "react";
@@ -12,7 +13,7 @@ export interface RequestRecord {
  input_tokens:number|null; output_tokens:number|null; cached_input_tokens:number|null; cost_usd:string|null;
  response_text?:string|null; duration?:number|null; finish_reason?:string|null; max_tokens?:number|null;
  pricing:{version:string;period?:string}|null;
- diagnostics:{provider_error?:Record<string,unknown>;selection?:{pacing?:Record<string,unknown>;mode:string;characters:Record<string,number>;character_total:number;character_included?:Record<string,number>;knowledge?:Record<string,number>;semantic?:Record<string,unknown>;entities?:{entity_type:string;entity_id:string;semantic_similarity:number|null;selection_reasons:string[];selected:boolean;included:boolean}[];sections:Record<string,{selected:number;included?:number;total:number}>;narrative_continuity:number;previous_player_inputs:number;target_context_budget:number;hard_context_limit:number;target_exceeded:boolean}|null;estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
+ diagnostics:{budget_plan?:{reasoning_reserve:number;requested_detail:string|null;effective_detail:string|null;reasons:string[];input_target:number;budget_mode:string;visible_target:number|null;output_allowance:number;safety_margin:number;capabilities:{source?:string};estimate_method:string;policy_version:number};provider_error?:Record<string,unknown>;selection?:{pacing?:Record<string,unknown>;mode:string;characters:Record<string,number>;character_total:number;character_included?:Record<string,number>;knowledge?:Record<string,number>;semantic?:Record<string,unknown>;entities?:{entity_type:string;entity_id:string;semantic_similarity:number|null;selection_reasons:string[];selected:boolean;included:boolean}[];sections:Record<string,{selected:number;included?:number;total:number}>;narrative_continuity:number;previous_player_inputs:number;target_context_budget:number;hard_context_limit:number;target_exceeded:boolean}|null;estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
  messages:{role:string;content:string}[];
 }
 interface Total {cost_usd:string;unknown_requests:number;input_tokens:number;output_tokens:number;cached_input_tokens:number}
@@ -59,7 +60,7 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
   <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'},...(historyTools?[{id:'history',label:'История и восстановление'}]:[])]}/>
   <Button variant="outline" disabled={busy} onClick={()=>void load()}>Обновить</Button>
   {!!data?.history_audit?.length&&<details className="delta-warnings"><summary>Аудит истории · ⚠ {data.history_audit.length}</summary><p>Исторические сведения неполны. Текущее состояние и сохранённые знания не отменены.</p>{data.history_audit.map((w,i)=><p key={i}><code>{w.section} · {w.code}</code><br/>{w.reason}</p>)}</details>}
-  {turns.length>0&&<label>Ход<select aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onChange={e=>{setTurnId(e.target.value);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</select></label>}
+  {turns.length>0&&<label>Ход<Choice aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onValueChange={selectedValue => {setTurnId(selectedValue);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</Choice></label>}
   <div role="tabpanel" id="diagnostic-panel" aria-labelledby={`diagnostic-panel-tab-${tab}`}>
   {tab==='history'&&historyTools}
   {tab==='performance'&&<>
@@ -81,11 +82,12 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
    <details><summary>Расходы отдельных LLM requests</summary>{filtered.map(r=><div key={r.id}><p>{stages[r.stage]||r.stage} · {r.model} · {money(r.cost_usd)}</p><small>Input {r.input_tokens??'—'} · Output {r.output_tokens??'—'} · Cache {r.cached_input_tokens??'—'}</small></div>)}</details>
   </>}
   {tab==='context'&&<>
-   <label>Запрос<select aria-label="Запрос диагностики" value={request?.id||''} onChange={e=>setSelected(e.target.value)}>{filtered.map(r=><option key={r.id} value={r.id}>{r.created_at} · {stages[r.stage]||r.stage} · {r.model}</option>)}</select></label>
+   <label>Запрос<Choice aria-label="Запрос диагностики" value={request?.id||''} onValueChange={selectedValue => setSelected(selectedValue)}>{filtered.map(r=><option key={r.id} value={r.id}>{r.created_at} · {stages[r.stage]||r.stage} · {r.model}</option>)}</Choice></label>
    {!request&&<p className="muted">Запросов пока нет. У старых ходов usage и точный контекст не восстанавливаются задним числом.</p>}
    {request&&<>
     <p>{stages[request.stage]||request.stage} · {request.provider} / {request.model} · {request.status}</p>
     <RequestTotals rows={[request]}/>
+    {request.diagnostics.budget_plan && <p className="muted small">Бюджет · {request.diagnostics.budget_plan.budget_mode==='auto'?'автоматический':'ручной'} · {request.diagnostics.budget_plan.capabilities.source} · {request.diagnostics.budget_plan.estimate_method} · резерв {request.diagnostics.budget_plan.safety_margin} · Thinking {request.diagnostics.budget_plan.reasoning_reserve}{request.diagnostics.budget_plan.visible_target ? ` · ориентир прозы ≈${request.diagnostics.budget_plan.visible_target}` : ''} · {request.diagnostics.budget_plan.reasons.join(', ')}</p>}
     <p className="muted small">Контекст: ≈{request.diagnostics.estimated_tokens} токенов · max_tokens: {request.max_tokens??'—'} · Finish: {request.finish_reason??'—'} · Время: {request.duration==null?'—':request.duration.toFixed(1)+' с'} · Thinking: {request.thinking}</p>
     <p className="muted small">Тариф: {request.pricing?.version||'неизвестен'} {request.pricing?.period||''}. {request.diagnostics.token_method||'Размер контекста оценочный; usage API выше — фактический.'}</p>
     {request.diagnostics.selection&&<section aria-label="Context Selection"><h4>Context Selection · {request.diagnostics.selection.mode}</h4>

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
 
@@ -155,7 +156,7 @@ test("group membership and protagonist-owned contacts", async ({
   ).toBeVisible();
   await dialog.getByRole("button",{name:"Свернуть телефон"}).click();
   await gameAction(page,'Сменить главного героя');
-  await page.getByRole("dialog").getByLabel("Новый главный герой").selectOption("qa_vera");
+  await chooseOption(page.getByRole("dialog").getByLabel("Новый главный герой"), "qa_vera");
   await page.getByRole("dialog").getByRole("button", { name: "Проверить и посмотреть" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Подтвердить смену" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();

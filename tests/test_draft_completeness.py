@@ -154,7 +154,7 @@ def test_bad_cross_references_have_exact_repair_paths(section,key,field,value):
     assert any(e['path'].startswith(f'/world/{section}/{key}/{field}') for e in exc.value.errors)
 
 
-def test_real_response_review_repair_start_turn_reload(api):
+def test_real_response_review_repair_start_turn_reload(archived_world_review,api):
     client,app=api;workspace=client.post('/api/workspaces',json={'name':'Real Volkov response'}).json()
     path=f"/api/workspaces/{workspace['id']}/draft";calls=[];reviews=[]
     @accept_creative_unchecked
@@ -193,7 +193,7 @@ def test_real_response_review_repair_start_turn_reload(api):
         assert len(world['roles'])==5 and len(world['organizations'])==6
 
 
-def test_unresolved_semantics_require_warning_ack_and_repair_budget_is_shared(tmp_path):
+def test_unresolved_semantics_require_warning_ack_and_repair_budget_is_shared(archived_world_review,tmp_path):
     repo=Repository(tmp_path/'fail.sqlite');w=repo.create_workspace('semantic failure')
     cfg=dict(REMOTE,context_length=65536,_draft_task='world',_draft_input=DINNER,_use_idea=False)
     jid=repo.begin_preparation(w['id'],'draft_world',DINNER,cfg,0);cfg=json.loads(repo.preparation_job(jid)['config_json']);calls=[]

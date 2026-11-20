@@ -44,9 +44,9 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await page.reload();await nav(page,'Создать');
   await workshopNav(page,'Проверка мира');
   await expect(page.getByRole('heading',{name:'Смысловая проверка не завершена'})).toBeVisible();
-  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
-  await expect(page.getByRole('status',{name:'Ход проверки мира'})).toHaveCount(0);await workshopNav(page,'Обзор мира');await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
-  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Повторить проверку',exact:true})).toHaveCount(0);
+  await workshopNav(page,'Обзор мира');
+  await page.getByRole('button',{name:/^(Подтвердить мир и начать игру|Начать с предупреждениями)$/}).click();
   await confirmWorkshopStart(page);
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();

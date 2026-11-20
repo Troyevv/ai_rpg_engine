@@ -1,3 +1,4 @@
+import {requestId} from './lib/requestId';
 import "./styles/current-game.css";
 import {observeStorySnapshot} from "./lib/storyPresentation";
 import {ThemeProvider, useTheme} from "./ThemeProvider";
@@ -29,6 +30,10 @@ import type {ChatSource} from "./chatTypes";
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
 const GameCalendar=lazy(()=>import('./GameCalendar').then(m=>({default:m.GameCalendar})));
 const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
+function restoreModel(initial: Preferences["game"], saved?: Preferences["game"]) {
+  return saved ? {...initial, ...saved, auto_context:saved.auto_context, budget_mode:saved.budget_mode} : initial;
+}
+
 export default function App() {
   const [chatOpen,setChatOpen]=useState(()=>localStorage.getItem("active-mode")==="chat");
   const [chatSource,setChatSource]=useState<ChatSource|undefined>();
@@ -132,18 +137,14 @@ export default function App() {
   const [profile] = useState(() => {
     let p = localStorage.getItem("profile");
     if (!p) {
-      p =
-        crypto.randomUUID?.() ??
-        Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
-          b.toString(16).padStart(2, "0"),
-        ).join("");
+      p = requestId();
       localStorage.setItem("profile", p);
     }
     return p;
   });
   useEffect(() => {
     api<Partial<Preferences>>(`/settings/${profile}`)
-      .then((p) => setPrefs({ ...defaults, ...p, idea:{...defaults.idea,...p.idea}, summary:{...defaults.summary,...p.summary}, game:{...defaults.game,...p.game} }))
+      .then((p) => setPrefs({ ...defaults, ...p, idea:restoreModel(defaults.idea,p.idea), summary:restoreModel(defaults.summary,p.summary), game:restoreModel(defaults.game,p.game) }))
       .catch((e) => toast.error(e.message))
       .finally(()=>setPrefsLoading(false));
   }, [profile]);

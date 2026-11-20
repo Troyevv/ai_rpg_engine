@@ -99,7 +99,7 @@ def test_http_retry_releases_reservation_under_tight_budget(code):
     assert journal['http_failures'][0]['reservation_released']
 
 
-def test_full_volkov_failed_review_resume_edit_play_reload(api):
+def test_full_volkov_failed_review_resume_edit_play_reload(archived_world_review,api):
     client,app=api
     wid=client.post('/api/workspaces',json={'name':'Protocol recovery'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     calls=[];bad={'issues':[{'path':'/world/world/roles/new_role','message':'Профессия должна быть канонической'}]}
@@ -202,7 +202,7 @@ def test_legacy_failed_job_and_late_worker_cannot_overwrite_resume(tmp_path):
     assert repo.preparation_job(jid)['status']=='saved'
 
 
-def test_report_repair_keeps_valid_sibling_and_malformed_patch_feedback(api):
+def test_report_repair_keeps_valid_sibling_and_malformed_patch_feedback(archived_world_review,api):
     client,app=api;wid=client.post('/api/workspaces',json={'name':'Mixed report'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     calls=[];state=rich()
     good={'path':'/campaign/title','message':'Название противоречит замыслу'}

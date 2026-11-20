@@ -126,7 +126,7 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('visual_field_facts','genre','weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('visual_field_facts','narrative_detail','genre','weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
         weather=weather_at(state),
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: deepcopy(state['locations'][lid]) for lid in scope.location_ids},
@@ -721,9 +721,12 @@ def actor_knowledge(state, scope, current):
     return [k for k in current['knowledge'] if k['actor_id'] in active and k['actor_id'] != scope.controlled_actor_id]
 
 
+from backend.services.token_budget import INPUT_TARGET
+
+
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False):
+                  target_context_budget=INPUT_TARGET, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=EXTRACTION_VERSION, suggestions=(), public_observation=False, max_input=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:
@@ -1048,6 +1051,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         rules += '\n' + repair_intro + '\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
+    if not builder.extraction:
+        from backend.services.token_budget import prose_guidance
+        rules += '\n' + prose_guidance(state['meta'].get('narrative_detail', 'balanced'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
     current_input = dict(kind=kind, player_input=user_text)
     if reply_format:
@@ -1062,6 +1068,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         letter_context_index = len(messages)
         messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
+    if max_input is not None:
+        hard_context_limit = min(hard_context_limit, max_input - 256)
     target = min(target_context_budget, hard_context_limit)
     if builder.extraction and not validation_feedback:
         # Leave soft headroom for the previous JSON plus diagnostic feedback.

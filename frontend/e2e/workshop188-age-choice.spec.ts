@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect,type Locator,type Page} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -61,11 +62,11 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  await page.getByRole('button',{name:'Список',exact:true}).click();await fullArt(page,card);
  await card.click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
  await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
- const selector=page.getByLabel('Визуальный возраст',{exact:true});await expect(selector).toHaveValue('auto');
+ const selector=page.getByLabel('Визуальный возраст',{exact:true});await expect(selector).toHaveJSProperty('value', 'auto');
  await expect(page.locator('.portrait-age-reference')).toContainText('24 года · Молодой взрослый');
  const previews=new Map<string,string>();
  for(const age of ['infant','child','adolescent','young_adult','mature_adult','elderly']){
-  await selector.selectOption(age);
+  await chooseOption(selector, age);
   const preview=page.locator('.portrait-comparison figure').last();
   const src=(await preview.locator('img').getAttribute('src'))!;previews.set(age,src);
   await preview.locator('img').evaluate(async e=>{await (e as HTMLImageElement).decode()});
@@ -74,22 +75,22 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  expect(new Set(previews.values()).size).toBe(6);
  await page.locator('.portrait-age-reference').scrollIntoViewIfNeeded();
  await page.locator('.portrait-dialog').screenshot({path:info.outputPath(`anna-age-editor-${info.project.name}.png`),animations:'disabled'});
- await page.getByLabel('Предпочтение',{exact:true}).selectOption('procedural');
+ await chooseOption(page.getByLabel('Предпочтение',{exact:true}), 'procedural');
  await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();
  await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  const elderly=previews.get('elderly')!;
  await expect(page.locator('.ww-dossier-aside>.portrait-control .procedural-portrait')).toHaveAttribute('src',elderly);
  await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');await card.click();
  await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
- await expect(selector).toHaveValue('elderly');
- await page.getByRole('button',{name:'Вернуть возраст по персонажу',exact:true}).click();await expect(selector).toHaveValue('auto');
+ await expect(selector).toHaveJSProperty('value', 'elderly');
+ await page.getByRole('button',{name:'Вернуть возраст по персонажу',exact:true}).click();await expect(selector).toHaveJSProperty('value', 'auto');
  await expect(page.locator('.portrait-comparison figure').last().locator('img')).toHaveAttribute('src',previews.get('young_adult')!);
  await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  const persisted=await(await request.get(url+`/characters/${cid}/portraits?author=true`)).json();
  expect(persisted.descriptor.visual_age_mode).toBe('auto');expect(persisted.descriptor.visual_age).toBe('young_adult');
  // Persist a manual minor category on an adult, then start the real Runtime.
  await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
- await selector.selectOption('infant');await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
+ await chooseOption(selector, 'infant');await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'Готово',exact:true}).click();
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);

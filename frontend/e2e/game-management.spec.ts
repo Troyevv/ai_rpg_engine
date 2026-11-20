@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import { test, expect } from "@playwright/test";
 import { gameAction, nav } from "./navigation";
 
@@ -124,7 +125,7 @@ test("chronology uses visible projection, handles errors, groups dates and expan
   await expect(page.locator(".management-timeline article p")).toHaveText(
     text.trim(),
   );
-  await page.getByLabel("События персонажа").selectOption({ index: 1 });
+  await chooseOption(page.getByLabel("События персонажа"), { index: 1 });
   await expect(page.locator(".management-timeline article")).toHaveCount(1);
 });
 
@@ -146,7 +147,7 @@ test("advance invalidates stale preview and preserves request after launch error
   await expect(submit).toBeEnabled();
   await dialog.getByText(/Подробности симуляции/).click();
   await dialog.getByLabel("Лимит обращений к модели").fill("0");
-  await dialog.getByLabel("Единица перехода").selectOption("weeks");
+  await chooseOption(dialog.getByLabel("Единица перехода"), "weeks");
   await dialog.getByLabel("Количество единиц перехода").fill("");
   await expect(submit).toBeDisabled();
   await dialog.getByLabel("Количество единиц перехода").fill("2");
@@ -210,7 +211,7 @@ test("ordinary time skip commits and remains independent of long-term advance", 
   await expect(page.getByRole("alert")).toContainText(
     "Для месяцев и лет нужна установленная дата календаря",
   );
-  await page.getByLabel("Единица перехода").selectOption("weeks");
+  await chooseOption(page.getByLabel("Единица перехода"), "weeks");
   await expect(page.getByRole("alert")).toContainText(
     "До 7 суток используй обычный пропуск времени",
   );

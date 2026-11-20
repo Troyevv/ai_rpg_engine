@@ -26,6 +26,7 @@ def install(app, repo):
         meta=snapshot['world_state']['meta']
         current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference')}
         # Form projection only: reads must not materialize neutral policy in canon.
+        current['narrative_detail']=meta.get('narrative_detail','balanced')
         current['genre']=meta.get('genre') or GenreConfig().model_dump()
         return dict(current=current,
             pacing_presets={k:NarrativePacingProfile(preset=k).model_dump() for k in PACING_PRESETS},
@@ -34,5 +35,5 @@ def install(app, repo):
 
     @app.put('/api/saves/{sid}/narrative-policy')
     def set_policy(sid: int, body: PolicyUpdate):
-        repo.update_narrative_policy(sid,body.revision,body.model_dump(exclude={'revision'} | ({'genre'} if 'genre' not in body.model_fields_set else set())))
+        repo.update_narrative_policy(sid,body.revision,body.model_dump(exclude={'revision'},exclude_unset=True))
         return repo.get_save(sid)

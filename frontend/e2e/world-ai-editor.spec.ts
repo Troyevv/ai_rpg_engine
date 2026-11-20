@@ -176,7 +176,7 @@ test('AI editor refuses dangling locations and archived NPC references without m
  const editor=page.locator('.world-ai-editor');await request.post('/test/editor173/release');
  for(const instruction of ['DELETE184_LOCATION','DELETE184_HISTORY']){
   await editor.getByLabel('Что изменить в мире?').fill(instruction);await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
-  await expect(editor.getByRole('heading',{name:'Запрос прерван',exact:true})).toBeVisible();
+  await expect(editor.getByRole('heading',{name:'Не удалось применить',exact:true})).toBeVisible();
   await expect(editor.getByRole('alert')).toContainText('всё ещё связана');
   await expect(editor.getByRole('button',{name:'Применить пакет…'})).toHaveCount(0);
   const current=await(await request.get(url+'?author=true')).json();

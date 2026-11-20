@@ -175,7 +175,7 @@ def test_whole_card_preview_preserves_identity_and_requires_decision(api):
     assert final['state']['world']==before['state']['world']
     result=next(c for c in final['state']['characters'] if c['id']==cid)
     assert result==dict(card,**proposed);assert len(calls)==1;assert not final['pending_editor']
-    assert client.post(endpoint,json={'revision':final['revision'],'decision':'accept','accept_warnings':True}).status_code==409
+    assert client.post(endpoint,json={'revision':before['revision'],'decision':'accept','accept_warnings':True}).json()['version_id']==final['version_id']
 
 
 def test_event_periods_use_world_day_and_preserve_unknown_dates():
@@ -288,3 +288,31 @@ def test_launch_labels_do_not_expose_hidden_names_or_confuse_subject_with_pov():
     assert view['pov']=='Скрытый персонаж' and view['subject']=='Фокус' and view['controlled_actor']=='Игрок'
     state['camera'].pop('pov_actor_id')
     assert launch_view(state,visible)['pov']=='Игрок'
+
+
+def test_paid_field_preview_recovers_offline_and_fences_old_values(api):
+    client,app=api
+    repo=app.state.repository
+    wid,url,before=imported(client)
+    cid=before['state']['characters'][0]['id']
+    def answer(**kwargs):
+        yield json.dumps({'value':'Первое предложение.'})
+    with patch('backend.services.preparation.chat_stream',side_effect=answer) as transport:
+        with patch.object(repo,'finish_field_preview',side_effect=RuntimeError('crash after paid response')):
+            job=client.post(url+'/generate',json=dict(revision=before['revision'],task='field',kind='character',
+                entity_id=cid,field='fields.Характер',config=dict(REMOTE,context_length=131072,max_tokens=4000),api_key='offline')).json()
+            assert wait_job(client,job['id'])['status']=='error'
+        with patch('backend.services.preparation.deepseek_key',side_effect=AssertionError('no key')), \
+             patch('backend.services.token_budget.prepare',side_effect=AssertionError('no preflight')):
+            recovered=client.post(url+'/resume',json=dict(revision=before['revision']))
+            assert recovered.is_success,recovered.text
+            assert wait_job(client,job['id'])['status']=='saved'
+        route=url+'/field-proposals/'+job['id']
+        adjusted=client.post(route,json=dict(revision=before['revision'],decision='revise',value='Выбор автора.'))
+        assert adjusted.is_success,adjusted.text
+        assert adjusted.json()['state']==before['state']
+        assert not client.post(route,json=dict(revision=before['revision'],decision='accept')).is_success
+        published=client.post(route,json=dict(revision=adjusted.json()['revision'],decision='accept',accept_warnings=True))
+        assert published.json()['state']['characters'][0]['fields']['Характер']=='Выбор автора.'
+        assert client.get(route+'?author=true').json()['original_value']=='Первое предложение.'
+        assert transport.call_count==1

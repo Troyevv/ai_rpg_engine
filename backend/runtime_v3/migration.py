@@ -43,7 +43,7 @@ def migrate_v2(original):
     world = old.get('world') or {}
     if world.get('version') != 2:
         if isinstance(original.get('scene'),str) and not original.get('world') and not original.get('characters'):
-            state=WorldStateV3(camera=dict(mode='observer',situation=original['scene']),characters={}).model_dump()
+            state=WorldStateV3(camera=dict(mode='observer',situation=original['scene']),characters={}).model_dump(exclude={'meta': {'narrative_detail'}})
             history=WorldHistoryV3();history.legacy.append(deepcopy(original))
             return MigrationResult(dict(schema_version=3,world_state=state,character_cards=[],campaign={'incomplete_import':True},memory={},history_head=None),history.to_dict(),[dict(section='migration',reason='неполное древнее сохранение: текст сохранён, требуется подготовка персонажей')])
         fatal('невозможно мигрировать неполное сохранение', 'migration_invalid')
@@ -119,7 +119,7 @@ def migrate_v2(original):
     state = WorldStateV3(camera=dict(location_id=camera_location, present_character_ids=present,
         controlled_actor_id=actor, subject_id=old.get('camera',{}).get('subject_id'),
         pov_actor_id=old.get('camera',{}).get('pov_actor_id'), mode=mode, situation=old.get('scene', '')), characters=actors,
-        locations=locations, meta=dict(schema_version=3, turn_id=0, world_time=current_time(old))).model_dump()
+        locations=locations, meta=dict(schema_version=3, turn_id=0, world_time=current_time(old))).model_dump(exclude={'meta': {'narrative_detail'}})
     from backend.runtime_v3.appearance import VISUAL_FIELDS
     bindings = {cid:{key:list(ids) for key,ids in fields.items() if key in VISUAL_FIELDS and ids}
                 for cid,fields in old.get('card_field_facts', {}).items() if cid in actors}
@@ -192,6 +192,8 @@ def migrate_v2(original):
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(old['creation_settings'])
         state['meta']['narrative_pacing']=settings.narrative_pacing.model_dump()
+        if 'narrative_detail' in old['creation_settings']:
+            state['meta']['narrative_detail'] = settings.narrative_detail
         state['meta']['narrative_risk']=settings.narrative_risk.model_dump()
         state['meta']['npc_expressiveness']=settings.npc_expressiveness
     initialize_calendar(state)

@@ -199,6 +199,8 @@ def _generate(repo, sid, cid, *, field, revision, review_revision, config, api_k
         'Отсутствие сведений не означает отсутствия свойства; suspected остаётся предположением. '
         'Не генерируй другие поля.'), dict(role='user', content=json.dumps(dict(
             field=field, draft=record['card'], context=npc_context), ensure_ascii=False))]
+    from backend.services.token_budget import prepare
+    config = prepare(config, 'npc_card_field', api_key=api_key)
     budget = config['max_tokens']
     if estimate(messages) + budget > config['context_length']: raise ValueError('Недостаточно контекста для генерации поля.')
     class Accounting:

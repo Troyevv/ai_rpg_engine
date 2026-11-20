@@ -20,6 +20,11 @@ test(`recorded sister ${cid}: unchanged draft, preview, confirmation and Runtime
  await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');
  await editor.getByLabel('Что изменить в мире?').fill(instruction);await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
+ if(cid==='vera'){
+  await expect(editor.getByRole('heading',{name:'Не удалось применить'})).toBeVisible();
+  await expect(editor.getByRole('alert')).toContainText('/sections/relationships');
+  await editor.getByRole('button',{name:'Исключить указанные операции и проверить'}).click();
+ }
  await expect(editor.getByRole('heading',{name:'Ожидает решения',exact:true})).toBeVisible();
  await expect(editor.getByRole('button',{name:'Применить пакет…',exact:true})).toBeEnabled();
  const preview=await(await request.get(url+'/edits?author=true')).json();expect(preview.edits[0].proposal.changes).toHaveLength(cid==='vera'?15:13);

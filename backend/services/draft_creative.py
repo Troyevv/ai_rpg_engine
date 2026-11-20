@@ -4,17 +4,28 @@ from backend.repositories.drafts import candidate_hash
 from backend.services.draft_changes import Proposal, apply_proposal
 from backend.services.draft_initial import prompt_schema
 
-VALIDATION_VERSION = 2
+VALIDATION_VERSION = 3
+
+
+def proposal_text(reply):
+    """Accept one complete object plus one redundant outer brace from continuation."""
+    from backend.services.draft_response import strict_loads
+    try:
+        strict_loads(reply)
+    except json.JSONDecodeError as exc:
+        if exc.msg != 'Extra data' or reply[exc.pos:].strip() != '}':
+            raise
+        prefix = reply[:exc.pos]
+        if not isinstance(strict_loads(prefix), dict):
+            raise
+        return prefix, 'extra_outer_brace'
+    return reply, None
 
 MARKER = 'Творческое развитие начального мира / v1.'
-RULES = '''Идея автора — творческий бриф, не исчерпывающая спецификация. Развей
-неописанные стороны мира свободно, связно и художественно: людей, их прошлое,
-семьи, отношения, места, организации, экономику, повседневность, конфликты,
-тайны, события и открытые сюжетные линии. Это направления возможностей,
-не обязательный набор: никаких квот, шаблонных травм, обязательных секретов
-или заполнения всего ради количества. Создавай причинные связи и возможности
-будущей игры; не пересказывай уже хорошие фрагменты. Новые сущности разрешены.
-Явные факты, ограничения и намеренная неизвестность автора приоритетны.
+RULES = '''Развивай мир свободно по замыслу автора. Сначала раскрой исходных NPC
+(original_npc_gaps), свяжи их с миром, затем добавляй полезные лица, места и линии.
+Масштаб — ориентир. Не требуй тайны, травмы или романтики. Уважай заданные факты,
+намеренную неизвестность и различия в знаниях персонажей.
 Сохраняй эпоху, технологии, географию и календарь. Не подменяй неизвестность
 знанием, предысторию будущим событием, приглашение согласием. Не назначай
 управляемому персонажу намерения, чувства, решения и обязательства. Его
@@ -32,7 +43,7 @@ birth_provenance, birth_date_provenance из кандидата в новые з
 скопируй точно. Для новых карточек/мест op=add path=/characters/- или
 /locations/-. Для новых записей op=add path=/world/<section>/<новый ID>.
 Зависимые записи добавляй в том же пакете: ссылки проверяются после всех
-изменений. Существующие записи меняй по полям op=replace (op=add только для
+изменений. Для существующих карточек используй стабильный ID: /characters/<id>/fields/Внешность или /locations/<id>/text. Существующие записи меняй по полям op=replace (op=add только для
 отсутствующего поля), списки заменяй целиком. Не удаляй существующие сущности.
 reason объясняет художественную связь изменения с миром, а не выдаёт вымысел
 за факт автора. rationale объясняет замысел пакета. Если мир уже развит и
@@ -45,15 +56,31 @@ def creative_schema():
     return compact_schema(prompt_schema())
 
 
+def npc_gaps(state):
+    from backend.services.draft_quality import minimum
+    result = {}
+    for finding in minimum(state, '', creative=True):
+        _, _, index, _, field = finding['path'].split('/')
+        card = state['characters'][int(index)]
+        result.setdefault(card['id'], dict(id=card['id'],name=card['name'],fields=[]))['fields'].append(field)
+    return list(result.values())
+
+
 def messages(state, author_context):
     # Entire canonical content, no clipping, retrieval sampling, or second canon.
     # Transport preflight refuses contexts that cannot fit it before spending.
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
     return [dict(role='system', content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user', content=json.dumps(dict(
-                author_context=author_context, candidate={k:state[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
+                author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:state[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
                 candidate_hash=candidate_hash(state), world_schema=creative_schema(),
                 response_schema=Proposal.model_json_schema()), ensure_ascii=False, separators=(',', ':')))]
+
+
+def recoverable(journal):
+    records=[*journal.get('creative_history',[]),journal.get('creative') or {}]
+    return {r['before_hash']:r for r in records if r.get('before_hash') and r.get('current_reply')
+            and (r.get('status')=='rejected' or r['before_hash'] in journal.get('creative_recoveries',{}))}
 
 
 def response_slot(journal, record, request_key):
@@ -83,6 +110,10 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return state  # Manual edits/repair/resume never trigger enrichment again.
     before = candidate_hash(state)
     if record and record.get('before_hash') != before:
+        if record.get('current_reply') and journal.get('generation_contract',{}).get('audit_policy')==2:
+            # A different revision can preview the paid batch on its own base.
+            # Resuming another stage must never buy a replacement for it.
+            return state
         journal.setdefault('creative_history', []).append(record)
         record = None
     if record is None:
@@ -116,6 +147,9 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         attempts = record.setdefault('corrections', [])
         while True:
             try:
+                answer, normalization = proposal_text(answer)
+                if normalization:
+                    record['normalization'] = normalization
                 enhanced, proposal = apply_proposal(state, answer)
                 break
             except ValueError as invalid:
@@ -153,11 +187,12 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return enhanced
     except ValueError as exc:
         from backend.services.draft_response import TransportError
+        from backend.services.token_budget import BudgetError
         diagnostics=getattr(exc, 'diagnostic', None) or getattr(exc, 'errors', None)
         if diagnostics is None and getattr(exc, 'world_paths', None):
             diagnostics=[dict(path=p,category='server_metadata',message=str(exc)) for p in exc.world_paths]
         if callable(diagnostics):diagnostics=diagnostics(include_url=False,include_context=False,include_input=False)
-        record.update(status='interrupted' if isinstance(exc, TransportError) else 'rejected', reason=str(exc),
+        record.update(status='interrupted' if isinstance(exc, (TransportError, BudgetError)) else 'rejected', reason=str(exc),
                       diagnostics=diagnostics)
         save()
         raise

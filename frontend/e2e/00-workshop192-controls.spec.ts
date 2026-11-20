@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -48,7 +49,7 @@ test('W31 feeling keyboard endpoints, unknown, two-field save and rollback prese
  const find=(s:any,source:string,target:string)=>Object.entries(s.world.relationships).find(([,r]:any)=>r.source_id===source&&r.target_id===target)!;
  const [edge,original]=find(before.state,'ilya','sonya'),[reverse,reverseOriginal]=find(before.state,'sonya','ilya');
  await open(page,id);await workshopNav(page,'Связи и семьи');
- await page.getByLabel('Чьи отношения показать').selectOption('ilya');
+ await chooseOption(page.getByLabel('Чьи отношения показать'), 'ilya');
  await page.locator('.ww-records-relationship .ww-record-card').filter({has:page.getByRole('heading',{name:'Илья Соколов → Соня Ковалёва',exact:true})}).getByRole('button',{name:'Открыть запись →',exact:true}).click();
  await page.locator('.ww-record-dialog').getByRole('button',{name:'Редактировать запись',exact:true}).click();
  const editor=page.locator('.ww-record-editor'),trust=editor.getByRole('slider',{name:'Доверие',exact:true});

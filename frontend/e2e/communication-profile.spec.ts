@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
@@ -23,7 +24,7 @@ for (const skin of ["graphite", "parchment"])
     await nav(page, "Создать");
 
     const profile = page.getByRole("region", { name: "Технологии связи" });
-    await profile.getByLabel("Набор технологий связи",{exact:true}).selectOption("modern");
+    await chooseOption(profile.getByLabel("Набор технологий связи",{exact:true}), "modern");
     await profile
       .getByRole("checkbox", { name: "Письма", exact: true })
       .check();
@@ -32,7 +33,7 @@ for (const skin of ["graphite", "parchment"])
       .check();
     await expect(
       profile.getByLabel("Набор технологий связи",{exact:true}),
-    ).toHaveValue("custom");
+    ).toHaveJSProperty('value', "custom");
     await profile.getByText("Правила и особенности",{exact:true}).click();
     await profile
       .getByLabel("Особенности связи в мире")
@@ -83,9 +84,7 @@ for (const skin of ["graphite", "parchment"])
       preset: "custom",
     });
     await workshopNav(page,'Проверка мира');
-    await page
-      .getByRole("button", { name: "Повторить проверку", exact: true })
-      .click();
+    await expect(page.getByRole("button",{name:"Повторить проверку",exact:true})).toHaveCount(0);
     await workshopNav(page,'Обзор мира');
     await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
     await page
@@ -169,14 +168,14 @@ test("communication presets, keyboard and English labels", async ({
   // Trigger the parent render after changing the existing locale source.
 
   const profile = page.locator(".atelier-communication");
-  await profile.getByRole("combobox").selectOption("1939");
+  await chooseOption(profile.getByRole("combobox"), "1939");
   await expect(
     profile.getByRole("checkbox", { name: "Letters", exact: true }),
   ).toBeChecked();
   await expect(
     profile.getByRole("checkbox", { name: "Telegrams", exact: true }),
   ).toBeChecked();
-  await profile.getByRole("combobox").selectOption("none");
+  await chooseOption(profile.getByRole("combobox"), "none");
   await expect(profile.locator("input:checked")).toHaveCount(0);
   await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));
   expect(

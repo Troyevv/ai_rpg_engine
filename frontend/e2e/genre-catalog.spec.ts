@@ -108,7 +108,7 @@ test('new genres generate, hand off, edit and reload with a controlled provider'
  await chooseGenre(page,'Музыкальная драма');
  for(const name of ['Киберпанк','Придворные интриги','Чёрная комедия'])await chooseGenre(page,name,'secondary');
  await done(page);await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await page.getByRole('button',{name:'Создать мир',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Мир готов к редактированию'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Мир сохранён с замечаниями'})).toBeVisible();
  const wid=await page.locator('.world-workshop').getAttribute('data-workspace-id');
  const draft=await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json();
  const expected={primary_genre:'music_drama',secondary_genres:['cyberpunk','court_intrigue','black_comedy'],custom_genre:''};

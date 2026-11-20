@@ -40,7 +40,7 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .atelier-scope .field-name,.atelier-scope .era label,.atelier-scope .channel-set legend{font-size:12px;color:var(--ink)}
 .atelier-scope .field-name{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
 .atelier-scope .field-name span{font-size:11px;font-weight:400;color:var(--muted)}
-.atelier-scope .name-input,.atelier-scope .select-wrap select,.atelier-scope .modal-body>textarea{border:1px solid var(--line);border-radius:6px;background:var(--sub);color:var(--ink);width:100%}
+.atelier-scope .name-input,.atelier-scope .select-wrap [data-choice],.atelier-scope .modal-body>textarea{border:1px solid var(--line);border-radius:6px;background:var(--sub);color:var(--ink);width:100%}
 .atelier-scope .name-input{padding:8px 11px;min-height:36px;margin:6px 0 13px;font-size:14px}
 .atelier-scope .name-input::placeholder{color:var(--muted)}
 .atelier-scope .existing-name{font:17px var(--serif);margin:5px 0 12px;overflow-wrap:anywhere}
@@ -86,8 +86,8 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .atelier-scope .comm-body{padding:0 22px 15px;display:grid;grid-template-columns:minmax(162px,.74fr) minmax(0,2fr);gap:24px}
 .atelier-scope .era{border-right:1px solid var(--line);padding-right:24px}
 .atelier-scope .select-wrap{position:relative;margin-top:6px}
-.atelier-scope .select-wrap select{appearance:none;padding:8px 28px 8px 10px;min-height:37px;text-overflow:ellipsis;font-size:13px}
-.atelier-scope .select-wrap svg{position:absolute;top:50%;right:9px;transform:translateY(-50%);pointer-events:none;color:var(--muted)}
+.atelier-scope .select-wrap [data-choice]{padding:8px 10px;min-height:37px;text-overflow:ellipsis;font-size:13px}
+.atelier-scope .select-wrap svg{color:var(--muted)}
 .atelier-scope .era p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:6px 0 0}
 .atelier-scope .channel-set{border:0;padding:0;margin:0;min-width:0}
 .atelier-scope .channel-set legend{padding:0;margin:0 0 6px}
@@ -191,7 +191,7 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .atelier-scope .comm-body{display:block;padding:0 14px 12px}
 .atelier-scope .era{border:0;padding:0 0 13px}
 .atelier-scope .era p{margin:4px 0 0}
-.atelier-scope .select-wrap select{font-size:16px;min-height:42px}
+.atelier-scope .select-wrap [data-choice]{font-size:16px;min-height:44px}
 .atelier-scope .channel{min-height:38px}
 .atelier-scope .channel-set legend{margin-bottom:8px}
 .atelier-scope .chips{gap:6px}
@@ -528,3 +528,12 @@ html[data-theme=graphite] .atelier-scope .fl-stages li.done .fl-stage-no{backgro
 /* The generic mobile dialog is a bottom sheet; the approved atelier keeps centered folios. */
 .dialog-content.atelier-scope.folio-modal:not(.drawer){left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);border-radius:14px}
 html[data-theme=graphite] .atelier-scope .primary:disabled{opacity:1;background:#49463a;border-color:#575243;color:#c1baaa}
+
+.dialog-content.creative-recovery {max-height:calc(100dvh - 2rem - env(safe-area-inset-bottom));display:flex;flex-direction:column;overflow:hidden;overflow-wrap:anywhere}
+.creative-recovery-body {min-height:0;overflow:auto;overscroll-behavior:contain;display:grid;gap:.65rem;padding:.2rem}
+.creative-recovery-body button {justify-self:start}
+.creative-recovery details, .generation-notes {margin-block:.65rem}
+.creative-recovery summary, .generation-notes summary, .generation-notes button {cursor:pointer;min-height:44px;align-content:center}
+.creative-recovery ul, .generation-notes ul {padding-inline-start:1.4rem;list-style:disc}
+.creative-recovery li, .generation-notes li {margin-block:.45rem;overflow-wrap:anywhere}
+.generation-notes button {color:var(--accent);text-decoration:underline}

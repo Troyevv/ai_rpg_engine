@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {chooseGenre} from './genre-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea,ideaGroup,closeIdeaGroup} from './idea-navigation';
@@ -12,10 +13,10 @@ test('creation settings and JSON continuation survive editor start and reload',a
   await ideaGroup(page,'Жанры истории');
   await chooseGenre(page,'Семейная сага');
   await ideaGroup(page,'Персонажи');
-  await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await chooseOption(page.getByLabel('Выразительность NPC',{exact:true}), 'hyperbolized');
   await ideaGroup(page,'Темп и последствия');
-  await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
-  await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
+  await chooseOption(page.getByLabel('Темп истории',{exact:true}), 'calm');
+  await chooseOption(page.getByLabel('Риск последствий',{exact:true}), 'safe');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
   await page.screenshot({path:`test-results/draft-v4-settings-${page.viewportSize()?.width}.png`,fullPage:true});
   await closeIdeaGroup(page);
@@ -116,7 +117,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await closeIdeaGroup(page);
   await page.getByLabel('Описание мира или текст импорта').fill('TEST_MOTIVATION_OBJECTS. Сохрани заданные цели и намерения.');
   await generateIdea(page);
-  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status,{timeout:30000}).toBe('saved');
   await workshopNav(page,'Персонажи');
   await page.locator('.ww-character-card').first().click();await page.getByRole('tab',{name:'Цели',exact:true}).click();
   await page.locator('.ww-dossier-fields summary').first().click();
@@ -141,7 +142,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
     await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.world.characters[cid][field]).toEqual(records);
   }
   await page.getByRole('button',{name:'Готово',exact:true}).click();await workshopNav(page,'Проверка мира');
-  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Повторить проверку',exact:true})).toHaveCount(0);
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await page.screenshot({path:`test-results/motivations-${page.viewportSize()?.width}.png`,fullPage:true});
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();

@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {generateIdea} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -76,7 +77,7 @@ test('reference relationship map uses existing directed edges and preserves doss
  const before=(await(await request.get(url+'?author=true')).json()).state;
  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Связи и семьи');
  for(const cid of ['sergey_volkov','ilya']){
-  await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption(cid);
+  await chooseOption(page.getByRole('combobox',{name:'Чьи отношения показать'}), cid);
   const outgoing=Object.values(state.world.relationships).filter((r:any)=>r.source_id===cid);
   await expect(page.locator('.ww-relation-list .ww-record-card')).toHaveCount(outgoing.length);
   const neighbors=[...new Set(Object.values(state.world.relationships).flatMap((r:any)=>r.source_id===cid?[r.target_id]:r.target_id===cid?[r.source_id]:[]))].filter(id=>id!==cid);
@@ -93,14 +94,14 @@ test('reference relationship map uses existing directed edges and preserves doss
  for(const fact of hidden)await expect(page.locator('.ww-content')).not.toContainText(fact.text);
  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before);
  await authorView(page);await workshopNav(page,'Связи и семьи');await page.getByRole('button',{name:'Направленные чувства',exact:true}).click();
- await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('ilya');
+ await chooseOption(page.getByRole('combobox',{name:'Чьи отношения показать'}), 'ilya');
  await page.locator('.ww-relation-list .ww-record-card').first().getByRole('button',{name:'Открыть запись →'}).click();
- await page.getByRole('button',{name:'Изменить От кого',exact:true}).click();await page.locator('.ww-field-dialog').getByRole('combobox',{name:'От кого',exact:true}).selectOption('nina_petrovna');
+ await page.getByRole('button',{name:'Изменить От кого',exact:true}).click();await chooseOption(page.locator('.ww-field-dialog').getByRole('combobox',{name:'От кого',exact:true}), 'nina_petrovna');
  await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.locator('.ww-field-dialog')).toHaveCount(0);
  await expect(page.locator('.ww-record-dialog')).toBeVisible();await expect(page.locator('.ww-record-dialog .dialog-title')).toContainText('Нина Петровна');await page.keyboard.press('Escape');
- await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('sergey_volkov');await page.locator('.ww-relation-list').getByRole('button',{name:'Добавить',exact:true}).click();
- const creation=page.locator('.ww-create-dialog');await expect(creation).toBeVisible();await expect(creation.getByLabel('От кого')).toHaveValue('sergey_volkov');await expect(creation.getByLabel('К кому')).toHaveValue('');await creation.getByRole('button',{name:'Отмена',exact:true}).click();
- await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('sergey_volkov');await expect(page.locator('.ww-record-dialog')).toHaveCount(0);
+ await chooseOption(page.getByRole('combobox',{name:'Чьи отношения показать'}), 'sergey_volkov');await page.locator('.ww-relation-list').getByRole('button',{name:'Добавить',exact:true}).click();
+ const creation=page.locator('.ww-create-dialog');await expect(creation).toBeVisible();await expect(creation.getByLabel('От кого')).toHaveJSProperty('value', 'sergey_volkov');await expect(creation.getByLabel('К кому')).toHaveJSProperty('value', '');await creation.getByRole('button',{name:'Отмена',exact:true}).click();
+ await chooseOption(page.getByRole('combobox',{name:'Чьи отношения показать'}), 'sergey_volkov');await expect(page.locator('.ww-record-dialog')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 

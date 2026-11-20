@@ -54,14 +54,19 @@ def check_config(config):
 def submit(storage, save_id, user_text='', kind='turn', config=None, api_key=None):
     config = config or {}
     check_config(config)
-    if config.get('provider') == 'deepseek':
+    if config.get('provider') == 'deepseek' and kind != 'regenerate':
         api_key = deepseek_key(api_key)
     from engine_storage import ExistingJob
     try:
         job_id = storage.begin_job(save_id, user_text, kind, config)
     except ExistingJob as existing:
         return existing.job_id
-    if config.get('provider') == 'deepseek':
+    effective = json.loads(storage.get_job(job_id)['config_json'])
+    provider = effective.get('provider','local')
+    if provider != config.get('provider','local'):
+        from backend.services.credentials import Credentials
+        api_key = Credentials(storage).resolve(provider)
+    if provider != 'local' and api_key:
         launch(storage.path, job_id, api_key=api_key)
     else:
         launch(storage.path, job_id)
@@ -82,7 +87,7 @@ def retry(storage, job_id, config, api_key=None, *, correct_chronology=False, re
         job_id = storage.correct_chronology_job(job_id, revision, attempt_epoch)
     else:
         storage.retry_job(job_id, config, revision=revision, attempt_epoch=attempt_epoch)
-    if config.get('provider') == 'deepseek':
+    if config.get('provider') != 'local' and api_key:
         launch(storage.path, job_id, api_key=api_key)
     else:
         launch(storage.path, job_id)
@@ -131,22 +136,42 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
-            if job['kind'] == 'communication':
-                from backend.services.communication import execute
-                execute(storage, job, handle, chat_stream)
+            from backend.services.token_budget import prepare, snapshot, extraction_output, extraction_reserve, preflight_downstream
+            before = json.loads(job['memory_before_json'] or job['before_json'])
+            detail = before['world_state']['meta'].get('narrative_detail','balanced')
+            def prepare_job(loaded=None):
+                resolved = prepare(config, job['kind'], loaded=loaded, detail=detail, api_key=handle.api_key)
+                if config.get('budget_mode') and not config.get('_budget_snapshot'):
+                    with storage.connect() as db:
+                        db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._budget_snapshot',json(?)) WHERE id=? AND attempt_epoch=?",
+                                   (json.dumps(snapshot(resolved)), job_id, job['attempt_epoch']))
+                return resolved
+            if job['kind'] in ('communication','long_term'):
+                if job['kind'] == 'communication':
+                    from backend.services.communication import execute
+                else:
+                    from backend.services.long_term_advance import execute
+                if job['kind']=='communication' or config['long_term_advance'].get('max_llm_calls') != 0:
+                    config = prepare_job()
+                execute(storage, job, handle, chat_stream, config)
                 return
-            if job['kind'] == 'long_term':
-                from backend.services.long_term_advance import execute
-                execute(storage, job, handle, chat_stream)
-                return
-            from llm import game_context_limit
             model = None
             if config.get('provider', 'local') == 'local':
                 model = find_loaded_model(config['model'])
                 if model is None:
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
-            context = game_context_limit(config, model)
-            before = json.loads(job['memory_before_json'] or job['before_json'])
+            config = prepare_job(model)
+            context = config['context_length']
+            max_input = config['_budget_caps'].get('max_input')
+            recorded = config.get('_recorded_budget')
+            if recorded:
+                original_endpoint = recorded.get('capabilities',{}).get('endpoint_id')
+                if original_endpoint and original_endpoint != config['_budget_caps'].get('endpoint_id'):
+                    raise ValueError('Адрес провайдера изменился. Восстановите подключение исходной модели.')
+                if context < recorded['context_window'] or config['_budget_caps'].get('max_output') and config['_budget_caps']['max_output'] < recorded['output_allowance']:
+                    raise ValueError('Возможности модели изменились. Сохранённый план запроса несовместим.')
+                context = config['context_length'] = recorded['context_window']
+                config['max_tokens'] = recorded['output_allowance']
             from backend.runtime_v3.repository import restore_biographical_secrets
             with storage.connect() as db:
                 restore_biographical_secrets(db, before)
@@ -267,7 +292,7 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         from llm import ProviderGenerationError
                         before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, cancelled=handle.cancelled, provider_errors=(ProviderGenerationError,), history_events=world_history.get('events', []))
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], extraction_contract=version, public_observation=job['kind']=='background', recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], max_input=max_input, extraction_contract=version, public_observation=job['kind']=='background', recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
                 if agency_required(before['world_state'], job['user_text'], job['kind']) and not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
                     from copy import copy
@@ -287,6 +312,16 @@ def run_job(path, job_id, handle):
                     messages.append({'role':'system','content':CONTRACT})
                     if estimate(messages)>context-config['max_tokens']-256:
                         raise ValueError('Сохранённый контекст с контрактом письма не помещается в выбранную модель.')
+                if config.get('budget_mode') and not config.get('_narrative_correction'):
+                    # Project Extraction with the same scope and pinned policies before buying prose.
+                    from backend.runtime_v3.pacing import recorded_policy
+                    from backend.runtime_v3.initiative import recorded_plan
+                    from backend.runtime_v3.continuity import recorded as recorded_continuity
+                    preflight_downstream(config, lambda reserve: build_context(
+                        before, history, job['user_text'], job['kind'], context, reserve, max_input=max_input, extraction_text='',
+                        extraction_contract=version, recent_turns=config.get('recent_turns',6), prompts=config.get('_prompts'),
+                        world_history=world_history, pacing_decision=recorded_policy(messages,before['world_state']),
+                        initiative_decision=recorded_plan(messages), continuity_decision=recorded_continuity(messages)))
                 storage.save_context(job_id,messages,before)
                 correction = config.get('_narrative_correction')
                 if correction:
@@ -350,7 +385,7 @@ def run_job(path, job_id, handle):
                 # A new, explicitly linked candidate uses corrected current canon.
                 # No Narrative request; old context/hash belongs to the old branch.
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
-                    config['max_tokens'], extraction_contract=version, recent_turns=config.get('recent_turns',6),
+                    config['max_tokens'], max_input=max_input, extraction_contract=version, recent_turns=config.get('recent_turns',6),
                     prompts=config.get('_prompts'), world_history=world_history)
                 storage.save_context(job_id, messages, before)
             # Use exactly the policy supplied to this narrative, including retry /
@@ -391,6 +426,7 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.scene_repair import SceneCandidate
             semantic_candidate = SceneCandidate(before['world_state'], narrative, job['user_text'], sequence+1,
                 version=version, suggestions=suggestions, on_record=lambda audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit)) if 6 <= version < 10 else None
+            config['update_tokens'] = extraction_output(config, estimate([{'content':narrative}]))
             for attempt in range(1 if version >= 10 else 2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
@@ -404,7 +440,7 @@ def run_job(path, job_id, handle):
                 stage_started=time.perf_counter()
                 try:
                     messages = build_context(before, history, job['user_text'], job['kind'], context,
-                                             config['update_tokens'], extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
+                                             extraction_reserve(config, config['update_tokens']), max_input=max_input, extraction_text=narrative, extraction_contract=config.get('_extraction_contract', 1),
                                              suggestions=suggestions, validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     correction_grounds = config.get('_narrative_correction', {}).get('grounds', [])
                     calendar_grounds = [g for g in correction_grounds if g.get('kind') not in ('agency','birth','birth_boundary')]
@@ -413,12 +449,12 @@ def run_job(path, job_id, handle):
                                     reference_minute=g.get('current_minute')) for g in calendar_grounds]
                         messages.append({'role':'system', 'content':'Corrected candidate: recheck objective assertions for '
                             + json.dumps(ids) + ' in chronology_claims against the NEW prose; never omit or downgrade them.'})
-                        if estimate(messages)>context-config['update_tokens']-256:
+                        if estimate(messages)>context-extraction_reserve(config, config['update_tokens'])-256:
                             raise ValueError('Контекст повторной проверки хронологии не помещается в выбранную модель.')
                     if legacy_letter_sources:
                         from backend.services.letter_sources import extraction_context
                         messages.append(extraction_context(legacy_letter_sources))
-                        if estimate(messages)>context-config['update_tokens']-256:
+                        if estimate(messages)>context-extraction_reserve(config, config['update_tokens'])-256:
                             raise ValueError('Контекст восстановления старого письма не помещается в выбранную модель.')
                     stage_started=time.perf_counter()
                     result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
