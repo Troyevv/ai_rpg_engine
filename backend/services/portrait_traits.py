@@ -39,6 +39,8 @@ _TYPED = {
         'короткие':'short', 'длинные':'long', 'каре':'bob', 'кудрявые':'curly',
         'средние':'medium', 'волнистые':'wavy', 'чёлка':'fringe', 'без волос':'bald'}),
     'face': ('face', {}),
+    'scar': ('detail', {}), 'piercing': ('detail', {}), 'cosmetic': ('detail', {}),
+    'tattoo': ('detail', {}),
     'build': ('build', {'худощавый':'slim','полный':'full','коренастый':'stocky','широкоплечий':'broad','атлетичный':'athletic','средний':'average'}),
     'skin': ('skin', {'светлая':'light','смуглая':'deep','оливковая':'olive'}),
     'eye_color': ('eyes', {

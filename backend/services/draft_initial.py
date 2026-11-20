@@ -616,15 +616,19 @@ def inspect_candidate(raw, *, for_start=False, portrait_version=3):
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)
 
 
-def compact_schema(schema):
+def compact_schema(schema, *, dense=False):
     """Factor repeated schema nodes without dropping constraints or canon."""
     from collections import Counter
     import json
     counts=Counter();definitions={};names={}
+    # The illustrated catalog competes with the partial world on continuations.
+    # Factor smaller repeated constraints there while retaining the legacy wire schema.
+    threshold=35 if dense else 160
+    prefix='c' if dense else 'creative_'
     def key(node):return json.dumps(node,sort_keys=True,separators=(',', ':'))
     def count(node):
         if isinstance(node,dict):
-            if len(key(node))>160:counts[key(node)]+=1
+            if len(key(node))>threshold:counts[key(node)]+=1
             for value in node.values():count(value)
         elif isinstance(node,list):
             for value in node:count(value)
@@ -636,7 +640,7 @@ def compact_schema(schema):
         # Property maps are not schemas; never replace them with a $ref.
         if not properties and counts[signature]>1:
             if signature not in names:
-                name='creative_'+str(len(names));names[signature]=name
+                name=prefix+str(len(names));names[signature]=name
                 definitions[name]={k:compact(v,k=='properties') for k,v in node.items()}
             return {'$ref':'#/$defs/'+names[signature]}
         return {k:compact(v,k=='properties') for k,v in node.items()}

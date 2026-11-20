@@ -64,7 +64,7 @@ def procedural_access(state,cid):
     return authorized(state,cid) and (not is_game_birth(state,cid) or state['camera']['controlled_actor_id']==cid)
 
 
-def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None):
+def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None,preserve_mode=False):
     from backend.runtime_v3.repository import append_history
     from backend.repositories.living_world import project
     changes=changes or {}
@@ -83,7 +83,7 @@ def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
                 if not procedural_access(state,target): raise ValueError('Портрет недоступен.')
                 current=state['characters'][target]
                 before={k:current.get(k) for k in ('procedural_portrait','portrait_mode')}
-                apply_descriptor(state,target,art,mode)
+                apply_descriptor(state,target,art,mode,preserve_mode=preserve_mode)
                 after={k:current[k] for k in before}
                 batch.state_changes.append(dict(kind='portrait_edit',entity=target,source='user_illustration',
                     minute=state['meta']['world_time'],before=before,after=after))

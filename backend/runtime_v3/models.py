@@ -519,14 +519,19 @@ class ProceduralPortraitV4(StrictModel):
     visual_age: Literal['infant','child','adolescent','young_adult','mature_adult','elderly'] | None = None
     visual_age_mode: Literal['auto','manual'] | None = None
     traits: dict[str, str]
+    manual_traits: list[str] = Field(default_factory=list, max_length=18)
 
     @model_serializer(mode='wrap')
     def sparse_age(self, handler):
-        return {key:value for key,value in handler(self).items() if value is not None}
+        result={key:value for key,value in handler(self).items() if value is not None}
+        if not self.manual_traits: result.pop('manual_traits',None)
+        return result
 
     @model_validator(mode='after')
     def supported_art(self):
         from backend.runtime_v3.portrait_catalog import ILLUSTRATION_STYLES
+        if not set(self.manual_traits)<=ILLUSTRATION_STYLES.keys() or len(set(self.manual_traits))!=len(self.manual_traits):
+            raise ValueError('Неизвестная ручная черта.')
         if self.traits.keys() != ILLUSTRATION_STYLES.keys() or any(
                 value not in ILLUSTRATION_STYLES[key] for key, value in self.traits.items()):
             raise ValueError('Неизвестный вариант рисунка.')

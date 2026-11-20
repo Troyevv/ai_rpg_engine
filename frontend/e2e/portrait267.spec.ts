@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 import {chooseOption} from './choice-navigation';
 import {authorView,workshopNav} from './workshop-navigation';
 
@@ -68,28 +68,35 @@ test('portrait catalogue, local edits and quoted batch commissions',async({page,
  expect(saved.portraits.character_2.procedural_portrait.garment).toBe('blouse');
 });
 
-test('same v3 illustration stays legible in phone contacts and family nodes',async({page,request},info)=>{
+for(const version of [3,4])test('v'+version+' stays legible in dossier, phone contacts and family nodes',async({page,request},info)=>{
  const mobile=info.project.name==='mobile';
  await page.setViewportSize({width:mobile?393:1280,height:820});
- for(const surface of ['phone','family']){
+ for(const surface of ['phone','family','dossier']){
   const fixture=surface==='phone'?'/test/phone-seed?incoming=false&polish=true':'/test/ui-completion-seed?checkpoint=ui-family';
   const selected=await(await request.post(fixture)).json();
+  await request.put('/api/worlds/'+selected.world+'/presentation',{data:{theme_id:mobile?'graphite':'parchment'}});
   const path='/api/saves/'+selected.save+'/characters/qa_timur/portraits';
   const listing=await(await request.get(path)).json();
   const descriptor={...listing.descriptor,version:3,base_version:2,form:'human',body_frame:'male',
    facial_hair:'clean_shaven',hairstyle:'bun',garment:'cloak',visage:'angular',face_revision:3,visual_age_mode:'manual',visual_age:'young_adult'};
-  const result=await request.put(path+'/procedural',{data:{descriptor,revision:listing.revision,mode:'procedural'}});
+  const art=version===4?{version:4,art_revision:1,art_style:mobile?'semi_realistic':'anime',
+   seed:descriptor.seed,palette:2,stage:descriptor.stage,form:'human',body_frame:'male',visual_age:'young_adult',visual_age_mode:'manual',
+   traits:{face:'angular',hair:'bun',clothing:'cloak',eye_shape:'monolid',nose_shape:'broad',lip_shape:'full',brows:'angled',
+    skin:'warm',hair_color:'brown',eyes:'amber',clothing_color:'navy',trim:'cream',build:'broad',facial_hair:'clean_shaven',detail:'round_specs',expression:'neutral'}}:descriptor;
+  const result=await request.put(path+'/procedural',{data:{descriptor:art,revision:listing.revision,mode:'procedural'}});
   expect(result.ok(),await result.text()).toBeTruthy();
   await page.goto('/');await page.evaluate(selection=>localStorage.setItem('selection',JSON.stringify(selection)),selected);
   await page.reload();
   if(surface==='phone'){
    await page.getByRole('button',{name:/^Телефон/}).click();
    await page.getByRole('region',{name:'Телефон персонажа'}).getByRole('button',{name:'Контакты',exact:true}).click();
+  }else if(surface==='dossier'){
+   await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_timur');
   }else{
    await nav(page,'Родословная');
    await chooseOption(page.getByLabel('Семья персонажа'),'qa_timur');
   }
-  const row=page.locator(surface==='phone'?'.phone-recipient':'.family-root').filter({hasText:'Тимур'}).first();
+  const row=surface==='dossier'?page.locator('.character-profile .portrait-control').first():page.locator(surface==='phone'?'.phone-recipient':'.family-root').filter({hasText:'Тимур'}).first();
   const avatar=row.locator('.character-avatar').first();
   await expect(avatar.locator('img')).toHaveAttribute('src',/^data:image\/svg/);
   await expect(avatar).toHaveCSS('border-radius','50%');

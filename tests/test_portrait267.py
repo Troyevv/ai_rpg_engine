@@ -106,13 +106,15 @@ def test_uncertain_response_is_never_reissued(api,outcome):
     assert client.get(url+'?author=true').json()['revision']==d['revision']
 
 
-def test_creative_refines_only_current_creation_and_unedited_art():
+@pytest.mark.parametrize('style',['legacy','semi_realistic'])
+def test_creative_refines_only_current_creation_and_unedited_art(style):
     from test_initial_draft_v4 import rich
     from backend.services.draft_initial import inspect_candidate
     from backend.repositories.drafts import candidate_hash
     from backend.services.draft_changes import apply_proposal
     raw=rich(); cid=raw['characters'][0]['id']
     raw['portrait_world_id']='creation-1'
+    raw['creation_settings']={'portrait_style':style}
     raw['world']['characters'][cid].update(birth_date=None,developmental_stage='adult')
     raw['characters'][0]['portrait_traits']=dict(hair='pixie',eyes='grey_blue')
     base,report=inspect_candidate(raw);assert not report['errors']
@@ -123,7 +125,11 @@ def test_creative_refines_only_current_creation_and_unedited_art():
             dict(op='add',path=f'/characters/{cid}/portrait_traits',value=dict(hair='braid'),reason='Причёска')])
         return apply_proposal(state,json.dumps(packet),creation_job=job)[0]['world']['characters'][cid]['procedural_portrait']
     result=creative(base,'creation-1')
-    assert result['hairstyle']=='braid' and result['eyes']==art['eyes'] and result['seed']==art['seed']
+    assert result['seed']==art['seed']
+    if style=='legacy':
+        assert result['hairstyle']=='braid' and result['eyes']==art['eyes']
+    else:
+        assert result['art_style']==style and result['traits']=={**art['traits'],'hair':'braid'}
     assert creative(base,'another-job')==art
     base.setdefault('authoring',{}).setdefault('manual_portraits',{})[cid]=True
     assert creative(base,'creation-1')==art

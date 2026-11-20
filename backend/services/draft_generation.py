@@ -36,10 +36,11 @@ def messages_for(repo,job,config):
         name='draft_world_prompt.md'
         selected=config['_prompts'][name]['content']
         author_prompt=(ROOT/name).read_text(encoding='utf-8') if is_builtin_prompt(name,selected) else selected
+        portrait_version=art_version(settings.portrait_style)
         system=(author_prompt+'\nФормат ответа задаёт текущая схема ниже.\n'+SECRET_AUTHORING_RULES
                 +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Творчески развивай открытую внешность в рамках замысла; сохрани намеренную неизвестность. Выбери campaign.portrait_profile по эпохе. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(compact_schema(prompt_schema(initial_portraits=True,portrait_version=art_version(settings.portrait_style))),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(compact_schema(prompt_schema(initial_portraits=True,portrait_version=portrait_version),dense=portrait_version==4),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']

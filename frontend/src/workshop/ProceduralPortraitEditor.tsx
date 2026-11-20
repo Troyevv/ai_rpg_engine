@@ -34,7 +34,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const [section,setSection]=useState<Category>('hair'),[source,setSource]=useState(''),[error,setError]=useState('');
  const settings=useRef<HTMLFieldSetElement>(null);
  const reset=()=>{setValue(descriptor);setSelected(mode);setSource('');setError('')};
- const change=(next:ProceduralPortrait)=>{setValue(next);setSelected('procedural');setSource('Ручной выбор');setError('')};
+ const change=(next:ProceduralPortrait)=>{setValue(next);if(next.version!==4)setSelected('procedural');setSource('Ручной выбор');setError('')};
  const modern=():Extract<ProceduralPortrait,{version:3}>=>{if(value.version===4)throw new Error('Недоступно для этого рисунка.');return value.version===3?value:{...value,version:3,base_version:value.version,
     body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
     facial_hair:value.version===2?value.facial_hair:'clean_shaven'}};

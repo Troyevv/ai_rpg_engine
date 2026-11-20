@@ -79,7 +79,7 @@ def test_free_switch_selective_apply_and_mixed_commission(api,scope):
         assert result['status']=='ready' and wire.call_count==1
         rows=result['proposals']
         assert [rows[cid]['descriptor']['art_style'] for cid in ids]==['semi_realistic','anime']
-        assert rows[ids[1]]['descriptor']['traits']['clothing']=='pilot'
+        assert all(rows[cid]['descriptor']['traits']['clothing']=='pilot' for cid in ids)
         assert rows[ids[1]]['warnings']
     if scope=='workspace':
         draft=client.get(url+'?author=true').json()
@@ -87,3 +87,48 @@ def test_free_switch_selective_apply_and_mixed_commission(api,scope):
         _,clone=create(client,exported)
         assert clone['portraits'][ids[0]]['procedural_portrait']==expected
 
+
+
+@pytest.mark.parametrize('editing',[True,False])
+def test_new_editor_and_creative_actor_share_world_catalog(editing):
+    from test_draft_editor_paths import recorded
+    from backend.repositories.drafts import candidate_hash
+    from backend.services import draft_creative, draft_editor
+    from backend.services.draft_changes import apply_proposal
+    sample=recorded()
+    state=sample['base']['state']
+    state['creation_settings']={**state.get('creation_settings',{}),'portrait_style':'semi_realistic'}
+    packet=json.loads(sample['reply'])
+    packet['candidate_hash']=candidate_hash(state)
+    card=packet['changes'][1]['value']
+    card['portrait_traits']={'form':'human','face':'diamond','eye_shape':'monolid','build':'full','eyes':'amber','nose_shape':'unknown'}
+    warnings=[]
+    result,_=apply_proposal(state,json.dumps(packet),editing=editing,warnings=warnings)
+    art=result['world']['characters']['olya']['procedural_portrait']
+    assert art['art_style']=='semi_realistic'
+    assert {k:art['traits'][k] for k in ('face','eye_shape','build','eyes')}==dict(face='diamond',eye_shape='monolid',build='full',eyes='amber')
+    assert any(row['category']=='portrait_traits' for row in warnings)
+    wire=draft_editor.messages(sample['base'],'Редактирование') if editing else draft_creative.messages(state,'Замысел')
+    schema=json.loads(wire[1]['content'])['world_schema']['properties']['characters']['items']['properties']['portrait_traits']
+    assert 'monolid' in schema['properties']['eye_shape']['enum']
+
+
+def test_local_style_keeps_selected_photo_original_and_crop(api):
+    from test_portraits import image
+    client,_=api
+    url,draft=create(client)
+    cid=draft['state']['characters'][0]['id']
+    path=url+f'/characters/{cid}/portraits'
+    uploaded=client.post(path,params={'revision':draft['revision']},content=image(),headers={'content-type':'image/png'}).json()
+    photo=uploaded['portrait']
+    crop=dict(x=.23,y=.71,zoom=1.8)
+    client.patch(path+'/'+photo['id'],json=dict(revision=uploaded['revision'],crop=crop)).raise_for_status()
+    before=client.get(path+'?author=true').json()
+    base='/api/portrait-proposals/workspace/'+url.split('/')[3]
+    preview=client.post(base+'/style',json=dict(revision=before['revision'],ids=[cid],art_style='anime')).json()
+    client.post(base+'/'+preview['id']+'/apply',json=dict(revision=before['revision'],ids=[cid])).raise_for_status()
+    after=client.get(path+'?author=true').json()
+    assert after['descriptor']['art_style']=='anime'
+    assert after['portrait_mode']==before['portrait_mode']=='auto'
+    assert after['portrait']==before['portrait'] and after['portrait']['crop']==crop
+    assert client.get(path+'/assets/'+photo['asset_id']+'?author=true').status_code==200

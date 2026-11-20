@@ -131,10 +131,13 @@ def refine_automatic(state, cid, hints, warnings=None):
         traits=graphic_choices(actor,hints,facial_hair=eligible,warnings=conflicts,semantic=True)
         old['traits'].update(traits)
         if not eligible: old['traits']['facial_hair']='clean_shaven'
+        if isinstance(hints,dict) and hints.get('form') in ('human','neutral') or old['stage']=='unknown' and generated['stage']!='unknown':
+            old['form']=generated['form']
         for key in ('body_frame','stage','visual_age'):
             old[key]=generated.get(key)
-        if isinstance(hints,dict) and hints.get('form') in ('human','neutral') or old['form']=='neutral' and generated['form']=='human':
-            old['form']=generated['form']
+        if old['form']=='neutral':
+            old['body_frame']='neutral'
+            old['traits']['facial_hair']='clean_shaven'
         if warnings is not None:
             warnings.extend(dict(category='portrait_traits',path=f'/characters/{cid}/portrait_traits',message=w) for w in conflicts)
         return
@@ -252,10 +255,13 @@ def asset(repo,wid,cid,aid,author=False):
         return row[0]
 
 
-def apply_descriptor(runtime,cid,descriptor,mode):
+def apply_descriptor(runtime,cid,descriptor,mode,*,preserve_mode=False):
     actor=runtime['characters'][cid]
     art=DESCRIPTORS.validate_python(descriptor)
-    if art.visual_age_mode == 'auto':
+    old=actor.get('procedural_portrait') or {}
+    same_basis=(old.get('version')==4 and isinstance(art,ProceduralPortraitV4) and
+                all(old.get(k)==getattr(art,k) for k in ('stage','visual_age','visual_age_mode')))
+    if art.visual_age_mode == 'auto' and not same_basis:
         # Resolve once at explicit save, never silently redraw on a birthday.
         art.stage=life_period(runtime,cid)[1]
         art.visual_age=visual_age(runtime,cid)
@@ -267,10 +273,10 @@ def apply_descriptor(runtime,cid,descriptor,mode):
                 or not beard_eligible(actor, life_period(runtime,cid)[1])):
             raise ValueError('Растительность на лице доступна только взрослому мужчине со взрослым визуальным возрастом.')
     actor['procedural_portrait']=art.model_dump(exclude_none=isinstance(art,ProceduralPortraitV4))
-    actor['portrait_mode']=mode or 'procedural'
+    if not preserve_mode: actor['portrait_mode']=mode or 'procedural'
 
 
-def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None):
+def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None,preserve_mode=False):
     with repo.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         _,record,state=load(repo,db,wid,cid,revision,editable=True)
@@ -278,7 +284,7 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         if descriptor is not None or descriptors:
             for target, art in (descriptors or {cid:descriptor}).items():
                 if target not in runtime['characters']: raise ValueError('Портрет недоступен.')
-                apply_descriptor(runtime,target,art,mode)
+                apply_descriptor(runtime,target,art,mode,preserve_mode=preserve_mode)
                 if state.get('portrait_world_id'):
                     state.setdefault('authoring',{}).setdefault('manual_portraits',{})[target]=True
         elif mode is not None: actor['portrait_mode']=mode

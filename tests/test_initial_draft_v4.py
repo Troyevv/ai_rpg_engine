@@ -68,7 +68,10 @@ def volkov_rich():
 def test_source_settings_continuation_editor_start_reload(api,source):
     client,app=api;workspace=client.post('/api/workspaces',json={'name':'Generation'}).json()
     path=f"/api/workspaces/{workspace['id']}/draft"
-    expected=volkov_rich() if source==FULL else rich();raw=json.dumps(expected,ensure_ascii=False,separators=(',',':'));cut=raw.index('Apex')+2;calls=[]
+    expected=volkov_rich() if source==FULL else rich()
+    if source==SHORT:
+        expected['characters'][0]['portrait_traits']={'form':'human','face':'diamond','eye_shape':'monolid','build':'full','hair_color':'lavender'}
+    raw=json.dumps(expected,ensure_ascii=False,separators=(',',':'));cut=raw.index('Apex')+2;calls=[]
     @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
@@ -79,6 +82,7 @@ def test_source_settings_continuation_editor_start_reload(api,source):
         kwargs['on_finish']('stop');yield raw[cut:]
     settings={'primary_genre':'family_saga','npc_expressiveness':'hyperbolized','cast_preset':'small','geography':'Москва',
               'narrative_pacing':{'preset':'calm'},'narrative_risk':{'preset':'safe'}}
+    if source==SHORT: settings['portrait_style']='anime'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         reply=client.post(path+'/generate',json={'revision':0,'text':source,'config':dict(REMOTE,context_length=65536 if source==FULL else 32768),'api_key':'test-secret','creation_settings':settings})
         job=wait_job(client,reply.json()['id']);assert job['status']=='saved',job.get('error',job)
@@ -86,6 +90,10 @@ def test_source_settings_continuation_editor_start_reload(api,source):
     assert calls[1]['messages'][-2]['content']==raw[:cut]
     draft=client.get(path+'?author=true').json();assert draft['source_text']==source
     assert draft['state']['world']['organizations']['apex']['name']=='Apex Group Inc.'
+    if source==SHORT:
+        art=draft['portraits'][expected['characters'][0]['id']]['procedural_portrait']
+        assert art['version']==4 and art['art_style']=='anime'
+        assert all(art['traits'][k]==v for k,v in expected['characters'][0]['portrait_traits'].items() if k!='form')
     if source==FULL:
         assert [c['name'] for c in draft['state']['characters']]==[c['name'] for c in expected['characters']]
         assert [c['fields']['Биография'] for c in draft['state']['characters']]==[c['fields']['Биография'] for c in expected['characters']]

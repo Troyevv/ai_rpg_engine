@@ -23,7 +23,7 @@ _lock = threading.Lock()
 
 def approved_styles(art):
     if art['version']==4:
-        return dict(art['traits'],form=art['form'])
+        return {key:art['traits'][key] for key in art.get('manual_traits',[])}
     result={'form':art['form']}
     layers={'hair':'hairstyle','clothing':'garment','face':'visage'}
     for field,options in STYLES.items():
@@ -79,13 +79,17 @@ def sources(repo, db, scope, owner, ids, revision):
         confirmed = actor.get('portrait_mode')=='procedural' or bool(draft and draft.get('authoring',{}).get('manual_portraits',{}).get(cid))
         records[cid] = dict(description=description or (actor.get('appearance') or {}).get('legacy_text',''),
             features=[dict(kind=item['kind'],text=item['text']) for item in public],visual_age=age)
-        approved=approved_styles(existing) if existing and confirmed else {}
+        if existing.get('version')==4:
+            records[cid]['illustration']=existing['traits']
+        approved=approved_styles(existing) if existing and (confirmed or existing.get('manual_traits')) else {}
         if approved:
             records[cid]['approved_illustration']=approved
+        world_style=(draft or {}).get('creation_settings',{}).get('portrait_style','legacy')
+        style=existing.get('art_style','legacy') if existing else world_style
         references[cid] = dict(actor=dict(biological_sex=actor.get('biological_sex'),
             appearance=dict(items={str(i):v for i,v in enumerate(public)})),stage=stage,age=age,
             existing=existing,approved=approved,world_id=str(world_id),profile=profile,
-            art_style=existing.get('art_style') or (draft or {}).get('creation_settings',{}).get('portrait_style','legacy') if not existing or existing.get('version')==4 else 'legacy')
+            art_style=style)
     return records,references,profile
 
 
@@ -205,6 +209,7 @@ def proposed(cid,traits,reference,style=None):
         art['seed']=old['seed']
         art['palette']=old['palette']
         if old.get('version')==4:
+            if old.get('manual_traits'): art['manual_traits']=old['manual_traits']
             art.update(art_revision=old['art_revision'], body_frame=old['body_frame'])
         elif not modern:
             if old['version'] in (1,2):
@@ -299,4 +304,4 @@ def apply(repo,scope,owner,rid,ids,revision):
         raise ValueError('Выберите готовые предложения.')
     edit=drafts.edit if scope=='workspace' else saves.edit
     return edit(repo,owner if scope=='workspace' else int(owner),ids[0],result['revision'],
-                descriptors={cid:proposals[cid]['descriptor'] for cid in ids},mode='procedural')
+                descriptors={cid:proposals[cid]['descriptor'] for cid in ids},mode='procedural',preserve_mode=bool(result.get('local_style')))
