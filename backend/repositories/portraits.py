@@ -19,6 +19,9 @@ def initialize(db):
     db.execute("""CREATE TABLE IF NOT EXISTS portrait_asset_access (
       asset_id TEXT NOT NULL, scope TEXT NOT NULL, owner TEXT NOT NULL,
       PRIMARY KEY(asset_id,scope,owner))""")
+    db.execute("""CREATE TABLE IF NOT EXISTS portrait_proposals (
+        id TEXT PRIMARY KEY, scope TEXT NOT NULL, owner TEXT NOT NULL, revision INTEGER NOT NULL,
+        request_json TEXT NOT NULL, status TEXT NOT NULL, result_json TEXT NOT NULL DEFAULT '{}')""")
     db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('portrait_asset_access_v2')")
     db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('portrait_assets_v1')")
 
@@ -39,8 +42,11 @@ def listing(repo,sid,cid):
     with repo.connect() as db:
         row,snapshot=load(db,sid,cid)
         from backend.runtime_v3.portraits import projection
+        state=snapshot['world_state']
+        from backend.services.draft_portraits import editor_metadata
+        metadata=editor_metadata(state,cid,row['world_id']) if procedural_access(state,cid) else {}
         return dict(revision=row['revision'],portraits=[p for p in snapshot['world_state']['characters'][cid]['portraits'] if not p['deleted']],
-                    **projection(snapshot['world_state'],cid))
+                    **projection(state,cid), **metadata)
 
 
 def asset(repo,sid,cid,aid):
@@ -53,7 +59,12 @@ def asset(repo,sid,cid,aid):
         return value[0]
 
 
-def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False):
+def procedural_access(state,cid):
+    from backend.runtime_v3.birth_identity import is_game_birth
+    return authorized(state,cid) and (not is_game_birth(state,cid) or state['camera']['controlled_actor_id']==cid)
+
+
+def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove=False,descriptor=None,mode=None,descriptors=None):
     from backend.runtime_v3.repository import append_history
     from backend.repositories.living_world import project
     changes=changes or {}
@@ -64,13 +75,25 @@ def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови карточку.')
         actor=snapshot['world_state']['characters'][cid];before=deepcopy(actor['portraits'])
         aid=uuid.uuid4().hex if image is not None else None
-        mutate(actor,snapshot['world_state'],cid,image=image,asset_id=aid,portrait_id=portrait_id,changes=changes,remove=remove)
+        batch=WorldHistoryV3()
+        if descriptor is not None or descriptors:
+            from backend.services.draft_portraits import apply_descriptor
+            state=snapshot['world_state']
+            for target, art in (descriptors or {cid:descriptor}).items():
+                if not procedural_access(state,target): raise ValueError('Портрет недоступен.')
+                current=state['characters'][target]
+                before={k:current.get(k) for k in ('procedural_portrait','portrait_mode')}
+                apply_descriptor(state,target,art,mode)
+                after={k:current[k] for k in before}
+                batch.state_changes.append(dict(kind='portrait_edit',entity=target,source='user_illustration',
+                    minute=state['meta']['world_time'],before=before,after=after))
+        else:
+            mutate(actor,snapshot['world_state'],cid,image=image,asset_id=aid,portrait_id=portrait_id,changes=changes,remove=remove)
+            batch.state_changes.append(dict(kind='portrait_edit',entity=cid,source='user_attachment',
+                minute=snapshot['world_state']['meta']['world_time'],before=before,after=deepcopy(actor['portraits'])))
         if image is not None:
             content,w,h=image
             db.execute('INSERT INTO portrait_assets(id,world_id,content,width,height) VALUES(?,?,?,?,?)',(aid,row['world_id'],content,w,h))
-        batch=WorldHistoryV3()
-        batch.state_changes.append(dict(kind='portrait_edit',entity=cid,source='user_attachment',
-            minute=snapshot['world_state']['meta']['world_time'],before=before,after=deepcopy(actor['portraits'])))
         snapshot['history_head']=append_history(db,snapshot.get('history_head'),batch.to_dict())
         project(db,sid,snapshot)
         db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),sid))

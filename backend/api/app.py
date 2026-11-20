@@ -39,6 +39,7 @@ def create_app(db_path=None, recover=True):
         if recover:
             app.state.chat.recover()
             with repo.connect() as db:
+                db.execute("UPDATE portrait_proposals SET status='interrupted' WHERE status='running'")
                 stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
                 interrupted = [r[0] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
                 db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE json_extract(config_json,'$._published_scene') IS NULL AND status IN ('generating','extracting','validating')")
@@ -65,6 +66,8 @@ def create_app(db_path=None, recover=True):
     install_narrative_policy(app,repo)
     from backend.api.portraits import register as register_portraits
     register_portraits(app,repo)
+    from backend.api.portrait_proposals import install as install_portrait_proposals
+    install_portrait_proposals(app,repo,credentials)
     from backend.api.remote import install as install_remote
     install_remote(app,repo)
     from backend.api.npc_review import install as install_npc_review

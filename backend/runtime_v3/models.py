@@ -484,7 +484,25 @@ class ProceduralPortraitV2(ProceduralPortrait):
         return self
 
 
-PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2
+class ProceduralPortraitV3(ProceduralPortraitV2):
+    version: Literal[3]
+    # Keep each unedited layer of a historical plate exactly as it was painted.
+    base_version: Literal[1, 2] = 2
+    hairstyle: str | None = None
+    garment: str | None = None
+    visage: str | None = None
+    skin_swatch: bool = False
+
+    @model_validator(mode='after')
+    def catalogue_layers(self):
+        from backend.runtime_v3.portrait_catalog import STYLES
+        for key, value in [('hair', self.hairstyle), ('clothing', self.garment), ('face', self.visage)]:
+            if value is not None and value not in STYLES[key]:
+                raise ValueError('Неизвестный вариант иллюстрации: ' + key)
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3
 
 
 class PortraitReference(StrictModel):

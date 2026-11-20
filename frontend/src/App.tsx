@@ -1,3 +1,4 @@
+import {PortraitModels} from './workshop/PortraitCommission';
 import {requestId} from './lib/requestId';
 import "./styles/current-game.css";
 import {observeStorySnapshot} from "./lib/storyPresentation";
@@ -216,7 +217,7 @@ export default function App() {
   };
   if(chatOpen)return <ThemeProvider world={null} preview><ThemedToaster/><ChatMode source={chatSource} onBack={()=>{setChatOpen(false);localStorage.setItem("active-mode","narrative")}} onConnections={()=>setSettings(true)}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,"PUT");setPrefs(p)}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
   return (
-    <ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
+    <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
       <ThemedToaster />
       {!mobile&&<nav className="nav-rail" aria-label="Главная навигация">
         <button
@@ -377,7 +378,7 @@ export default function App() {
         setCharacter={setCharacter}
         refresh={refresh}
       />
-    </div></ThemeProvider>
+    </div></ThemeProvider></PortraitModels.Provider>
   );
 }
 

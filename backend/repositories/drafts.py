@@ -471,7 +471,8 @@ class DraftStorage(DraftEditorStorage):
             state=domain.prepare(state)
             if operation == 'add' and kind == 'character':
                 from backend.services.draft_portraits import initialize
-                initialize(state, version=2, character_ids=[eid])
+                state.setdefault('portrait_world_id',wid)
+                initialize(state, version=3, character_ids=[eid])
             after=domain.validate(state)
             if operation in ('add','patch_fields'):
                 new_errors=set(after['errors'])-set(before['errors'])

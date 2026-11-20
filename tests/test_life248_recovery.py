@@ -61,20 +61,20 @@ def mixed_candidate():
     state['world']['knowledge']={'original':dict(actor_id=cid,fact_id=fid,status='known',evidence='Original'), 'duplicate':dict(actor_id=cid,fact_id=fid,status='known',evidence='')}
     return state
 
-def test_portrait_and_knowledge_errors_share_bounded_repair_scope():
+def test_cosmetics_do_not_expand_knowledge_repair_scope():
     raw=mixed_candidate();before=deepcopy(raw);_,report=draft_initial.inspect_candidate(raw)
     assert raw==before
     paths={d['path'] for d in report['diagnostics']}
-    assert '/characters/0/portrait_traits' in paths
+    assert '/characters/0/portrait_traits' not in paths
     assert '/world/knowledge/duplicate/evidence' in paths
     _,scope=draft_repair.request(json.dumps(raw),report['diagnostics'])
-    answer=dict(patches=[dict(path='/characters/0/portrait_traits',value={'hair':'short'}),dict(path='/world/knowledge/duplicate/evidence',value='Original')])
+    answer=dict(patches=[dict(path='/world/knowledge/duplicate/evidence',value='Original')])
     repaired=json.loads(draft_repair.apply(json.dumps(raw),json.dumps(answer),scope))
     _,report=draft_initial.inspect_candidate(repaired)
     assert not report['errors'], report
     assert repaired['characters'][0]['fields']==raw['characters'][0]['fields']
     assert raw==before
-    answer['patches'][0]['value']['hair']='long'
+    answer['patches'].append(dict(path='/characters/0/portrait_traits',value={'hair':'long'}))
     with pytest.raises(ValueError):draft_repair.apply(json.dumps(raw),json.dumps(answer),scope)
 
 def test_changed_policy_failure_does_not_reopen_old_policy_via_ignored_sampling():
@@ -116,11 +116,16 @@ def test_unknown_response_never_recovers_by_changing_policy():
     assert journal==before
 
 
-def test_invalid_portrait_consumption_is_atomic():
+def test_cosmetic_errors_preserve_other_cards():
     from backend.services.draft_portraits import consume_authored_traits
-    raw=mixed_candidate();raw['characters'][1]['portrait_traits']={'hair':'long'};old=deepcopy(raw)
-    with pytest.raises(ValueError):consume_authored_traits(raw)
-    assert raw==old
+    raw=mixed_candidate()
+    raw['characters'][0]['portrait_traits']['clothing']='unsupported'
+    raw['characters'][1]['portrait_traits']={'hair':'long'}
+    consume_authored_traits(raw)
+    for card,hair in zip(raw['characters'],['short','long']):
+        assert raw['world']['characters'][card['id']]['procedural_portrait']['hairstyle']==hair
+        assert 'portrait_traits' not in card
+
 
 from unittest.mock import patch
 from test_api import api, wait_job

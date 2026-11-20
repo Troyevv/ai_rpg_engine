@@ -1,3 +1,4 @@
+import {PortraitCommission} from './workshop/PortraitCommission';
 import {StorySecretBrowser} from './StorySecretBrowser';
 import {personalRelationships} from './lib/personalRelationships';
 import {personalRelationshipLabel} from './lib/dossier';
@@ -59,6 +60,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     <p className="dossier-location"><MapPin size={15} aria-hidden="true"/>{c?.location||card.fields['Место']||t('unknown')}</p>
    </div>
   </header>
+  {save&&refresh&&<PortraitCommission cards={state.characters} saveId={save.id} revision={save.revision} refresh={refresh}/>}
   <SectionTabs items={items} value={tab} onChange={setTab} label={t('tabs')} tablist panelId={panelId} className="dossier-tabs"/>
   <div id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${tab}`} tabIndex={0} className="dossier-panel" key={`${card.id}:${actor}:${tab}`}>
    {tab==='overview'&&<div className="dossier-columns"><div className="dossier-column">

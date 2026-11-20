@@ -191,7 +191,7 @@ def apply_proposal(state, reply, *, editing=False, warnings=None):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
     resolve_card_paths(state, proposal, editing=editing)
     trial = deepcopy(state)
-    schema = prompt_schema()['properties']
+    schema = prompt_schema(initial_portraits=True)['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}
     paths = [c.path for c in proposal.changes if c.path not in ('/characters/-', '/locations/-')]
     if len(set(paths)) != len(paths) or any(a.startswith(b+'/') for a in paths for b in paths if a != b):
@@ -300,10 +300,17 @@ def apply_proposal(state, reply, *, editing=False, warnings=None):
         trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
         if not trial['card_field_facts']:trial.pop('card_field_facts')
     normalized = validate_transition(state, trial, editing=editing, warnings=warnings)
+    # Creative can refine only the provisional illustration of this creation job.
+    if not editing and state.get('portrait_generation_version') == 3:
+        from backend.services.draft_portraits import refine_automatic
+        for card in trial['characters']:
+            if card.get('portrait_traits') and card['id'] in state['world']['characters']:
+                refine_automatic(normalized, card['id'], card['portrait_traits'])
+
     new_ids = normalized['world']['characters'].keys() - state['world']['characters'].keys()
     if new_ids:
         from backend.services.draft_portraits import initialize
-        initialize(normalized, version=2, character_ids=new_ids)
+        initialize(normalized, version=3, character_ids=new_ids)
     return normalized, proposal.model_dump()
 
 

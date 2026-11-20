@@ -231,6 +231,7 @@ def prompt_schema(*, initial_portraits=False):
     if initial_portraits:
         from backend.services.portrait_traits import input_schema
         schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()
+        schema['properties']['campaign']['properties']['portrait_profile'] = {'enum':['modern','historical','neutral']}
     return schema
 
 
@@ -588,7 +589,7 @@ def inspect_candidate(raw, *, for_start=False):
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
     portrait_errors = input_diagnostics(raw.get('characters')) if isinstance(raw, dict) else []
-    independent_errors = portrait_errors + dependency_errors(raw)
+    independent_errors = dependency_errors(raw)
     state=raw
     try:
         state=normalize(raw)
@@ -596,11 +597,14 @@ def inspect_candidate(raw, *, for_start=False):
         advisories=validate_typed(state,advisory_age=for_start)
         if independent_errors:
             raise DraftErrors(independent_errors)
-        state=draft_world.prepare(state)
+        cosmetic_warnings = []
+        state=draft_world.prepare(state, portrait_warnings=cosmetic_warnings)
         report=draft_world.validate(state,canonical=False)
         if report['errors']:
             return state,dict(report,diagnostics=[error('/',e,'validation') for e in report['errors']])
         canonical_check(state,advisory_age=for_start)
+        report['warnings'].extend(cosmetic_warnings)
+        advisories.extend(portrait_errors)
         report['warnings'].extend(e['path']+': '+e['message'] for e in advisories)
         return state,dict(report,diagnostics=[],semantic_warnings=advisories)
     except (ValueError,TypeError,KeyError,IndexError,AttributeError) as exc:

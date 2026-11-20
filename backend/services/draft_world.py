@@ -41,7 +41,7 @@ GROUPS['scheduled_events']='scheduled_events'
 FIELDS['scheduled_events']=set(ScheduledEvent.model_fields)-{'id','time_semantics'}
 
 
-def prepare(original):
+def prepare(original, *, portrait_warnings=None):
     if not isinstance(original,dict) or not isinstance(original.get('characters'),list):
         raise ValueError('Мир должен содержать список Characters.')
     for card in original['characters']:
@@ -89,7 +89,7 @@ def prepare(original):
     # imported provider response. Creative hints must never become card prose.
     if any('portrait_traits' in card for card in state['characters']):
         from backend.services.draft_portraits import consume_authored_traits
-        consume_authored_traits(state)
+        consume_authored_traits(state, portrait_warnings)
     return sync(state)
 
 

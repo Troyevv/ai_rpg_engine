@@ -3,16 +3,7 @@ from typing import get_args
 from backend.runtime_v3.models import FacialHair
 
 FACIAL_HAIR = get_args(FacialHair)
-STYLES = {
-    'facial_hair': FACIAL_HAIR,
-    'face': ('oval', 'narrow', 'angular', 'broad', 'long', 'round', 'soft'),
-    'hair': ('short', 'long', 'bob', 'curly', 'medium', 'wavy', 'fringe', 'bald'),
-    'hair_color': ('black', 'brown', 'blond', 'dark_blond', 'red', 'grey', 'white'),
-    'skin': ('light', 'warm', 'beige', 'deep', 'olive', 'peach', 'sand'),
-    'eyes': ('hazel', 'green', 'grey', 'brown', 'grey_green', 'blue', 'light_green', 'grey_blue'),
-    'clothing': ('plain', 'tshirt', 'shirt', 'blazer', 'jacket', 'cardigan', 'jumper', 'sweater'),
-    'clothing_color': ('dark', 'light', 'blue', 'green', 'brown', 'red', 'sand'),
-}
+from backend.runtime_v3.portrait_catalog import STYLES
 
 
 def input_diagnostics(cards):
@@ -32,9 +23,7 @@ def input_diagnostics(cards):
         invalid = [k for k, v in hints.items() if k not in options or v not in options[k]] if isinstance(hints, dict) else None
         if invalid or invalid is None:
             errors.append(dict(path=f'/characters/{index}/portrait_traits', category='portrait_traits',
-                message='portrait_traits: используйте только поддерживаемые признаки из схемы. '
-                        'Неподдерживаемые признаки можно опустить; корректные признаки и Внешность сохраните.',
-                invalid_fields=invalid, allowed={k:list(v) for k,v in options.items()}))
+                message='Неподдерживаемые параметры иллюстрации пропущены.', invalid_fields=invalid))
     return errors
 # Exact, unambiguous values of a *typed* initial feature, never substrings of
 # sentences, names, legacy_text, biographies or derived identity characteristics.
@@ -62,7 +51,7 @@ def input_schema():
             **{k:{'enum':list(v)} for k,v in STYLES.items()}}, 'additionalProperties':False}
 
 
-def graphic_choices(actor, hints=None, *, facial_hair=False):
+def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None):
     approved = {}
     if isinstance(hints,dict):
         for field, options in STYLES.items():
@@ -80,7 +69,7 @@ def graphic_choices(actor, hints=None, *, facial_hair=False):
         if item.get('source_event_id') or item.get('fact_id') or item.get('condition_id') or item.get('revision',1)!=1:
             # A hint from a model which could see private source material is
             # insufficient evidence to publish that same facial feature.
-            if item['kind'] == 'facial_hair': approved.pop('facial_hair', None)
+            if item['kind'] in _TYPED: approved.pop(_TYPED[item['kind']][0], None)
             continue
         spec=_TYPED.get(item.get('kind'))
         if not spec or not isinstance(item.get('text'),str): continue
@@ -93,6 +82,7 @@ def graphic_choices(actor, hints=None, *, facial_hair=False):
             if token in STYLES[field]:
                 choice=STYLES[field].index(token)
                 if field in approved and approved[field]!=choice:
-                    raise ValueError('portrait_traits противоречит структурированной внешности: '+field)
+                    if warnings is not None:
+                        warnings.append('Открытая черта имеет приоритет: '+field)
                 approved[field]=choice
     return approved

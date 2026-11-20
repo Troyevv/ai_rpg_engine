@@ -42,3 +42,10 @@ it('fits facial hair to the chosen jaw, beneath front locks and independent of s
  expect(svg({...modern,visual_age:'adolescent',facial_hair:'full_beard'})).not.toContain('id="jaw"');
  expect(proceduralPortrait({...modern,body_frame:'__proto__'} as unknown as ProceduralPortrait)).toBeNull();
 });
+
+it('keeps the v2 plate intact through a layer-preserving v3 preview',()=>{
+ const expected='dc15c13e5fa7cdb828dd3f5e167630736b781ee132b856c56a15f7fc46c68d36';
+ expect(createHash('sha256').update(svg(modern)).digest('hex')).toBe(expected);
+ expect(svg({...modern,version:3,base_version:2})).toBe(svg(modern));
+ expect(svg({...legacy,version:3,base_version:1,body_frame:'neutral',facial_hair:'clean_shaven'})).toBe(svg(legacy));
+});

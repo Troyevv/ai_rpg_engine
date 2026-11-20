@@ -18,7 +18,7 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
  const tile=page.getByRole('button',{name:'Досье '+card.name,exact:true});
  await tile.click();
- const editor=async()=>{await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click()};
+ const editor=async()=>{await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();await page.getByRole('button',{name:'Образ',exact:true}).click()};
  await editor();
  const frame=page.getByLabel('Основа тела'),beard=page.getByLabel('Растительность на лице');
  await expect(frame).toHaveJSProperty('value', '');
@@ -36,7 +36,7 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  expect(faces.size).toBe(5);
  await chooseOption(page.getByLabel('Визуальный возраст',{exact:true}), 'child');await expect(beard).toHaveCount(0);
  await chooseOption(page.getByLabel('Визуальный возраст',{exact:true}), 'elderly');await expect(beard).toHaveJSProperty('value', 'clean_shaven');
- await chooseOption(beard, 'full_beard');await chooseOption(page.getByRole('combobox',{name:'Цвет волос',exact:true}), '5');
+ await chooseOption(beard, 'full_beard');await page.getByRole('button',{name:'Цвета',exact:true}).click();await page.getByRole('button',{name:'Седые',exact:true}).click();
  const saved=await preview.getAttribute('src');
  await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await editor();await expect(frame).toHaveJSProperty('value', 'male');await expect(beard).toHaveJSProperty('value', 'full_beard');

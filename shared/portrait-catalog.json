@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "styles": {
+    "hair": {
+      "short": "Короткая",
+      "long": "Длинные прямые",
+      "bob": "Каре",
+      "curly": "Кудри",
+      "medium": "До плеч",
+      "wavy": "Длинные волнистые",
+      "fringe": "С чёлкой",
+      "bald": "Без волос",
+      "buzz": "Ёжик",
+      "pixie": "Пикси",
+      "undercut": "Андеркат",
+      "ponytail": "Хвост",
+      "bun": "Пучок",
+      "braid": "Коса",
+      "parted": "Боковой пробор",
+      "receding": "Редкие волосы"
+    },
+    "clothing": {
+      "plain": "Туника",
+      "tshirt": "Футболка",
+      "shirt": "Рубашка",
+      "blazer": "Пиджак",
+      "jacket": "Куртка",
+      "cardigan": "Кардиган",
+      "jumper": "Джемпер",
+      "sweater": "Водолазка",
+      "blouse": "Блуза",
+      "hoodie": "Худи",
+      "vest": "Жилет",
+      "dress": "Платье",
+      "coveralls": "Комбинезон",
+      "smock": "Рубаха",
+      "cloak": "Плащ"
+    },
+    "face": {
+      "oval": "Овальное",
+      "narrow": "Узкое",
+      "angular": "Угловатое",
+      "broad": "Широкое",
+      "long": "Вытянутое",
+      "round": "Округлое",
+      "soft": "Мягкое"
+    },
+    "hair_color": {
+      "black": "Чёрные",
+      "brown": "Каштановые",
+      "blond": "Светлые",
+      "dark_blond": "Тёмно-русые",
+      "red": "Рыжие",
+      "grey": "Седые",
+      "white": "Белые"
+    },
+    "skin": {
+      "light": "Светлая",
+      "warm": "Тёплая",
+      "beige": "Бежевая",
+      "deep": "Смуглая",
+      "olive": "Оливковая",
+      "peach": "Персиковая",
+      "sand": "Песочная"
+    },
+    "eyes": {
+      "hazel": "Ореховые",
+      "green": "Зелёные",
+      "grey": "Серые",
+      "brown": "Карие",
+      "grey_green": "Серо-зелёные",
+      "blue": "Голубые",
+      "light_green": "Светло-зелёные",
+      "grey_blue": "Серо-голубые"
+    },
+    "clothing_color": {
+      "dark": "Графит",
+      "light": "Молочный",
+      "blue": "Синий",
+      "green": "Зелёный",
+      "brown": "Коричневый",
+      "red": "Красный",
+      "sand": "Песочный"
+    },
+    "facial_hair": {
+      "clean_shaven": "Гладко выбрит",
+      "stubble": "Щетина",
+      "mustache": "Усы",
+      "short_beard": "Короткая борода",
+      "full_beard": "Полная борода"
+    }
+  },
+  "wardrobes": {
+    "neutral": [
+      "plain",
+      "smock",
+      "blouse",
+      "vest",
+      "dress",
+      "cloak"
+    ],
+    "historical": [
+      "plain",
+      "smock",
+      "vest",
+      "dress",
+      "cloak"
+    ],
+    "modern": [
+      "tshirt",
+      "shirt",
+      "blazer",
+      "jacket",
+      "cardigan",
+      "jumper",
+      "sweater",
+      "blouse",
+      "hoodie",
+      "vest",
+      "dress",
+      "coveralls"
+    ]
+  }
+}
