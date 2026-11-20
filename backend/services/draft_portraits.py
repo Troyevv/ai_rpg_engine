@@ -12,16 +12,14 @@ from backend.repositories.portraits import mutate
 DESCRIPTORS = TypeAdapter(PortraitDescriptor)
 
 def authoring_context(state):
-    """Creative and review need canonical appearance, not persisted renderer geometry."""
-    if not state.get('portrait_world_id'):
-        return state
+    """Include canonical appearance in authoring prompts and omit v3 renderer geometry."""
     actors = state['world']['characters']
-    public_actors = {}
+    actors_without_art = {}
     for cid, actor in actors.items():
         art = actor.get('procedural_portrait') or {}
-        public_actors[cid] = ({k:v for k,v in actor.items() if k != 'procedural_portrait'}
+        actors_without_art[cid] = ({k:v for k,v in actor.items() if k != 'procedural_portrait'}
                               if art.get('version') == 3 else actor)
-    return {**state, 'world':{**state['world'], 'characters':public_actors}}
+    return {**state, 'world':{**state['world'], 'characters':actors_without_art}}
 
 
 def portrait_state(state):

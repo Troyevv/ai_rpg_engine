@@ -151,10 +151,11 @@ def preview(state, packet, *, workspace_id=None):
 def messages(base, instruction):
     from backend.services.draft_initial import prompt_schema, compact_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
+    from backend.services.draft_portraits import authoring_context
     state=base['state']
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+ADDRESS_RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
-                candidate=state,candidate_hash=candidate_hash(state),
+                candidate=authoring_context(state),candidate_hash=candidate_hash(state),
                 world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=EditorialProposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
 
 

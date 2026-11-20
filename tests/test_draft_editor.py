@@ -32,7 +32,9 @@ def provider(changes=None,calls=None):
         kw['on_usage']({'prompt_tokens':100,'completion_tokens':40});kw['on_finish']('stop')
         if system.startswith(draft_editor.MARKER):
             data=json.loads(kw['messages'][1]['content']);s=data['candidate']
-            yield proposal(s,changes(s) if changes else None)
+            packet=json.loads(proposal(s,changes(s) if changes else None))
+            packet['candidate_hash']=data['candidate_hash']
+            yield json.dumps(packet,ensure_ascii=False)
         elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}'
         elif system.startswith(draft_creative.MARKER):
             data=json.loads(kw['messages'][1]['content']);yield json.dumps(dict(candidate_hash=data['candidate_hash'],rationale='Мир уже согласован.',changes=[]))
@@ -638,14 +640,24 @@ def test_resume_after_manual_edit_cannot_adopt_new_head(api):
     assert actual['state']==updated['state'] and actual['version_id']==updated['version_id']
 
 
-def test_editor_prompt_compacts_contract_without_cutting_canon(api):
+@pytest.mark.parametrize('version',[2,3])
+def test_editor_prompt_compacts_contract_without_cutting_canon(api,version):
     from context_builder import estimate
     from backend.services.draft_portraits import initialize
     client,_=api;_,_,before=setup(client)
-    initialize(before['state'],version=2)
+    state=before['state']
+    for actor in state['world']['characters'].values():
+        actor.pop('procedural_portrait',None)
+    initialize(state,version=version)
+    expected=deepcopy(state)
+    if version==3:
+        for actor in expected['world']['characters'].values():
+            assert actor.pop('procedural_portrait')['version']==3
     prompt=draft_editor.messages(before,'Измени мир')
     payload=json.loads(prompt[1]['content'])
-    assert payload['candidate']==before['state']
+    from backend.repositories.drafts import candidate_hash
+    assert payload['candidate']==expected
+    assert payload['candidate_hash']==candidate_hash(state)
     assert estimate(prompt)+512+256 <= 32768
     schema=payload['world_schema']
     assert schema['$defs']
