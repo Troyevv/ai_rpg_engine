@@ -89,7 +89,7 @@ class DraftEditorStorage:
             result=[]
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
-                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies','warnings','diagnostics','family_impacts','related_records','amended_indices','original_proposal')}
+                item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure','chronologies','warnings','diagnostics','removable','omitted','original_indices','family_impacts','related_records','amended_indices','original_proposal')}
                 if edit.get('proposal'):
                     item['author_idea']=edit['base'].get('source','')
                 if edit.get('status')=='unapplied' and edit.get('action')=='fix':
@@ -125,7 +125,7 @@ class DraftEditorStorage:
             if decision=='recalculate_dates' and edit.get('calendar_recalculated'):
                 return
             recoverable=decision=='replay' and edit.get('action')=='fix' and edit['status']=='unapplied'
-            editable=decision=='revise' and bool(edit.get('proposal')) and edit['status']=='unapplied'
+            editable=decision in ('revise','omit_invalid') and bool(edit.get('proposal')) and edit['status']=='unapplied'
             if decision=='replay' and not recoverable:
                 if edit.get('response_replayed'):return
                 raise ValueError('Нет отклонённого ответа для повторного открытия.')
@@ -146,7 +146,7 @@ class DraftEditorStorage:
                 current=json.loads(head['content'])
                 if candidate_hash(current['state'])!=edit['before_hash']:raise ValueError('Кандидат изменился.')
                 from backend.services.draft_review_actions import superseded_year_preview
-                if decision in ('revise','replay'):
+                if decision in ('revise','replay','omit_invalid'):
                     from backend.services import draft_editor, draft_review_actions
                     if decision=='replay':
                         from backend.services.draft_response import join_fragments
@@ -158,21 +158,34 @@ class DraftEditorStorage:
                     else:
                         from copy import deepcopy
                         proposal=deepcopy(edit['proposal'])
-                        if not values:raise ValueError('Выберите значение для корректировки.')
-                        for i,value in values.items():
+                        removed=set(edit.get('removable') or []) if decision=='omit_invalid' else set()
+                        if not values and not removed:raise ValueError('Выберите значение для корректировки.')
+                        original_indices=edit.get('original_indices',list(range(len(proposal['changes']))))
+                        for i,value in (values or {}).items():
                             if i<0 or i>=len(proposal['changes']) or proposal['changes'][i]['op']=='remove':
                                 raise ValueError('Некорректный номер операции для редактирования.')
                             proposal['changes'][i]['value']=value
+                        retained=[i for i in range(len(proposal['changes'])) if i not in removed]
+                        proposal['changes']=[proposal['changes'][i] for i in retained]
                         updated=draft_editor.preview(current['state'],draft_editor.EditorialProposal.model_validate(proposal))
                         if updated['status']=='unapplied':raise ValueError(updated['failure'])
                         edit.setdefault('original_proposal',edit['proposal'])
-                        edit['amended_indices']=sorted(set(edit.get('amended_indices',[]))|set(values))
+                        amended=set(edit.get('amended_indices',[]))|set(values or {})
+                        edit['amended_indices']=[i for i,old in enumerate(retained) if old in amended]
+                        edit['original_indices']=[original_indices[i] for i in retained]
+                        edit['omitted']=sorted(set(edit.get('omitted',[]))|{original_indices[i] for i in removed})
+                        if removed:
+                            for finding in edit.get('outcomes',[]):
+                                previous=finding.get('change_indices',[])
+                                finding['change_indices']=[i for i,old in enumerate(retained) if old in previous]
+                                if previous and not finding['change_indices']:
+                                    finding.update(outcome='remaining',reason='Автор исключил предложенные операции.')
                         edit['chronologies']=[]
                         edit['calendar_decisions']={}
                         for finding in edit.get('outcomes',[]):
                             if finding['outcome']=='unapplied' and finding.get('change_indices'):
                                 finding['outcome']='proposed'
-                    for key in ('failure','candidate','diff','diagnostics','warnings'):
+                    for key in ('failure','candidate','diff','diagnostics','warnings','removable'):
                         edit.pop(key,None)
                     edit.update(updated,base_revision=revision+1)
                     db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))

@@ -129,13 +129,13 @@ def import_world(client):
     return url,client.get(url+'?author=true').json()
 
 
-def replay_stream(calls, *, fail=False, semantic_forge=False, semantic_refine=False):
+def replay_stream(calls, *, fail=False, semantic_forge=False, semantic_refine=False, original=False):
     def stream(**kw):
         system=kw['messages'][0]['content'];data=json.loads(kw['messages'][1]['content'])
         kw['on_usage']({'prompt_tokens':100,'completion_tokens':40});kw['on_finish']('stop')
         if system.startswith(draft_editor.MARKER):
             calls.append('proposal');assert 'Создай сестру Ильи' in data['author_context']
-            yield reply_for(data['candidate'],clean=not (fail or semantic_forge))
+            yield reply_for(data['candidate'],clean=not (fail or semantic_forge or original))
         elif system.startswith('Адресная коррекция'):
             calls.append('correction')
             yield json.dumps(dict(proposal_hash=data['proposal_hash'],patches=[],drop_indices=[0] if fail else [15]))
@@ -155,12 +155,18 @@ def test_full_npc_pipeline_preview_accept_startgame_rollback(api,after_start):
         r=client.post(url+'/confirm',json={'revision':before['revision'],'version_id':before['version_id'],'accept_warnings':True});assert r.status_code==200,r.text
         sid=r.json()['save'];old=deepcopy(app.state.repository.get_snapshot(sid));before=client.get(url+'?author=true').json()
     calls=[]
-    with patch('backend.services.preparation.chat_stream',side_effect=replay_stream(calls)):
+    with patch('backend.services.preparation.chat_stream',side_effect=replay_stream(calls,original=True)):
         r=request(client,url,before,text='Создай сестру Ильи');assert r.status_code==200,r.text
         job=wait_job(client,r.json()['id']);assert job['status']=='saved',job.get('error')
     assert calls==['proposal']
     current=client.get(url+'?author=true').json();assert current['state']==before['state'] and current['version_id']==before['version_id']
     edit=client.get(url+'/edits?author=true').json()['edits'][0]
+    assert edit['status']=='unapplied' and edit['removable']==[15]
+    confirmed=decide(client,url,current,edit,'omit_invalid')
+    assert confirmed.is_success,confirmed.text
+    current=confirmed.json()
+    edit=client.get(url+'/edits?author=true').json()['edits'][0]
+    assert edit['omitted']==[15] and len(edit['requests'])==1
     assert edit['status']=='preview' and len(edit['proposal']['changes'])==15 and edit['review'] is None
     assert decide(client,url,current,edit).status_code==200
     accepted=client.get(url+'?author=true').json();assert accepted['version_id']!=before['version_id']

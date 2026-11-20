@@ -102,7 +102,7 @@ class FieldEditDecision(EditDecision):
 
 
 class WorldEditDecision(EditDecision):
-    decision: Literal['accept','reject','recalculate_dates','revise','replay']
+    decision: Literal['accept','reject','recalculate_dates','revise','replay','omit_invalid']
     values: dict[int,Any] = Field(default_factory=dict)
     family: list[FamilyConfirmation] = Field(default_factory=list)
 

@@ -130,7 +130,8 @@ def preview(state, packet):
         failure=str(exc)
         if diagnostics:
             failure='; '.join(f"Операция {d['operation']} ({d['path']}): {d['message']}" for d in diagnostics)
-        return dict(status='unapplied',proposal=packet.model_dump(),failure=failure,diagnostics=diagnostics)
+        return dict(status='unapplied',proposal=packet.model_dump(),failure=failure,diagnostics=diagnostics,
+                    removable=sorted(set(getattr(exc,'drop_indices',[]))))
     for row,original in zip(proposal['changes'],packet.changes):
         row['detail']=original.detail
     diff=differences(state,candidate)

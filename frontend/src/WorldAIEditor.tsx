@@ -17,7 +17,7 @@ const outcomeLabels:Record<string,string>={proposed:'Предложена пра
 const findingLabels:Record<string,string>={contradiction:'Подтверждённое противоречие',incomplete_description:'Неполное описание',uncertainty:'Неопределённость',false_positive:'Ложное замечание'};
 type FamilyChronology = {child:string;name:string;date:string;age:number|null;reference:string;options:number;first:string;last:string;
   parents:{id:string;name:string;age:number|null;birth_date:string|null;died:boolean;quote:string}[];marriage_ids:string[];inventions:{name:string;date:string}[]};
-type Edit = {related_records?:{section:string;id:string;links:{kind:string;id:string}[]}[];family_impacts?:{parent:string;child:string;day:string;age:number|null}[];author_idea?:string;can_replay?:boolean;warnings?:{message:string;path:string}[];diagnostics?:{operation:number;path:string;message:string}[];original_proposal?:{changes:ProposalChange[]};amended_indices?:number[];superseded_dates?:boolean;legacy_families?:LegacyFamily[];chronologies?:FamilyChronology[];action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
+type Edit = {removable?:number[];original_indices?:number[];omitted?:number[];related_records?:{section:string;id:string;links:{kind:string;id:string}[]}[];family_impacts?:{parent:string;child:string;day:string;age:number|null}[];author_idea?:string;can_replay?:boolean;warnings?:{message:string;path:string}[];diagnostics?:{operation:number;path:string;message:string}[];original_proposal?:{changes:ProposalChange[]};amended_indices?:number[];superseded_dates?:boolean;legacy_families?:LegacyFamily[];chronologies?:FamilyChronology[];action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
   references?:Parameters<typeof resolver>[0];
   requests?:{id:string;stage:string;status:string;input_tokens:number|null;output_tokens:number|null;cost_usd:string|null}[];
   proposal?:{rationale:string;conflicts?:string[];changes:ProposalChange[]};diff?:Diff[];conflicts?:string[];
@@ -80,7 +80,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const appliedFix=current?.action==='recheck'&&history.find(e=>e.action==='fix'&&e.applied_version===current.base_version);
  const samePreview=current?.status==='preview'&&!current.stale&&current.instruction===instruction;
  useEffect(()=>{if(job && !active(job))requestId.current=null},[job?.status]);
- const decision=(choice:'accept'|'reject'|'recalculate_dates'|'replay',family?:FamilyInput[])=>execute(async()=>{
+ const decision=(choice:'accept'|'reject'|'recalculate_dates'|'replay'|'omit_invalid',family?:FamilyInput[])=>execute(async()=>{
   await api(`/workspaces/${wid}/draft/edits/${current.id}`,{revision,decision:choice,family,accept_conflicts:conflicts,accept_warnings:warnings});
   if(alive.current){setConfirm(false);requestId.current=null;await load();await refresh()}
  });
@@ -111,6 +111,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    <div className="ai-preview-title"><h4>{statuses[current.status]||'Сохранённый запрос'}</h4><span>На основе версии #{current.base_version}</span></div>
    {!reviewMode&&<details><summary>Инструкция автора</summary><p className="ai-prose">{current.instruction}</p></details>}
    {!!current.diagnostics?.length&&<ul className="ai-editor-error" role="alert" aria-label="Ошибки операций">{current.diagnostics.map(d=><li key={d.operation}><strong>Операция {d.operation}</strong> · {d.path}<p>{d.message}</p></li>)}</ul>}
+   {!!current.removable?.length&&current.status==='unapplied'&&<div className="ai-editor-warning"><p>Можно исключить перечисленные операции и проверить оставшуюся часть пакета.</p><ul>{current.removable.map(i=><li key={i}>{current.proposal?.changes[i]?.path}</li>)}</ul><Button variant="outline" disabled={disabled||current.stale} onClick={()=>void decision('omit_invalid')}>Исключить указанные операции и проверить</Button></div>}
    {current.can_replay&&<Button variant="outline" disabled={disabled||current.stale} onClick={()=>void decision('replay')}>Открыть сохранённое предложение без нового запроса</Button>}
    {current.failure&&!current.diagnostics?.length&&<p className="ai-editor-error" role="alert">{current.failure}</p>}
    {!!current.outcomes?.length&&<section className="ai-review-outcomes" aria-label="Результаты по замечаниям">
@@ -161,7 +162,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {!!current.proposal?.conflicts?.length&&<section aria-label="Неоднозначности"><h5>Что требует решения автора</h5>{!!current.amended_indices?.length&&<p>Модель отметила эти расхождения до вашей корректировки.</p>}<ul>{current.proposal.conflicts.map((text,i)=><li key={i}>{text}</li>)}</ul></section>}
    {current.status==='assessed'&&onCharacters&&current.outcomes?.some(row=>row.outcome==='ambiguous')&&<Button variant="outline" disabled={disabled} onClick={onCharacters}>Уточнить данные в карточках персонажей</Button>}
    {!!current.warnings?.length&&<section className="ai-editor-warning"><h5>Смысловые предупреждения</h5><ul>{current.warnings.map(w=><li key={w.path+w.message}>{w.message}</li>)}</ul></section>}
-   {current.original_proposal&&<details><summary>Исходные значения модели</summary>{current.amended_indices?.map(i=>{const c=current.original_proposal!.changes[i];return c&&<div key={i}><small>{c.path}</small><RuntimeValue field={c.path.split('/').pop()!} value={c.value} resolve={previewResolve} author/></div>})}</details>}
+   {current.original_proposal&&<details><summary>Исходные значения модели</summary>{[...(current.amended_indices||[]).map(i=>current.original_indices?.[i]??i),...(current.omitted||[])].map(i=>{const c=current.original_proposal!.changes[i];return c&&<div key={i}><small>{current.omitted?.includes(i)&&'Исключено автором · '}{c.path}</small><RuntimeValue field={c.path.split('/').pop()!} value={c.value} resolve={previewResolve} author/></div>})}</details>}
    {['preview','unapplied'].includes(current.status)&&current.proposal?.changes.some(c=>c.op!=='remove')&&<Button variant="outline" disabled={disabled||current.stale} onClick={()=>setAdjust(current.id)}><Pencil size={16}/>Скорректировать значения</Button>}
    {adjust===current.id&&current.proposal&&<ProposalAdjustment references={current.references} changes={current.proposal.changes} revision={revision} resolve={previewResolve}
     disabled={busy} onClose={()=>setAdjust(null)} onSave={async(values,baseRevision)=>{
