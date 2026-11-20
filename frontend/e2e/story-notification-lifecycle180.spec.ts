@@ -23,7 +23,7 @@ async function dismiss(page:Page,id:string){
  await expect(toast(page)).toHaveAttribute('data-notice-id',id);
  if(test.info().project.name==='mobile')await swipe(page,toast(page).locator('.story-toast-icon'),100,0);
  else await toast(page).getByRole('button',{name:'Скрыть уведомление'}).click();
- await expect(page.locator('.story-toast[data-notice-id=+id+]')).toHaveCount(0);
+ await expect(page.locator('.story-toast[data-notice-id='+JSON.stringify(id)+']')).toHaveCount(0);
 }
 for(const theme of ['graphite','parchment']){
  test(`visible deliveries survive phone, inactive workspace and reload, then settle once: ${theme}`,async({page,request})=>{

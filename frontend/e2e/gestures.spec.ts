@@ -476,6 +476,6 @@ test('the action sheet moves one stop at a time and preserves suggestions after 
   await expect(page.locator('.phone-device')).toHaveClass(/is-open/);
   await page.getByRole('button', { name: 'Свернуть телефон' }).click();
   await expect(suggestion).toBeEnabled();
-  await expect(suggestion).toHaveText(label);
+  await expect(suggestion).toHaveText(label,{useInnerText:true});
   expect(await revision()).toBe(before);
 });
