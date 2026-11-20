@@ -70,7 +70,7 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
     expect(preview!.y).toBeGreaterThanOrEqual(controls!.y+controls!.height);
    }
    if(route==='characters'){
-    const add=await page.locator('.ww-page-head>.ww-primary').evaluate(el=>{const s=getComputedStyle(el);return {wrap:s.whiteSpace,overflow:el.scrollWidth>el.clientWidth}});
+    const add=await page.getByRole('button',{name:'Персонаж',exact:true}).evaluate(el=>{const s=getComputedStyle(el);return {wrap:s.whiteSpace,overflow:el.scrollWidth>el.clientWidth}});
     expect(add).toEqual({wrap:'nowrap',overflow:false});
    }
    if(route==='history'){

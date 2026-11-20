@@ -26,6 +26,10 @@ def register(app,repo):
     def list_portraits(sid:int,cid:str):
         return portraits.listing(repo,sid,cid)
 
+    @app.put(base+'/procedural')
+    def procedural(sid:int,cid:str,body:ProceduralEdit):
+        return portraits.edit(repo,sid,cid,body.revision,descriptor=body.descriptor,mode=body.mode)
+
     @app.post(base)
     async def upload(sid:int,cid:str,request:Request,revision:int,replace_id:str|None=None,settings:str="{}"):
         import json

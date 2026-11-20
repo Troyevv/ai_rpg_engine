@@ -26,6 +26,7 @@ RULES = '''Развивай мир свободно по замыслу авто
 (original_npc_gaps), свяжи их с миром, затем добавляй полезные лица, места и линии.
 Масштаб — ориентир. Не требуй тайны, травмы или романтики. Уважай заданные факты,
 намеренную неизвестность и различия в знаниях персонажей.
+При создании или развитии внешности укажи portrait_traits из итогового открытого описания, для исходного NPC через add /characters/<id>/portrait_traits. Сохрани намеренную неизвестность и секреты.
 Сохраняй эпоху, технологии, географию и календарь. Не подменяй неизвестность
 знанием, предысторию будущим событием, приглашение согласием. Не назначай
 управляемому персонажу намерения, чувства, решения и обязательства. Его
@@ -53,7 +54,7 @@ reason объясняет художественную связь изменен
 
 def creative_schema():
     from backend.services.draft_initial import compact_schema
-    return compact_schema(prompt_schema())
+    return compact_schema(prompt_schema(initial_portraits=True))
 
 
 def npc_gaps(state):
@@ -70,9 +71,11 @@ def messages(state, author_context):
     # Entire canonical content, no clipping, retrieval sampling, or second canon.
     # Transport preflight refuses contexts that cannot fit it before spending.
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
+    from backend.services.draft_portraits import authoring_context
+    candidate=authoring_context(state)
     return [dict(role='system', content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user', content=json.dumps(dict(
-                author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:state[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
+                author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:candidate[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
                 candidate_hash=candidate_hash(state), world_schema=creative_schema(),
                 response_schema=Proposal.model_json_schema()), ensure_ascii=False, separators=(',', ':')))]
 
@@ -99,11 +102,13 @@ def response_slot(journal, record, request_key):
 
 
 def develop(state, author_context, journal, call, save, *, request_key=None):
+    art_version=journal.get('generation_contract',{}).get('portrait_version',2)
+    art_job=journal.get('binding',{}).get('job_id') if art_version==3 else None
     record = journal.get('creative')
     if record and record.get('status') == 'applied':
         # Recover a crash between the journal checkpoint and version append.
         if candidate_hash(state) == record['before_hash'] and record['after_hash'] != record['before_hash']:
-            enhanced, _ = apply_proposal(state, json.dumps(record['proposal'], ensure_ascii=False))
+            enhanced, _ = apply_proposal(state, json.dumps(record['proposal'], ensure_ascii=False),portrait_version=art_version,creation_job=art_job)
             journal['candidate_text'] = json.dumps(enhanced, ensure_ascii=False)
             save()
             return enhanced
@@ -150,7 +155,9 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
                 answer, normalization = proposal_text(answer)
                 if normalization:
                     record['normalization'] = normalization
-                enhanced, proposal = apply_proposal(state, answer)
+                warnings=[]
+                enhanced, proposal = apply_proposal(state, answer,portrait_version=art_version,creation_job=art_job,warnings=warnings)
+                if warnings: record['warnings']=warnings
                 break
             except ValueError as invalid:
                 allowed = correction.scope(state, answer, invalid)

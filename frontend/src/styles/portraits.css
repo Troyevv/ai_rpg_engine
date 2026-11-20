@@ -42,3 +42,57 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
  .portrait-comparison figcaption{font-size:10px;margin-bottom:4px}
  .portrait-comparison .portrait-literary-reference{min-width:0;max-height:118px;overflow:auto;margin:0}
 }
+.dialog-content.studio-open{display:flex;flex-direction:column;gap:10px;width:min(920px,96vw);height:min(780px,90dvh);overflow:hidden;background:var(--surface-1)}
+.portrait-studio,.studio-main,.studio-settings{min-height:0;min-width:0}
+.portrait-studio{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.studio-main{display:grid;grid-template-columns:minmax(210px,.82fr) minmax(0,1fr);gap:22px;flex:1}
+.studio-reference{align-self:start;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:12px}
+.studio-reference .portrait-comparison{position:static;display:flex;align-items:end;gap:9px;background:none}
+.studio-reference .portrait-comparison figure{min-width:0;margin:0;flex:1}
+.studio-reference .portrait-comparison figure:last-child{flex:1.45}
+.studio-reference .portrait-comparison .character-avatar{display:block;width:100%;max-width:none;border:none}
+.studio-reference figcaption{font-weight:600}.studio-reference>.ui-button{margin:8px auto 0;display:flex}
+.portrait-dialog fieldset.studio-settings{overflow-y:auto;overscroll-behavior:contain;padding:0 4px 12px;border:none;scrollbar-gutter:stable}
+.studio-tabs{position:sticky;z-index:1;top:0;background:var(--surface-1);padding:3px 0 9px;display:flex;flex-wrap:wrap;gap:3px}
+.studio-tabs button,.studio-colors button,.studio-gallery button{background:var(--surface-2);color:var(--text);font:inherit;border:1px solid var(--border);border-radius:8px;cursor:pointer}
+.studio-tabs button{min-height:40px;padding:6px 9px;font-size:13px}
+.studio-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));gap:8px}
+.studio-gallery button{position:relative;display:flex;flex-direction:column;overflow:hidden;text-align:start;padding:0}
+.studio-gallery img{display:block;width:100%;aspect-ratio:1.12;object-fit:cover;object-position:center 34%}
+.studio-gallery[aria-label="Одежда"] img{aspect-ratio:.95;object-position:bottom}
+.studio-gallery button span{font-size:12px;font-weight:550;line-height:1.25;padding:7px 6px}
+.studio-gallery button svg{position:absolute;top:5px;right:5px;background:var(--surface-1);color:var(--accent);border-radius:50%}
+.portrait-studio button[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.studio-colors{margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px}
+.studio-colors h3{width:100%;font-size:14px;margin:4px 0}
+.studio-colors button{min-height:38px;display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:5px}
+.studio-colors i{width:18px;height:18px;border:1px solid #8888;border-radius:50%}
+.portrait-studio footer{border-top:1px solid var(--border);padding:10px 0 0;display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.portrait-studio footer p{margin:0;width:100%;font-size:12px;color:var(--text);max-height:3.5em;overflow:auto}
+@media(max-width:760px){
+ .dialog-content.studio-open{width:100%;height:var(--app-height,100dvh);max-height:100dvh;padding:16px 12px max(10px,env(safe-area-inset-bottom));gap:6px}
+ .studio-main{display:flex;flex-direction:column;gap:8px}
+ .studio-reference{width:100%;padding:6px 10px}
+ .studio-reference .portrait-comparison{justify-content:center;gap:18px}
+ .studio-reference .portrait-comparison figure,.studio-reference .portrait-comparison figure:last-child{flex:0 1 min(23vw,14dvh)}
+ .studio-reference .portrait-comparison figcaption{font-size:11px;line-height:1.2;white-space:normal;margin-bottom:4px;text-align:center;overflow-wrap:normal}
+ .studio-gallery{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .studio-tabs{gap:2px;justify-content:space-between}
+ .studio-tabs button{padding:5px 7px;min-height:42px;font-size:12px}
+ .portrait-studio footer .ui-button{min-height:44px;padding-inline:10px;font-size:13px}
+}
+@media(max-width:640px){
+ .studio-reference .portrait-comparison figure:last-child{flex-basis:min(33vw,19dvh)}
+}
+@media(max-width:640px) and (max-height:590px){
+ .studio-reference{display:flex;align-items:center;justify-content:space-around;gap:9px}
+ .studio-reference .portrait-comparison{flex:1;gap:9px}
+ .studio-reference .portrait-comparison figure{flex-basis:min(18vw,13dvh)}
+ .studio-reference .portrait-comparison figure:last-child{flex-basis:min(24vw,17dvh)}
+ .studio-reference>.ui-button{margin:0;width:105px;min-height:44px;padding-inline:6px;white-space:normal;line-height:1.25}
+}
+
+.studio-face-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin-top:12px}
+.studio-face-details p{grid-column:1/-1;margin:0;color:var(--text-muted);font-size:13px}
+
+.character-avatar img.face-framing{transform:scale(1.45);transform-origin:50% 28%}

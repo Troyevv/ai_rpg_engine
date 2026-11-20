@@ -108,13 +108,13 @@ class RuntimeStorage:
             batch = diagnostic if isinstance(diagnostic, list) else [diagnostic]
             db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',(dump(records+batch),job_id))
 
-    def begin_request(self, job_id, stage, config, messages, diagnostics, save_id=None):
+    def begin_request(self, job_id, stage, config, messages, diagnostics, save_id=None, workspace_id=None):
         from backend.services.usage import price_snapshot
         rid = uuid.uuid4().hex
         with self.connect() as db:
             job = db.execute('SELECT save_id,session_id,attempt_epoch,revision FROM game_jobs WHERE id=?', (job_id,)).fetchone()
-            workspace = None
-            if not job and save_id is None:
+            workspace = workspace_id
+            if not job and save_id is None and workspace_id is None:
                 preparation = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()
                 # Chat jobs share the usage ledger, but never a Narrative save/workspace.
                 if not preparation:

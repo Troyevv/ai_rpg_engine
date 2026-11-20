@@ -14,7 +14,7 @@ const cuts = {
  youth:   {neck:22, collar:316, shoulder:105, rise:346, sleeve:138, waist:94,  drape:.88},
 };
 
-export function dressedBust(frame:BodyFrame, juvenile:boolean, tailoring:string, shade:string, plain:boolean) {
+export function dressedBust(frame:BodyFrame, juvenile:boolean, tailoring:string, shade:string, plain:boolean, neckPath?:string) {
  const {neck:n,collar:y,shoulder:s,rise:r,sleeve:a,waist:w,drape:k}=cuts[juvenile?'youth':frame];
  const l=200-n, h=200+n;
  const neck=`M${l} 264 Q${l+3} ${y-13} ${l-5} ${y} Q${l-12} ${y+8} ${l-39} ${r} Q200 ${y+79} ${h+39} ${r} Q${h+9} ${y+7} ${h+5} ${y} Q${h-3} ${y-13} ${h} 264Z`;
@@ -24,7 +24,7 @@ export function dressedBust(frame:BodyFrame, juvenile:boolean, tailoring:string,
  C${216-s} ${r-4} ${l-20} ${y+10} ${l} ${y}Z`;
  const fit=`translate(200 ${y}) scale(${k} 1) translate(-200 -316)`;
  return `<defs><clipPath id="tailoring"><path d="${outline}"/></clipPath></defs>
- <path d="${neck}" fill="url(#neck)"/>
+ <path d="${neckPath||neck}" fill="url(#neck)"/>
  <path d="M${l+2} 283 Q200 312 ${h-1} 282 L${h-1} 299 Q202 327 ${l+2} 300Z" fill="${shade}" opacity=".38"/>
  <path d="${outline}" fill="url(#cloth)"/>
  <g clip-path="url(#tailoring)">
@@ -48,11 +48,13 @@ const whiskers='M200 247 C197 244 193 244 189 246 C184 247 182 252 176 254 Q181 
 const cheekLine='M131 202 Q140 205 145 222 C149 235 164 244 176 246 Q185 248 187 253 Q179 258 185 263 Q192 269 201 268 Q213 268 217 262 Q221 257 214 253 Q217 248 224 246 C241 240 250 234 255 219 Q260 202 270 201 V341 H131Z';
 const trimmedLine='M132 209 Q141 212 146 228 Q153 245 173 251 Q181 254 184 258 C178 267 194 273 201 271 C210 273 223 266 218 258 Q222 252 231 249 Q249 239 255 224 Q262 210 270 207 V340 H132Z';
 
-export function beardLayer(style:FacialHair, face:string, hair:readonly string[]) {
+export function beardLayer(style:FacialHair, face:string, hair:readonly string[],offset?:number) {
  if(style==='clean_shaven')return '';
  const [light,dark]=hair;
+ const shift=offset?` transform="translate(0 ${offset})"`:'';
  const mustache=`<path d="${whiskers}" fill="url(#hair)"/><path d="M183 252q5-5 11-5m12 0q6 0 12 5" fill="none" stroke="${light}" stroke-width="1" opacity=".56" stroke-linecap="round"/>`;
- if(style==='mustache')return mustache;
+ const fitted=offset?`<g${shift}>${mustache}</g>`:mustache;
+ if(style==='mustache')return fitted;
  const full=style==='full_beard', stubble=style==='stubble';
  const length=full?1.22:stubble?1:1.03;
  const jaw=`<path d="${face}" transform="translate(0 215) scale(1 ${length}) translate(0 -215)"/>`;
@@ -60,12 +62,12 @@ export function beardLayer(style:FacialHair, face:string, hair:readonly string[]
  const details=`<path d="M125 200H178Q183 269 195 335H125Z" fill="url(#brush0)"/>
  <path d="M178 200H222Q216 269 205 335H195Q183 269 178 200Z" fill="url(#brush1)"/>
  <path d="M222 200H275V335H205Q216 269 222 200Z" fill="url(#brush2)"/>`;
- return `<defs>${brush(stubble,stubble?dark:light)}<clipPath id="jaw">${jaw}</clipPath><clipPath id="cheeks"><path d="${hairline}"/></clipPath>
+ return `<defs>${brush(stubble,stubble?dark:light)}<clipPath id="jaw">${jaw}</clipPath><clipPath id="cheeks"><path d="${hairline}"${shift}/></clipPath>
  <linearGradient id="beard" x1="0" y1="0" x2=".88" y2=".8"><stop stop-color="${light}"/><stop offset=".62" stop-color="${dark}"/><stop offset="1" stop-color="${dark}"/></linearGradient></defs>
  <g clip-path="url(#jaw)"><g clip-path="url(#cheeks)">
  <rect x="125" y="200" width="150" height="140" fill="url(#beard)" opacity="${stubble ? .17 : 1}"/>
  <path d="M143 220 Q151 248 171 261 Q186 270 198 289 Q185 288 165 274 Q151 260 143 245Z" fill="${light}" opacity="${stubble ? .09 : .28}"/>
  <path d="M255 220 Q248 252 230 266 Q216 278 208 303 Q234 293 252 265Z" fill="${dark}" opacity=".18"/>
  <g fill="none" stroke-linecap="round">${details}</g></g></g>
- ${stubble?`<path d="${whiskers}" fill="${dark}" opacity=".11"/>`:mustache}`;
+ ${stubble?`<path d="${whiskers}"${shift} fill="${dark}" opacity=".11"/>`:fitted}`;
 }

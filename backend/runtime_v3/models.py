@@ -462,7 +462,7 @@ class ProceduralPortrait(StrictModel):
     @model_serializer(mode='wrap')
     def _sparse_colors(self, handler):
         result=handler(self)
-        for key in ('hair_color','clothing_color','visual_age','visual_age_mode'):
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode','face_revision','eye_shape','nose_shape','lip_shape'):
             if result.get(key) is None: result.pop(key,None)
         return result
 
@@ -484,7 +484,30 @@ class ProceduralPortraitV2(ProceduralPortrait):
         return self
 
 
-PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2
+class ProceduralPortraitV3(ProceduralPortraitV2):
+    version: Literal[3]
+    # Keep each unedited layer of a historical plate exactly as it was painted.
+    base_version: Literal[1, 2] = 2
+    hairstyle: str | None = None
+    garment: str | None = None
+    visage: str | None = None
+    face_revision: Literal[2, 3] | None = None
+    eye_shape: Literal['almond','open','hooded'] | None = None
+    nose_shape: Literal['straight','rounded','arched'] | None = None
+    lip_shape: Literal['defined','full','fine'] | None = None
+    skin_swatch: bool = False
+    eye_swatch: bool = False
+
+    @model_validator(mode='after')
+    def catalogue_layers(self):
+        from backend.runtime_v3.portrait_catalog import STYLES
+        for key, value in [('hair', self.hairstyle), ('clothing', self.garment), ('face', self.visage)]:
+            if value is not None and value not in STYLES[key]:
+                raise ValueError('Неизвестный вариант иллюстрации: ' + key)
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2 | ProceduralPortraitV3
 
 
 class PortraitReference(StrictModel):

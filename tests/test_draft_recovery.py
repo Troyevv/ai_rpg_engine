@@ -79,6 +79,7 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
     raw_with_settings=dict(raw,creation_settings=d['candidate']['creation_settings'])
     expected=initial.normalize(complete(raw_with_settings,SHORT,seed=jid))
     expected.pop('creation_settings',None)
+    expected['portrait_world_id']=jid
     assert {k:v for k,v in d['candidate'].items() if k!='creation_settings'}==expected
     assert client.get(url).json()['candidate'] is None
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
@@ -183,7 +184,8 @@ def test_review_context_resume_keeps_completed_world(api):
     with patch('backend.services.preparation.chat_stream',side_effect=review_only) as provider:
         resumed=client.post(url+'/resume',json={'revision':d['revision'],'context_length':65536,'api_key':'test'})
         assert resumed.status_code==200,resumed.text
-        assert wait_job(client,jid)['status']=='saved'
+        finished=wait_job(client,jid)
+        assert finished['status']=='saved',finished.get('error')
         assert provider.call_count==2  # creative development then review; world response is cached
     assert json.loads(repo.preparation_job(jid)['response_journal'])['responses']['world']==before
     assert client.get(url+'?author=true').json()['state']['characters'][0]['fields']['Биография']==raw['characters'][0]['fields']['Биография']

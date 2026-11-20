@@ -1,0 +1,171 @@
+{
+  "version": 3,
+  "styles": {
+    "hair": {
+      "short": "Короткая",
+      "long": "Длинные прямые",
+      "bob": "Каре",
+      "curly": "Кудри",
+      "medium": "До плеч",
+      "wavy": "Длинные волнистые",
+      "fringe": "С чёлкой",
+      "bald": "Без волос",
+      "buzz": "Ёжик",
+      "pixie": "Пикси",
+      "undercut": "Андеркат",
+      "ponytail": "Хвост",
+      "bun": "Пучок",
+      "braid": "Коса",
+      "parted": "Боковой пробор",
+      "receding": "Редкие волосы"
+    },
+    "clothing": {
+      "plain": "Туника",
+      "tshirt": "Футболка",
+      "shirt": "Рубашка",
+      "blazer": "Пиджак",
+      "jacket": "Куртка",
+      "cardigan": "Кардиган",
+      "jumper": "Джемпер",
+      "sweater": "Водолазка",
+      "blouse": "Блуза",
+      "hoodie": "Худи",
+      "vest": "Жилет",
+      "dress": "Платье",
+      "coveralls": "Комбинезон",
+      "smock": "Рубаха",
+      "cloak": "Плащ"
+    },
+    "face": {
+      "oval": "Овальное",
+      "narrow": "Узкое",
+      "angular": "Угловатое",
+      "broad": "Широкое",
+      "long": "Вытянутое",
+      "round": "Округлое",
+      "soft": "Мягкое"
+    },
+    "hair_color": {
+      "black": "Чёрные",
+      "brown": "Каштановые",
+      "blond": "Светлые",
+      "dark_blond": "Тёмно-русые",
+      "red": "Рыжие",
+      "grey": "Седые",
+      "white": "Белые"
+    },
+    "skin": {
+      "light": "Светлая",
+      "warm": "Тёплая",
+      "beige": "Бежевая",
+      "deep": "Смуглая",
+      "olive": "Оливковая",
+      "peach": "Персиковая",
+      "sand": "Песочная"
+    },
+    "eyes": {
+      "hazel": "Ореховые",
+      "green": "Зелёные",
+      "grey": "Серые",
+      "brown": "Карие",
+      "grey_green": "Серо-зелёные",
+      "blue": "Голубые",
+      "light_green": "Светло-зелёные",
+      "grey_blue": "Серо-голубые"
+    },
+    "clothing_color": {
+      "dark": "Графит",
+      "light": "Молочный",
+      "blue": "Синий",
+      "green": "Зелёный",
+      "brown": "Коричневый",
+      "red": "Красный",
+      "sand": "Песочный"
+    },
+    "facial_hair": {
+      "clean_shaven": "Гладко выбрит",
+      "stubble": "Щетина",
+      "mustache": "Усы",
+      "short_beard": "Короткая борода",
+      "full_beard": "Полная борода"
+    }
+  },
+  "wardrobes": {
+    "neutral": [
+      "plain",
+      "smock",
+      "blouse",
+      "vest",
+      "dress",
+      "cloak"
+    ],
+    "historical": [
+      "plain",
+      "smock",
+      "vest",
+      "dress",
+      "cloak"
+    ],
+    "modern": [
+      "tshirt",
+      "shirt",
+      "blazer",
+      "jacket",
+      "cardigan",
+      "jumper",
+      "sweater",
+      "blouse",
+      "hoodie",
+      "vest",
+      "dress",
+      "coveralls"
+    ]
+  },
+  "skin_materials": {
+    "light": [
+      "#ffe4d1",
+      "#eac5af",
+      "#c8967e"
+    ],
+    "warm": [
+      "#eec99e",
+      "#d4a579",
+      "#a87551"
+    ],
+    "beige": [
+      "#ddba9c",
+      "#bc9074",
+      "#946950"
+    ],
+    "deep": [
+      "#a66e52",
+      "#82503d",
+      "#583529"
+    ],
+    "olive": [
+      "#c7ad7e",
+      "#aa8d65",
+      "#806b49"
+    ],
+    "peach": [
+      "#f5c6ab",
+      "#dcaa90",
+      "#b77c69"
+    ],
+    "sand": [
+      "#daba8a",
+      "#bd986a",
+      "#95724f"
+    ]
+  },
+  "eye_colors": {
+    "hazel": "#786344",
+    "green": "#53704f",
+    "grey": "#778082",
+    "brown": "#553f31",
+    "grey_green": "#6c7b68",
+    "blue": "#577d9c",
+    "light_green": "#8c9c69",
+    "grey_blue": "#6f8998"
+  }
+}

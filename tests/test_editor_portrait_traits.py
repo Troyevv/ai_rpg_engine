@@ -18,7 +18,7 @@ def test_new_npc_portrait_contract_and_materialization():
     out,_=apply_proposal(s,json.dumps(p),editing=True)
     assert s==before
     descriptor=out['world']['characters']['olya']['procedural_portrait']
-    assert (descriptor['version'],descriptor['body_frame'],descriptor['facial_hair']) == (2,'male','mustache')
+    assert (descriptor['version'],descriptor['body_frame'],descriptor['facial_hair']) == (3,'male','mustache')
     assert (descriptor['hair'],descriptor['hair_color'],descriptor['eyes'],descriptor['clothing'])==(2,3,7,6)
     assert 'portrait_traits' not in next(c for c in out['characters'] if c['id']=='olya')
     schema=json.loads(messages(f['base'],'Создай сестру')[1]['content'])['world_schema']
@@ -38,9 +38,12 @@ def test_partial_and_absent_traits_stable():
     assert partial==dict(first,eyes=7)
 
 
-def test_unknown_traits_rejected():
+def test_unknown_traits_are_local_warnings():
     f=recorded();p=json.loads(f['reply']);p['changes'][1]['value']['portrait_traits']={'eyes':'ultraviolet'}
-    with pytest.raises(ValueError,match='portrait_traits'):apply_proposal(f['base']['state'],json.dumps(p),editing=True)
+    warnings=[]
+    out,_=apply_proposal(f['base']['state'],json.dumps(p),editing=True,warnings=warnings)
+    assert out['world']['characters']['olya']['procedural_portrait']['version']==3
+    assert any(row['category']=='portrait_traits' for row in warnings)
 
 from test_api import api
 import test_draft_editor_paths as pipeline
@@ -70,8 +73,9 @@ def test_facial_hair_requires_public_unambiguous_typed_source(text,style):
     actor['appearance']['items']['beard'] = item
     assert default_descriptor('ilya','adult',actor) == {**baseline,'facial_hair':style}
     conflicting = 'stubble' if style=='mustache' else 'mustache'
-    with pytest.raises(ValueError,match='facial_hair'):
-        default_descriptor('ilya','adult',actor,{'facial_hair':conflicting})
+    warnings=[]
+    assert default_descriptor('ilya','adult',actor,{'facial_hair':conflicting},warnings=warnings)['facial_hair']==style
+    assert warnings and 'facial_hair' in warnings[0]
     for key,value in [('fact_id','private'),('source_event_id','event'),('revision',2),('condition_id','private')]:
         actor['appearance']['items']['beard'] = {**item,key:value}
         assert default_descriptor('ilya','adult',actor,{'facial_hair':style}) == baseline

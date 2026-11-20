@@ -61,7 +61,7 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  await page.screenshot({path:info.outputPath(`anna-cards-${info.project.name}.png`),animations:'disabled',fullPage:true});
  await page.getByRole('button',{name:'Список',exact:true}).click();await fullArt(page,card);
  await card.click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
- await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
+ await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();await page.getByRole('button',{name:'Образ',exact:true}).click();
  const selector=page.getByLabel('Визуальный возраст',{exact:true});await expect(selector).toHaveJSProperty('value', 'auto');
  await expect(page.locator('.portrait-age-reference')).toContainText('24 года · Молодой взрослый');
  const previews=new Map<string,string>();
@@ -81,7 +81,7 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  const elderly=previews.get('elderly')!;
  await expect(page.locator('.ww-dossier-aside>.portrait-control .procedural-portrait')).toHaveAttribute('src',elderly);
  await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');await card.click();
- await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
+ await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();await page.getByRole('button',{name:'Образ',exact:true}).click();
  await expect(selector).toHaveJSProperty('value', 'elderly');
  await page.getByRole('button',{name:'Вернуть возраст по персонажу',exact:true}).click();await expect(selector).toHaveJSProperty('value', 'auto');
  await expect(page.locator('.portrait-comparison figure').last().locator('img')).toHaveAttribute('src',previews.get('young_adult')!);
@@ -89,7 +89,7 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  const persisted=await(await request.get(url+`/characters/${cid}/portraits?author=true`)).json();
  expect(persisted.descriptor.visual_age_mode).toBe('auto');expect(persisted.descriptor.visual_age).toBe('young_adult');
  // Persist a manual minor category on an adult, then start the real Runtime.
- await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
+ await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();await page.getByRole('button',{name:'Образ',exact:true}).click();
  await chooseOption(selector, 'infant');await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'Готово',exact:true}).click();
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);

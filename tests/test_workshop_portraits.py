@@ -130,7 +130,8 @@ def test_primary_art_direction_becomes_one_portable_descriptor(api):
     assert not report['errors'], report
     assert 'portrait_traits' not in candidate['characters'][0] and candidate['characters'][0]['fields']['Внешность']==description
     desc=candidate['world']['characters'][cid]['procedural_portrait']
-    assert desc==dict(default_descriptor(cid,'adult',age_style='young_adult'),face=3,hair=0,hair_color=0,eyes=2,clothing=2,clothing_color=0)
+    assert (desc['version'],desc['visage'],desc['hairstyle'],desc['garment'])==(3,'broad','short','shirt')
+    assert (desc['hair_color'],desc['eyes'],desc['clothing_color'])==(0,2,0)
     url,d=create(client,candidate)
     assert d['portraits'][cid]['procedural_portrait']==desc
     # New hints or literary edits never replace a portrait that has already been saved.
@@ -185,7 +186,7 @@ def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_
     draft=client.get(path+'?author=true').json()
     desc=draft['portraits'][cid]['procedural_portrait']
     assert desc['form']=='human' and desc['eyes']==2 and desc['clothing']==2 and desc['hair_color']==desc['clothing_color']==0
-    assert (desc['version'],desc['body_frame'],desc['facial_hair'])==(2,'male','short_beard')
+    assert (desc['version'],desc['body_frame'],desc['facial_hair'])==(3,'male','short_beard')
     assert 'MODEL-CANNOT-ISSUE-AN-ID' not in desc['seed']
     assert not draft['state']['world']['characters'][cid].get('portraits')
     assert draft['state']['world']['characters'][cid].get('portrait_mode','auto')=='auto'

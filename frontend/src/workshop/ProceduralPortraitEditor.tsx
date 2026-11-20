@@ -1,62 +1,94 @@
-import { Choice } from "@/components/ui/choice";
-import {useState,useId,type ReactNode} from 'react';
-import {type ProceduralPortrait} from './proceduralPortrait';
-import {bodyFrames,facialHairStyles,type BodyFrame,type FacialHair} from './portraitAnatomy';
-export type AnatomyReference = {body_frame:BodyFrame;facial_hair_allowed:boolean};
+import {useRef,useState,type ReactNode} from 'react';
+import {Check,RotateCcw} from 'lucide-react';
+import {Choice} from '../components/ui/choice';
 import {Button} from '../components/ui/button';
-const choices = {face:['Овальное','Узкое','Угловатое','Широкое','Вытянутое','Округлое','Мягкое'],hair:['Короткие','Длинные','Каре','Кудрявые','Средние','Волнистые','Чёлка','Без волос'],skin:['Светлая','Тёплая','Бежевая','Смуглая','Оливковая','Персиковая','Песочная'],eyes:['Ореховые','Зелёные','Серые','Карие','Серо-зелёные','Голубые','Светло-зелёные','Серо-голубые'],clothing:['Нейтральная туника','Футболка','Рубашка','Жакет','Куртка','Кардиган','Джемпер','Свитер'],accessory:['Без аксессуаров','Цепочка','Серьги и подвеска','Длинные серьги','Без украшений','Кулон','Без украшений','Подвеска'],palette:['Графит','Шалфей','Терракота','Охра','Лён','Сланец','Песок']};
-const ageLabels={infant:'Младенец',child:'Ребёнок',adolescent:'Подросток',young_adult:'Молодой взрослый',mature_adult:'Зрелый взрослый',elderly:'Пожилой'};
-const colors={hair_color:['Чёрные','Каштановые','Светлые','Тёмно-русые','Рыжие','Седые','Белые'],clothing_color:['Тёмный','Светлый','Синий','Зелёный','Коричневый','Красный','Песочный']};
-export function ProceduralPortraitEditor({descriptor,appearance,ageReference,anatomyReference,mode,disabled,onSave,renderPreview}:{renderPreview:(p:ProceduralPortrait)=>ReactNode;appearance?:string;anatomyReference?:AnatomyReference;ageReference?:{age?:number|null;stage:string;visual_age?:ProceduralPortrait['visual_age']|null};descriptor:ProceduralPortrait;mode:'auto'|'procedural';disabled:boolean;onSave:(p:ProceduralPortrait,mode:'auto'|'procedural')=>Promise<void>}) {
- const [open,setOpen]=useState(false);const panelId=useId();
- const [status,setStatus]=useState('');const [compare,setCompare]=useState(false);
- const [value,setValue]=useState(descriptor);const [selected,setSelected]=useState(mode);
- const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
- const adultArt=(p:ProceduralPortrait)=>['young_adult','mature_adult','elderly','adult'].includes(p.visual_age || p.stage);
- const selectAge=(choice:string)=>{
-  setCompare(true);
-  const next:ProceduralPortrait=choice==='auto'
-   ? {...value,visual_age_mode:'auto',visual_age:ageReference?.visual_age||undefined,stage:ageReference?.stage||value.stage}
-   : {...value,visual_age_mode:'manual',visual_age:choice as NonNullable<ProceduralPortrait['visual_age']>};
-  if(next.version===2 && !adultArt(next))next.facial_hair='clean_shaven';
-  setValue(next);
- };
- const setAnatomy=(change:{body_frame?:BodyFrame;facial_hair?:FacialHair})=>{
-  setValue({...value,version:2,
-   body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
-   facial_hair:value.version===2?value.facial_hair:'clean_shaven',...change});
- };
+import catalog from '../../../shared/portrait-catalog.json';
+import {proceduralPortrait,type ProceduralPortrait,type Layers} from './proceduralPortrait';
+import {figureFeatures,type FeatureChoices} from './portraitFigure';
+import {bodyFrames,facialHairStyles,type BodyFrame,type FacialHair} from './portraitAnatomy';
+const detailNames={eye_shape:'Разрез глаз',nose_shape:'Форма носа',lip_shape:'Форма губ'};
+const featureLabels={almond:'Миндалевидные',open:'Открытые',hooded:'Прикрытые веком',straight:'Прямой',rounded:'Округлый',arched:'С горбинкой',defined:'Выраженный контур',full:'Полные',fine:'Тонкие'};
+
+export type AnatomyReference={body_frame:BodyFrame;facial_hair_allowed:boolean};
+type Age=NonNullable<ProceduralPortrait['visual_age']>;
+const ages:Record<Age,string>={infant:'Младенец',child:'Ребёнок',adolescent:'Подросток',young_adult:'Молодой взрослый',mature_adult:'Зрелый взрослый',elderly:'Пожилой'};
+const categories={hair:'Волосы',clothing:'Одежда',face:'Лицо',color:'Цвета',details:'Образ'};
+type Category=keyof typeof categories;
+const layers={hair:'hairstyle',clothing:'garment',face:'visage'} as const;
+const swatches={
+ hair_color:['#373437','#795737','#e5ca93','#99876c','#ad6742','#aaa6a0','#f1ead8'],
+ clothing_color:['#393b40','#e7e1d7','#637c97','#788673','#876651','#a4665c','#c4b395'],
+ skin:Object.values(catalog.skin_materials).map(colors=>colors[1]),
+ eyes:Object.values(catalog.eye_colors),
+};
+const swatchLabels={hair_color:'Цвет волос',clothing_color:'Цвет одежды',skin:'Тон кожи',eyes:'Цвет глаз'};
+const accessories=[[0,'Без украшений'],[1,'Цепочка'],[2,'Серьги и подвеска'],[3,'Длинные серьги'],[5,'Кулон'],[7,'Подвеска']] as const;
+const backgrounds=['Графит','Шалфей','Терракота','Охра','Лён','Сланец','Песок'];
+type Props={descriptor:ProceduralPortrait;appearance?:string;ageReference?:{stage:string;age?:number|null;visual_age?:Age|null};
+ anatomyReference?:AnatomyReference;mode:'auto'|'procedural';disabled:boolean;renderPreview:(p:ProceduralPortrait)=>ReactNode;
+ savedPreview?:ReactNode;open:boolean;onOpen:(open:boolean)=>void;onSave:(p:ProceduralPortrait,mode:'auto'|'procedural')=>Promise<void>;
+ commission?:(accept:(p:ProceduralPortrait)=>void)=>ReactNode};
+export function ProceduralPortraitEditor({descriptor,appearance,ageReference,anatomyReference,mode,disabled,renderPreview,savedPreview,open,onOpen,onSave,commission}:Props){
+ const [value,setValue]=useState(descriptor),[selected,setSelected]=useState(mode);
+ const [section,setSection]=useState<Category>('hair'),[source,setSource]=useState(''),[error,setError]=useState('');
+ const settings=useRef<HTMLFieldSetElement>(null);
+ const reset=()=>{setValue(descriptor);setSelected(mode);setSource('');setError('')};
+ const change=(next:ProceduralPortrait)=>{setValue(next);setSelected('procedural');setSource('Ручной выбор');setError('')};
+ const modern=():Extract<ProceduralPortrait,{version:3}>=>value.version===3?value:{...value,version:3,base_version:value.version,
+    body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
+    facial_hair:value.version===2?value.facial_hair:'clean_shaven'};
+ const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:3}:{})} as ProceduralPortrait);
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
- return <section className="procedural-editor"><button type="button" aria-expanded={open} aria-controls={panelId} onClick={()=>setOpen(!open)}>Настроить иллюстрацию</button><div id={panelId} hidden={!open}><p>При создании мира иллюстрация может учитывать заданные черты. Неописанные детали получают условный вариант. Редактирование текста не меняет сохранённый портрет.</p>
- <p>Иллюстрация условная: родинки, часы и медицинская форма не поддерживаются. Они остаются в литературном описании.</p>
- <button type="button" aria-pressed={compare} onClick={()=>setCompare(!compare)}>Свериться с описанием внешности</button>
- {compare&&<p>Сравните варианты с текстом и выберите поддерживаемые признаки ниже. Автоматическое распознавание текста здесь не выполняется. Изменения сохраняются только по подтверждению.</p>}
- <div className="portrait-age-reference">
- <p>Реальный возраст персонажа: {ageReference?.age!=null?new Intl.NumberFormat('ru',{style:'unit',unit:'year',unitDisplay:'long'}).format(ageReference.age):'не указан'}{ageReference?.visual_age?` · ${ageLabels[ageReference.visual_age]}`:''}.</p>
- <label>Визуальный возраст<Choice aria-label="Визуальный возраст" disabled={disabled} value={ageSelection ?? "legacy"} onValueChange={selectedValue => selectAge(selectedValue)}>
- <option value="auto" disabled={!ageReference?.visual_age}>Автоматически — по текущему возрасту персонажа</option>
- {ageSelection==='legacy'&&<option value="legacy" disabled>Сохранённый исходный стиль</option>}
- {Object.entries(ageLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
- </Choice></label>
- <p>Возраст на иллюстрации: {value.visual_age?ageLabels[value.visual_age]:'исходный стиль'}. {ageSelection==='auto'?'Категория определяется возрастом персонажа при сохранении.':'Художественный выбор автора.'} Дата рождения и жизненный цикл не меняются. Сохранённый рисунок не меняется сам при дне рождения.</p>
- <Button variant="ghost" disabled={disabled||!ageReference?.visual_age} onClick={()=>selectAge('auto')}>Вернуть возраст по персонажу</Button>
- </div>
- <div className="procedural-editor-grid"><div className="portrait-comparison">
- {compare&&<figure><figcaption>Сохранённый вариант</figcaption>{renderPreview(descriptor)}</figure>}
- <figure><figcaption>{dirty?'Предлагаемый вариант':'Текущий вариант'}</figcaption>{renderPreview(value)}</figure>
- <div className="portrait-literary-reference"><strong>Внешность</strong><p>{appearance||'Описание не задано. Неописанные признаки определяются по seed.'}</p></div>
- </div><div>
- <label>Предпочтение<Choice aria-label="Предпочтение" value={selected} onValueChange={selectedValue => setSelected(selectedValue as typeof selected)}><option value="auto">Своя фотография, если применима</option><option value="procedural">Процедурная иллюстрация</option></Choice></label>
- <label>Вид изображения<Choice aria-label="Вид изображения" value={value.form} onValueChange={selectedValue => {const form=selectedValue as ProceduralPortrait['form'];setValue(value.version===2&&form==='neutral'?{...value,form,facial_hair:'clean_shaven'}:{...value,form});setSelected('procedural')}}><option value="neutral">Нейтральный силуэт</option><option value="human">Человек · художественная условность</option></Choice></label>
- {value.form==='human'&&<fieldset className="portrait-anatomy"><legend>Силуэт и лицо</legend>
- <label>Основа тела<Choice disabled={disabled} value={value.version===2?value.body_frame:''} onValueChange={selectedValue => setAnatomy({body_frame:selectedValue as BodyFrame})}>
- {value.version===1&&<option value="" disabled>Исходная иллюстрация</option>}
- {Object.entries(bodyFrames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></label>
- {anatomyReference?.facial_hair_allowed&&adultArt(value)&&<label>Растительность на лице<Choice disabled={disabled} value={value.version===2?value.facial_hair:''} onValueChange={selectedValue => setAnatomy({facial_hair:selectedValue as FacialHair})}>
- {value.version===1&&<option value="" disabled>Исходная иллюстрация</option>}
- {Object.entries(facialHairStyles).map(([key,label])=><option key={key} value={key}>{label}</option>)}</Choice></label>}
- </fieldset>}
- {value.form==='human'&&Object.entries(choices).map(([key,labels])=><label key={key}>{{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]}<Choice aria-label={{face:'Форма лица',hair:'Волосы',skin:'Тон кожи',eyes:'Глаза',clothing:'Одежда',accessory:'Аксессуары',palette:'Палитра'}[key]} value={value[key as keyof typeof choices]} onValueChange={selectedValue => setValue({...value,[key]:Number(selectedValue)})}>{labels.map((label,i)=><option key={i} value={i}>{label}</option>)}</Choice></label>)}
- {value.form==='human'&&(Object.keys(colors) as (keyof typeof colors)[]).map(key=><label key={key}>{key==='hair_color'?'Цвет волос':'Цвет одежды'}<Choice value={value[key]??''} onValueChange={selectedValue => {const next={...value};if(selectedValue==='')delete next[key];else next[key]=Number(selectedValue);setValue(next)}}><option value="">Как в исходном рисунке</option>{colors[key].map((name,i)=><option key={name} value={i}>{name}</option>)}</Choice></label>)}
- </div></div><div className="portrait-actions"><p role="status">{disabled?'Сохранение…':dirty?'Есть несохранённые изменения':status}</p><Button disabled={disabled||!dirty} onClick={async()=>{setStatus('');try{await onSave(value,selected);setStatus('Иллюстрация сохранена')}catch{setStatus('Не удалось сохранить. Ваши настройки оставлены в редакторе.')}}}>Сохранить иллюстрацию</Button><Button variant="ghost" disabled={disabled} onClick={()=>{setValue(descriptor);setSelected(mode)}}>Отменить настройки</Button></div></div></section>;
+ const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
+ const adult=(p:ProceduralPortrait)=>['adult','young_adult','mature_adult','elderly'].includes(p.visual_age||p.stage);
+ const setAge=(id:string)=>{
+   const next:ProceduralPortrait=id==='auto'?{...value,visual_age_mode:'auto',visual_age:ageReference?.visual_age||undefined,stage:ageReference?.stage||value.stage}:
+      {...value,visual_age_mode:'manual',visual_age:id as Age};
+   if(next.version!==1&&!adult(next))next.facial_hair='clean_shaven';
+   change(next);
+ };
+ if(!open)return <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(true)}}>Настроить иллюстрацию</Button>;
+ return <section className="portrait-studio" aria-label="Настроить иллюстрацию">
+ <div className="studio-main"><div className="studio-reference"><div className="portrait-comparison">
+ <figure><figcaption>Сохранённый вариант</figcaption>{savedPreview||renderPreview(descriptor)}</figure>
+ <figure><figcaption>{source||'Предпросмотр'}</figcaption>{renderPreview(value)}</figure></div>
+ {commission?.(p=>{setValue(p);setSelected('procedural');setSource('Предложение модели');setError('')})}
+ </div><fieldset ref={settings} disabled={disabled} className="studio-settings">
+ <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
+  <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
+ {section in layers&&(()=>{const group=section as keyof typeof layers;
+ const current=value.version===3 && (group!=='face'||value.face_revision===3)?value[layers[group] as keyof Layers]:null;
+ return <div className="studio-gallery" aria-label={categories[group]}>{Object.entries(catalog.styles[group]).map(([id,label])=>{
+  const art=withLayer(group,id);return <button type="button" key={id} aria-pressed={current===id} onClick={()=>change(art)}>
+  <img alt="" loading="lazy" decoding="async" src={proceduralPortrait(art)||undefined}/><span>{label}</span>{current===id&&<Check size={14} aria-hidden="true"/>}</button>
+ })}</div>})()}
+ {section==='face'&&<div className="studio-face-details">
+ {value.version===3&&value.face_revision===3?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
+ <Choice aria-label={detailNames[key]} value={value[key]||'auto'} onValueChange={id=>{
+ const next={...value};if(id==='auto')delete next[key];else Object.assign(next,{[key]:id});change(next)}}><option value="auto">По рисунку</option>
+ {figureFeatures[key].map(id=><option key={id} value={id}>{featureLabels[id]}</option>)}</Choice></label>):
+ <p>Выберите форму лица, чтобы примерить новый рисунок. Сохранённый портрет виден рядом.</p>}
+ </div>}
+ {section==='color'&&(Object.keys(swatches) as (keyof typeof swatches)[]).map(field=><div key={field} className="studio-colors" role="group" aria-label={swatchLabels[field]}>
+ <h3>{swatchLabels[field]}</h3>{Object.values(catalog.styles[field]).map((label,i)=><button key={label} type="button" title={label} aria-label={label} aria-pressed={value[field]===i}
+ onClick={()=>change({...modern(),form:'human',[field]:i,...(field==='skin'?{skin_swatch:true}:field==='eyes'?{eye_swatch:true}:{})})}><i style={{backgroundColor:swatches[field][i]}}/>{label}</button>)}</div>)}
+ {section==='details'&&<>
+ <label>Вид изображения<Choice aria-label="Вид изображения" disabled={disabled} value={value.form} onValueChange={v=>change({...value,form:v as 'neutral'|'human',...(v==='neutral'&&value.version!==1?{facial_hair:'clean_shaven'}:{})})}><option value="human">Человек</option><option value="neutral">Нейтральный силуэт</option></Choice></label>
+ <label>Предпочтение<Choice aria-label="Предпочтение" disabled={disabled} value={selected} onValueChange={v=>setSelected(v as typeof selected)}><option value="auto">Фотография, если подходит</option><option value="procedural">Процедурная иллюстрация</option></Choice></label>
+ {value.form==='human'&&<>
+ <div className="portrait-age-reference"><p>Возраст персонажа · {ageReference?.age==null?'неизвестен':new Intl.NumberFormat('ru',{style:'unit',unit:'year',unitDisplay:'long'}).format(ageReference.age)}{ageReference?.visual_age?' · '+ages[ageReference.visual_age]:''}</p>
+ <label>Визуальный возраст<Choice aria-label="Визуальный возраст" disabled={disabled} value={ageSelection||'legacy'} onValueChange={setAge}><option value="auto" disabled={!ageReference?.visual_age}>По возрасту персонажа</option>{ageSelection==='legacy'&&<option disabled value="legacy">Сохранённый стиль</option>}{Object.entries(ages).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>
+ <Button variant="ghost" disabled={disabled||!ageReference?.visual_age} onClick={()=>setAge('auto')}>Вернуть возраст по персонажу</Button></div>
+ {adult(value)&&<label>Основа тела<Choice aria-label="Основа тела" disabled={disabled} value={value.version===1?'':value.body_frame} onValueChange={v=>change({...modern(),base_version:2,body_frame:v as BodyFrame})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(bodyFrames).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>}
+ {anatomyReference?.facial_hair_allowed&&adult(value)&&<label>Растительность на лице<Choice aria-label="Растительность на лице" disabled={disabled} value={value.version===1?'':value.facial_hair} onValueChange={v=>change({...modern(),facial_hair:v as FacialHair})}>{value.version===1&&<option disabled value="">Исходная иллюстрация</option>}{Object.entries(facialHairStyles).map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>}
+ <label>Аксессуары<Choice aria-label="Аксессуары" disabled={disabled} value={value.accessory===4||value.accessory===6?0:value.accessory} onValueChange={v=>change({...value,accessory:Number(v)})}>{accessories.map(([k,v])=><option value={k} key={k}>{v}</option>)}</Choice></label>
+ <label>Палитра фона<Choice aria-label="Палитра фона" disabled={disabled} value={value.palette} onValueChange={v=>change({...value,palette:Number(v)})}>{backgrounds.map((v,i)=><option value={i} key={v}>{v}</option>)}</Choice></label></>}</>}
+ <details className="portrait-literary-reference"><summary>Свериться с описанием внешности</summary><p>{appearance||'Внешность пока не описана.'}</p></details>
+
+ </fieldset></div>
+ <footer>{descriptor.version===1&&value.version===3&&value.base_version===2&&<p>Новая основа тела также меняет посадку исходной одежды. Сравните варианты перед сохранением.</p>}{error&&<p role="alert">{error}</p>}
+ <Button variant="ghost" aria-label="Сбросить несохранённые изменения" title="Сбросить несохранённые изменения" disabled={disabled||!dirty} onClick={reset}><RotateCcw size={16}/></Button>
+ <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(false)}}>Отмена</Button>
+ <Button disabled={disabled||!dirty} onClick={async()=>{try{await onSave(value,selected)}catch(e){setError(String(e))}}}>{disabled?'Сохранение…':'Сохранить иллюстрацию'}</Button>
+ </footer></section>;
 }
