@@ -17,3 +17,8 @@
 .ai-diff-values>div:last-child{padding:14px;background:color-mix(in srgb,#66966f 12%,var(--surface-1));border-radius:8px}
 @keyframes ww-ai-shimmer{to{opacity:.4}}@keyframes ww-ai-flow{from{translate:-100% 0}to{translate:300% 0}}
 @media(prefers-reduced-motion:reduce){.ww-ai-skeleton,.ww-ai-stream::after{animation:none!important}}
+
+.ai-review-outcomes details + details { border-top: 1px solid var(--border); }
+.ai-review-outcomes .ai-review-note { display: grid; gap: .25rem; min-width: 0; }
+.ai-review-note > strong { color: var(--accent); }
+.ai-review-note > span { color: var(--foreground); overflow-wrap: anywhere; }

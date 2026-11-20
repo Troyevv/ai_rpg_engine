@@ -168,13 +168,18 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(request_messages,limit):
-        effective=review_config(config) if stage=='draft_world_validation' else config
+        effective=review_config(config) if stage=='draft_world_validation' and not edit.get('action') else config
         return tracked_stream(repo,stream_fn,jid,stage,effective,request_messages,model=effective['model'],
             provider=effective['provider'],api_key=api_key,temperature=effective['temperature'],max_tokens=limit,
             require_complete=True,cancel_event=handle.cancel,on_stream=opened,
             **({'response_format':{'type':'json_object'}} if effective['provider']=='deepseek' and not any(m['role']=='assistant' for m in request_messages) else {}))
     def call(slot,request_messages):
-        return response(repo,jid,journal,slot,request_messages,review_config(config) if stage=='draft_world_validation' else config,context,generate,handle.cancel)
+        return response(repo,jid,journal,slot,request_messages,review_config(config) if stage=='draft_world_validation' and not edit.get('action') else config,context,generate,handle.cancel)
+    if edit.get('action'):
+        from backend.services import draft_review_actions
+        if edit['action']=='recheck':
+            stage='draft_world_validation'
+        return draft_review_actions.run(repo,jid,journal,edit,call,epoch,handle.cancel)
     repo.draft_phase(jid,'proposing',reset_progress=True)
     request=journal.setdefault('messages',messages(base,edit['instruction']));save()
     from backend.services.draft_creative import response_slot

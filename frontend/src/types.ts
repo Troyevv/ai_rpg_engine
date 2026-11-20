@@ -162,6 +162,8 @@ export interface Turn {
 export interface Job {
   empty_retry_token?: string | null;
   review_thinking?: string|null;
+  review_reply_saved?: boolean;
+  review_action?: 'fix'|'recheck';
   effective_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number} | null;
   pinned_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number};
   response_diagnostic?: {code:string;message:string;http_status?:number} | null;

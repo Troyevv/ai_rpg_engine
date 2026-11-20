@@ -12,6 +12,16 @@ VERSION = 1
 WEEK = ('понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье')
 
 
+def age_reference_date(actor, clock):
+    """Age in a pre-game card is measured at death when life has ended."""
+    world = {'meta': {'world_time': clock['minute'], 'calendar': clock.get('calendar')}}
+    if actor.get('life_status') == 'dead':
+        if actor.get('death_date') or actor.get('death_minute') is None:
+            return actor.get('death_date')
+        return current_time(world, actor['death_minute'])['date']
+    return current_time(world)['date']
+
+
 def signature(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 

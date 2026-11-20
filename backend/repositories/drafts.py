@@ -55,6 +55,8 @@ class DraftStorage(DraftEditorStorage):
 
     def draft(self,wid,author=False):
         with self.connect() as db:
+            # SSE uses this job status to stop polling. Read its matching head and revision.
+            db.execute('BEGIN')
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
@@ -79,8 +81,16 @@ class DraftStorage(DraftEditorStorage):
                     state,report=inspect_candidate(state,for_start=True)
                 else:report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
+            review_count=0
+            if author and state and not report['errors']:
+                from backend.services.draft_review_actions import findings
+                review_count=len(findings(record,report))
             technical_valid=not report['errors'] if not candidate else not any(e.get('category')!='semantic_completeness' for e in report.get('diagnostics',[]))
             block=(review_block(record) if record else None) or ('Возраст в карточке не совпадает с датой рождения.' if report.get('semantic_warnings') else None)
+            if author and record and record.get('review',{}):
+                from backend.services.draft_review_actions import dismissed_hints
+                dismissed=dismissed_hints(record)
+                report['warnings']=[text for text in report['warnings'] if text not in dismissed]
             if block and author:report['warnings'].append(block)
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
@@ -95,7 +105,7 @@ class DraftStorage(DraftEditorStorage):
                 (wid,record.get('origin_job'))).fetchone() if record else None)
             world_journal=json.loads(creator['response_journal'] or '{}') if creator else {}
             packages=recoverable(world_journal) if creator and latest['status'] not in ('queued','generating') else {}
-            gaps=npc_gaps(raw) if raw and technical_valid and (creative_status or (record.get('generated') and not record.get('origin_job'))) else []
+            gaps=npc_gaps(raw) if raw and technical_valid and (world_journal.get('creative') or (record.get('generated') and not record.get('origin_job'))) else []
             if author and creative_status=='rejected':
                 report['warnings'].append('Необязательное творческое дополнение отклонено. Исходный мир сохранён и доступен для игры при корректной структуре.')
             if creative_status=='running' and latest['status']!='generating':creative_status='interrupted'
@@ -124,6 +134,13 @@ class DraftStorage(DraftEditorStorage):
             if author and record:
                 from backend.services.draft_review_tracking import fixed_decisions
                 review_decisions+=fixed_decisions(record.get('review_tracking'),candidate_hash(raw))
+            if author and record:
+                review=record.get('review') or {}
+                for outcome in review.get('outcomes',[]):
+                    if outcome['outcome'] in ('fixed','disproved'):
+                        review_decisions.append(dict(issue_id=outcome['issue_id'],signature=review['candidate_hash'],
+                            resolution=outcome['outcome'],message=outcome['message'],reason=outcome['reason'],
+                            paths=outcome['paths'],applies_to_current=review['candidate_hash']==candidate_hash(raw)))
             return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 # Safe lineage metadata: identifies the saved version, never its private content.
                 'version_origin_job_id':record.get('origin_job') if record else None,
@@ -137,7 +154,7 @@ class DraftStorage(DraftEditorStorage):
                 'portraits':self._portrait_view(state,visible,author),
                 'validation':report if author else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':['У автора есть замечания к черновику.'] if report['warnings'] and not (record and (record.get('origin_job') or review_metadata(record))) else []},
                 'review':review_metadata(record) if record and author else ({k:review_metadata(record).get(k) for k in ('status','advisory') if k in review_metadata(record)} if record and review_metadata(record) else None),
-                'review_decisions':review_decisions,
+                'review_decisions':review_decisions, 'review_finding_count':review_count,
                 'pending_editor':bool(latest and (json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview' or json.loads(latest['response_journal'] or '{}').get('field_proposal',{}).get('status')=='preview')),
                 'can_finish_candidate':bool(candidate and technical_valid and latest and latest['id']==record.get('origin_job') and latest['phase']=='reviewing' and latest['status'] in ('error','stopped')),
                 'has_review_notes':bool(record and (review_metadata(record) or {}).get('issues')),

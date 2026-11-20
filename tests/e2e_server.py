@@ -739,6 +739,12 @@ hold_next_preparation = False
 
 def preparation_stream(**kwargs):
     global hold_next_preparation
+    if len(kwargs['messages'])==2 and '"calendar_evidence":' in kwargs['messages'][1]['content']:
+        from review_actions_fixture import reply
+        kwargs['on_usage']({'prompt_tokens':120,'completion_tokens':60})
+        kwargs['on_finish']('stop')
+        yield reply(kwargs['messages'])
+        return
     hold = hold_next_preparation
     hold_next_preparation = False
     for chunk in stream(**kwargs):
@@ -886,6 +892,11 @@ if __name__ == '__main__':
         assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
         (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
+    @app.post('/test/review-actions')
+    def review_actions_seed():
+        from review_actions_fixture import seed
+        return seed(app.state.repository)
+
     @app.post('/test/generation266')
     def generation266_seed():
         from generation266_fixture import seed

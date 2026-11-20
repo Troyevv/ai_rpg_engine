@@ -103,6 +103,12 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                  'response_diagnostic':public_diagnostic(record.get('failure') or record.get('http_failure')),
                  'empty_retry_token':Repository.empty_retry_token(journal) if job.get('status')=='error' else None,
                  'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
+            if config.get('_review_action'):
+                from llm import thinking_options
+                from backend.services.draft_review_actions import saved_reply
+                job['review_action']=config['_review_action']
+                job['review_reply_saved']=bool(saved_reply(journal)) if job['resumable'] else False
+                job['review_thinking']=thinking_options(config.get('provider','local'),config.get('model',''),config.get('thinking','off'))[0]
             if job['kind']=='draft_world':
                 from llm import thinking_options
                 review_records=[v for k,v in journal.get('responses',{}).items() if k.startswith('completeness') and v.get('effective_config')]
@@ -180,6 +186,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if job['kind']=='draft_editor':
                 head=self._draft_head(db,job['workspace_id'])
                 edit=journal['editor']
+                if edit.get('action') and edit['status'] != 'running':
+                    raise ValueError('Ответ уже обработан. Откройте сохранённый результат.')
                 if edit['status'] in ('accepted','rejected') or not head or head['id']!=edit['base_version']:
                     raise ValueError('Предложение устарело или уже закрыто.')
                 if revision is not None and revision!=edit['base_revision']:
@@ -271,16 +279,18 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 raise ValueError('Задача не найдена.')
             return dict(row)
 
-    def begin_preparation(self, wid, kind, text, config, revision):
+    def begin_preparation(self, wid, kind, text, config, revision, *, receipt=False):
         jid = 'prep_' + uuid.uuid4().hex
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if kind=='draft_editor':
-                for previous in db.execute("SELECT id,config_json FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor'",(wid,)):
+                for previous in db.execute("SELECT id,revision,config_json FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor'",(wid,)):
                     saved=json.loads(previous['config_json'])
                     if saved.get('_editor_request_id')==config.get('_editor_request_id'):
-                        if saved.get('_draft_input')!=config.get('_draft_input'):raise ValueError('Ключ запроса уже использован для другой инструкции.')
-                        return previous['id']
+                        if saved.get('_draft_input')!=config.get('_draft_input') or saved.get('_review_action')!=config.get('_review_action'):raise ValueError('Ключ запроса уже использован для другой инструкции.')
+                        if saved.get('_review_action') and revision+1!=previous['revision']:
+                            raise ValueError('Ключ запроса относится к другой ревизии.')
+                        return (previous['id'],False) if receipt else previous['id']
             w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (wid,)).fetchone()
             if not w or w['deleted'] or w['revision'] != revision:
                 raise ValueError('Подготовка изменилась. Обнови её перед запросом.')
@@ -304,7 +314,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
             if journal:db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
-        return jid
+        return (jid,True) if receipt else jid
 
     def preparation_progress(self, jid, narrative, status='generating', error=''):
         with self.connect() as db:

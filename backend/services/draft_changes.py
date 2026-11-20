@@ -155,7 +155,7 @@ def resolve_card_paths(state, proposal):
             if any(e.startswith(f'Операция {i},') for e in errors)])
 
 
-def apply_proposal(state, reply, *, editing=False):
+def apply_proposal(state, reply, *, editing=False, review_fix=False):
     proposal = Proposal.model_validate(strict_loads(reply))
     if proposal.conflicts and not editing:
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
@@ -263,7 +263,7 @@ def apply_proposal(state, reply, *, editing=False):
         remaining={c['id'] for c in trial['characters']}
         trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
         if not trial['card_field_facts']:trial.pop('card_field_facts')
-    normalized = validate_transition(state, trial, editing=editing)
+    normalized = validate_transition(state, trial, editing=editing, review_fix=review_fix)
     new_ids = normalized['world']['characters'].keys() - state['world']['characters'].keys()
     if new_ids:
         from backend.services.draft_portraits import initialize
@@ -297,14 +297,14 @@ def validate_removals(before, after):
     if problems:raise DraftErrors(problems)
 
 
-def validate_transition(state, trial, *, editing=False):
+def validate_transition(state, trial, *, editing=False, review_fix=False):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     trial = author_value(state, trial)
-    return validate_candidate(state, trial, editing=editing)
+    return validate_candidate(state, trial, editing=editing, review_fix=review_fix)
 
 
-def validate_candidate(state, trial, *, editing=False):
+def validate_candidate(state, trial, *, editing=False, review_fix=False):
     """Validate server-normalized candidates; raw LLM boundaries use author_value.
 
     No provenance bypass for model replies: proposal/semantic repair entry points
@@ -314,9 +314,9 @@ def validate_candidate(state, trial, *, editing=False):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     actor = state['controlled_actor_id']
-    if actor not in trial['world']['characters']:
+    if actor is not None and actor not in trial['world']['characters']:
         raise ValueError('Нельзя удалить управляемого персонажа.')
-    for field in ('goals', 'short_goal', 'intentions', 'obligations', 'emotion'):
+    for field in ('goals', 'short_goal', 'intentions', 'obligations', 'emotion') if actor is not None else ():
         path = '/world/characters/'+actor.replace('~', '~0').replace('/', '~1')+'/'+field
         if field in state['world']['characters'][actor]:
             preserve(state, trial, path)
@@ -339,7 +339,12 @@ def validate_candidate(state, trial, *, editing=False):
     if state.get('world',{}).get('contacts',{}) != trial.get('world',{}).get('contacts',{}):
         raise ValueError('Телефонная книга не входит в авторские изменения.')
     if editing:validate_removals(state,trial)
-    normalized, report = inspect_candidate(trial)
+    normalized, report = inspect_candidate(trial, for_start=review_fix)
+    if review_fix and report.get('semantic_warnings'):
+        _, baseline = inspect_candidate(state, for_start=True)
+        for warning in report['semantic_warnings']:
+            if warning not in baseline.get('semantic_warnings', []):
+                raise DraftErrors([warning])
     if report['errors']:
         raise DraftErrors(report['diagnostics'])
     if not editing:

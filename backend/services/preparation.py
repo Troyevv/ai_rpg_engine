@@ -26,8 +26,10 @@ class Preparation:
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
         with self.lock:
-            jid = self.repo.begin_preparation(wid, kind, text, config, revision)
-            if jid in self.handles or self.repo.preparation_job(jid)['status']!='generating':return jid
+            jid, created = self.repo.begin_preparation(wid, kind, text, config, revision, receipt=True)
+            # Only the worker that inserted the job may dispatch the paid request.
+            if not created:
+                return jid
             handle = Handle()
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
@@ -38,7 +40,9 @@ class Preparation:
             if jid in self.handles: raise ValueError('Запрос ещё завершается.')
             job=self.repo.preparation_job(jid)
             config=json.loads(job['config_json'])
-            if config['provider']=='deepseek': api_key=deepseek_key(api_key)
+            from backend.services.draft_review_actions import saved_reply
+            if config['provider']=='deepseek' and not saved_reply(json.loads(job.get('response_journal') or '{}')):
+                api_key=deepseek_key(api_key)
             config=self.repo.resume_draft_response(jid,**options)
             handle=Handle(epoch=json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)+1);self.handles[jid]=handle
         threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
@@ -86,6 +90,15 @@ class Preparation:
         narrative = ''
         worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor') else None
         try:
+            if config.get('_review_action'):
+                from backend.services.draft_review_actions import saved_reply, finish
+                from backend.services.draft_response import join_fragments
+                journal=json.loads(self.repo.preparation_job(jid)['response_journal'])
+                cached=saved_reply(journal)
+                if cached:
+                    text=join_fragments(cached['parts'],cached.get('assembly'),terminal=True)
+                    finish(self.repo,jid,journal['editor'],text,worker_epoch)
+                    return
             with model_lease(config['provider']):
                 if handle.cancel.is_set():
                     return

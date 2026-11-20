@@ -94,7 +94,8 @@ def prepare(config, operation, *, loaded=None, detail='balanced', api_key=None):
         from backend.services.draft_response import MAX_FRAGMENTS
         working.setdefault('_draft_token_budget', 3 * MAX_FRAGMENTS * (32768 + 12000))
 
-    if operation == 'draft_world' and auto and provider == 'deepseek' and thinking != 'off':
+    structured_world = operation == 'draft_world' or (operation == 'draft_editor' and config.get('_review_action') in ('fix','recheck'))
+    if structured_world and auto and provider == 'deepseek' and thinking != 'off':
         # Structured generation may spend several reasoning tokens per visible
         # token even at low effort. This is an allowance, never a usage forecast.
         working['_world_budget_policy'] = 2

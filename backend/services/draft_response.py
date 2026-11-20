@@ -283,13 +283,18 @@ def stage_output_limit(slot, messages, config):
     return stage_output_plan(slot,messages,config)['output_limit']
 
 
-def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
-    # A confirmed retry gets a new response slot. Historical parts are immutable.
-    logical_slot=slot
+def effective_slot(journal,slot):
     redirects=journal.get('response_retries',{});seen=set()
     while slot in redirects:
         if slot in seen:raise TransportError('Повреждена история повторных проверок.')
         seen.add(slot);slot=redirects[slot]
+    return slot
+
+
+def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
+    # A confirmed retry gets a new response slot. Historical parts are immutable.
+    logical_slot=slot
+    slot=effective_slot(journal,slot)
     saved=journal.get('responses',{}).get(slot,{})
     if logical_slot.startswith('creative_') and not saved.get('complete') and saved.get('parts'):
         first=saved['parts'][0].get('request_id')
@@ -397,8 +402,8 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             return response(repo,jid,journal,logical_slot,messages,config,context,generate,cancel)
         repo.save_response_journal(jid,journal)
         raise TransportError(record['failure']['message'])
-    advisory=logical_slot.startswith('completeness_advisory_')
-    if advisory and record['parts']:return text
+    single_request=logical_slot.startswith(('completeness_advisory_', 'editor_proposal_findings_'))
+    if single_request and record['parts']:return text
     if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:
         record['complete']=False
@@ -498,7 +503,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             retries=record.get('http_retries',0)
             record['http_retries']=retries+1
             repo.save_response_journal(jid,journal)
-            if not advisory and exc.status_code in (429,503) and not fragment and retries<2:
+            if not single_request and exc.status_code in (429,503) and not fragment and retries<2:
                 if cancel.wait(min(2**retries,4)):return None
                 continue
             raise TransportError(diagnostic['message'],diagnostic) from None
@@ -528,7 +533,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             journal.setdefault('empty_requests',{})[fingerprint]=dict(slot=slot,request_id=part['request_id'],failure=record['failure'])
             repo.save_response_journal(jid,journal)
             raise TransportError(record['failure']['message'])
-        if advisory or record['document_state']!='incomplete' or (ended and not text):
+        if single_request or record['document_state']!='incomplete' or (ended and not text):
             record['complete']=True
             repo.save_response_journal(jid,journal)
             return text

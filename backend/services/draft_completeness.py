@@ -499,6 +499,16 @@ def advisory_messages(state, source):
     ]
 
 
+def advisory_issues(report):
+    if not isinstance(report,dict) or not isinstance(report.get('issues'),list):
+        raise ValueError('В отчёте отсутствует список замечаний.')
+    issues=[]
+    for item in report['issues']:
+        if isinstance(item,dict) and isinstance(item.get('message'),str) and item['message'].strip():
+            issues.append(dict(message=item['message'], severity='recommendation' if item.get('severity')=='recommendation' else 'warning', patch_paths=[]))
+    return issues, len(issues)==len(report['issues'])
+
+
 def read_advisory(state, source, journal, call):
     from backend.repositories.drafts import candidate_hash
     from backend.services.draft_response import strict_loads
@@ -512,15 +522,8 @@ def read_advisory(state, source, journal, call):
         reply=call('completeness_advisory_'+key,advisory_messages(state,source))
         if reply is None:return None
         report=strict_loads(reply)
-        if not isinstance(report,dict) or not isinstance(report.get('issues'),list):
-            raise ValueError('В отчёте отсутствует список замечаний.')
-        incomplete=False
-        for item in report['issues']:
-            if not isinstance(item,dict) or not isinstance(item.get('message'),str) or not item['message'].strip():
-                incomplete=True
-                continue
-            result['issues'].append(dict(message=item['message'],severity='recommendation' if item.get('severity')=='recommendation' else 'warning',patch_paths=[]))
-        if incomplete:raise ValueError('Часть замечаний не удалось прочитать.')
+        result['issues'],complete=advisory_issues(report)
+        if not complete:raise ValueError('Часть замечаний не удалось прочитать.')
         result['status']='completed'
     except ValueError as exc:
         result.update(status='failed',reason=str(exc))

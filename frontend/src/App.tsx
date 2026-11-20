@@ -1,3 +1,4 @@
+import {requestId} from './lib/requestId';
 import "./styles/current-game.css";
 import {observeStorySnapshot} from "./lib/storyPresentation";
 import {ThemeProvider, useTheme} from "./ThemeProvider";
@@ -136,11 +137,7 @@ export default function App() {
   const [profile] = useState(() => {
     let p = localStorage.getItem("profile");
     if (!p) {
-      p =
-        crypto.randomUUID?.() ??
-        Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
-          b.toString(16).padStart(2, "0"),
-        ).join("");
+      p = requestId();
       localStorage.setItem("profile", p);
     }
     return p;

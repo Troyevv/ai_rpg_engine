@@ -81,7 +81,8 @@ class Confirm(Revision):
 
 
 class WorldEdit(Revision,Credential):
-    text: str = Field(min_length=1)
+    action: Literal['edit','fix','recheck'] = 'edit'
+    text: str = ''
     request_id: str = Field(min_length=1,max_length=100,pattern=r'^[a-zA-Z0-9_-]+$')
     config: ModelConfig
     budget: ResponseBudget = Field(default_factory=ResponseBudget)
@@ -98,11 +99,14 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/edits')
     def propose(wid:str,body:WorldEdit):
-        if not body.text.strip():raise ValueError('Опишите желаемые изменения.')
-        config={**body.config.model_dump(),'_draft_task':'editor','_draft_input':body.text,'_editor_request_id':body.request_id}
+        from backend.services.draft_review_actions import TITLES
+        text=TITLES.get(body.action, body.text)
+        if not text.strip():raise ValueError('Опишите желаемые изменения.')
+        config={**body.config.model_dump(),'_draft_task':'editor','_draft_input':text,'_editor_request_id':body.request_id}
+        if body.action!='edit':config['_review_action']=body.action
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
         if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
-        jid=preparation.submit(wid,'draft_editor',body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
+        jid=preparation.submit(wid,'draft_editor',text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/draft/edits/{jid}')
@@ -283,7 +287,9 @@ def install(app,repo,preparation,credentials,job):
         if not current: raise ValueError('Нет задания.')
         saved=repo.preparation_job(current['id'])
         provider=json.loads(saved['config_json'])['provider']
-        preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
+        from backend.services.draft_review_actions import saved_reply
+        cached=saved_reply(json.loads(saved['response_journal'] or '{}'))
+        preparation.resume(current['id'],None if cached else credentials.resolve(provider,body.key()),revision=body.revision,
             config_changes={k:getattr(body,k) for k in ('budget_mode','max_tokens','context_length') if getattr(body,k) is not None},
             acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment,
             retry_empty_response=body.retry_empty_response,expected_epoch=body.expected_epoch)

@@ -308,8 +308,6 @@ def review_initial(state,source=''):
             warnings.append(f"{card['name']}: Внешность описана слишком общо: нужен целостный физический образ человека.")
         if len(fields.get('Характер','').strip())<35 and len(fields.get('Биография','').strip())<35:
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
-        if cid!=actor and not (character.get('goals') or character.get('intentions')):
-            warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
 
     for r in world['relationships'].values():
         if r.get('source_id') in ids and r.get('target_id') in ids and len(r.get('context','').strip())<25:

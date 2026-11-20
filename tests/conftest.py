@@ -37,11 +37,12 @@ def archived_world_review(monkeypatch):
     from backend.repositories.preparation import Repository
     begin=Repository.begin_preparation
 
-    def begin_archived(repo,wid,kind,text,config,revision):
-        jid=begin(repo,wid,kind,text,config,revision)
+    def begin_archived(repo,wid,kind,text,config,revision,*,receipt=False):
+        result=begin(repo,wid,kind,text,config,revision,receipt=receipt)
+        jid=result[0] if receipt else result
         if kind=='draft_world':
             journal=json.loads(repo.preparation_job(jid)['response_journal'] or '{}')
             journal['generation_contract']={'version':6,'portrait_version':2}
             repo.save_response_journal(jid,journal)
-        return jid
+        return result
     monkeypatch.setattr(Repository,'begin_preparation',begin_archived)
