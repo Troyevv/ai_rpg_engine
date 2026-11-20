@@ -85,3 +85,13 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
  .studio-tabs button{padding:5px 7px;min-height:42px;font-size:12px}
  .portrait-studio footer .ui-button{min-height:44px;padding-inline:10px;font-size:13px}
 }
+@media(max-width:640px){
+ .studio-reference .portrait-comparison figure:last-child{flex-basis:min(33vw,19dvh)}
+}
+@media(max-width:640px) and (max-height:590px){
+ .studio-reference{display:flex;align-items:center;justify-content:space-around;gap:9px}
+ .studio-reference .portrait-comparison{flex:1;gap:9px}
+ .studio-reference .portrait-comparison figure{flex-basis:min(18vw,13dvh)}
+ .studio-reference .portrait-comparison figure:last-child{flex-basis:min(24vw,17dvh)}
+ .studio-reference>.ui-button{margin:0;width:105px;min-height:44px;padding-inline:6px;white-space:normal;line-height:1.25}
+}
