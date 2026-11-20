@@ -113,7 +113,9 @@ test(`previewing the ${layer} keeps the saved cast until explicit confirmation`,
         });
       });
       writeFileSync(info.outputPath(name+'-'+width+'.json'),JSON.stringify(bounds));
-      if (source && mobile) {
+      // The Workshop scrolls inside its shell. An image of the whole grid can
+      // include clipped rows even after all the images decode.
+      if (source) {
         for (const [i,plate] of (await grid.locator('.ww-card-art').all()).entries()) {
           await plate.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
           await expect(plate).toBeInViewport();
