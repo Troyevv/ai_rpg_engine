@@ -1,4 +1,4 @@
-import {shape as path,seam as line} from './portraitWardrobe';
+import {shape as path,seam as line} from '../portraitWardrobe';
 import {illustrationCatalog as catalog,mix,type Illustration,type Traits} from './illustration';
 
 // Coordinates are relative to the eye line. The viewer sees the near cheek on the left.

@@ -1,5 +1,5 @@
 import {illustrationCatalog as catalog,mix,type Illustration,type Traits} from './illustration';
-import {shape as path,seam as line} from './portraitWardrobe';
+import {shape as path,seam as line} from '../portraitWardrobe';
 import type {landmarks} from './illustratedFace';
 type Cut={neck:'crew'|'v'|'high'|'boat'|'split'; ease:number; drop:number; sleeve:'set'|'raglan'|'drape'|'puff'|'armour'|'bare'};
 const cut=(neck:Cut['neck'],ease:number,drop:number,sleeve:Cut['sleeve']):Cut=>({neck,ease,drop,sleeve});

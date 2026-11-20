@@ -167,5 +167,28 @@
     "blue": "#577d9c",
     "light_green": "#8c9c69",
     "grey_blue": "#6f8998"
+  },
+  "features": {
+    "eye_shape": {
+      "almond": "Миндалевидные",
+      "open": "Открытые",
+      "hooded": "Прикрытые веком"
+    },
+    "nose_shape": {
+      "straight": "Прямой",
+      "rounded": "Округлый",
+      "arched": "С горбинкой"
+    },
+    "lip_shape": {
+      "defined": "Выраженный контур",
+      "full": "Полные",
+      "fine": "Тонкие"
+    },
+    "body_build": {
+      "slender": "Худощавое",
+      "average": "Среднее",
+      "broad": "Широкоплечее",
+      "full": "Полное"
+    }
   }
 }

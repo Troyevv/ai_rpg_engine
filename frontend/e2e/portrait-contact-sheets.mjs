@@ -15,8 +15,6 @@ const frontend = fileURLToPath(new URL('../', import.meta.url));
 const repo = path.dirname(path.resolve(frontend));
 const { values } = parseArgs({ options: {
   out: { type: 'string' }, groups: { type: 'string' }, cases: { type: 'string' },
-  // Only substitutes the v4 art function in the temporary review bundle.
-  'illustration-renderer': { type: 'string' },
   'full-size': { type: 'boolean', default: false },
 }});
 if (!values.out) throw new Error('Provide an output directory with --out');
@@ -36,18 +34,9 @@ await mkdir(destination, { recursive: true });
 const temp = await mkdtemp(path.join(tmpdir(), 'portrait-contact-sheets-'));
 let server, browser;
 try {
-  const renderer = values['illustration-renderer'];
-  const reviewRenderer = renderer && {
-    name: 'local-illustration-review',
-    enforce: 'pre',
-    resolveId(source, importer) {
-      if (importer === path.join(frontend, 'src/workshop/proceduralPortrait.ts') &&
-          source === './illustratedPortrait') return path.resolve(renderer);
-    },
-  };
   await build({
     root: frontend, configFile: false, logLevel: 'warn', define: { 'process.env.NODE_ENV': JSON.stringify('production') },
-    plugins: [reviewRenderer, react(), tailwindcss()], resolve: { alias: { '@': path.join(frontend, 'src') } },
+    plugins: [react(), tailwindcss()], resolve: { alias: { '@': path.join(frontend, 'src') } },
     build: { outDir: temp, emptyOutDir: true, lib: {
       entry: fileURLToPath(new URL('./portrait-review.mount.tsx', import.meta.url)),
       formats: ['es'], fileName: () => 'review.js', cssFileName: 'review',
@@ -67,12 +56,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
   page.on('pageerror', error => console.error(error.message));
   for (const group of selected) {
-    for (const style of ['anime', 'semi_realistic']) {
+    for (const revision of [3, 4]) {
       await page.goto(`http://127.0.0.1:${port}/`);
       await page.waitForFunction(() => typeof window.renderPortraitCases === 'function');
-      await page.evaluate(([rows, style, full]) => window.renderPortraitCases(rows, style, full),
-                          [groups[group], style, values['full-size']]);
-      const file = `${group}-${style}.jpg`;
+      await page.evaluate(([rows, revision, full]) => window.renderPortraitCases(rows, revision, full),
+                          [groups[group], revision, values['full-size']]);
+      const file = `${group}-r${revision}.jpg`;
       await page.locator('#review').screenshot({ path: path.join(destination, file), quality: 90 });
       console.log(`${file} — ${groups[group].length}`);
     }

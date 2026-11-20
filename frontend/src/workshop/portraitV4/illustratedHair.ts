@@ -1,6 +1,6 @@
-import {hairCut} from './portraitFigureHair';
-import type {HairStyle} from './portraitFigure';
-import {shape as path,seam as line} from './portraitWardrobe';
+import {hairCut} from '../portraitFigureHair';
+import type {HairStyle} from '../portraitFigure';
+import {shape as path,seam as line} from '../portraitWardrobe';
 import {mix} from './illustration';
 
 // The contour and parting guide both the cel shapes and the softly lit strands.

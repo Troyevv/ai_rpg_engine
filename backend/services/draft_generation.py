@@ -3,7 +3,6 @@ import json
 import hashlib
 from backend.services import draft_world as domain
 from backend.services.usage import tracked_stream
-from backend.runtime_v3.portrait_catalog import art_version
 
 
 
@@ -36,11 +35,10 @@ def messages_for(repo,job,config):
         name='draft_world_prompt.md'
         selected=config['_prompts'][name]['content']
         author_prompt=(ROOT/name).read_text(encoding='utf-8') if is_builtin_prompt(name,selected) else selected
-        portrait_version=art_version(settings.portrait_style)
         system=(author_prompt+'\nФормат ответа задаёт текущая схема ниже.\n'+SECRET_AUTHORING_RULES
                 +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Творчески развивай открытую внешность в рамках замысла; сохрани намеренную неизвестность. Выбери campaign.portrait_profile по эпохе. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(compact_schema(prompt_schema(initial_portraits=True,portrait_version=portrait_version),dense=portrait_version==4),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(compact_schema(prompt_schema(initial_portraits=True), dense=True),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']
@@ -188,7 +186,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         bundled=(Path(__file__).resolve().parents[2]/'prompts/draft_world_prompt.md').read_text()
         legacy = bool(journal.get('messages') or journal.get('responses') or 'candidate_text' in journal)
         journal['generation_contract']={'version':'legacy' if legacy else 6,
-            'portrait_version':1 if legacy else art_version(config.get('_creation_settings',{}).get('portrait_style')),
+            'portrait_version':1 if legacy else 3,
             'prompt_contract':'bundled' if config['_prompts']['draft_world_prompt.md']['content']==bundled else 'custom_unverified',
             'prompt_sha256':hashlib.sha256(config['_prompts']['draft_world_prompt.md']['content'].encode()).hexdigest()}
         if not legacy:
@@ -230,7 +228,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if isinstance(raw,dict):
                 if not recovered_candidate:
                     raw.pop('portrait_world_id',None)
-                    if journal['generation_contract'].get('portrait_version') in (3,4):
+                    if journal['generation_contract'].get('portrait_version') == 3:
                         raw['portrait_world_id']=jid
                     raw['creation_settings']=config.get('_creation_settings',{})
                     raw.pop('authoring',None)  # Model cannot mint server provenance.
@@ -259,7 +257,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             if cosmetic: journal['portrait_warnings']=cosmetic
             errors=report['diagnostics']
             # Resume must reuse the exact versioned candidate and review signature.
-            if not errors and journal['generation_contract'].get('portrait_version', 1) in (2,3,4):
+            if not errors and journal['generation_contract'].get('portrait_version', 1) in (2,3):
                 from backend.services.draft_portraits import initialize
                 initialize(state, version=journal['generation_contract']['portrait_version'])
             if isinstance(state,dict):

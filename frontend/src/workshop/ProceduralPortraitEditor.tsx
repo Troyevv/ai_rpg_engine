@@ -1,6 +1,6 @@
 import {useRef,useState,type ReactNode} from 'react';
 import {Check,RotateCcw} from 'lucide-react';
-import {StylePicker,IllustrationControls} from './IllustrationControls';
+import {IllustrationControls} from './portraitV4/IllustrationControls';
 import {Choice} from '../components/ui/choice';
 import {Button} from '../components/ui/button';
 import catalog from '../../../shared/portrait-catalog.json';
@@ -13,7 +13,7 @@ const featureLabels={almond:'Миндалевидные',open:'Открытые'
 export type AnatomyReference={body_frame:BodyFrame;facial_hair_allowed:boolean};
 type Age=NonNullable<ProceduralPortrait['visual_age']>;
 const ages:Record<Age,string>={infant:'Младенец',child:'Ребёнок',adolescent:'Подросток',young_adult:'Молодой взрослый',mature_adult:'Зрелый взрослый',elderly:'Пожилой'};
-const categories={hair:'Волосы',clothing:'Одежда',face:'Лицо',color:'Цвета',details:'Образ',style:'Стиль'};
+const categories={hair:'Волосы',clothing:'Одежда',face:'Лицо',color:'Цвета',details:'Образ'};
 type Category=keyof typeof categories;
 const layers={hair:'hairstyle',clothing:'garment',face:'visage'} as const;
 const swatches={
@@ -38,7 +38,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  const modern=():Extract<ProceduralPortrait,{version:3}>=>{if(value.version===4)throw new Error('Недоступно для этого рисунка.');return value.version===3?value:{...value,version:3,base_version:value.version,
     body_frame:value.version===2?value.body_frame:anatomyReference?.body_frame||'neutral',
     facial_hair:value.version===2?value.facial_hair:'clean_shaven'}};
- const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:3}:{})} as ProceduralPortrait);
+ const withLayer=(group:keyof typeof layers,id:string):ProceduralPortrait=>({...modern(),form:'human',[layers[group]]:id,...(group==='face'?{face_revision:value.version===3&&value.face_revision===3?3:4}:{})} as ProceduralPortrait);
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
  const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
  const adult=(p:ProceduralPortrait)=>['adult','young_adult','mature_adult','elderly'].includes(p.visual_age||p.stage);
@@ -58,15 +58,15 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  {value.version===4?<IllustrationControls value={value} onChange={change} eligible={!!anatomyReference?.facial_hair_allowed} ageReference={ageReference} mode={selected} setMode={setSelected}/>:<>
  <div className="studio-tabs" role="group" aria-label="Раздел настройки">{(Object.keys(categories) as Category[]).map(key=>
   <button type="button" key={key} aria-pressed={section===key} onClick={()=>{setSection(key);settings.current?.scrollTo(0,0)}}>{categories[key]}</button>)}</div>
- {section==='style'&&<StylePicker value={value} onChange={change}/>}
  {section in layers&&(()=>{const group=section as keyof typeof layers;
- const current=value.version===3 && (group!=='face'||value.face_revision===3)?value[layers[group] as keyof Layers]:null;
+ const current=value.version===3 && (group!=='face'||(value.face_revision===3||value.face_revision===4))?value[layers[group] as keyof Layers]:null;
  return <div className="studio-gallery" aria-label={categories[group]}>{Object.entries(catalog.styles[group]).map(([id,label])=>{
   const art=withLayer(group,id);return <button type="button" key={id} aria-pressed={current===id} onClick={()=>change(art)}>
   <img alt="" loading="lazy" decoding="async" src={proceduralPortrait(art)||undefined}/><span>{label}</span>{current===id&&<Check size={14} aria-hidden="true"/>}</button>
  })}</div>})()}
  {section==='face'&&<div className="studio-face-details">
- {value.version===3&&value.face_revision===3?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
+
+ {value.version===3&&(value.face_revision===3||value.face_revision===4)?(Object.keys(figureFeatures) as (keyof FeatureChoices)[]).map(key=><label key={key}>{detailNames[key]}
  <Choice aria-label={detailNames[key]} value={value[key]||'auto'} onValueChange={id=>{
  const next={...value};if(id==='auto')delete next[key];else Object.assign(next,{[key]:id});change(next)}}><option value="auto">По рисунку</option>
  {figureFeatures[key].map(id=><option key={id} value={id}>{featureLabels[id]}</option>)}</Choice></label>):
@@ -76,6 +76,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
  <h3>{swatchLabels[field]}</h3>{Object.values(catalog.styles[field]).map((label,i)=><button key={label} type="button" title={label} aria-label={label} aria-pressed={value[field]===i}
  onClick={()=>change({...modern(),form:'human',[field]:i,...(field==='skin'?{skin_swatch:true}:field==='eyes'?{eye_swatch:true}:{})})}><i style={{backgroundColor:swatches[field][i]}}/>{label}</button>)}</div>)}
  {section==='details'&&<>
+ {value.version===3&&value.face_revision===4&&<label>Телосложение<Choice aria-label="Телосложение" disabled={disabled} value={value.body_build||'average'} onValueChange={v=>change({...value,body_build:v as keyof typeof catalog.features.body_build})}>{Object.entries(catalog.features.body_build).map(([k,v])=><option key={k} value={k}>{v}</option>)}</Choice></label>}
  <label>Вид изображения<Choice aria-label="Вид изображения" disabled={disabled} value={value.form} onValueChange={v=>change({...value,form:v as 'neutral'|'human',...(v==='neutral'&&value.version!==1?{facial_hair:'clean_shaven'}:{})})}><option value="human">Человек</option><option value="neutral">Нейтральный силуэт</option></Choice></label>
  <label>Предпочтение<Choice aria-label="Предпочтение" disabled={disabled} value={selected} onValueChange={v=>setSelected(v as typeof selected)}><option value="auto">Фотография, если подходит</option><option value="procedural">Процедурная иллюстрация</option></Choice></label>
  {value.form==='human'&&<>

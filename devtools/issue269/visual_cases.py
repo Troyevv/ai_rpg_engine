@@ -1,76 +1,30 @@
-"""Fixed inputs for inspecting the rasterized production renderer. Run as a module."""
+"""Fixed inputs for the classic portrait review through real Workshop components."""
 import json
 
-from backend.runtime_v3.portrait_catalog import ILLUSTRATION
+from backend.runtime_v3.portrait_catalog import CATALOG
 from backend.services.draft_portraits import default_descriptor
-
-
-def portrait(identity, world, age="young_adult", profile="neutral", actor=None):
-    stage = age if age in {"infant", "child", "adolescent"} else "adult"
-    return default_descriptor(
-        identity, stage, actor=actor, age_style=age, world_id=world,
-        profile=profile, version=4, art_style="anime",
-    )
-
-
-def vary(base, **traits):
-    return {**base, "traits": {**base["traits"], **traits}}
 
 
 def cases():
     ages = ["infant", "child", "adolescent", "young_adult", "mature_adult", "elderly"]
-    base = vary(
-        portrait("reference", "studio"), hair="parted", face="oval", clothing="shirt",
-        build="average", facial_hair="clean_shaven", detail="none", expression="neutral",
-    )
-    groups = {}
-    for field, choices in ILLUSTRATION["styles"].items():
-        groups[field] = [
-            {"label": label, "portrait": vary(base, **{field: key})} for key, label in choices.items()
-        ]
-    groups["trim"] = [
-        {"label": label, "portrait": vary(base, clothing="blazer", trim=key)}
-        for key, label in ILLUSTRATION["styles"]["clothing_color"].items()
-    ]
-    groups["body_frame"] = [
-        {"label": frame, "portrait": {**base, "body_frame": frame}}
-        for frame in ("female", "male", "neutral")
-    ]
-    groups["age"] = [
-        {"label": age, "portrait": {**base, "visual_age": age, "stage": age if age in ages[:3] else "adult"}}
-        for age in ages
-    ]
-    groups["combinations"] = [
-        {"label": label, "portrait": vary(base, **traits)}
-        for label, traits in [
-            ("Узкая челюсть и борода", dict(face="narrow", facial_hair="full_beard")),
-            ("Узкая челюсть и эспаньолка", dict(face="narrow", facial_hair="goatee")),
-            ("Широкая челюсть и борода", dict(face="broad", facial_hair="short_beard")),
-            ("Широкая челюсть и бакенбарды", dict(face="broad", facial_hair="sideburns")),
-            ("Длинные волосы и высокий ворот", dict(hair="long", clothing="techcoat")),
-            ("Очки и нависающее веко", dict(detail="round_specs", eye_shape="hooded")),
-            ("Очки и распахнутые глаза", dict(detail="square_specs", eye_shape="open")),
-            ("Крупная фигура в пиджаке", dict(build="full", clothing="blazer")),
-        ]
-    ]
-    for age, hair, skin in [("child", "curly", "deep"), ("child", "bob", "light"),
-                           ("elderly", "bun", "deep"), ("elderly", "short", "light")]:
-        groups["combinations"].append({
-            "label": f"{age} · {hair} · {skin}",
-            "portrait": {**vary(base, hair=hair, skin=skin, hair_color="grey" if hair == "bun" else "brown"),
-                         "visual_age": age, "stage": "child" if age == "child" else "adult"},
-        })
-    # All 36 IDs are used, including repeated choices. Change only art_style when comparing a pair.
-    profiles = ["modern", "historical", "fantasy", "futuristic"]
-    groups["population"] = []
+    population = []
     for i in range(36):
-        world = i // 9
-        identity = f"npc-{i % 9}"
         age = ages[i % len(ages)]
-        sex = ["male", "female", None][(world + i // 2) % 3]
-        actor = {"biological_sex": sex} if sex else {}
-        descriptor = portrait(identity, f"world-{world}", age, profiles[world], actor)
-        groups["population"].append({"label": f"{world + 1} / {identity} · {age}", "portrait": descriptor})
+        stage = age if age in ages[:3] else "adult"
+        world = i // 6
+        actor = {"biological_sex": ["male", "female"][(i + world) % 2]}
+        p = default_descriptor(f"npc-{i}", stage, actor, age_style=age, version=3,
+                               world_id=f"classic-{world}", profile=["modern", "historical", "neutral"][world % 3])
+        population.append({"portrait": p, "label": f"{i + 1:02} · {age}"})
+    base = {**population[3]["portrait"], "facial_hair": "clean_shaven", "visage": "oval", "hairstyle": "parted",
+            "garment": "shirt", "eye_shape": "almond", "nose_shape": "straight", "lip_shape": "defined",
+            "body_frame": "male", "skin": 1, "hair_color": 1, "clothing_color": 2, "body_build": "average"}
+    groups = {"population": population}
+    for name, key in [("face", "visage"), ("hair", "hairstyle"), ("clothing", "garment"), ("facial_hair", "facial_hair")]:
+        groups[name] = [{"label": label, "portrait": {**base, key: code}} for code, label in CATALOG["styles"][name].items()]
+    groups["age"] = [{"label": age, "portrait": {**base, "visual_age": age, "stage": age if age in ages[:3] else "adult"}} for age in ages]
+    for name, options in CATALOG.get("features", {}).items():
+        groups[name] = [{"label": label, "portrait": {**base, name: code}} for code, label in options.items()]
     return groups
 
 

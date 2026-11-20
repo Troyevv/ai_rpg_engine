@@ -209,13 +209,12 @@ def apply(raw,reply,paths):
         path=patch['path'];used.add(path)
         if isinstance(paths,RepairScope) and path.startswith('/characters/') and path.endswith('/portrait_traits'):
             from backend.services.draft_completeness import pointer
-            from backend.runtime_v3.portrait_catalog import STYLES, ILLUSTRATION_STYLES, art_version
-            version=art_version((original.get('creation_settings') or {}).get('portrait_style'))
-            prior=pointer(original,path);proposed=patch['value'];options=dict(ILLUSTRATION_STYLES if version==4 else STYLES,form=('human','neutral'))
+            from backend.runtime_v3.portrait_catalog import CLASSIC_OPTIONS
+            prior=pointer(original,path);proposed=patch['value'];options=dict(CLASSIC_OPTIONS,form=('human','neutral'))
             if not isinstance(proposed,dict) or (not isinstance(prior,dict) and proposed):
                 raise ValueError('portrait_traits: исправление не должно придумывать признаки.')
             if isinstance(prior,dict) and (set(proposed)-set(prior) or any(
-                    k in options and isinstance(v,str) and v in options[k] and proposed.get(k)!=v for k,v in prior.items())):
+                    k in options and v in options[k] and proposed.get(k)!=v for k,v in prior.items())):
                 raise ValueError('portrait_traits: корректные признаки должны сохраниться.')
         if isinstance(paths,RepairScope) and path.startswith('/world/') and len(path.split('/'))==4 and isinstance(patch['value'],dict):
             ident=path.split('/')[-1].replace('~1','/').replace('~0','~')

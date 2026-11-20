@@ -1,4 +1,4 @@
-import {shape as path,seam as line} from './portraitWardrobe';
+import {shape as path,seam as line} from '../portraitWardrobe';
 import {paintedHair} from './illustratedHair';
 import {illustratedFace,landmarks} from './illustratedFace';
 import {illustratedCostume} from './illustratedCostume';

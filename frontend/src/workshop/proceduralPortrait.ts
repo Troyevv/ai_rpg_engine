@@ -5,11 +5,11 @@ import {portraitFigure,type FeatureChoices} from './portraitFigure';
 import {portraitFace} from './portraitFace';
 import {coiffure,garmentLayer} from './portraitWardrobe';
 export type Styles = typeof catalog.styles;
-export type Layers = FeatureChoices & {face_revision?:2|3;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
+export type Layers = FeatureChoices & {face_revision?:2|3|4;body_build?:keyof typeof catalog.features.body_build;base_version?:1|2; hairstyle?:keyof Styles['hair']|null; garment?:keyof Styles['clothing']|null; visage?:keyof Styles['face']|null; skin_swatch?:boolean;eye_swatch?:boolean};
 import parts from './portraitParts.json';
 import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
-import {type Illustration,validIllustration} from "./illustration";
-import {illustratedPortrait} from "./illustratedPortrait";
+import {type Illustration,validIllustration} from "./portraitV4/illustration";
+import {illustratedPortrait} from "./portraitV4/illustratedPortrait";
 export type ProceduralPortrait=LegacyPortrait|Illustration;
 export type LegacyPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair} | ({version:3;body_frame:BodyFrame;facial_hair:FacialHair} & Layers)) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
 type Art = { [key:string]: any };
@@ -130,7 +130,7 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
   const juvenile=['infant','child','adolescent'].includes(age);
   const skinColors=layers?.skin_swatch?Object.values(catalog.skin_materials)[p.skin]:skin.skin||parts[1].skin;
   const iris=layers?.eye_swatch?Object.values(catalog.eye_colors)[p.eyes]:p.eyes===7?'#6f8998':parts[p.eyes].iris;
-  if(layers?.face_revision===3){
+  if(layers?.face_revision===3 || layers?.face_revision===4){
    const ids=catalog.styles;
    const result=portraitFigure(layers,layers.visage||Object.keys(ids.face)[p.face] as keyof Styles['face'],
     layers.hairstyle||Object.keys(ids.hair)[p.hair] as keyof Styles['hair'],

@@ -129,8 +129,6 @@ def world_output(config, messages):
     targets = CreationSettings.model_validate(config.get('_creation_settings', {})).cast_targets([])
     source = estimate([m for m in messages if m['role'] == 'user'])
     visible = 2500 + 650 * targets['core'] + 320 * targets['secondary'] + min(source, 12000)
-    if config.get('_creation_settings',{}).get('portrait_style') in ('anime','semi_realistic'):
-        visible += 100 * (targets['core'] + targets['secondary'])
     return structured_output(config,visible)
 
 

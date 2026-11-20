@@ -52,11 +52,9 @@ reason объясняет художественную связь изменен
 '''
 
 
-from backend.runtime_v3.portrait_catalog import art_version as style_version
-
-def creative_schema(portrait_version=3):
+def creative_schema():
     from backend.services.draft_initial import compact_schema
-    return compact_schema(prompt_schema(initial_portraits=True,portrait_version=portrait_version))
+    return compact_schema(prompt_schema(initial_portraits=True))
 
 
 def npc_gaps(state):
@@ -73,12 +71,12 @@ def messages(state, author_context):
     # Entire canonical content, no clipping, retrieval sampling, or second canon.
     # Transport preflight refuses contexts that cannot fit it before spending.
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
-    from backend.services.draft_portraits import authoring_context as without_art
-    candidate=without_art(state)
+    from backend.services.draft_portraits import authoring_context
+    candidate=authoring_context(state)
     return [dict(role='system', content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user', content=json.dumps(dict(
                 author_context=author_context, original_npc_gaps={c['id']:c['fields'] for c in npc_gaps(state)}, candidate={k:candidate[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
-                candidate_hash=candidate_hash(state), world_schema=creative_schema(style_version(state.get('creation_settings',{}).get('portrait_style'))),
+                candidate_hash=candidate_hash(state), world_schema=creative_schema(),
                 response_schema=Proposal.model_json_schema()), ensure_ascii=False, separators=(',', ':')))]
 
 
@@ -105,7 +103,7 @@ def response_slot(journal, record, request_key):
 
 def develop(state, author_context, journal, call, save, *, request_key=None):
     art_version=journal.get('generation_contract',{}).get('portrait_version',2)
-    art_job=journal.get('binding',{}).get('job_id') if art_version in (3,4) else None
+    art_job=journal.get('binding',{}).get('job_id') if art_version==3 else None
     record = journal.get('creative')
     if record and record.get('status') == 'applied':
         # Recover a crash between the journal checkpoint and version append.

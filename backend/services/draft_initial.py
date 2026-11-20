@@ -588,9 +588,6 @@ def inspect_candidate(raw, *, for_start=False, portrait_version=3):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
     from backend.services.portrait_traits import input_diagnostics
-    from backend.runtime_v3.portrait_catalog import art_version
-    settings=raw.get('creation_settings') if isinstance(raw,dict) else None
-    if portrait_version==3 and isinstance(settings,dict): portrait_version=art_version(settings.get('portrait_style'))
     portrait_errors = input_diagnostics(raw.get('characters'),portrait_version) if isinstance(raw, dict) else []
     independent_errors = dependency_errors(raw)
     state=raw
@@ -621,7 +618,7 @@ def compact_schema(schema, *, dense=False):
     from collections import Counter
     import json
     counts=Counter();definitions={};names={}
-    # The illustrated catalog competes with the partial world on continuations.
+    # The world schema shares its context with previously generated fragments.
     # Factor smaller repeated constraints there while retaining the legacy wire schema.
     threshold=35 if dense else 160
     prefix='c' if dense else 'creative_'

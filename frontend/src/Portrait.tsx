@@ -36,7 +36,7 @@ export function CharacterAvatar({subject,saveId,workspaceId,author=false,onClick
  const style={'--avatar-size':typeof size==='number'?`${size}px`:size} as CSSProperties;
  const descriptor=subject.procedural_portrait;
  const generated=hasImage?null:proceduralPortrait(descriptor);
- const faceCrop=framing==='avatar'&&(descriptor?.version===4||descriptor?.version===3&&descriptor.face_revision===3);
+ const faceCrop=framing==='avatar'&&(descriptor?.version===4||descriptor?.version===3&&(descriptor.face_revision===3||descriptor.face_revision===4));
  const content=hasImage?<img key={imageKey} alt="" loading="lazy" decoding="async" src={portraitUrl(saveId,subject.id,p!,workspaceId,author)} style={cropStyle(p!)} onError={()=>setFailedKey(imageKey)}/>:generated?<img className={faceCrop?"procedural-portrait face-framing":"procedural-portrait"} src={generated} alt="" loading="lazy" decoding="async"/>:<>
   <svg viewBox="0 0 100 100" aria-hidden="true" data-silhouette={silhouette}>
    {silhouette==='female'?<>

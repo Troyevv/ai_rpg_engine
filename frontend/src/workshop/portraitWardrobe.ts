@@ -44,8 +44,45 @@ const cuts: Record<Garment,[string,string]> = {
  cloak:['M169 309Q196 332 231 309l23 16q52 17 70 62l56 123H20l56-123q18-45 70-62Z',
  shape('M166 312q36 19 66-3 9 85 94 201H134q94-116 32-198Z',dark,.32)+seam('M164 317q-7 72-55 157m126-158q8 60 59 130',ivory,4,.35)+'<circle cx="215" cy="332" r="8" fill="#c7a469"/><circle cx="215" cy="332" r="4" fill="#795f46"/>'],
 };
-export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null) {
+type Fit = {build: keyof typeof catalog.features.body_build; youth: number; collarY: number; turn: number};
+// Necklines stay in the same coordinates as their plackets. Sleeve heads and hips
+// are fitted separately so broad shoulders do not enlarge a collar or a button.
+const necklines: Record<Garment, string> = {
+ plain:'M172 318Q198 349 228 318', tshirt:'M172 320Q200 347 228 320',
+ shirt:'M170 316L200 342 230 316', blazer:'M167 313L200 404 233 313',
+ jacket:'M163 301L200 350 237 301 248 322', cardigan:'M169 319Q200 345 231 319',
+ jumper:'M163 321L200 351 237 321', sweater:'M172 297Q200 306 228 297L233 325',
+ blouse:'M166 319Q200 356 234 319', hoodie:'M153 322Q153 292 177 292L200 308 223 292Q250 293 247 322',
+ vest:'M171 316L200 348 229 316', dress:'M153 329Q162 351 200 364Q238 351 247 329',
+ coveralls:'M170 316L200 341 230 316', smock:'M174 318Q200 343 226 318', cloak:'M169 309Q196 332 231 309',
+};
+function fittedGarment(id: Garment, frame: BodyFrame, fit: Fit, details: string) {
+ const {build,youth,collarY,turn}=fit;
+ const tailored=id==='blazer'||id==='jacket'||id==='coveralls';
+ const flowing=id==='cloak'||id==='smock';
+ const sleeves=id==='tshirt'||id==='dress'||id==='blouse';
+ const shoulder=(104+(frame==='male'?5:frame==='female'?-4:0)+(tailored?9:flowing?7:0)
+   +({slender:-13,average:0,broad:20,full:12}[build])*(1-youth))*(1-youth*.29);
+ const waist=(102+(flowing?25:0)+(id==='dress'?-15:0)+({slender:-21,average:0,broad:0,full:30}[build])*(1-youth))*(1-youth*.32);
+ const drop=tailored?338:flowing?352:346;
+ const cuff=id==='dress'?387:id==='blouse'?404:417;
+ const r=200+shoulder,l=200-shoulder;
+ const side=sleeves
+   ? `Q${r+12} ${drop+10} ${r+25} ${cuff-9} L${r-6} ${cuff+2} L${r-14} ${cuff-13} Q${200+waist-10} 460 ${200+waist} 510 H${200-waist} Q${200-waist+10} 460 ${l+14} ${cuff-13} L${l+6} ${cuff+2} L${l-25} ${cuff-9} Q${l-12} ${drop+10} ${l} ${drop}`
+   : `C${r+15} ${drop+3} ${r+23} ${drop+29} ${r+27} 402 Q${200+waist+27} 452 ${200+waist+37} 510 H${200-waist-37} Q${200-waist-27} 452 ${l-27} 402 Q${l-19} ${drop+5} ${l} ${drop}`;
+ const outline=necklines[id]+` Q${r-24} ${drop-9} ${r} ${drop} `+side+` Q${l+26} ${drop-10} ${id==='cloak'?169:id==='hoodie'||id==='dress'?153:170} 319Z`;
+ const arms=sleeves?shape(`M${l-21} ${cuff-15}l30 6-13 120h-37Z M${r+21} ${cuff-15}l-30 6 13 120h37Z`,'url(#skin)'):'';
+ const sleeveFolds=flowing
+   ? `M${r-8} ${drop+1}Q${r-28} 404 ${r+8} 489 M${l+10} ${drop+2}Q${l+14} 397 ${l-14} 460`
+   : `M${l+7} ${drop+3}Q${l+20} ${drop+15} ${l+23} ${drop+38} M${r-8} ${drop+3}Q${r-24} ${drop+21} ${r-23} ${drop+41}`;
+ const shade=shape(`M${r+7} ${drop-8}Q${r-29} ${drop+25} ${r-20} 429 Q${r-36} 477 ${r-35} 511H401V300Z`,dark,.14);
+ const dropY=collarY+(youth>.8?-4:0);
+ return `<g transform="translate(0 ${dropY})"><defs><clipPath id="fittedCloth"><path d="${outline}"/></clipPath></defs>${arms}${shape(outline,'url(#cloth)')}<g clip-path="url(#fittedCloth)">${turn<0?'<g transform="translate(400 0) scale(-1 1)">':''}${shade}${turn<0?'</g>':''}${seam(sleeveFolds,dark,1.9,.25)}${details}</g></g>`;
+}
+
+export function garmentLayer(id:Garment,frame:BodyFrame,young:boolean,neckPath?:string|null, fit?:Fit) {
  const [outline,details]=cuts[id];
+ if(fit)return fittedGarment(id,frame,fit,details);
  const width=young?.85:frame==='male'?1.12:frame==='female'?.89:1;
  const arms=(id==='tshirt'||id==='dress') ?
    shape(id==='tshirt'?'M79 397L112 411 103 461 98 510H60L68 460Z M321 397L288 411 297 461 302 510H340L332 460Z':'M93 375L123 388 116 459 112 510H77L84 447Z M307 375L277 388 284 459 288 510H323L316 447Z','url(#skin)'):'';

@@ -62,3 +62,11 @@ it('preserves approved v3 faces until a revised face is chosen',()=>{
   expect(new Set(options).size).toBe(3);
  }
 });
+
+it('keeps the master revision 3 drawing byte-for-byte after adding the classic fits',()=>{
+ const pinned = {version:3,form:'human',stage:'adult',seed:'ab'.repeat(16),face:0,hair:0,clothing:0,
+  skin:2,eyes:3,accessory:0,palette:1,body_frame:'male',facial_hair:'short_beard',
+  visage:'broad',hairstyle:'curly',garment:'jacket',face_revision:3} as const;
+ expect(createHash('sha256').update(svg(pinned)).digest('hex'))
+  .toBe('a7f630b8518dbc1c66ecb359b9727bd3ff2cdb0be78a6c86fb998df4a722f445');
+});

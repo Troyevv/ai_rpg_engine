@@ -595,7 +595,3 @@
     font-size: 13px;
   }
 }
-
-.commission-operation{display:flex;flex-wrap:wrap;gap:6px;padding:4px 12px}.commission-operation>*{min-width:0;flex:1 1 145px}
-
-.cast-thumbnail{display:block;height:100%;width:100%}

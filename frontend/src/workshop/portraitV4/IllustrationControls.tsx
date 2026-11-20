@@ -1,48 +1,13 @@
 import { useState } from 'react';
-import { Choice } from '../components/ui/choice';
-import { proceduralPortrait, type ProceduralPortrait } from './proceduralPortrait';
+import { Choice } from '../../components/ui/choice';
+import { proceduralPortrait } from '../proceduralPortrait';
 import {
   illustrationCatalog as catalog,
-  convertStyle,
-  type ArtStyle,
   type Illustration,
   type Traits,
 } from './illustration';
-import { bodyFrames, type BodyFrame } from './portraitAnatomy';
+import { bodyFrames, type BodyFrame } from '../portraitAnatomy';
 
-export function StylePicker({
-  value,
-  onChange,
-}: {
-  value: ProceduralPortrait;
-  onChange: (p: Illustration) => void;
-}) {
-  return (
-    <div>
-      <p>
-        {value.version === 4
-          ? 'Рисунок меняется локально. Выбранные черты сохранятся.'
-          : 'Переход на новый рисунок приблизительно переносит прежние черты. Сравните варианты перед сохранением.'}
-      </p>
-      <div className="studio-style-pair">
-        {(Object.keys(catalog.art_styles) as ArtStyle[]).map((style) => {
-          const art = convertStyle(value, style);
-          return (
-            <button
-              type="button"
-              key={style}
-              aria-pressed={value.version === 4 && value.art_style === style}
-              onClick={() => onChange(art)}
-            >
-              <img alt="" src={proceduralPortrait({ ...art, form: 'human' }) || undefined} />
-              {catalog.art_styles[style]}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 const groups = {
   face: ['face', 'eye_shape', 'brows', 'nose_shape', 'lip_shape'],
   hair: ['hair', 'facial_hair'],
@@ -76,7 +41,6 @@ const sections = {
   clothes: 'Одежда',
   colors: 'Цвета',
   details: 'Детали',
-  style: 'Стиль',
 };
 const ages = {
   infant: 'Младенец',
@@ -101,7 +65,7 @@ export function IllustrationControls({
   mode: string;
   setMode: (id: 'auto' | 'procedural') => void;
 }) {
-  const [section, setSection] = useState<keyof typeof sections>('style'),
+  const [section, setSection] = useState<keyof typeof sections>('body'),
     [field, setField] = useState<keyof Traits>('face');
   const [query, search] = useState(''),
     [page, go] = useState(0);
@@ -134,7 +98,7 @@ export function IllustrationControls({
   const index = Math.min(page, Math.max(0, Math.ceil(choices.length / 8) - 1));
   function switchSection(s: keyof typeof sections) {
     setSection(s);
-    if (s !== 'style') select(groups[s][0]);
+    select(groups[s][0]);
   }
   return (
     <>
@@ -158,10 +122,7 @@ export function IllustrationControls({
           </button>
         ))}
       </div>
-      {section === 'style' ? (
-        <StylePicker {...{ value, onChange }} />
-      ) : (
-        <>
+      <>
           {section === 'body' && (
             <>
               <label>
@@ -313,8 +274,7 @@ export function IllustrationControls({
               )}
             </>
           )}
-        </>
-      )}
+      </>
     </>
   );
 }

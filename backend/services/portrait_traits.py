@@ -3,7 +3,7 @@ from typing import get_args
 from backend.runtime_v3.models import FacialHair
 
 FACIAL_HAIR = get_args(FacialHair)
-from backend.runtime_v3.portrait_catalog import CATALOG, STYLES, ILLUSTRATION_STYLES
+from backend.runtime_v3.portrait_catalog import CATALOG, STYLES, CLASSIC_OPTIONS, ILLUSTRATION_STYLES
 
 
 def input_diagnostics(cards, version=3):
@@ -12,7 +12,7 @@ def input_diagnostics(cards, version=3):
     The optional hint object is the repair unit: unsupported features can be
     omitted without inventing a replacement or changing literary appearance.
     """
-    options = dict(ILLUSTRATION_STYLES if version==4 else STYLES, form=('human', 'neutral'))
+    options = dict(ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else STYLES, form=('human', 'neutral'))
     errors = []
     for index, card in enumerate(cards if isinstance(cards, list) else []):
         if not isinstance(card, dict) or 'portrait_traits' not in card:
@@ -55,18 +55,23 @@ _LABEL_IDS = {field:{label.casefold():key for key,label in options.items()}
 
 
 def input_schema(version=3):
-    options = ILLUSTRATION_STYLES if version==4 else STYLES
+    options = ILLUSTRATION_STYLES if version==4 else CLASSIC_OPTIONS if version==3 else STYLES
     return {'type':'object', 'properties':{'form':{'enum':['human','neutral']},
             **{k:{'enum':list(v)} for k,v in options.items()}}, 'additionalProperties':False}
 
 
 def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None, catalog_labels=False, semantic=False):
-    styles=ILLUSTRATION_STYLES if semantic else STYLES
+    styles=ILLUSTRATION_STYLES if semantic else CLASSIC_OPTIONS if catalog_labels else STYLES
+    typed = _TYPED
+    if catalog_labels and not semantic:
+        typed = {**_TYPED, 'build': ('body_build', {'худощавый':'slender','худощавое':'slender','полный':'full','полное':'full','широкоплечий':'broad','широкоплечее':'broad','средний':'average','среднее':'average'})}
+    def value(field, token):
+        return token if semantic or field in CATALOG['features'] else styles[field].index(token)
     approved = {}
     if isinstance(hints,dict):
         for field, options in styles.items():
             if (field != 'facial_hair' or facial_hair) and isinstance(hints.get(field),str) and hints[field] in options:
-                approved[field] = hints[field] if semantic else options.index(hints[field])
+                approved[field] = value(field,hints[field])
     # Existing AppearanceProfile carries open text, not typed color IDs. Handle
     # only uncomplicated public initial features that match a supported value.
     # Never bake a private or evolving feature into a shared visual descriptor.
@@ -79,16 +84,16 @@ def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None, cata
         if item.get('source_event_id') or item.get('fact_id') or item.get('condition_id') or item.get('revision',1)!=1:
             # A hint from a model which could see private source material is
             # insufficient evidence to publish that same facial feature.
-            if item['kind'] in _TYPED: approved.pop(_TYPED[item['kind']][0], None)
+            if item['kind'] in typed: approved.pop(typed[item['kind']][0], None)
             continue
-        spec=_TYPED.get(item.get('kind'))
+        spec=typed.get(item.get('kind'))
         if not spec or spec[0] not in styles or not isinstance(item.get('text'),str): continue
         field, names=spec
         token=item['text'].casefold().strip()
         if semantic:
             token = next((key for key,label in styles[field].items() if label.casefold()==token),token)
         elif catalog_labels:
-            token = _LABEL_IDS[field].get(token,token)
+            token = _LABEL_IDS.get(field,{}).get(token,token)
         elif field == 'face':
             continue
         matches.setdefault(field,set()).add(names.get(token,token))
@@ -96,7 +101,7 @@ def graphic_choices(actor, hints=None, *, facial_hair=False, warnings=None, cata
         if len(tokens)==1:
             token=next(iter(tokens))
             if token in styles[field]:
-                choice=token if semantic else STYLES[field].index(token)
+                choice=value(field,token)
                 if field in approved and approved[field]!=choice:
                     if warnings is not None:
                         warnings.append('Открытая черта имеет приоритет: '+field)

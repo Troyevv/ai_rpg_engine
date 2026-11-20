@@ -121,12 +121,24 @@ const cuts: Record<HairStyle, Cut> = {
 };
 export function hairCut(style:HairStyle): Readonly<Cut> { return cuts[style] }
 
+// Shapes sit in skull space (eyes at y=0). Sweep, fringe and temple have
+// different edges even at avatar size. Long locks cover the shoulder in front.
+const croppedCuts: Partial<Record<HairStyle, Partial<Cut>>> = {
+ short: {front:'M-59 4Q-68-9-64-36Q-69-61-44-76L-48-79Q-32-89-10-86Q5-98 26-89Q53-88 64-66Q77-52 66-31L63-6L55 8 53-20Q55-39 35-47Q24-48 20-59Q11-42-7-39L1-51Q-13-37-32-37L-28-44Q-48-36-53-25Z'},
+ parted: {front:'M-58 4Q-68-18-63-46C-54-77-28-91-7-88C3-93 7-94 15-89Q54-94 69-56Q76-28 63 5L56 10Q58-14 48-35Q30-46 15-68C8-52-8-39-30-34Q-45-30-52-17Z',strokes:'M12-78Q-6-59-40-47m55-36Q35-71 49-52m-44-27Q-22-69-45-55m67-24Q49-67 58-46'},
+ medium:{front:curtains+' M-55-33Q-67 0-55 29Q-48 45-55 52Q-40 43-46 19Q-53-2-42-24Z'},
+ wavy:{front:curtains+' M48-36C64-20 56 3 62 19C73 39 53 53 53 65Q54 83 69 88Q60 77 66 66C85 44 73 31 73 17Q73-9 68-32Z'},
+ long:{front:curtains+' M-59-31C-77 6-62 43-64 77Q-67 98-76 105Q-51 101-51 74C-46 34-59 12-45-30Z'},
+ bun:{back:'M31-65Q49-90 72-79Q95-71 85-44Q78-27 54-32Z',backLines:'M49-70q17-12 28 3m-25 9q20-10 26 2'},
+ curly:{front:'M-61 7Q-75 8-71-9Q-87-12-77-31Q-88-43-74-56Q-77-73-58-76Q-56-93-39-88Q-31-106-14-96Q-2-110 14-98Q33-108 44-95Q64-97 68-79Q87-78 80-61Q99-53 87-37Q94-19 76-14Q78 2 62 9Q57 18 52 11L50-4Q35-1 37-16Q22-13 20-26Q8-17 2-29Q-12-16-23-27Q-32-12-44-20Q-44-4-55-7Z'},
+};
 export function figureHair(
   style: HairStyle,
   temple: number,
   crown: number,
   light: string,
   dark: string,
+  fit?: {infant: boolean; part: number},
 ) {
   const coated = style === 'ponytail' || style === 'braid' || style === 'bun';
   const parted =
@@ -136,7 +148,11 @@ export function figureHair(
     : parted
       ? line('M8-83Q11-72 9-62m23 20q12 11 17 22', light, 1, 0.5)
       : '';
-  const cut = cuts[style],
+  if (fit?.infant && (style === 'buzz' || style === 'short')) {
+    const wisps = 'M-40-61Q-32-80-13-83Q-17-89-10-92Q-9-85-2-83Q13-85 26-74 M-27-73q10-10 22-8m-9 5q12-3 23 3';
+    return {back:'',front:`<g transform="scale(${temple/61} ${-crown/87})">${line(wisps,dark,1.65,.62)}</g>`};
+  }
+  const cut = fit ? {...cuts[style], ...croppedCuts[style]} : cuts[style],
     wrap = (s: string) => `<g transform="scale(${(temple + 1) / 61} ${-crown / 87})">${s}</g>`;
   return {
     back: cut.back
@@ -152,6 +168,7 @@ export function figureHair(
             `<g transform="translate(2 3)">` +
             line(cut.strokes || '', dark, 0.9, 0.32) +
             '</g>' +
+            (fit && parted ? line(`M${2+fit.part*6} -85q4 6 2 10`, light, 1.6, .57) : '') +
             hairline +
             '</g>',
         )
