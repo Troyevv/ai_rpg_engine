@@ -475,11 +475,12 @@ class DraftStorage(DraftEditorStorage):
             elif operation=='add':state,eid=domain.add(state,kind,value)
             elif operation=='remove':state=domain.remove(state,kind,eid)
             else:raise ValueError('Неизвестная операция.')
-            state=domain.prepare(state)
             if operation == 'add' and kind == 'character':
-                from backend.services.draft_portraits import initialize
                 state.setdefault('portrait_world_id',wid)
-                initialize(state, version=3, character_ids=[eid])
+                # Drawing a new blank dossier does not declare a canonical age or sex.
+                card = next(card for card in state['characters'] if card['id'] == eid)
+                card.setdefault('portrait_traits', {'form': 'human'})
+            state=domain.prepare(state)
             after=domain.validate(state)
             if operation in ('add','patch_fields'):
                 new_errors=set(after['errors'])-set(before['errors'])

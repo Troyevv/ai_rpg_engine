@@ -146,6 +146,9 @@ def test_initial_character_matches_startup_contract(db,sex):
     jid=repo.begin_job(sid,'Я доверяю Ладе.','start',CONFIG);run(repo,jid,raw)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     actual=repo.get_snapshot(sid)['world_state']['characters']['new_npc']
+    portrait=actual['procedural_portrait']
+    assert portrait['version']==3 and portrait['face_revision']==4 and portrait['form']=='human'
+    assert portrait['body_frame']==(sex if sex in ('male','female') else 'neutral')
     expected=Character(id='new_npc',**dict(attrs,biological_sex=None if sex=='unknown' else sex)).model_dump()
     # A living NPC has no recorded death. Old living snapshots retain their exact keys.
     assert set(actual)==set(expected)==set(Character.model_fields)-{'death_date','death_minute'}

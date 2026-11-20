@@ -7,6 +7,7 @@ from backend.runtime_v3.models import ProceduralPortraitV3
 from backend.runtime_v3.portrait_catalog import CATALOG
 from backend.services.draft_portraits import default_descriptor, initialize
 from backend.services.portrait_traits import input_schema
+from test_api import api
 from test_workshop_portraits import fixture
 
 
@@ -75,3 +76,18 @@ def test_partial_description_preserves_an_imported_portrait(version):
         assert art['base_version'] == version and 'face_revision' not in art
         assert art['garment'] is None and art['visage'] is None
         assert not art['eye_swatch'] and not art['skin_swatch']
+
+
+def test_manual_new_dossier_draws_without_inventing_a_canonical_age(api):
+    from test_workshop_portraits import create
+    client, _ = api
+    url, draft = create(client)
+    response = client.patch(url, json=dict(revision=draft['revision'], operation='add', kind='character',
+                                           value={'name':'Ирина'}, warnings_ack=True))
+    assert response.status_code == 200, response.text
+    result = response.json()
+    cid = result['entity_id']
+    art = result['portraits'][cid]['procedural_portrait']
+    assert (art['version'], art['face_revision'], art['form'], art['stage']) == (3, 4, 'human', 'unknown')
+    assert not result['state']['world']['characters'][cid].get('birth_date')
+    assert all(result['portraits'][k] == p for k,p in draft['portraits'].items())

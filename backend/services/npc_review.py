@@ -52,6 +52,20 @@ def identity_card(card):
     return dict(deepcopy(card), fields=dict.fromkeys(CARD_FIELDS, ''))
 
 
+def assign_new_portrait(state, cid):
+    """Draw a newly introduced NPC without publishing unreviewed card prose."""
+    from backend.runtime_v3.portraits import life_period, visual_age
+    from backend.services.draft_portraits import default_descriptor
+    actor = state['characters'][cid]
+    stage = life_period(state, cid)[1]
+    if stage == 'unknown' or actor.get('procedural_portrait'):
+        return
+    protagonist = state['characters'].get(state['meta'].get('current_protagonist_id'), {})
+    world_seed = (protagonist.get('procedural_portrait') or {}).get('seed', '')
+    actor['procedural_portrait'] = default_descriptor(
+        cid, stage, actor, age_style=visual_age(state, cid), version=3, world_id=world_seed)
+
+
 def review_projection(snapshot):
     actor = snapshot['world_state']['camera']['controlled_actor_id']
     records = []

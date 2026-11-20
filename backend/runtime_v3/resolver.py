@@ -279,7 +279,7 @@ class StateResolver:
             cid = item.get('id')
             if any(cid==ch['id'] for p in s['pregnancies'].values() for ch in p['children']):
                 self.warn('promotions',i,'Reserved birth identity is created only by Runtime.',code='birth_identity_reserved'); continue
-            from backend.services.npc_review import promotion_card, identity_card
+            from backend.services.npc_review import promotion_card, identity_card, assign_new_portrait
             card = promotion_card(item)
             if cid in s['characters']:
                 fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)
@@ -289,6 +289,7 @@ class StateResolver:
                 validate_dates(s, cid)
             except ValueError as exc:
                 fatal(str(exc), 'promotion_character_invalid', repairable=True, section='promotions')
+            assign_new_portrait(s, cid)
             self.history.state_changes.append(dict(kind='npc_identity_created', entity=cid, turn_id=self.turn_id,
                 source='extraction', evidence=item['evidence'], initial_character=deepcopy(s['characters'][cid])))
             if cid in self.minimal_promotion_ids:
