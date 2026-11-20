@@ -10,7 +10,7 @@ SOURCE = 'Марина родилась 2 марта 1990 и работала в
 FILLED = 'До отъезда работала реставратором в семейном архиве.'
 
 
-def seed(repo):
+def seed(repo, scenario=''):
     state = candidate()
     mar = state['characters'][1]
     mar['fields'].update(Возраст='24', Биография='Работала в городе.')
@@ -19,7 +19,7 @@ def seed(repo):
     state.setdefault('authoring',{})['manual_paths']=['/campaign/title','/world/characters/'+mar['id']+'/birth_date']
     wid = repo.create_workspace('Семейный архив')['id']
     with repo.connect() as db:
-        repo._write_draft(db,wid,state,'draft_world',source=SOURCE,review=dict(status='completed',
+        repo._write_draft(db,wid,state,'draft_world',source=SOURCE + (' '+scenario if scenario else ''),review=dict(status='completed',
             advisory=True,issues=[dict(message=text,severity='warning') for text in (BIO,DEAD,UNKNOWN)]))
     return {'wid':wid}
 
@@ -28,6 +28,11 @@ def reply(messages):
     data = json.loads(messages[-1]['content'])
     decisions=[];changes=[]
     fix='response_schema' in data
+    if fix and data['author_context']['original_idea'].endswith('empty-conflicts'):
+        return json.dumps(dict(candidate_hash=data['candidate_hash'], rationale='Источники оставляют точную дату открытой.',
+            changes=[], conflicts=['Известен только год рождения.', 'Дата окончания брака условна.'],
+            decisions=[dict(issue_id=n['issue_id'],outcome='ambiguous',category='uncertainty',
+                reason='Нужна точная дата от автора.') for n in data['findings']]),ensure_ascii=False)
     for issue in data['findings']:
         msg=issue['message']
         if msg == BIO:
@@ -48,6 +53,8 @@ def reply(messages):
         if status=='proposed':decision['change_indices']=[len(changes)-1]
         decisions.append(decision)
     if fix:
+        if data['author_context']['original_idea'].endswith('invalid-write'):
+            changes[-1]['path']='/campaign/title'
         return json.dumps(dict(candidate_hash=candidate_hash(data['candidate']),rationale='Уточнить карточку Марины по замыслу автора.',
                           changes=changes,decisions=decisions),ensure_ascii=False)
     return json.dumps(dict(issues=[],decisions=decisions),ensure_ascii=False)

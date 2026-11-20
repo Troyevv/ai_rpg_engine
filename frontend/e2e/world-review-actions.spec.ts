@@ -3,11 +3,10 @@ import {defaults} from '../src/types';
 import {nav} from './navigation';
 import {authorView, workshopNav} from './workshop-navigation';
 
-test('review saved world, confirm targeted changes, recheck and roll back',async({page,request},info)=>{
-  const mobile=info.project.name==='mobile';
+async function setupReview(page:import('@playwright/test').Page,request:import('@playwright/test').APIRequestContext,mobile:boolean,scenario=''){
   if(mobile)await page.addInitScript(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined}));
   await page.setViewportSize({width:mobile?360:1280,height:820});
-  const {wid}=await(await request.post('/test/review-actions')).json();
+  const {wid}=await(await request.post('/test/review-actions?scenario='+scenario)).json();
   const url=`/api/workspaces/${wid}/draft`;
   const before=await(await request.get(url+'?author=true')).json();
   await page.goto('/');
@@ -24,7 +23,12 @@ test('review saved world, confirm targeted changes, recheck and roll back',async
     await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Проверка мира');
   }
   await openReview();
-  const panel=page.getByRole('region',{name:'Работа с замечаниями'});
+  return {before,url,openReview,skin,panel:page.getByRole('region',{name:'Работа с замечаниями'})};
+}
+
+test('review saved world, confirm targeted changes, recheck and roll back',async({page,request},info)=>{
+  const mobile=info.project.name==='mobile';
+  const {before,url,openReview,skin,panel}=await setupReview(page,request,mobile);
   await panel.getByRole('button',{name:'Исправить замечания с помощью ИИ'}).click();
   await expect(panel.getByRole('heading',{name:'Ожидает решения'})).toBeVisible();
   const drafts=async()=>(await request.get(url+'?author=true')).json();
@@ -59,3 +63,35 @@ test('review saved world, confirm targeted changes, recheck and roll back',async
   const history=await(await request.get(url+'/edits?author=true')).json();
   expect(history.edits.map((e:{requests:unknown[]})=>e.requests.length)).toEqual([1,1]);
 });
+
+for(const scenario of ['empty-conflicts','invalid-write']){
+  test('review result survives reload: '+scenario,async({page,request},info)=>{
+    const {panel,openReview,url,before}=await setupReview(page,request,info.project.name==='mobile',scenario);
+    await panel.getByRole('button',{name:'Исправить замечания с помощью ИИ'}).click();
+    const empty=scenario==='empty-conflicts';
+    const heading=panel.getByRole('heading',{name:empty?'Рассмотрено без изменений':'Не удалось применить'});
+    await expect(heading).toBeVisible();
+    await openReview();
+    await expect(heading).toBeVisible();
+    if(empty){
+      await expect(panel.getByRole('alert')).toHaveCount(0);
+      await expect(panel.getByRole('region',{name:'Неоднозначности'})).toContainText('Дата окончания брака условна.');
+      await panel.getByText('Отклонено как неоднозначное',{exact:true}).first().click();
+      await expect(panel.getByText(/Нужна точная дата от автора/).first()).toBeVisible();
+    }else{
+      await expect(panel.getByRole('alert').first()).toBeVisible();
+    }
+    await expect(panel.getByRole('button',{name:'Применить пакет…'})).toHaveCount(0);
+    await expect(panel.getByText('Запросы и расходы · 1')).toBeVisible();
+    const current=await(await request.get(url+'?author=true')).json();
+    expect(current.version_id).toEqual(before.version_id);
+    expect(current.state).toEqual(before.state);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+    await heading.scrollIntoViewIfNeeded();
+    await page.screenshot({path:info.outputPath('assessment.png'),scale:'css'});
+    if(empty){
+      await panel.getByRole('button',{name:'Уточнить данные в карточках персонажей'}).click();
+      await expect(page.getByRole('textbox',{name:'Поиск персонажей'})).toBeVisible();
+    }
+  });
+}

@@ -12,7 +12,8 @@ import './styles/world-ai-editor.css';
 type Diff = {section:string;id:string;name:string;operation:'add'|'replace'|'remove';fields:{field:string;before:unknown;after:unknown}[]};
 type ReviewAction = 'fix'|'recheck';
 const outcomeLabels:Record<string,string>={proposed:'Предложена правка',fixed:'Исправлено',remaining:'Осталось',ambiguous:'Отклонено как неоднозначное',disproved:'Замечание опровергнуто',unapplied:'Не удалось применить'};
-type Edit = {action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
+const findingLabels:Record<string,string>={contradiction:'Подтверждённое противоречие',incomplete_description:'Неполное описание',uncertainty:'Неопределённость',false_positive:'Ложное замечание'};
+type Edit = {action?:ReviewAction;failure?:string;outcomes?:{issue_id:string;message:string;paths:string[];outcome:string;category?:string|null;reason:string}[];id:string;status:string;instruction:string;stale:boolean;base_version:number;applied_version?:number;error:string;
   references?:Parameters<typeof resolver>[0];
   requests?:{id:string;stage:string;status:string;input_tokens:number|null;output_tokens:number|null;cost_usd:string|null}[];
   proposal?:{rationale:string;conflicts?:string[];changes:{path:string;reason:string}[]};diff?:Diff[];conflicts?:string[];
@@ -27,7 +28,7 @@ const statuses:Record<string,string>={preview:'Ожидает решения',as
 
 type EditorProps = {
  wid:string;revision:number;job:Job|null;locked:boolean;prefs:Preferences;apiKey:string;
- reviewCount?:number;pendingPreview?:boolean;title?:string;version?:number|null;example?:string;onHistory?:(version:number)=>void;onObject?:(section:string,id:string)=>void;
+ reviewCount?:number;pendingPreview?:boolean;title?:string;version?:number|null;example?:string;onCharacters?:()=>void;onHistory?:(version:number)=>void;onObject?:(section:string,id:string)=>void;
  onJob:(job:Job)=>void;refresh:()=>Promise<void>;resolve:ReturnType<typeof resolver>;
 };
 
@@ -36,7 +37,7 @@ export function WorldAIEditor(props:EditorProps) {
  return <WorkspaceEditor key={props.wid} {...props}/>;
 }
 
-function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve,title,version,example,onHistory,onObject,reviewCount,pendingPreview}:EditorProps) {
+function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve,title,version,example,onHistory,onCharacters,onObject,reviewCount,pendingPreview}:EditorProps) {
  const storageKey=`world-editor:${wid}`;
  const [instruction,setInstruction]=useState(()=>localStorage.getItem(storageKey)||example||'');
  const textarea=useRef<HTMLTextAreaElement>(null);
@@ -69,7 +70,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const changed=current?.diff||[];
  const previewResolve=current?.references ? resolver(current.references) : resolve;
  const destructive=!!current?.conflicts?.length||changed.some(d=>d.operation==='remove');
- const issues=current?.action?[]:current?.review?.issues||[];const blocked=!!current?.proposal?.conflicts?.length||issues.some(i=>(i.severity||'blocker')==='blocker');
+ const issues=current?.action?[]:current?.review?.issues||[];const blocked=(current?.status==='preview'&&!!current.proposal?.conflicts?.length)||issues.some(i=>(i.severity||'blocker')==='blocker');
  const disabled=busy||locked;
  const appliedFix=current?.action==='recheck'&&history.find(e=>e.action==='fix'&&e.applied_version===current.base_version);
  const samePreview=current?.status==='preview'&&!current.stale&&current.instruction===instruction;
@@ -114,12 +115,12 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
        row.outcome==='proposed'&&current.status==='rejected'?'Правка отклонена':outcomeLabels[row.outcome];
      return <details key={row.issue_id}><summary><span className="ai-review-note">
        <strong>{label}</strong><span>{subject&&previewResolve('actor_id',subject)+' · '}{message}</span>
-     </span></summary><p className="ai-prose">{row.reason}</p></details>;
+     </span></summary><p className="ai-prose">{row.category&&<strong>{findingLabels[row.category]}. </strong>}{row.reason}</p></details>;
     })}
    </section>}
    {current.status==='reviewed'&&!current.review?.issues.length&&!current.outcomes?.length&&<p>Замечаний к этой версии нет.</p>}
    {appliedFix&&onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(appliedFix.base_version)}>Посмотреть версию до исправления и откатить</Button>}
-   {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p><details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{c.path}</small></li>)}</ol></details></>}
+   {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p>{current.proposal.changes.length>0&&<details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{c.path}</small></li>)}</ol></details>}</>}
    {current.error && <p role="alert">{current.error}</p>}
    {current.status==='preview' && current.stale && <p className="ai-editor-error" role="alert">Предпросмотр устарел: мир изменился. Отправьте инструкцию заново.</p>}
    {current.diff && (!reviewMode||changed.length>0) && <>
@@ -129,13 +130,15 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
       <summary><span>{d.name}</span><span>{operations[d.operation]} · {d.fields.length}</span></summary>
       {d.fields.map((f,i)=><div className="ai-diff-field" key={i}><h6>{f.field==='/'?'Вся сущность':runtimeLabels[f.field.split('/').pop()!]||f.field}</h6><div className="ai-diff-values">
         <div><span className="ai-diff-label">До</span>{f.before==null?<p>Отсутствует</p>:<RuntimeValue field={f.field.split('/').pop()!} value={f.before} resolve={previewResolve} author/>}</div><ArrowRight className="ai-diff-arrow" aria-hidden="true" size={16}/>
-        <div><span className="ai-diff-label">После</span>{f.after==null?<p>Отсутствует</p>:<RuntimeValue field={f.field.split('/').pop()!} value={f.after} resolve={previewResolve} author/>}</div>
+        <div><span className="ai-diff-label">После</span>{f.after==null?<p>{reviewMode&&f.field.endsWith('/birth_date')?'Точная дата неизвестна':'Отсутствует'}</p>:<RuntimeValue field={f.field.split('/').pop()!} value={f.after} resolve={previewResolve} author/>}</div>
       </div></div>)}
     </details>)}</section>)}
    </>}
    {!!current.conflicts?.length && <div className="ai-editor-warning"><strong>Затронуты ручные авторские решения</strong><p>Эти значения изменятся только с вашим отдельным подтверждением.</p><ul>{current.conflicts.map(p=><li key={p}>{p}</li>)}</ul></div>}
    {issues.map((issue,i)=><p className="ai-editor-warning" key={i}>{issue.severity==='blocker'?'Противоречие':'Замечание'}: {issue.message}</p>)}
-   {current.proposal?.conflicts?.map((text,i)=><p role="alert" className="ai-editor-warning" key={i}>{text}</p>)}
+   {current.status==='assessed'&&<p role="status">Модель завершила разбор. Правок нет. Сохранена исходная версия #{current.base_version}.</p>}
+   {!!current.proposal?.conflicts?.length&&<section aria-label="Неоднозначности"><h5>Что требует решения автора</h5><ul>{current.proposal.conflicts.map((text,i)=><li key={i}>{text}</li>)}</ul></section>}
+   {current.status==='assessed'&&onCharacters&&current.outcomes?.some(row=>row.outcome==='ambiguous')&&<Button variant="outline" disabled={disabled} onClick={onCharacters}>Уточнить данные в карточках персонажей</Button>}
    {blocked && <p>Уточните инструкцию с учётом противоречий. Применение заблокировано.</p>}
    {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||blocked||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
    {current.status==='accepted' && <section><p role="status">Изменения сохранены в версии #{current.applied_version}.</p>{onHistory&&<Button variant="outline" disabled={disabled} onClick={()=>onHistory(current.base_version)}>{reviewMode?'Посмотреть исходную версию и откатить':'Посмотреть исходную версию'}</Button>}{onObject&&changed.filter(d=>d.operation!=='remove').map(d=><Button key={d.section+d.id} variant="ghost" onClick={()=>onObject(d.section,d.id)}>Открыть: {d.name}</Button>)}</section>}

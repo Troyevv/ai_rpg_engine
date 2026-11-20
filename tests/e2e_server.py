@@ -893,9 +893,9 @@ if __name__ == '__main__':
         (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
     app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
     @app.post('/test/review-actions')
-    def review_actions_seed():
+    def review_actions_seed(scenario: str = ''):
         from review_actions_fixture import seed
-        return seed(app.state.repository)
+        return seed(app.state.repository,scenario)
 
     @app.post('/test/generation266')
     def generation266_seed():

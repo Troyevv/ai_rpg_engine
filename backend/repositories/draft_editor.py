@@ -78,6 +78,7 @@ class DraftEditorStorage:
                 (json.dumps(journal,ensure_ascii=False),'preview' if result['status']=='preview' else 'saved',jid))
 
     def world_edits(self,wid,author=False):
+        from backend.services.draft_review_actions import historical_assessment
         with self.connect() as db:
             db.execute('BEGIN')
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
@@ -89,6 +90,8 @@ class DraftEditorStorage:
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
                 item={key:edit.get(key) for key in ('status','instruction','base_version','base_revision','proposal','diff','review','conflicts','applied_version','action','outcomes','failure')}
+                if historical_assessment(edit):
+                    item.update(status='assessed', failure=None, diff=[])
                 if edit.get('action') and not edit.get('outcomes') and row['status'] in ('error','stopped'):
                     item['outcomes']=[dict(note,outcome='unapplied',reason=row['error'] or 'Запрос остановлен.') for note in edit['findings']]
                 item.update(id=row['id'],job_status=row['status'],error=row['error'],
@@ -142,7 +145,7 @@ class DraftEditorStorage:
                     review=dict(current.get('review') or {},status='stale',advisory=True,
                         reason='Предложенные правки сохранены. Можно повторно проверить эту версию.',
                         issues=[issue_from_finding(n) for n in edit['findings']])
-                    accept_calendar_updates(current['state'],trial)
+                    accept_calendar_updates(current['state'],trial,edit.get('calendar_decisions'))
                     current['state']=trial
                     current.update(review=review)
                 else:

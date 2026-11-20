@@ -158,6 +158,8 @@ def resolve_card_paths(state, proposal):
 def apply_proposal(state, reply, *, editing=False, review_fix=False):
     proposal = Proposal.model_validate(strict_loads(reply))
     if proposal.conflicts and not editing:
+        if review_fix:
+            raise ValueError('Пакет правок содержит нерешённые авторские противоречия.')
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')

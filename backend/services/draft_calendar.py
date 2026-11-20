@@ -237,3 +237,67 @@ def manual_edit(state, path, old_minute=None):
         if old_minute is not None:
             synchronize(state, old_minute, state['world_clock']['minute'], state['world_clock']['calendar'])
     return complete(state)
+
+
+def review_birth_date(base, path, basis):
+    """Resolve cited birthday evidence on the frozen candidate, for author confirmation."""
+    from backend.runtime_v3.birth_identity import is_game_birth
+    state = base['state']
+    parts = path.split('/')
+    if len(parts) != 5 or parts[1:3] != ['world', 'characters'] or parts[-1] != 'birth_date':
+        raise ValueError('Основание календаря допустимо только для даты рождения.')
+    cid = parts[3].replace('~1', '/').replace('~0', '~')
+    actor = state['world']['characters'].get(cid, {})
+    prior = state.get('authoring', {}).get('calendar_completion', {}).get('birth_dates', {}).get(cid, {})
+    if (not actor.get('birth_date') or prior.get('source') != 'automatic'
+            or prior.get('value') != actor['birth_date'] or dob_metadata(actor).get('source') != 'authoring_automatic'
+            or is_game_birth(state['world'], cid)):
+        raise ValueError('По замечанию можно пересчитать только ранее назначенную автоматическую дату рождения.')
+    card = next(c for c in state['characters'] if c['id'] == cid)
+    fields = card['fields']
+    quote = basis['quote'].strip()
+    source = base.get('source') or ''
+    if not quote or not any(quote in text for text in (source, str(fields.get('Биография', '')), actor.get('biography') or '')):
+        raise ValueError('Цитата о дне рождения отсутствует в замысле и биографии персонажа.')
+    if basis['kind'] == 'year_only':
+        if not re.search(r'(?<!\d)'+str(basis['year'])+r'(?!\d)', quote):
+            raise ValueError('В цитате отсутствует указанный год рождения.')
+        return dict(source='unknown', value=None, known_year=basis['year'], basis=basis,
+                    notice=f"Известен {basis['year']} год. Месяц и день не установлены.")
+    if actor.get('life_status') == 'dead':
+        raise ValueError('Возраст на начало истории нельзя использовать для умершего персонажа.')
+    age_text = str(fields.get('Возраст', '')).strip()
+    age_match = re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?', age_text)
+    age_quote = basis['age_quote'].strip()
+    age_path = '/characters/'+str(state['characters'].index(card))+'/fields/Возраст'
+    manual_age = age_path in state.get('authoring', {}).get('manual_paths', []) and age_quote == age_text
+    if (not age_match or not age_quote or not (age_quote in source or manual_age)
+            or not re.search(r'(?<!\d)'+age_match[1]+r'(?!\d)', age_quote)):
+        raise ValueError('Указанный автором возраст должен совпадать с карточкой на дату начала.')
+    calendar = state['world_clock'].get('calendar') or {}
+    today = age_reference_date(actor, state['world_clock'])
+    if not today:
+        raise ValueError('Для вычисления даты рождения нужна установленная дата начала.')
+    profile = calendar.get('profile') or {}
+    year, current_month, current_day = date_parts(today, profile)
+    if basis['kind'] == 'birthday_at_start':
+        # The model identifies whose birthday the author meant. Verify the quoted
+        # time anchor before using the exact scenario date in calendar arithmetic.
+        if not re.search(r'\b(?:сегодня|today|в начале (?:игры|истории)|на старте|at the start)\b', quote, re.I) and today not in quote:
+            raise ValueError('В цитате нет привязки дня рождения к началу истории.')
+        month, day = current_month, current_day
+    else:
+        month, day = basis['month'], basis['day']
+        labels = (profile.get('month_names') or []) if profile.get('system') == 'custom' else (
+            'января февраля марта апреля мая июня июля августа сентября октября ноября декабря'.split())
+        numeric = rf'(?<!\d)0?{day}[./]0?{month}(?!\d)|(?<!\d){month:02d}-{day:02d}(?!\d)'
+        named = rf'\b{day}\s+{re.escape(labels[month-1])}\b' if month <= len(labels) else None
+        if not (re.search(numeric, quote) or named and re.search(named, quote, re.I)):
+            raise ValueError('В цитате не указаны этот месяц и день рождения.')
+    age = int(age_match[1])
+    birth_year = year - age - int((current_month, current_day) < (month, day))
+    value = f'{birth_year:04d}-{month:02d}-{day:02d}'
+    date_parts(value, profile)
+    if age_on(value, today, profile) != age:
+        raise ValueError('Календарь не подтверждает возраст на указанную дату.')
+    return dict(source='explicit', value=value, basis=basis)

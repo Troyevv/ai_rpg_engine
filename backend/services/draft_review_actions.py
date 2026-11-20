@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from backend.repositories.drafts import candidate_hash
 from backend.services import draft_completeness, draft_editor
-from backend.services.draft_changes import Proposal, apply_proposal
+from backend.services.draft_changes import Change, Proposal, apply_proposal
 from backend.services.draft_response import strict_loads
 
 TITLES = {'fix': 'Исправить замечания с помощью ИИ', 'recheck': 'Повторить смысловую проверку'}
@@ -17,13 +17,17 @@ GUIDANCE = """Замечания — гипотезы. Опирайся на а�
 Автоматическая дата не опровергает явный возраст автора. Не переноси рождение или
 историческое событие, чтобы согласовать вторичное описание. Если достоверный источник
 отсутствует или два авторских факта противоречат друг другу, объясни неоднозначность.
-Цели нужны только когда следуют из мира. Не требуй целей у умерших и не назначай их
+Отделяй подтверждённое противоречие (contradiction) от неполного описания
+(incomplete_description), неопределённости (uncertainty) и ложного замечания
+(false_positive). Укажи category у каждого решения. Допустимо оставить все
+предупреждения без правок, объяснив каждое. Цели нужны только когда следуют из мира. Не требуй целей у умерших и не назначай их
 каждому NPC. Не придумывай решений игрока, скрытых знаний и намеренно неизвестных фактов."""
 
 
 class Assessment(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     issue_id: str
+    category: Literal['contradiction', 'incomplete_description', 'uncertainty', 'false_positive'] | None = None
     reason: str = Field(min_length=1)
 
 
@@ -32,7 +36,35 @@ class EditAssessment(Assessment):
     change_indices: list[int] = Field(default_factory=list)
 
 
+class BirthdayAtStart(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    kind: Literal['birthday_at_start']
+    quote: str = Field(min_length=1)
+    age_quote: str = Field(min_length=1)
+
+
+class BirthdayMonthDay(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    kind: Literal['month_day']
+    quote: str = Field(min_length=1)
+    age_quote: str = Field(min_length=1)
+    month: int = Field(ge=1)
+    day: int = Field(ge=1)
+
+
+class BirthYearOnly(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    kind: Literal['year_only']
+    year: int = Field(ge=1, le=9999)
+    quote: str = Field(min_length=1)
+
+
+class ReviewChange(Change):
+    date_basis: BirthdayAtStart | BirthdayMonthDay | BirthYearOnly | None = None
+
+
 class ReviewProposal(Proposal):
+    changes: list[ReviewChange]
     decisions: list[EditAssessment]
 
 
@@ -101,16 +133,15 @@ def calendar_evidence(state):
     from backend.services.draft_calendar import age_reference_date
     clock = state['world_clock']
     calendar = clock.get('calendar') or {}
-    recalculated = automatic_dates(state)
     result = {}
+    card_ages = {c['id']: c.get('fields', {}).get('Возраст') for c in state['characters']}
     for cid, actor in state['world']['characters'].items():
         if not actor.get('birth_date'):
             continue
         date = age_reference_date(actor, clock)
-        result[cid] = dict(date=date, birth_date=actor['birth_date'], provenance=dob_metadata(actor),
+        result[cid] = dict(date=date, birth_date=actor['birth_date'], card_age=card_ages.get(cid), provenance=dob_metadata(actor),
                            age=age_on(actor['birth_date'], date, calendar.get('profile', {})))
-        if cid in recalculated:
-            result[cid]['recalculated_birth_date'] = recalculated[cid]['value']
+
     return result
 
 
@@ -136,8 +167,16 @@ def messages(base, action, notes):
 в пути карточки, например /characters/anya/fields/Биография. Адресуй конкретное поле:
 replace для существующего, add для отсутствующего. Сохраняй привязки тайных полей.
 Адресная правка допустима для описания, контекста связи или намерения живого NPC с
-основанием в замысле. Производную дату можно заменить только готовым значением
-recalculated_birth_date из calendar_evidence при подтверждённом исходном возрасте."""
+основанием в замысле. Для исправления автоматически назначенного birth_date передай
+replace с value=null и date_basis. Если день рождения приходится на начало игры,
+kind=birthday_at_start, quote — дословные слова автора об этом, age_quote — дословная
+цитата о возрасте этого персонажа на начало. Если автор указал месяц и день,
+kind=month_day, month, day и обе цитаты. Сервер вычислит год и точную дату.
+Если установлен только год рождения, kind=year_only, year и дословная quote из
+замысла или карточки этого персонажа: сервер предложит снять недостоверную точную
+дату, сохранив год. Не используй год смерти другого персонажа как дату рождения.
+Если источники расходятся, оставь ambiguous, без операции. Не передвигай брак
+или смерть и не меняй биографию для формального закрытия замечания."""
     else:
         request = draft_completeness.advisory_messages(base['state'], '')
         payload = json.loads(request[1]['content'])
@@ -165,7 +204,7 @@ def assessments(notes, decisions):
     return [{**row, **answers.get(row['issue_id'], missing)} for row in notes]
 
 
-def check_scope(state, change, dates):
+def check_scope(state, change, dates, birth_updates):
     """Protect the sources themselves while allowing corrections to derived descriptions."""
     parts = change['path'].split('/')[1:]
     root = parts[0]
@@ -201,7 +240,7 @@ def check_scope(state, change, dates):
         cid = parts[2].replace('~1','/').replace('~0','~')
         if parts[3]=='situation' and cid==state.get('controlled_actor_id'):
             raise ValueError('Начальное действие управляемого персонажа защищено.')
-        if parts[3]=='birth_date' and dates.get(cid,{}).get('recalculated_birth_date') == change['value'] and change['value']:
+        if parts[3]=='birth_date' and cid in birth_updates and birth_updates[cid]['value'] == change['value']:
             return
         if parts[3] in ('goals','intentions') and cid!=state.get('controlled_actor_id'):
             if state['world']['characters'][cid].get('life_status')=='alive':
@@ -227,12 +266,36 @@ def proposal_result(edit, reply):
         linked.update(indices)
     if linked != set(range(len(packet.changes))):
         raise ValueError('В пакете есть правки без исходного замечания.')
-    raw = packet.model_dump_json(exclude={'decisions'})
+    if not packet.changes:
+        fingerprint = edit.get('before_hash') or candidate_hash(state)
+        if packet.candidate_hash != fingerprint:
+            raise ValueError('Разбор замечаний относится к другой версии мира.')
+        return dict(status='assessed', outcomes=outcomes, proposal=packet.model_dump(exclude={'decisions'}), diff=[])
+    proposal_data = packet.model_dump(exclude={'decisions', 'changes'})
+    proposal_data['changes'] = []
+    birth_updates = {}
     try:
-        trial, proposal = apply_proposal(state, raw, review_fix=True)
+        from backend.services.draft_calendar import review_birth_date
+        for change in packet.changes:
+            row = change.model_dump(exclude={'date_basis'})
+            if change.date_basis is not None:
+                record = review_birth_date(edit['base'], change.path, change.date_basis.model_dump())
+                if change.op != 'replace' or (change.value is not None and change.value != record['value']):
+                    raise ValueError('Правка не соответствует вычислению календаря.')
+                cid = change.path.split('/')[3].replace('~1','/').replace('~0','~')
+                birth_updates[cid] = record
+                row['value'] = record['value']
+                basis = record['basis']
+                row['reason'] += ' Основание: «'+basis['quote']+'».'
+                if basis['kind'] == 'year_only':
+                    row['reason'] += f" Будет сохранён год {basis['year']}; точные месяц и день неизвестны."
+                else:
+                    row['reason'] += ' Возраст на начало истории: «'+basis['age_quote']+'».'
+            proposal_data['changes'].append(row)
+        trial, proposal = apply_proposal(state, json.dumps(proposal_data), review_fix=True)
         dates = calendar_evidence(state)
         for change in proposal['changes']:
-            check_scope(state, change, dates)
+            check_scope(state, change, dates, birth_updates)
             if change['op']=='replace' and draft_completeness.pointer(state,change['path'])==change['value']:
                 raise ValueError('Предложение повторяет исходное значение: '+change['path'])
     except ValueError as exc:
@@ -240,16 +303,34 @@ def proposal_result(edit, reply):
             if row['outcome']=='proposed':
                 row['outcome']='unapplied'
         return dict(status='unapplied', outcomes=outcomes, failure=str(exc), proposal=packet.model_dump(exclude={'decisions'}))
-    return dict(status='preview' if packet.changes else 'assessed', candidate=trial, proposal=proposal,
-                outcomes=outcomes, diff=draft_editor.differences(state, trial))
+    return dict(status='preview', candidate=trial, proposal=proposal,
+                outcomes=outcomes, calendar_decisions=birth_updates, diff=draft_editor.differences(state, trial))
 
 
-def accept_calendar_updates(before, trial):
+def historical_assessment(edit):
+    """Project only the old empty-package conflict failure. Keep its paid journal intact."""
+    proposal = edit.get('proposal') or {}
+    return (edit.get('action') == 'fix' and edit.get('status') == 'unapplied'
+            and edit.get('failure') == 'Творческое предложение содержит нерешённые авторские конфликты.'
+            and proposal.get('changes') == [] and bool(proposal.get('conflicts'))
+            and bool(edit.get('before_hash')) and proposal.get('candidate_hash') == edit['before_hash']
+            and all(r['outcome'] in ('ambiguous','disproved','remaining') for r in edit.get('outcomes', [])))
+
+
+def accept_calendar_updates(before, trial, decisions=None):
     """Publish derived-date provenance together with its reviewed value."""
     calculated = None
     for cid, actor in trial['world']['characters'].items():
         if actor.get('birth_date') == before['world']['characters'][cid].get('birth_date'):
             continue
+        if decisions is not None:
+            record = decisions.get(cid)
+            if not record or record['value'] != actor['birth_date']:
+                raise ValueError('Дата не соответствует подтверждённому предпросмотру.')
+            trial['authoring']['calendar_completion']['birth_dates'][cid] = record
+            actor['birth_date_provenance'] = dict(actor.get('birth_date_provenance') or {}, source=record['source'])
+            continue
+        # Existing previews from the original review contract retain their recorded calculation.
         if calculated is None:
             calculated = automatic_dates(before)
         record = calculated.get(cid)

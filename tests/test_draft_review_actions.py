@@ -137,7 +137,12 @@ def test_recheck_omissions_and_persistent_date_conflict_are_not_fixes(api):
     assert not any('не задана цель' in m for m in draft_world.review_initial(base['state']))
 
 
-def test_automatic_birthday_uses_calendar_owned_value_and_keeps_its_provenance(api):
+@pytest.mark.parametrize('basis,expected', [
+    (dict(kind='birthday_at_start',quote='Сегодня у Марины день рождения',age_quote='Марине 36 лет'), '1990-10-23'),
+    (dict(kind='month_day',month=11,day=27,quote='Её день рождения 27 ноября',age_quote='Марине 36 лет'), '1989-11-27'),
+    (dict(kind='year_only',quote='Марина родилась в 1990 году',year=1990), None),
+])
+def test_automatic_birthday_resolved_by_author_evidence(api, basis, expected):
     from backend.services.draft_calendar import complete
     from test_draft_creative import candidate, change
     client,app=api;repo=app.state.repository
@@ -152,18 +157,17 @@ def test_automatic_birthday_uses_calendar_owned_value_and_keeps_its_provenance(a
     state['authoring']['manual_paths']=['/characters/1/fields/Возраст']
     wid=repo.create_workspace('Производная дата')['id']
     with repo.connect() as db:
-        repo._write_draft(db,wid,state,'draft_world',source='Автору известно: Марине 36 лет.')
+        repo._write_draft(db,wid,state,'draft_world',source='Марине 36 лет. '+basis['quote']+'.')
     base=repo.draft(wid,True)
     url=f'/api/workspaces/{wid}/draft'
     calls=[]
     def answer(**kwargs):
         payload=json.loads(kwargs['messages'][-1]['content'])
-        target=payload['calendar_evidence'][card['id']]['recalculated_birth_date']
-        assert target!=old
-        calls.append(target)
+        assert 'recalculated_birth_date' not in payload['calendar_evidence'][card['id']]
+        calls.append(payload)
         issue=next(i for i in payload['findings'] if '/birth_date' in i['message'])
-        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Автор установил возраст.',
-            changes=[change('/world/characters/'+card['id']+'/birth_date',target,'replace')],
+        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Автор уточнил дату.',
+            changes=[dict(change('/world/characters/'+card['id']+'/birth_date',None,'replace'),date_basis=basis)],
             decisions=[dict(issue_id=issue['issue_id'],outcome='proposed',reason='Дата получена из календаря.',change_indices=[0])]))
     with patch('backend.services.preparation.chat_stream',side_effect=answer):
         job=submit(client,url,base,'fix','date').json()
@@ -171,8 +175,13 @@ def test_automatic_birthday_uses_calendar_owned_value_and_keeps_its_provenance(a
     proposal=repo.world_edits(wid,True)['edits'][0]
     assert proposal['status']=='preview',proposal
     updated=client.post(url+'/edits/'+job['id'],json=dict(revision=repo.draft(wid)['revision'],decision='accept')).json()
-    assert updated['state']['authoring']['calendar_completion']['birth_dates'][card['id']]['value']==calls[0]
-    assert updated['state']['world']['characters'][card['id']]['birth_date']==calls[0]
+    assert len(calls)==1 and old!=expected
+    resolution=updated['state']['authoring']['calendar_completion']['birth_dates'][card['id']]
+    assert resolution['value']==expected and resolution['basis']==basis
+    if expected is None:
+        assert resolution['known_year']==1990
+    assert updated['state']['world']['characters'][card['id']]['birth_date']==expected
+    assert complete(updated['state'])['world']['characters'][card['id']]['birth_date']==expected
     assert updated['state']['characters'][1]['fields']['Возраст']=='36'
     assert updated['state']['world']['events']==base['state']['world']['events']
 
@@ -339,3 +348,102 @@ def test_still_open_findings_keep_their_original_targets_on_reread():
     reply = json.dumps(dict(issues=[dict(message=notes[0]['message'])], decisions=[]))
     report = review_result(edit, reply)['review']
     assert findings(dict(state={}, review=report), {}) == notes
+
+
+def test_review_empty_conflicts_persist_without_applying_or_retrying(api):
+    from backend.services.draft_changes import apply_proposal
+    from backend.repositories.drafts import candidate_hash
+    client,app=api
+    repo=app.state.repository
+    wid=seed(repo)['wid']
+    url=f'/api/workspaces/{wid}/draft'
+    base=repo.draft(wid,True)
+    calls=[]
+    conflicts=['Известен только год.', 'Источники расходятся.']
+    def answer(**kwargs):
+        calls.append(1)
+        payload=json.loads(kwargs['messages'][-1]['content'])
+        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Точных сведений недостаточно.',
+            changes=[],conflicts=conflicts,decisions=[dict(issue_id=n['issue_id'],outcome='ambiguous',
+            category='uncertainty',reason='Нужны сведения автора.') for n in payload['findings']]))
+    with patch('backend.services.preparation.chat_stream',side_effect=answer):
+        job=submit(client,url,base,'fix','assessment').json()
+        assert wait_job(client,job['id'])['status']=='saved'
+        assert submit(client,url,base,'fix','assessment').json()['id']==job['id']
+    item=Repository(repo.path).world_edits(wid,True)['edits'][0]
+    assert item['status']=='assessed' and not item['failure'] and item['proposal']['conflicts']==conflicts
+    assert len(item['requests'])==len(calls)==1
+    assert all(r['outcome']=='ambiguous' and r['category']=='uncertainty' for r in item['outcomes'])
+    current=repo.draft(wid,True)
+    assert current['version_id']==base['version_id'] and current['state']==base['state']
+    assert not client.post(url+'/edits/'+job['id'],json=dict(revision=current['revision'],decision='accept')).is_success
+    with pytest.raises(ValueError,match='нерешённые авторские конфликты'):
+        apply_proposal(base['state'],json.dumps(item['proposal']))
+    # Simulate the exact journal shape left by the prior release.
+    with repo.connect() as db:
+        journal=json.loads(repo.preparation_job(job['id'])['response_journal'])
+        journal['editor'].update(status='unapplied',failure='Творческое предложение содержит нерешённые авторские конфликты.')
+        stored=json.dumps(journal)
+        db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(stored,job['id']))
+    reopened=Repository(repo.path).world_edits(wid,True)['edits'][0]
+    assert reopened['status']=='assessed' and not reopened['failure'] and reopened['outcomes']==item['outcomes']
+    assert repo.preparation_job(job['id'])['response_journal']==stored
+    from backend.services.draft_review_actions import proposal_result
+    unsafe=dict(item['proposal'],changes=[dict(op='replace',path='/campaign/description',value='Новый текст',reason='Правка.')],
+                decisions=[dict(issue_id=item['outcomes'][0]['issue_id'],outcome='proposed',reason='Правка.',change_indices=[0])])
+    assert proposal_result(journal['editor'],json.dumps(unsafe))['status']=='unapplied'
+    with pytest.raises(ValueError,match='другой версии'):
+        proposal_result(journal['editor'],json.dumps(dict(unsafe,changes=[],decisions=[],candidate_hash=candidate_hash('other'))))
+
+
+def test_original_world_edit_analysis():
+    import hashlib
+    import os
+    from pathlib import Path
+    from backend.services.draft_review_actions import historical_assessment, proposal_result
+    path=os.getenv('RPG_WORLD_EDIT_EXPORT')
+    if not path:
+        pytest.skip('private original supplied separately')
+    raw=Path(path).read_bytes()
+    assert hashlib.sha256(raw).hexdigest()=='8bc8b315986e09cfbe83babdfbcf15a8393588fec14cc06fe81c174b9cdb4da9'
+    export=json.loads(raw)
+    proposal=export['proposal']
+    # The export contains the response and frozen fingerprint, not the candidate itself.
+    notes=[{k:row[k] for k in ('issue_id','message','paths')} for row in export['outcomes']]
+    decisions=[{k:row[k] for k in ('issue_id','reason','outcome','change_indices')} for row in export['outcomes']]
+    edit=dict(base=dict(state=None),before_hash=proposal['candidate_hash'],findings=notes)
+    result=proposal_result(edit,json.dumps(dict(proposal,decisions=decisions)))
+    assert result['status']=='assessed' and not result['diff'] and 'candidate' not in result
+    assert len(result['outcomes'])==3 and all(r['outcome']=='ambiguous' for r in result['outcomes'])
+    assert result['proposal']==proposal and len(proposal['conflicts'])==2
+    assert historical_assessment(dict(export,before_hash=edit['before_hash']))
+    assert export['requests'][0]['input_tokens']==29130 and export['requests'][0]['output_tokens']==8442
+
+
+def test_live_calendar_examples_use_cited_day_and_age_and_preserve_year_precision():
+    from backend.services.draft_calendar import review_birth_date
+    quote = 'Сегодня у Ильи день рождения'
+    idea = quote + '. Илья Волков, 30 лет. Мёрфи родилась в 2015 году.'
+    actors = {cid:dict(birth_date=day,birth_date_provenance=dict(source='authoring_automatic'))
+              for cid,day in [('ilya','1995-11-27'),('murphy','2014-09-27')]}
+    ledger = {cid:dict(source='automatic',value=a['birth_date']) for cid,a in actors.items()}
+    state = dict(world=dict(characters=actors), authoring=dict(calendar_completion=dict(birth_dates=ledger)),
+        characters=[dict(id='ilya',fields={'Возраст':'30 лет'}),dict(id='murphy',fields={'Возраст':'11 лет'})],
+        world_clock=dict(minute=0,calendar=dict(start_minute=0,start_date='2026-07-10',start_weekday=4)))
+    base = dict(state=state,source=idea)
+    exact = dict(kind='birthday_at_start',quote=quote,age_quote='Илья Волков, 30 лет')
+    path = '/world/characters/ilya/birth_date'
+    assert review_birth_date(base,path,exact)['value']=='1996-07-10'
+    murphy = '/world/characters/murphy/birth_date'
+    year = dict(kind='year_only',quote='Мёрфи родилась в 2015 году',year=2015)
+    record = review_birth_date(base,murphy,year)
+    assert record['value'] is None and record['known_year']==2015
+    for wrong in (dict(exact,quote=year['quote']),dict(exact,age_quote='В 19 лет'),
+                  dict(kind='month_day',month=1,day=1,quote=year['quote'],age_quote=exact['age_quote'])):
+        with pytest.raises(ValueError):
+            review_birth_date(base,path,wrong)
+    with pytest.raises(ValueError):
+        review_birth_date(base,'/world/objective_relations/marriage/until_date',year)
+    actors['ilya']['birth_date_provenance']['source']='manual'
+    with pytest.raises(ValueError):
+        review_birth_date(base,path,exact)
