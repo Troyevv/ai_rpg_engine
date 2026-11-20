@@ -6,6 +6,7 @@ import {useCallback,useLayoutEffect,useRef,useState} from 'react';
  */
 export function useStoryScroll(saveId?:number|string){
   const scroll=useRef<HTMLDivElement>(null),pinned=useRef(true);
+  const liveText=useRef<HTMLDivElement>(null),followingProse=useRef(false);
   const [away,setAway]=useState(false);
   const frame=useRef(0),lastTop=useRef(0),upwardInputUntil=useRef(0);
   const lastHeight=useRef(0),lastViewport=useRef(0);
@@ -27,7 +28,22 @@ export function useStoryScroll(saveId?:number|string){
     if(frame.current)return;
     frame.current=requestAnimationFrame(()=>{
       frame.current=0;const el=scroll.current;if(!el||!el.clientHeight)return;
-      if(pinned.current)el.scrollTop=el.scrollHeight;
+      if(pinned.current){
+        let target=el.scrollHeight;
+        followingProse.current=false;
+        const text=liveText.current;
+        if(text){
+          // Enough room for the last lines, even if the status and stop
+          // controls below the prose are taller than the landscape reader.
+          const end=el.scrollTop+text.getBoundingClientRect().bottom-el.getBoundingClientRect().top;
+          const readingTop=Math.max(0,end-Math.min(100,el.clientHeight*.6));
+          if(readingTop<target-el.clientHeight){
+            target=readingTop;
+            followingProse.current=true;
+          }
+        }
+        el.scrollTop=target;
+      }
       else if(anchor.current){
         const a=anchor.current;
         const node=Array.from(el.querySelectorAll<HTMLElement>('[data-reading-id]')).find(n=>n.dataset.readingId===a.id);
@@ -46,7 +62,10 @@ export function useStoryScroll(saveId?:number|string){
     // A tall menu can be longer than the reader. At publication leave the
     // final lines and the first choices together, never jump to the last card.
     const offset=menu.getBoundingClientRect().top-el.getBoundingClientRect().top;
-    el.scrollTop+=offset-el.clientHeight/2;
+    const first=menu.firstElementChild;
+    if(!first)return;
+    if(offset<el.clientHeight/4 || offset+first.clientHeight>el.clientHeight)
+      el.scrollTop+=offset-el.clientHeight/2;
     pinned.current=el.scrollHeight-el.clientHeight-el.scrollTop<2;
     setAway(!pinned.current);
     remember();
@@ -60,14 +79,15 @@ export function useStoryScroll(saveId?:number|string){
     // maximum again; compare geometry, not just proximity to the new bottom.
     // User input counts only when this scrollport actually moves upward.
     const layoutChanged=pinned.current&&(el.scrollHeight!==lastHeight.current||el.clientHeight!==lastViewport.current);
-    if(top<lastTop.current-1&&(!layoutChanged||performance.now()<upwardInputUntil.current))pinned.current=false;
-    else if(el.scrollHeight-el.clientHeight-top<2)pinned.current=true;
+    if(followingProse.current&&liveText.current&&top>lastTop.current+1)pinned.current=false;
+    else if(el.scrollHeight-el.clientHeight-top<2&&!(followingProse.current&&liveText.current))pinned.current=true;
+    else if(top<lastTop.current-1&&(!layoutChanged||performance.now()<upwardInputUntil.current))pinned.current=false;
     setAway(!pinned.current);remember();
     if(layoutChanged)schedule();
   },[remember,schedule]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el)return;
-    pinned.current=true;anchor.current=null;lastTop.current=0;setAway(false);
+    pinned.current=true;followingProse.current=false;anchor.current=null;lastTop.current=0;setAway(false);
     try {const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved){pinned.current=saved.pinned;el.scrollTop=saved.top;setAway(!saved.pinned)}}catch{/* old UI preference */}
     remember();schedule();
     const observer=new ResizeObserver(schedule);observer.observe(el);
@@ -101,5 +121,5 @@ export function useStoryScroll(saveId?:number|string){
       window.removeEventListener('pagehide',persist);cancelAnimationFrame(frame.current);frame.current=0;
     };
   },[key,remember,schedule]);
-  return {scroll,pinned,away,jumpToLatest,onScroll,revealMenu};
+  return {scroll,pinned,away,jumpToLatest,onScroll,revealMenu,liveText};
 }

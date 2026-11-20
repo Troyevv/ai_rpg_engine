@@ -100,7 +100,7 @@ export function Game({
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
-  const {scroll,away,jumpToLatest,onScroll,revealMenu}=useStoryScroll(viewScope);
+  const {scroll,away,jumpToLatest,onScroll,revealMenu,liveText}=useStoryScroll(viewScope);
   const [selectedCall,setSelectedCall]=useState<string|null>(null);
   const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
   useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
@@ -223,7 +223,7 @@ export function Game({
   const entries=surfaceEntries(allEntries,'physical');
   const callEntries=surfaceEntries(allEntries,'call',actorId,selectedCall);
   const latestCall=callEntries.at(-1);
-  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn liveTextRef={!toolsOnly && physicalStream && entry.identity===job?.id ? liveText : undefined} toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
     <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
       {!!job.narrative_complete && ['start','turn','background','pov'].includes(job.kind) && <Button disabled={busy || running} onClick={()=>void run(async()=>{

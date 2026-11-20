@@ -63,6 +63,17 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
    const box=await reader.boundingBox(), textBox=await lastLine.boundingBox();
    expect(textBox!.y+textBox!.height).toBeGreaterThan(box!.y);
    expect(textBox!.y+textBox!.height).toBeLessThanOrEqual(box!.y+box!.height+1);
+   if(info.project.name==='mobile'&&!reduced){
+     const portrait=page.viewportSize()!;
+     await page.setViewportSize({width:740,height:412});
+     await expect.poll(()=>lastLine.evaluate(el=>{
+       const r=el.closest('.story-scroll')!.getBoundingClientRect();
+       const bottom=el.getBoundingClientRect().bottom;
+       return bottom>r.top+12&&bottom<=r.bottom+1;
+     })).toBe(true);
+     await page.setViewportSize(portrait);
+     await frames(page,10);
+   }
  }
  await emit({status:'extracting',narrative_complete:true});await frames(page,100);
  await page.evaluate(()=>(window as any).testStream.onerror?.(new Event('error')));

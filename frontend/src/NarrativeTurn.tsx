@@ -10,7 +10,8 @@ import {Timing} from './Timing';
 import {Button} from './components/ui/button';
 import {api} from './api';
 import type {Job,Save,World,Preferences,Turn} from './types';
-export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mobile,busy,running,mainActor,turn,run,setSubmitted,refresh,setDiagnosticJob,setDiagnostics,openCharacter,job,reconnecting,stop,identity,committed,onPresented,showTools=true,toolsOnly=false}: {
+export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mobile,busy,running,mainActor,turn,run,setSubmitted,refresh,setDiagnosticJob,setDiagnostics,openCharacter,job,reconnecting,stop,identity,committed,onPresented,liveTextRef,showTools=true,toolsOnly=false}: {
+ liveTextRef?:React.RefObject<HTMLDivElement|null>;
  showTools?:boolean;toolsOnly?:boolean;
  t:Turn;i:number;save:Save;world:World;prefs:Preferences;mobile:boolean;busy:boolean;running:boolean;mainActor?:string;
  turn:(kind:'start'|'turn'|'regenerate'|'background',text?:string,target?:number,rollback?:boolean)=>Promise<void>;
@@ -47,7 +48,7 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                     {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
                   </p>
                   {committed&&t.presentation?.physical_reconciliation&&!t.read_only_projection&&<p role="status" className="muted small">{phoneText('physicalReconciled')}</p>}
-                  <NarrativeText identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
+                  <NarrativeText liveTextRef={liveTextRef} identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
                   {!committed&&showTools&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
                   </>}
                   {committed&&showTools&&!t.read_only_projection&&<>
