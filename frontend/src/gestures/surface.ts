@@ -17,9 +17,9 @@ export type Surface = {
   sign?: 1 | -1;
   begin?: (host: HTMLElement) => boolean | void;
   move?: (travel: Travel) => void;
-  finish: (travel: Travel) => void;
+  finish: (travel: Travel) => void | boolean;
   reset?: (host: HTMLElement, committed: boolean) => void;
-  hold?: (host: HTMLElement) => void;
+  hold?: (host: HTMLElement) => void | boolean;
   allowButton?: boolean;
   opensLayer?: boolean;
   alternate?: (host: HTMLElement) => Surface | undefined;
@@ -213,10 +213,7 @@ export function surface(primary: Surface) {
             getControls().sensitivity
           );
         stop(success);
-        if (success) {
-          mastered(config.id);
-          config.finish(p);
-        }
+        if (success && config.finish(p) !== false) mastered(config.id);
       };
       if (primary.hold && allowed(primary.group))
         timer = window.setTimeout(() => {
@@ -225,8 +222,7 @@ export function surface(primary: Surface) {
             return;
           }
           phase = 'held';
-          mastered(primary.id);
-          primary.hold?.(host);
+          if (primary.hold?.(host) !== false) mastered(primary.id);
         }, 520);
       window.dispatchEvent(new Event('gesture-start'));
       window.addEventListener('pointermove', move, { signal, passive: false });
@@ -292,7 +288,9 @@ export function pages<T>(
           else if (button.right > strip.right)
             host.scrollLeft += button.right - strip.right;
         });
+        return true;
       }
+      return false;
     },
   });
 }

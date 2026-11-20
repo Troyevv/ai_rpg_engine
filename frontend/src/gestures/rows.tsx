@@ -11,42 +11,50 @@ type Menu = {
   buttons: HTMLButtonElement[];
 };
 const eventName = 'gesture-row-actions';
+export function actionsForRow(anchor: HTMLElement): Menu | null {
+  const selector = anchor.dataset.actionOwner;
+  const owner = selector ? anchor.closest<HTMLElement>(selector) : anchor;
+  if (!owner) return null;
+  const buttons = owner.matches('button')
+    ? [owner as HTMLButtonElement]
+    : Array.from(
+        owner.querySelectorAll<HTMLButtonElement>(
+          anchor.dataset.actionButtons || 'button'
+        )
+      );
+  const visible = buttons.filter(
+    (b) =>
+      !b.disabled && b.getClientRects().length && !b.closest('[hidden],[inert]')
+  );
+  return visible.length ? { owner, anchor, buttons: visible } : null;
+}
 export function rowActions(ownerSelector?: string, buttonSelector = 'button') {
   function open(anchor: HTMLElement) {
-    const owner = ownerSelector
-      ? anchor.closest<HTMLElement>(ownerSelector)
-      : anchor;
-    if (!owner) return;
-    const buttons = owner.matches('button')
-      ? [owner as HTMLButtonElement]
-      : Array.from(owner.querySelectorAll<HTMLButtonElement>(buttonSelector));
-    const visible = buttons.filter(
-      (b) =>
-        !b.disabled &&
-        b.getClientRects().length &&
-        !b.closest('[hidden],[inert]')
-    );
-    if (visible.length)
-      window.dispatchEvent(
-        new CustomEvent<Menu>(eventName, {
-          detail: { owner, anchor, buttons: visible },
-        })
-      );
+    const menu = actionsForRow(anchor);
+    if (!menu) return false;
+    window.dispatchEvent(new CustomEvent<Menu>(eventName, { detail: menu }));
+    return true;
   }
-  return surface({
-    id: 'row',
-    group: 'context',
-    axis: 'x',
-    sign: -1,
-    allowButton: true,
-    alternate: listPull,
-    move: ({ host, delta }) => {
-      host.style.translate = Math.max(-38, Math.min(0, delta * 0.45)) + 'px 0';
-    },
-    reset: (host) => host.style.removeProperty('translate'),
-    finish: ({ host }) => open(host),
-    hold: open,
-  });
+  return {
+    'data-action-owner': ownerSelector,
+    'data-action-buttons': buttonSelector,
+    ...surface({
+      begin: (host) => !!actionsForRow(host),
+      id: 'row',
+      group: 'context',
+      axis: 'x',
+      sign: -1,
+      allowButton: true,
+      alternate: listPull,
+      move: ({ host, delta }) => {
+        host.style.translate =
+          Math.max(-38, Math.min(0, delta * 0.45)) + 'px 0';
+      },
+      reset: (host) => host.style.removeProperty('translate'),
+      finish: ({ host }) => open(host),
+      hold: open,
+    }),
+  };
 }
 export function RowActionsHost() {
   const [menu, setMenu] = useState<Menu | null>(null);

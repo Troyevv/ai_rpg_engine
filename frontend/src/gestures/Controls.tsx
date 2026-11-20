@@ -12,7 +12,7 @@ import {
   type Group,
 } from './preferences';
 import { foreground, interacting } from './surface';
-import { RowActionsHost } from './rows';
+import { actionsForRow, RowActionsHost } from './rows';
 import { Choice } from '../components/ui/choice';
 
 const guide = {
@@ -224,6 +224,8 @@ export function GestureHost() {
         !allowed(node.dataset.gestureGroup as Group) ||
         !foreground(node)
       )
+        return false;
+      if (node.hasAttribute('data-action-buttons') && !actionsForRow(node))
         return false;
       const r = node.getBoundingClientRect(),
         x = r.left + r.width / 2,
