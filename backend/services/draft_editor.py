@@ -8,9 +8,14 @@ from copy import deepcopy
 from backend.repositories.drafts import candidate_hash
 from backend.services.draft_changes import Change, Proposal, apply_proposal
 from typing import Literal
+from pydantic import Field
 from backend.services.draft_completeness import pointer
 
 MARKER = 'AI-редактор начального мира / v1.'
+ADDRESS_RULES = """Для changes[].path используй JSON Pointer от корня candidate, начиная с /.
+Например, /world/characters/ilya/birth_date и /characters/1/fields/Возраст.
+Индекс карточки относится к исходному снимку. Можно указать её стабильный ID вместо индекса.
+Точка и квадратные скобки не разделяют сегменты JSON Pointer. Внутри ключа кодируй ~ как ~0, а / как ~1."""
 RULES = '''Ты автор-редактор ещё не запущенного мира. Выполни текущую инструкцию
 автора свободно и связно во всех затронутых сущностях. Текущая инструкция имеет
 приоритет над прежней идеей и модельными деталями. Не игнорируй намеренную смену
@@ -63,6 +68,8 @@ def author_context(base, instruction):
 
 
 class EditorialChange(Change):
+    # Advertise the canonical wire format while retaining offline reads of recorded aliases.
+    path: str = Field(description='JSON Pointer относительно candidate',json_schema_extra={'pattern':'^/'})
     detail: Literal['proposal','author_fact','new_detail'] = 'proposal'
     reason: str = ''
 
@@ -126,7 +133,8 @@ def preview(state, packet):
         for i,change in enumerate(packet.changes):
             if any(p==change.path or p.startswith(change.path+'/') or change.path.startswith(p+'/') for p in paths):
                 indices.add(i)
-        diagnostics=[dict(operation=i+1,path=packet.changes[i].path,message=str(exc)) for i in sorted(indices)]
+        path_errors=getattr(exc,'path_errors',{})
+        diagnostics=[dict(operation=i+1,path=packet.changes[i].path,message=path_errors.get(i,str(exc))) for i in sorted(indices)]
         failure=str(exc)
         if diagnostics:
             failure='; '.join(f"Операция {d['operation']} ({d['path']}): {d['message']}" for d in diagnostics)
@@ -144,7 +152,7 @@ def messages(base, instruction):
     from backend.services.draft_initial import prompt_schema, compact_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
     state=base['state']
-    return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
+    return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+ADDRESS_RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
                 world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=EditorialProposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]

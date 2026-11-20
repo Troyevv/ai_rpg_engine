@@ -15,12 +15,13 @@ from backend.services.draft_initial import inspect_candidate, prompt_schema, Dra
 
 
 class ProposalError(ValueError):
-    def __init__(self, message, *, proposal_paths=(), world_paths=(), drop_indices=(), remove_paths=()):
+    def __init__(self, message, *, proposal_paths=(), world_paths=(), drop_indices=(), remove_paths=(), path_errors=None):
         super().__init__(message)
         self.proposal_paths=list(proposal_paths)
         self.world_paths=list(world_paths)
         self.drop_indices=list(drop_indices)
         self.remove_paths=list(remove_paths)
+        self.path_errors=path_errors or {}
 
 
 class Change(BaseModel):
@@ -99,7 +100,33 @@ def author_value(old, new, path=""):
     return result
 
 
-def resolve_card_paths(state, proposal):
+def recorded_editor_pointer(state, address):
+    """Decode an unambiguous dot/bracket address of an existing field on this base."""
+    parts = []
+    node = state
+    segments = address.split('.')
+    for i, segment in enumerate(segments):
+        match = re.fullmatch(r'([\w-]+)(?:\[(0|[1-9]\d*)\])?', segment)
+        if not match or not isinstance(node, dict):
+            raise ValueError('Используйте JSON Pointer для этого адреса')
+        key, index = match.groups()
+        # A literal ID or field name may itself contain dots or brackets.
+        suffix = '.'.join(segments[i:])
+        if any(k != key and (suffix == k or suffix.startswith((k+'.', k+'['))) for k in node):
+            raise ValueError('Неоднозначный адрес. Укажите точный JSON Pointer')
+        if key not in node:
+            raise ValueError('Адрес не найден. Для нового поля или ID укажите JSON Pointer')
+        node = node[key]
+        parts.append(key)
+        if index is not None:
+            if not isinstance(node, list) or int(index) >= len(node):
+                raise ValueError('Индекс не указывает на элемент массива')
+            node = node[int(index)]
+            parts.append(index)
+    return '/' + '/'.join(parts)
+
+
+def resolve_card_paths(state, proposal, *, editing=False):
     """Stable card identity aliases; numeric addresses retain frozen-base semantics.
 
     The shadow tracks prior additions/assignments and tombstones without shifting
@@ -107,14 +134,16 @@ def resolve_card_paths(state, proposal):
     """
     shadow = deepcopy(state)
     deleted = set()
-    errors = []
+    errors = {}
     for index, change in enumerate(proposal.changes):
         original = change.path
         try:
-            if not original.startswith('/') or re.search(r'~(?![01])', original):
+            address=recorded_editor_pointer(shadow,original) if editing and not original.startswith('/') else original
+            if not address.startswith('/') or re.search(r'~(?![01])', address):
                 raise ValueError('Некорректный JSON Pointer')
-            parts = [p.replace('~1', '/').replace('~0', '~') for p in original[1:].split('/')]
+            parts = [p.replace('~1', '/').replace('~0', '~') for p in address[1:].split('/')]
             if parts[0] not in ('characters', 'locations', 'world', 'campaign'):
+                change.path=address
                 continue  # Existing allowlist supplies the operation-drop scope.
             if parts[0] in ('characters', 'locations') and len(parts) >= 2:
                 rows = shadow[parts[0]]
@@ -148,11 +177,10 @@ def resolve_card_paths(state, proposal):
             change.path = path
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             reason = str(exc) if isinstance(exc, ValueError) else 'Родительский объект не существует'
-            errors.append(f'Операция {index}, путь {original}: {reason}. Исправьте только path на существующий разрешённый адрес.')
+            errors[index]=reason
     if errors:
-        raise ProposalError('; '.join(errors), proposal_paths=[
-            f'/changes/{i}/path' for i, c in enumerate(proposal.changes)
-            if any(e.startswith(f'Операция {i},') for e in errors)])
+        raise ProposalError('; '.join(f'Операция {i}, путь {proposal.changes[i].path}: {reason}' for i,reason in errors.items()),
+                            proposal_paths=[f'/changes/{i}/path' for i in errors], path_errors=errors)
 
 
 def apply_proposal(state, reply, *, editing=False, warnings=None):
@@ -161,7 +189,7 @@ def apply_proposal(state, reply, *, editing=False, warnings=None):
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
-    resolve_card_paths(state, proposal)
+    resolve_card_paths(state, proposal, editing=editing)
     trial = deepcopy(state)
     schema = prompt_schema()['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}
