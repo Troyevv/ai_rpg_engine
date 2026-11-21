@@ -8,6 +8,7 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  await page.goto('/');
  await nav(page,'Настройки');
  await chooseOption(page.getByLabel('Провайдер game'), 'deepseek');
+ await page.locator('.settings-connections:not([open]) > summary').click();
  await page.getByLabel('API-ключ DeepSeek').fill('persisted-test-key');
  await chooseOption(page.getByLabel('Thinking game'), 'low');
  await page.getByRole('button',{name:'Сохранить настройки'}).click();

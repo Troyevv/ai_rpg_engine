@@ -346,7 +346,7 @@ test('phone leaves composer reachable with keyboard-sized viewport and enlarged 
   // Fullscreen phone intentionally covers Narrative; it must own pointer hits.
   expect(await narrative.evaluate(el=>{const r=el.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-testid="phone-device"]')})).toBe(true);
  }else{
-  await expect(page.locator('.narrative-shell')).toHaveAttribute('inert','');
+  await expect(page.locator('.narrative-shell')).toHaveJSProperty('inert',false);
  }
  await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
  await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();

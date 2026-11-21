@@ -1,3 +1,4 @@
+import {tr} from './lib/interfaceText';
 import {ReadingDisplay} from './ReadingDisplay';
 import {dismissTransient} from './lib/transientBack';
 import {useRootDialogBack} from './lib/useRootDialogBack';
@@ -224,7 +225,7 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
-  const navigation=(act:(action:()=>void)=>void)=>(<nav className="nav-rail" inert={inspector&&!mobile} aria-label="Главная навигация">
+  const navigation=(act:(action:()=>void)=>void)=>(<nav className="nav-rail" inert={inspector&&!mobile} aria-label={tr('Главная навигация','Main navigation')}>
         <button
           className="brand"
           aria-label="AI RPG Engine"
@@ -239,22 +240,22 @@ export default function App() {
             onClick={()=>act(()=>navigate("game"))}
           >
             <BookOpen />
-            <span>Игра</span>
+            <span>{tr('Игра','Game')}</span>
           </button>
           <button
             className={view === "prepare" ? "current" : ""}
             onClick={()=>act(()=>navigate("prepare"))}
           >
             <Feather />
-            <span>Создать</span>
+            <span>{tr('Создать','Create world')}</span>
           </button>
           {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-nav-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} className={inspector&&panel===id?'current':''} aria-current={inspector&&panel===id?'page':undefined} onClick={()=>act(()=>inspect(id))}><Icon/><span>{panelLabel(id)}</span></button>)}</div>)}
-          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>act(()=>openWorkspace(section))}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?'Календарь':'Родословная'}</span></button>)}</div>
+          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>act(()=>openWorkspace(section))}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?tr('Календарь','Calendar'):tr('Родословная','Family tree')}</span></button>)}</div>
           <button disabled={!world} onClick={()=>act(()=>setWorldInfo(true))}><Settings2/><span>{it('settings')}</span></button>
         </div>
         <button className="nav-settings" disabled={prefsLoading} onClick={()=>act(()=>setSettings(true))}>
           <Settings2 />
-          <span>Настройки</span>
+          <span>{tr('Настройки','Settings')}</span>
         </button>
       </nav>);
   const menu=<MobileNavigation open={mobileMenu} setOpen={setMobileMenu}>{navigation}</MobileNavigation>;
@@ -333,6 +334,7 @@ export default function App() {
           </div>
         ) : (view !== "prepare" || !!save) && (
           <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
+            suspended={chatOpen}
             presentationActive={!chatOpen&&view==="game"&&!workspace&&!inspector&&!mobileMenu&&!library&&!settings&&!worldInfo}
             openDisplay={()=>setDisplay(true)} openSettings={()=>setSettings(true)} toggleFocus={()=>setReading(!reading)} reading={reading}
             openStory={openStory}
@@ -361,7 +363,7 @@ export default function App() {
         apiKey={apiKey}
         setApiKey={setApiKey}
       />
-      <Library
+      <Library currentWorld={world?.id}
         open={library}
         onOpenChange={setLibrary}
         choose={choose}

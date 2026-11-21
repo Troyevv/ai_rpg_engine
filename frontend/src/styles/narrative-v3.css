@@ -212,7 +212,7 @@
 
 @font-face {font-family:Inter;src:url('../assets/inter/inter-cyrillic.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0400-052F,U+2116}
 @font-face {font-family:Inter;src:url('../assets/inter/inter-latin.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
-#root {container:app / inline-size;position:relative;height:var(--app-height,100dvh);overflow:clip}
+#root {container:app / inline-size;position:relative;top:var(--app-top,0px);height:var(--app-height,100dvh);overflow:clip}
 .narrative-shell,.phone-device {--reader-gutter:32px;--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
 #root .narrative-shell {height:100%;overflow:clip}
 #root .app-main,.game-preserved,.game {min-height:0;overflow:clip}
@@ -322,7 +322,8 @@ html[data-hide-turn-times] .turn-clock {display:none}
 .reading-sizes {display:flex;gap:4px}
 .reading-sizes button {width:34px;height:34px;border:1px solid var(--border);border-radius:6px;color:var(--text);background:var(--surface-1)}
 .reading-sizes button[aria-pressed=true] {color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-.action-panel-hint {float:right;padding:5px 0;font:11px/1.5 Inter,sans-serif;color:var(--text-muted)}
+.action-panel-heading {display:flex;align-items:center;justify-content:space-between;gap:8px}
+.action-panel-hint {padding:5px 0;font:11px/1.5 Inter,sans-serif;color:var(--text-muted)}
 @container app (max-width:680px){#root .reading-display {right:12px;bottom:144px}.action-panel-hint {display:none}}
 .inspector-backdrop {position:absolute;inset:0;z-index:35;background:#080a0bad}
 .inspector-layout {display:flex;flex:1;min-height:0;min-width:0}
@@ -339,4 +340,36 @@ html[data-hide-turn-times] .turn-clock {display:none}
  .inspector-sections button {flex:none;min-height:44px}
  .rp-chat-stage {padding:0}
  .rp-chat-stage .chat-mode {width:100%;border:0;border-radius:0}
+}
+@keyframes narrative-nav-in {from{transform:translateX(-102%)}to{transform:translateX(0)}}
+@media(prefers-reduced-motion:no-preference){
+ .narrative-drawer[data-state=open] {animation:narrative-nav-in .28s cubic-bezier(.22,.8,.2,1)}
+ .narrative-drawer[data-state=closed] {animation:narrative-nav-in .22s cubic-bezier(.22,.8,.2,1) reverse}
+}
+#root .library-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start}
+#root .library-layout .world-grid {grid-template-columns:minmax(0,1fr)}
+#root .library-dialog .world-card {min-height:146px;gap:10px}
+.library-actions>span {margin-right:auto;color:var(--text-muted)}
+.library-world-select {display:none}
+.library-selected {display:flex;align-items:center;justify-content:space-between;gap:10px}
+.library-selected h3,#root .library-dialog .world-card strong {font:600 17px/1.5 Inter,sans-serif}
+#root .library-layout .save-list {margin:0;padding:0;min-width:0;border:0}
+.library-selected .library-remove {width:44px;height:44px;display:grid;place-items:center}
+#root .settings-dialog:has(.settings-scroll)>.section-tabs {display:grid;grid-template-columns:repeat(3,1fr);width:100%}
+#root .settings-connections {padding:14px 16px;background:var(--surface-2);border-radius:10px}
+#root .management-calendar {justify-self:start;color:var(--accent)}
+#root .management-clock .scene-clock {font:14px/1.65 Inter,sans-serif;color:var(--text-muted)}
+#root .management-time-options .management-icon {padding:8px;background:var(--accent-soft);border-radius:9px;width:36px;height:36px}
+#root .management-time-options button {padding:0;background:transparent;border:0;color:var(--accent);box-shadow:none;justify-content:space-between;width:100%}
+#root .inspector-workspace .inspector-world-hero h2 {font:600 18px/1.5 Inter,sans-serif}
+@container app (min-width:681px){
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay {left:170px;background:#07090db8;backdrop-filter:blur(3px)}
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) :is(.library-dialog,.settings-dialog,.current-game-panel) {left:calc(50% + 85px);width:min(920px,calc(100% - 218px));max-width:none}
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-content:not(.reading-display,.narrative-drawer) {left:calc(50% + 85px);max-width:calc(100% - 202px)}
+ #root .inspector-backdrop {left:170px;backdrop-filter:blur(3px)}
+}
+@container app (max-width:680px){
+ #root .library-layout {display:block}
+ #root .library-world-select {display:grid}
+ #root .library-layout .world-grid {display:none}
 }

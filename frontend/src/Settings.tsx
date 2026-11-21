@@ -84,6 +84,7 @@ export function Settings({
           items={[{id:'models',label:'Модели'},{id:'context',label:'Контекст'},{id:'appearance',label:'Оформление'}]}/>
         <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-panel-tab-${tab}`} className="settings-scroll">
         {tab==='models'&&<>
+        <details className="settings-connections"><summary>Подключения</summary>
         <details><summary>Основные промпты и версии</summary>{promptNames.map(name=><Button key={name} size="sm" variant="ghost" onClick={()=>setPrompt(name)}>{name}</Button>)}</details>
         <Versions kind="prompt" owner={prompt} open={!!prompt} close={()=>setPrompt("")}/>
         <label>
@@ -103,6 +104,7 @@ export function Settings({
           const status = await api<{deepseek:boolean}>("/credentials/deepseek",undefined,"DELETE");
           setStored(status.deepseek); setApiKey(""); toast.success(status.deepseek ? "Сохранённый ключ удалён; ключ окружения остаётся доступен" : "Ключ удалён");
         })}>Удалить сохранённый ключ</Button>}
+        </details>
         {(["idea", "summary", "game"] as const).map((key, index) => (
           <fieldset key={key}>
             <legend>

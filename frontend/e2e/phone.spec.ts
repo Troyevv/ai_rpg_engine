@@ -38,6 +38,7 @@ test("phone controls, freeform text, reload and physical scene", async ({
   await page.getByRole('button',{name:/^Телефон/}).click();
   const after = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.scene).toEqual(before.state.scene);
+  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
   await dialog.getByRole("button", { name: "Вера работа", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Написать", exact: true })
@@ -154,13 +155,14 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByRole("button", { name: "Удалить: Вера работа", exact: true }),
   ).toBeVisible();
-  await dialog.getByRole("button",{name:"Свернуть телефон"}).click();
+  await page.getByRole("button",{name:"Свернуть телефон"}).click();
   await gameAction(page,'Сменить главного героя');
   await chooseOption(page.getByRole("dialog").getByLabel("Новый главный герой"), "qa_vera");
   await page.getByRole("dialog").getByRole("button", { name: "Проверить и посмотреть" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Подтвердить смену" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: /^Телефон/ }).click();
+  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
   await expect(dialog.getByText("Кирилл", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Мастерская", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText("Новый знакомый", { exact: true })).toHaveCount(
@@ -188,6 +190,7 @@ test("unread text and shared portrait projection", async ({
   ).toHaveCount(0);
   await page.getByRole("button", { name: /^Телефон/ }).click();
   const dialog = page.getByRole("region", {name:"Телефон персонажа"});
+  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
   const contact = dialog
     .locator("article.phone-row")
     .filter({ hasText: "Вера работа" });
@@ -221,6 +224,7 @@ test("unread text and shared portrait projection", async ({
   expect(uploaded.ok()).toBeTruthy();
   await page.reload();
   await page.getByRole("button", { name: /^Телефон/ }).click();
+  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
   await expect(contact.locator("img")).toBeVisible();
   const portrait = await contact.locator("img").getAttribute("src");
   await expect(

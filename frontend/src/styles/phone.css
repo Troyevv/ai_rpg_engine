@@ -22,7 +22,7 @@
 #root .phone-list-actions button{display:flex;justify-content:center;align-items:center;gap:7px;flex:1;min-height:40px;border:1px solid #353d45;border-radius:9px;background:#21272d;font-size:12px;line-height:1.4;padding:8px;color:#cfcec7}
 #root .phone-list-actions button:hover{border-color:#7f7052;background:#2c2f2e}
 #root .phone-list-actions svg{width:15px;height:15px;color:var(--accent)}
-#root .phone-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));flex:none;gap:4px;padding:8px 12px 5px;border-top:1px solid #2d353e;background:#1b2026}
+#root .phone-bottom{display:grid;grid-auto-columns:minmax(0,1fr);grid-auto-flow:column;flex:none;gap:4px;padding:8px 12px 5px;border-top:1px solid #2d353e;background:#1b2026}
 #root .phone-bottom button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:54px;border:0;border-radius:10px;background:transparent;color:#a0a8b2;font-size:12px;line-height:1.3;padding:7px 4px;transition:background 160ms ease,color 160ms ease}
 #root .phone-bottom button[aria-pressed=true]{background:#302d25;color:#e4c68d}
 #root .phone-bottom button:hover{background:#2c3033}
@@ -161,7 +161,10 @@ html:not([data-theme=graphite]) #root .ph-close {background:var(--surface-2);col
 
 .phone-body .phone-search {display:flex;align-items:center;gap:9px;margin:10px 6px 12px!important;padding:0 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px}
 .phone-search input[type="search"] {border:0;background:none;padding:11px 0}
-.phone-device .avatar-fallback {background:var(--accent-soft);color:var(--accent);border-radius:50%}
+.phone-device .avatar-fallback {display:inline-flex;align-items:center;justify-content:center;background:var(--avatar-bg);color:var(--avatar-ink);border:0;border-radius:50%}
+.phone-thread:nth-child(3n+1) .avatar-fallback {--avatar-bg:#3e323f;--avatar-ink:#d1b7d1}
+.phone-thread:nth-child(3n+2) .avatar-fallback {--avatar-bg:#263a3a;--avatar-ink:#a4c6bf}
+.phone-thread:nth-child(3n) .avatar-fallback {--avatar-bg:#40392d;--avatar-ink:#ddc89f}
 .phone-device .avatar-fallback svg {display:none}
-.phone-device .avatar-fallback .portrait-initials {position:static;inset:auto;font:500 14px/1 Inter,sans-serif;color:inherit;background:transparent}
+.phone-device .avatar-fallback .portrait-initials {position:static;inset:auto;width:auto;font:500 14px/1 Inter,sans-serif;color:inherit;background:transparent}
 @container app (max-width:680px){.phone-thread {padding:17px 12px}.phone-message {font-size:15px;line-height:1.6;padding:12px 14px}}

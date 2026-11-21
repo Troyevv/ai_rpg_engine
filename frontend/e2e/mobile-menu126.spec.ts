@@ -19,14 +19,12 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await seed(page,request,true);
  await page.getByLabel('Своё действие или реплика').fill('Неотправленный черновик');
  await page.locator('.story-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight/2;el.dispatchEvent(new Event('scroll'))});
- await expect(page.getByRole('button',{name:'К последней сцене'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'К последнему ответу'})).toBeVisible();
  const top=await page.locator('.story-scroll').evaluate(el=>el.scrollTop);
  for(const section of ['Мир','Сцена','Персонажи','Отношения','Сюжет','Память','Тайны']){
   await nav(page,section);await expect(page.locator('.inspector-workspace')).toBeVisible();
   await expect(page.locator('.inspector-workspace')).toHaveAttribute('aria-label',section);
  }
- await menu(page);await page.evaluate(()=>history.back());
- await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.inspector-workspace')).toBeVisible();
  await page.evaluate(()=>history.back());await expect(page.locator('.inspector-workspace')).toBeHidden();
  for(const section of ['Календарь','Родословная']){
@@ -64,9 +62,9 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await nav(page,'Создать');await expect(page.locator('.world-workshop')).toBeVisible();
  await nav(page,'Игра');await expect(page.locator('.game')).toBeVisible();
  await nav(page,'Настройки');await expect(page.locator('.settings-dialog')).toBeVisible();await page.keyboard.press('Escape');
- await menu(page);const reading=page.getByRole('switch',{name:'Режим чтения'});
- await expect(reading).toHaveAttribute('aria-checked','false');await reading.click();await expect(reading).toHaveAttribute('aria-checked','true');await reading.click();
- await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await nav(page,'Режим чтения');
+ await expect(page.locator('.app-shell')).toHaveClass(/reading/);
+ await nav(page,'Выйти из чтения');
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Неотправленный черновик');
  expect(await page.locator('.story-scroll').evaluate(el=>el.scrollTop)).toBe(top);
  await menu(page);await page.keyboard.press('Escape');
@@ -79,11 +77,11 @@ test('menu: five widths, skins, low viewport and no legacy entries',async({page,
   await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});await page.reload();
   for(const width of [320,360,393,412,430]){
    await page.setViewportSize({width,height:720});const dialog=await menu(page);
-   await expect.poll(async()=>(await dialog.boundingBox())!.y).toBe(0);
-   const rect=await dialog.boundingBox();expect(rect!.x).toBe(0);expect(rect!.y).toBe(0);expect(rect!.width).toBe(width);expect(rect!.height).toBe(720);
+   await expect.poll(async()=>(await dialog.boundingBox())!.x).toBe(0);
+   const rect=await dialog.boundingBox();expect(rect!.x).toBe(0);expect(rect!.y).toBe(0);expect(rect!.width).toBe(250);expect(rect!.height).toBe(720);
    expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
    await expect(dialog.getByRole('button',{name:/Ветки|Tabletop|Настольная/})).toHaveCount(0);
-   await expect(dialog.locator('.mobile-menu-card')).toHaveCount(9);
+   await expect(dialog.locator('.inspector-nav-group button')).toHaveCount(9);
    for(const button of await dialog.locator('button').all()){
     const box=await button.boundingBox();if(box)expect(box.height).toBeGreaterThanOrEqual(44);
    }
@@ -92,7 +90,7 @@ test('menu: five widths, skins, low viewport and no legacy entries',async({page,
   }
  }
  await page.setViewportSize({width:320,height:420});const dialog=await menu(page);
- await dialog.getByRole('switch').scrollIntoViewIfNeeded();await expect(dialog.getByRole('switch')).toBeInViewport();
+ await dialog.locator('.nav-settings').scrollIntoViewIfNeeded();await expect(dialog.locator('.nav-settings')).toBeInViewport();
  await page.keyboard.press('Escape');
 });
 
@@ -100,14 +98,15 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await seed(page,request);
  const dock=async()=>{
   const peek=await page.locator('.phone-peek').evaluate(el=>{const r=el.getBoundingClientRect();return {y:r.y,height:r.height}});const composer=await page.locator('.composer').boundingBox();
-  expect(Math.abs(peek!.y+peek!.height-composer!.y)).toBeLessThanOrEqual(1);
-  const send=await page.getByRole('button',{name:'Отправить действие'}).boundingBox();expect(send!.y).toBeGreaterThanOrEqual(peek!.y+peek!.height);
+  expect(peek.y).toBeGreaterThanOrEqual(composer!.y);
+  expect(peek.y+peek.height).toBeLessThanOrEqual(composer!.y+composer!.height);
+  const send=await page.getByRole('button',{name:'Отправить действие'}).boundingBox();
+  expect(Math.abs(send!.y-peek.y)).toBeLessThanOrEqual(2);
   await page.locator('.story-scroll').evaluate(el=>el.scrollTop=el.scrollHeight);
-  const last=await page.locator('.choices button').last().boundingBox();expect(last!.y+last!.height).toBeLessThanOrEqual(peek!.y+1);
+  const last=await page.locator('.choices button').last().boundingBox();expect(last!.y+last!.height).toBeLessThanOrEqual(composer!.y+1);
  };
  for(const width of [320,430]){
   await page.setViewportSize({width,height:850});
-  await expect.poll(async()=>{const p=await page.locator('.phone-peek').evaluate(el=>{const r=el.getBoundingClientRect();return {y:r.y,height:r.height}});const c=await page.locator('.composer').boundingBox();return Math.abs(p!.y+p!.height-c!.y)}).toBeLessThanOrEqual(1);
   await dock();
   await page.getByLabel('Своё действие или реплика').fill('Многострочное действие\n'.repeat(8));await dock();
   await page.locator('.composer').evaluate(el=>(el as HTMLElement).style.paddingBottom='34px');await dock();
@@ -127,6 +126,7 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await page.setViewportSize({width:393,height:850});
  await page.locator('.phone-peek').click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
  await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Черновик при открытии клавиатуры');
@@ -144,8 +144,7 @@ test('menu: empty save and English focus/keyboard controls',async({page})=>{
  await page.evaluate(()=>document.documentElement.lang='en');
  await page.getByRole('button',{name:'Game menu'}).click();
  const dialog=page.getByRole('dialog',{name:'Game menu'});
- await expect(dialog).toContainText('No world selected');await expect(dialog).toContainText('No active playthrough');
- await expect(dialog.locator('.mobile-menu-card:disabled')).toHaveCount(9);
+ await expect(dialog.locator('.inspector-nav-group button:disabled')).toHaveCount(9);
  await expect(dialog.getByRole('button',{name:'Create world'})).toBeEnabled();
  await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Game menu'})).toBeFocused();
@@ -165,13 +164,14 @@ test('menu summary follows controlled actor rather than POV; all skin bases and 
  for(const skin of ['cyberpunk','industrial','medieval','arcane','street','noir','terminal','biotech','retro']){
   await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});
   await page.reload();const dialog=await menu(page);
-  await expect(dialog.locator('.mobile-menu-resume')).toContainText('Без управляемого персонажа');
+  await expect(dialog.locator('.inspector-world-label')).toContainText('Очень длинное название мира');
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   await page.keyboard.press('Escape');
+  await expect(page.getByLabel('Управляемый персонаж')).toContainText('Наблюдение');
  }
  actorId='controlled';await page.reload();const dialog=await menu(page);
- await expect(dialog.locator('.mobile-menu-resume')).toContainText(actorName);
- await expect(dialog.locator('.mobile-menu-resume')).not.toContainText('Без управляемого персонажа');
+ await page.keyboard.press('Escape');
+ await expect(page.getByLabel('Управляемый персонаж')).toContainText(actorName);
 });
 
 test('library refresh and nested Back preserve the selected world and the game draft', async ({page, request}) => {
@@ -182,13 +182,12 @@ test('library refresh and nested Back preserve the selected world and the game d
  await draft.fill('Вернуться к разговору');
  await page.locator('.breadcrumb').click();
  const library = page.locator('.library-dialog');
- const card = library.locator('[data-world-id="'+selection.world+'"]');
- await card.locator('.world-card').click();
+ await expect(library.getByRole('combobox',{name:'Выбрать мир'})).toHaveJSProperty('value',String(selection.world));
  await expect(library.locator('.save-list')).toContainText('Продолжить');
  const refreshed = page.waitForResponse(r => new URL(r.url()).pathname === '/api/worlds/'+selection.world+'/saves' && r.ok());
  await library.getByRole('button',{name:'Обновить список'}).click();
  await refreshed;
- await card.getByRole('button',{name:/Удалить/}).click();
+ await library.getByRole('button',{name:'Переместить мир в корзину'}).click();
  await expect(page.getByRole('heading',{name:/Удалить «/})).toBeVisible();
  await page.goBack();
  await expect(page.getByRole('heading',{name:/Удалить «/})).toHaveCount(0);

@@ -431,6 +431,12 @@ export function Inspector({
       {open&&<div className="inspector-backdrop" aria-hidden onClick={back}/>}
       <section
         className="inspector-workspace"
+        onKeyDown={e=>{
+          if(e.key!=='Tab'||!e.currentTarget.contains(e.target as Node))return;
+          const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')).filter(n=>n.tabIndex>=0&&n.getClientRects().length);
+          if(e.shiftKey&&e.target===nodes[0]){e.preventDefault();nodes.at(-1)?.focus()}
+          else if(!e.shiftKey&&e.target===nodes.at(-1)){e.preventDefault();nodes[0]?.focus()}
+        }}
         hidden={!open}
         aria-label={panelLabel(panel)}
       >

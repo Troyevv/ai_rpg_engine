@@ -10,12 +10,27 @@ export const DialogClose = Primitive.Close;
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof Primitive.Content>,
   React.ComponentPropsWithoutRef<typeof Primitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  const opener=React.useRef<HTMLElement|null>(null);
+  return (
   <Primitive.Portal container={document.getElementById("root")}>
     <Primitive.Overlay className="dialog-overlay" />
     <Primitive.Content
       ref={ref}
       className={cn("dialog-content", className)}
+      onOpenAutoFocus={event=>{
+        opener.current=document.activeElement as HTMLElement|null;
+        onOpenAutoFocus?.(event);
+      }}
+      onCloseAutoFocus={event=>{
+        onCloseAutoFocus?.(event);
+        if(event.defaultPrevented)return;
+        const target=opener.current;
+        if(target?.isConnected&&target!==document.body&&target.getClientRects().length&&!target.closest('[inert],[hidden]')){
+          event.preventDefault();
+          target.focus({preventScroll:true});
+        }
+      }}
       {...props}
     >
       {className?.split(' ').some(name=>['mobile-sheet','time-skip-sheet','current-game-panel'].includes(name))&&<SheetHeight/>}
@@ -25,7 +40,8 @@ export const DialogContent = React.forwardRef<
       </Primitive.Close>
     </Primitive.Content>
   </Primitive.Portal>
-));
+  );
+});
 DialogContent.displayName = "DialogContent";
 export const DialogHeader = ({
   className,

@@ -9,7 +9,7 @@
 }
 .narrative-shell .nav-rail {
   width: var(--inspector-nav-width);
-  padding: 22px 14px 16px;
+  padding: 22px 9px;
   align-items: stretch;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -17,68 +17,69 @@
 .narrative-shell .nav-rail .brand {
   display: flex;
   width: auto;
-  height: 42px;
+  height: 22px;
   justify-content: flex-start;
-  gap: 14px;
+  gap: 11px;
   border: 0;
-  margin: 0 10px 26px;
-  font: 600 13px/1.4 var(--ui-font);
-  letter-spacing: 2px;
+  margin: 0 8px 28px;
+  font: 600 10px/1.4 var(--ui-font);
+  letter-spacing: 1.7px;
   white-space: nowrap;
   overflow-wrap: normal;
   flex-shrink: 0;
 }
 .narrative-shell .nav-rail .brand svg {
+  width:22px; height:22px;
   flex-shrink: 0;
 }
 .inspector-world-label {
   display: grid;
-  gap: 7px;
-  padding: 0 10px 20px;
-  margin-bottom: 16px;
+  gap: 6px;
+  padding: 0 0 16px;
+  margin: 0 7px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 .inspector-world-label small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 .narrative-shell .nav-links {
-  gap: 4px;
+  gap: 0;
 }
 .narrative-shell .nav-links button,
 .narrative-shell .nav-settings {
   flex-direction: row;
   justify-content: flex-start;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
-  padding: 10px 12px;
-  min-height: 44px;
-  font-size: 13px;
+  padding: 9px;
+  min-height: 38px;
+  font-size: 11px;
   line-height: 1.4;
 }
 .narrative-shell .nav-links button span,
 .narrative-shell .nav-settings span {
-  font-size: 13px;
+  font-size: 11px;
 }
 .narrative-shell .nav-links svg,
 .narrative-shell .nav-settings svg {
-  width: 17px;
-  height: 17px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 .inspector-nav-group {
   display: grid;
-  gap: 3px;
-  margin-top: 12px;
+  gap: 0;
+  margin-top: 24px;
 }
 .inspector-nav-group > p {
-  font-size: 9px;
-  letter-spacing: 1.4px;
+  font-size: 8px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--text-subtle);
-  margin: 6px 12px 8px;
+  margin: 0 9px 10px;
 }
 .narrative-shell .nav-links button.current {
   background: var(--accent-soft);
@@ -94,7 +95,7 @@
   flex-shrink: 0;
 }
 .narrative-shell .nav-settings {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 .narrative-shell .save-workspace {
   left: var(--inspector-nav-width);

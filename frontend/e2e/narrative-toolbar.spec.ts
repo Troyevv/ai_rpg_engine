@@ -1,3 +1,4 @@
+import {chooseOption} from './choice-navigation';
 import {test, expect, type Page} from '@playwright/test';
 
 async function geometry(page: Page) {
@@ -88,7 +89,8 @@ for (const theme of ['graphite', 'parchment']) {
       // Switch through the actual library, without remounting the browser.
       for (const target of [other, s]) {
         await page.locator('.breadcrumb').click();
-        await page.locator(`[data-world-id="${target.world}"] .world-card`).click();
+        if(mobile)await chooseOption(page.getByLabel('Выбрать мир',{exact:true}), String(target.world));
+        else await page.locator(`[data-world-id="${target.world}"] .world-card`).click();
         const saves = await (await request.get(`/api/worlds/${target.world}/saves`)).json();
         const choices = page.locator('.save-list button').filter({hasText: 'Продолжить →'});
         await expect(choices).toHaveCount(saves.length);

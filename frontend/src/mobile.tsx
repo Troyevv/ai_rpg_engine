@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {gameLocale} from './gameDate';
 import {Menu} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle} from './components/ui/dialog';
 import {Button} from './components/ui/button';
@@ -35,6 +36,13 @@ export function useMobileViewport(mobile:boolean){
 export function MobileNavigation({open,setOpen,children}:{
  open:boolean;setOpen:(v:boolean)=>void;children:(act:(action:()=>void)=>void)=>ReactNode;
 }){
+ const [locale,setLocale]=useState(gameLocale);
+ useEffect(()=>{
+  const observer=new MutationObserver(()=>setLocale(gameLocale()));
+  observer.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+  return ()=>observer.disconnect();
+ },[]);
+ const title=locale.startsWith('en')?'Game menu':'Меню игры';
  const trigger=useRef<HTMLButtonElement>(null);
  const pending=useRef<(()=>void)|null>(null);
  // Consume the menu's own history entry before opening another workspace.
@@ -54,11 +62,11 @@ export function MobileNavigation({open,setOpen,children}:{
   if(history.state?.mobileMenu)history.back();
   else setOpen(false);
  };
- return <><Button ref={trigger} data-mobile-menu-trigger size="icon" variant="ghost" aria-label="Меню игры" onClick={()=>setOpen(true)}><Menu/></Button>
+ return <><Button ref={trigger} data-mobile-menu-trigger size="icon" variant="ghost" aria-label={title} onClick={()=>setOpen(true)}><Menu/></Button>
    <Dialog open={open} onOpenChange={v=>v?setOpen(true):close()}>
      <DialogContent className="mobile-game-menu narrative-drawer" aria-describedby={undefined} onCloseAutoFocus={e=>{
        e.preventDefault();const action=pending.current;pending.current=null;
-       if(action)action();else trigger.current?.focus({preventScroll:true});
-     }}><DialogTitle className="sr-only">Меню игры</DialogTitle>{children(close)}</DialogContent>
+       trigger.current?.focus({preventScroll:true});action?.();
+     }}><DialogTitle className="sr-only">{title}</DialogTitle>{children(close)}</DialogContent>
    </Dialog></>;
 }

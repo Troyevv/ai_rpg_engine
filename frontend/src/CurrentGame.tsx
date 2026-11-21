@@ -274,7 +274,7 @@ export function CurrentGame({
           <header className="management-header">
             <DialogTitle>Управление игрой</DialogTitle>
             <DialogDescription>
-              Время, персонажи и настройки этого прохождения.
+              {save.name}
             </DialogDescription>
           </header>
           <SectionTabs
@@ -301,7 +301,7 @@ export function CurrentGame({
                   <SceneClock save={save} />
                   <p>{save.state.scene_meta?.location || "Место не указано"}</p>
                 </div>
-          {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+
                 <div className="management-time-options">
                   <article className="management-card">
                     <Clock className="management-icon" />
@@ -330,6 +330,8 @@ export function CurrentGame({
                     </Button>
                   </article>
                 </div>
+                <Button variant="ghost" className="management-calendar" onClick={()=>act(()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}})))}>Открыть календарь <ArrowRight size={15}/></Button>
+          {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
                 {blocked && (
                   <p role="status" className="management-state">
                     {save.state.protagonist_required

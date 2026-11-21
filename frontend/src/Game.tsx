@@ -51,7 +51,7 @@ import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
 import {useMobile} from './mobile';
 export function Game({
-  presentationActive=true,
+  presentationActive=true, suspended=false,
   world,
   save,
   refresh,
@@ -62,7 +62,7 @@ export function Game({
   prefs,
   apiKey,
 }: {
-  presentationActive?: boolean;
+  presentationActive?: boolean; suspended?:boolean;
   world: World | null;
   save: Save | null;
   refresh: () => void;
@@ -319,11 +319,11 @@ export function Game({
   </>;
   return (
     <main className="game" style={{"--sf-reading-width":prefs.reading_width+"px","--sf-font-size":prefs.font_size+"px","--sf-line-height":prefs.line_height} as React.CSSProperties}>
-      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
+      {save&&!suspended&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics||!presentationActive} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');
-      }} end={async()=>{await run(async()=>{const request=phoneOperation(`phone-request:${save.id}:${save.state.phone?.actor_id}`,{action:'end',event_id:selectedCall});const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:request.payload});request.complete();refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
+      }} end={async()=>{await run(async()=>{const request=phoneOperation(`phone-request:${save.id}:${save.state.phone?.actor_id}`,{action:'end',event_id:selectedCall});const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:request.payload});request.complete();refreshControl(after);setSelectedCall(null);requestAnimationFrame(()=>input.current?.focus({preventScroll:true}))})}}>
         {callEntries.map(e=>renderEntry(e))}
       </CallScene>}
       {save&&<div className="narrative-toolbar nr-gamebar" role="group" aria-label="Действия истории">

@@ -7,6 +7,8 @@ test('canonical date, observances and server time skip preview survive reload',a
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');
  await expect(page.locator('.scene-bar, .mobile-scene-line')).toContainText('8 октября 2026 года');
+ await page.getByRole('button',{name:'Управление игрой',exact:true}).click();
+ await page.getByRole('tab',{name:'Время',exact:true}).click();
  await page.getByText('Ближайшие даты',{exact:true}).click();
  await expect(page.getByText('9 октября 2026 года · День рождения: Вера Ларина')).toBeVisible();
  const before=await(await request.get(`/api/saves/${selected.save}`)).json();

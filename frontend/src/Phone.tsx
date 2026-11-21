@@ -197,7 +197,8 @@ export function Phone({
       }
     };
     const modal = new MutationObserver(() => {
-      if (document.querySelector('[role="dialog"]')) setOpen(false);
+      const device=screen.current?.closest('.phone-device');
+      if (Array.from(document.querySelectorAll('[role="dialog"]')).some(dialog=>dialog!==device)) setOpen(false);
     });
     modal.observe(document.body, { childList: true, subtree: true });
     const historyKey = `phone:${ownerKey}`;
@@ -631,7 +632,7 @@ export function Phone({
               <>
                 {!conversation && !contact && !recipient ? (
                   <>
-                    {!grouping && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><Plus size={18}/>{t("write")}</Button>
+                    {!grouping && phone.capabilities.text_message && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><Plus size={18}/>{t("write")}</Button>
                     <Button variant="ghost" onClick={() => setGrouping(true)}><Users size={18}/>Создать группу</Button></div>}
                     {grouping && (
                       <form
@@ -820,7 +821,7 @@ export function Phone({
                 ["messages", "Переписки", MessageCircle],
                 ["contacts", "Контакты", ContactRound],
               ] as const
-            ).map(([key, label, Icon]) => (
+            ).filter(([key])=>key==='contacts'||(key==='calls'?phone.capabilities.voice_call:phone.capabilities.text_message)).map(([key, label, Icon]) => (
               <button
                 key={key}
                 aria-label={label}

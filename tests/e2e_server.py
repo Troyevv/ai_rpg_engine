@@ -1611,6 +1611,8 @@ if __name__ == '__main__':
 
     @app.post('/test/seed')
     def seed():
+        global phone_mode
+        phone_mode = 'silent'
         repo = app.state.repository
         wid = repo.save_world('Тест вариантов и памяти',summary())
         sid = repo.create_save(wid,'Тестовое прохождение')

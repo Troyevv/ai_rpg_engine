@@ -62,6 +62,7 @@ test('author can compare and restore the world prompt without losing history',as
  const edit=await request.post(endpoint,{data:{content:override,expected_head:initial.active_id}});
  expect(edit.ok()).toBeTruthy();
  await page.goto('/');await nav(page,'Настройки');
+ await page.locator('.settings-connections:not([open]) > summary').click();
  await page.getByText('Основные промпты и версии',{exact:true}).click();
  await page.getByRole('button',{name:'draft_world_prompt.md',exact:true}).click();
  const modal=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:/История версий/})});

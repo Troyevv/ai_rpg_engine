@@ -20,6 +20,7 @@ export function ActionPanel({
   ][step];
   return (
     <div className="action-panel" data-stop={step} hidden={hidden}>
+      <div className="action-panel-heading">
       <button
         className="action-panel-toggle"
         type="button"
@@ -33,6 +34,7 @@ export function ActionPanel({
         {step === 2 ? <ChevronUp aria-hidden="true" size={16} /> : <ChevronDown aria-hidden="true" size={16} />}
       </button>
       {count!==undefined&&<span className="action-panel-hint">или напиши своё</span>}
+      </div>
       <div className="action-panel-body" id={bodyId} inert={step === 0}>
         {children}
       </div>

@@ -8,6 +8,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Настройки');
   await chooseOption(page.getByLabel('Провайдер summary'), 'deepseek');
+  await page.locator('.settings-connections:not([open]) > summary').click();
   await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
   await page.getByRole('tab',{name:'Контекст',exact:true}).click();
   for (const stage of ['idea','summary','game']) {

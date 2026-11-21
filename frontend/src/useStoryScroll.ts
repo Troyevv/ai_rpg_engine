@@ -8,6 +8,7 @@ export function useStoryScroll(saveId?:number|string, startAtTop=false){
   const scroll=useRef<HTMLDivElement>(null),pinned=useRef(true);
   const liveText=useRef<HTMLDivElement>(null),followingProse=useRef(false);
   const [away,setAway]=useState(false);
+  const publishedPosition=useRef<number|null>(null);
   const frame=useRef(0),lastTop=useRef(0),upwardInputUntil=useRef(0);
   const lastHeight=useRef(0),lastViewport=useRef(0);
   const anchor=useRef<{id:string;offset:number}|null>(null);
@@ -55,7 +56,7 @@ export function useStoryScroll(saveId?:number|string, startAtTop=false){
       remember();
     });
   },[remember]);
-  const jumpToLatest=useCallback(()=>{pinned.current=true;anchor.current=null;setAway(false);schedule()},[schedule]);
+  const jumpToLatest=useCallback(()=>{publishedPosition.current=null;pinned.current=true;anchor.current=null;setAway(false);schedule()},[schedule]);
   const revealMenu=useCallback((menu:HTMLElement)=>{
     const el=scroll.current;
     if(!el||!pinned.current||!menu.parentElement||menu.parentElement.clientHeight<=el.clientHeight/2)return;
@@ -67,7 +68,8 @@ export function useStoryScroll(saveId?:number|string, startAtTop=false){
     if(offset<el.clientHeight/4 || offset+first.clientHeight>el.clientHeight)
       el.scrollTop+=offset-el.clientHeight/2;
     pinned.current=el.scrollHeight-el.clientHeight-el.scrollTop<2;
-    setAway(!pinned.current);
+    publishedPosition.current=el.scrollTop;
+    setAway(false);
     remember();
   },[remember]);
   const onScroll=useCallback(()=>{
@@ -82,11 +84,13 @@ export function useStoryScroll(saveId?:number|string, startAtTop=false){
     if(followingProse.current&&liveText.current&&top>lastTop.current+1)pinned.current=false;
     else if(el.scrollHeight-el.clientHeight-top<2&&!(followingProse.current&&liveText.current))pinned.current=true;
     else if(top<lastTop.current-1&&(!layoutChanged||performance.now()<upwardInputUntil.current))pinned.current=false;
-    setAway(!pinned.current);remember();
+    if(publishedPosition.current!==null&&top<publishedPosition.current-1)publishedPosition.current=null;
+    setAway(!pinned.current&&publishedPosition.current===null);remember();
     if(layoutChanged)schedule();
   },[remember,schedule]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el)return;
+    publishedPosition.current=null;
     pinned.current=!startAtTop;followingProse.current=false;anchor.current=null;lastTop.current=0;setAway(false);
     try {const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved){pinned.current=saved.pinned;el.scrollTop=saved.top;setAway(!saved.pinned && saved.top>0)}}catch{/* old UI preference */}
     remember();if(startAtTop && el.scrollTop===0)anchor.current=null; schedule();

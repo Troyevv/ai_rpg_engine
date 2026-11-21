@@ -19,7 +19,8 @@ test('container resize preserves the physical draft, phone geometry and modal fo
     const device=page.locator('.phone-device.is-open');
     await expect.poll(async()=>Math.round((await device.boundingBox())!.width)).toBe(mobile?width:350);
     await expect.poll(async()=>Math.round((await device.boundingBox())!.y)).toBe(mobile?0:200);
-    await expect(page.locator('.narrative-shell')).toHaveAttribute('inert','');
+    await expect(device).toHaveAttribute('aria-modal',String(mobile));
+    await expect(page.locator('.narrative-shell')).toHaveJSProperty('inert',mobile);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();
     await expect(input).toHaveValue(draft);

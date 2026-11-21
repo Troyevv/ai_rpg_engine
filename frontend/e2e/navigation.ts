@@ -15,7 +15,7 @@ export async function nav(page:Page,name:string){
   if(await section.count()){await section.click();return}
   await page.keyboard.press('Escape');
  }
- if(await page.getByRole('button',{name:'Меню игры',exact:true}).isVisible()){
+ if(await page.locator('[data-mobile-menu-trigger]:visible').count()){
   await expect(page.getByRole('dialog')).toHaveCount(0);
   if(name==='Режим чтения'||name==='Выйти из чтения')await page.getByLabel('Ещё действия').click();
   else await page.getByRole('button',{name:'Меню игры'}).click();
