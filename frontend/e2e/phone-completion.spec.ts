@@ -176,6 +176,7 @@ test('206 Kirill and Vera exchange messages without saved contacts', async ({pag
   const selected = await seed(page, request, 'incoming=false&decision=answer&strangers=true');
   await page.getByRole('button', {name: /^Телефон/}).click();
   const phone = screen(page);
+  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
   await phone.getByLabel('Поиск адресата').fill('Вера');
   await phone.getByRole('button', {name: /Написать: Вера/}).click();
   await phone.getByLabel('Сообщение в телефоне').fill('Вера, когда тебе удобно созвониться?');

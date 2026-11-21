@@ -128,6 +128,8 @@
   #root .nr-rpentry svg {display:none}
   #root [data-current-world] {font-size:13px}
   #root .nr-gamebar {display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding-top:8px;padding-bottom:8px}
+  #root .current-game-entry .nr-managemententry {width:100%}
+  #root .nr-saved,#root .action-panel-hint {display:none}
   #root .nr-actorcontrol {min-width:0}
   #root .nr-camerabutton {justify-content:flex-start;padding-left:2px}
   #root .nr-camerabutton svg {display:block}
@@ -247,7 +249,10 @@
 html:not([data-theme=graphite]) {
  --v3-panel:var(--surface-2);--v3-line:var(--border);--v3-text:var(--text);--v3-muted:var(--text-muted);--v3-ink:var(--accent-contrast);--v3-accent:var(--accent)
 }
-@container app (max-width:1080px) { .narrative-shell {--reader-gutter:22px} }
+@container app (max-width:1080px) {
+ .narrative-shell {--reader-gutter:24px}
+ #root .nr-actorvalue .choice-trigger {font-size:12px}
+}
 @container app (max-width:680px) {
  .narrative-shell {--reader-gutter:16px}
  #root .app-shell {top:0;position:relative}
