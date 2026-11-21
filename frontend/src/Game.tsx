@@ -1,4 +1,4 @@
-import {choiceText, NarrativeChoiceCard, NarrativeChoiceList} from './NarrativeChoice';
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {ActionPanel} from './components/ui/action-panel';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
@@ -433,13 +433,13 @@ export function Game({
                     <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <ActionPanel count={physicalChoices.length} label="Варианты действий" hidden={physicalStream}><NarrativeChoiceList ref={choicesElement} key={choiceKey}>
+                  <ActionPanel count={physicalChoices.length} label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
                     {physicalChoices.map((c, i) => (
                       <NarrativeChoiceCard key={i} choice={c} disabled={!canSubmit}
                         selected={selectedChoice===choiceText(c)} sending={sendingChoice===choiceText(c)}
                         choose={chooseProposal}/>
                     ))}
-                  </NarrativeChoiceList></ActionPanel>
+                  </div></ActionPanel>
                   {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"
