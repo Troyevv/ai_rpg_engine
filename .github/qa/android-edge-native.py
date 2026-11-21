@@ -64,32 +64,25 @@ for version,port,build in [('before',8216,Path('/tmp/pre-edge/frontend/dist')),(
                 physical=lambda width:round(float(width.removesuffix('px'))*info['dpr'])
                 assert list(map(physical,info['edges']))==([0]*4 if version=='after' else [1]*4) and physical(info['inner'])==1
                 assert abs(info['rect'][0])+abs(info['rect'][1])<1 and max(abs(a-b) for a,b in zip(info['rect'][2:],info['viewport']))<1
+                def ui():
+                    adb('shell','uiautomator','dump','/sdcard/edge-window.xml')
+                    return ElementTree.fromstring(adb('exec-out','cat','/sdcard/edge-window.xml'))
+                tree=ui()
+                for _ in range(3):
+                    candidates=[n for n in tree.iter('node') if (n.get('text','').lower() in {'got it','not now','no thanks','dismiss','skip','skip introduction','continue without account','ok','maybe later'} and n.get('package') in {'org.mozilla.firefox','com.android.permissioncontroller'})]
+                    if not candidates:break
+                    x,y,ex,ey=map(int,re.findall(r'-?\d+',candidates[0].get('bounds')))
+                    adb('shell','input','tap',str((x+ex)//2),str((y+ey)//2));time.sleep(.8);tree=ui()
+                print('Android UI',[(n.get('resource-id',''),(n.get('text') or n.get('content-desc',''))[:65]) for n in tree.iter('node') if n.get('text') or n.get('content-desc')][:60],flush=True)
                 shot=out/f'{version}-{phase}-device.png';shot.write_bytes(adb('exec-out','screencap','-p'))
-                adb('shell','uiautomator','dump','/sdcard/edge-window.xml')
-                tree=ElementTree.fromstring(adb('exec-out','cat','/sdcard/edge-window.xml'))
-                image=Image.open(shot)
-                w,h=info['viewport'];scale=image.width/w
-                nodes=[]
-                for node in tree.iter('node'):
-                    bounds=tuple(map(int,re.findall(r'-?\d+',node.get('bounds',''))))
-                    if len(bounds)!=4:continue
-                    x,y,ex,ey=bounds
-                    score=abs(ex-x-round(w*scale))+abs(ey-y-round(h*scale))
-                    nodes.append((score, bounds, node.get('class'),node.get('resource-id')))
-                nodes.sort()
-                print('Android content bounds',nodes[:4],flush=True)
-                im=image.convert('RGB')
-                color=tuple(map(int,re.findall(r'\d+',info['bg'] if version=='after' else info['borderColor'])[:3]))
-                height=round(info['rect'][3]*scale)
-                # Use native compositor pixels to find the first row of the web surface. Ignore the Android bars.
-                candidates=[y for y in range(im.height-height+2) if all(im.getpixel((x,y))==color for x in (0,2,20,im.width//2,im.width-1))]
-                native_y=nodes[0][1][1]
-                def matches(y):
-                    points=[(x,y+dy) for x in (0,im.width-1) for dy in (0,4,28,110,height//2,height-3,height-1)]
-                    points.extend((x,y+height-1) for x in (2,20,im.width//2,im.width-2))
-                    return sum(im.getpixel(pos)==color for pos in points)
-                yy=max(candidates,key=lambda y:(matches(y),-abs(native_y-y)))
-                box=(0,yy,im.width,yy+height)
+                im=Image.open(shot).convert('RGB')
+                frame=next((n for n in tree.iter('node') if n.get('resource-id','').endswith(':id/engineView')),None)
+                if frame is None:
+                    # The first run establishes the browser content rectangle, which is stable across this fixture.
+                    assert 'last_box' in globals(), 'Missing Android browser bounds'
+                    box=last_box
+                else:box=tuple(map(int,re.findall(r'-?\d+',frame.get('bounds'))))
+                last_box=box
                 web=im.crop(box)
                 from collections import Counter
                 columns=[[(x,y) for x in range(web.width)] for y in (0,web.height-1)]

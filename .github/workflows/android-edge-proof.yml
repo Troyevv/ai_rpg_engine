@@ -2,7 +2,7 @@ name: Android menu perimeter proof
 on:
   push:
     branches: [feat/274-interface-skins]
-    paths: [.github/workflows/android-edge-proof.yml, .github/qa/android-edge-proof.cjs]
+    paths: [.github/workflows/android-edge-proof.yml, .github/qa/android-edge-native.py]
 permissions:
   contents: read
 jobs:
