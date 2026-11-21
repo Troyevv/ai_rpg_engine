@@ -44,9 +44,9 @@ export async function api<T>(
   }
   return response.json();
 }
-export function download(text: string, name: string) {
+export function download(text: string, name: string, type = "text/markdown;charset=utf-8") {
   const url = URL.createObjectURL(
-    new Blob([text], { type: "text/markdown;charset=utf-8" }),
+    new Blob([text], { type }),
   );
   const a = document.createElement("a");
   a.href = url;

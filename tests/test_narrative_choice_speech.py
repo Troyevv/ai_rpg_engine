@@ -109,3 +109,64 @@ def test_explicit_speech_validates_shape_without_editing_authored_words():
     assert warnings[0]['available'] == 2
     legacy, _ = narrative_frame.menu(decode(narrative_frame.FORMAT), world)
     assert dict(action='Старый вариант', speech='') in legacy
+
+
+def test_existing_save_reports_recorded_and_fresh_contracts_without_story_or_credentials(game):
+    from backend.runtime_v3.context import build_context
+    from fastapi.testclient import TestClient
+    from backend.api.app import create_app
+    repo, sid = game
+    hidden_value = 'private-story-marker'
+    old_rows = [dict(text='Предложить тост ' + str(i)) for i in range(6)]
+    current_rows = [dict(text='Поднять бокал', speech='За нас!'), dict(text='Поставить тарелку.', speech=None)]
+    # Resume a job with the actual format header reported by the old installation.
+    jid = repo.begin_job(sid, 'Осмотреться.', 'turn', dict(CONFIG))
+    snap = repo.get_snapshot(sid)
+    messages = build_context(snap, [], 'Осмотреться.', 'turn', 131072, 2400)
+    current = next(m for m in messages if m['content'].startswith('Текущий ввод\n'))
+    body = json.loads(current['content'].split('\n', 1)[1])
+    body['response_format'] = 'JSON со сценой и вариантами Варианты от лица героя. После scene включи actions.'
+    current['content'] = 'Текущий ввод\n' + json.dumps(body, ensure_ascii=False)
+    messages[0]['content'] = messages[0]['content'].replace(narrative_frame.AUTHOR_FORMAT, 'Добавь шесть actions с text.')
+    repo.save_context(jid, messages, snap)
+
+    def finish(job, rows):
+        def stream(**kwargs):
+            stage = identity()['stage']
+            if stage == 'narrative':
+                yield json.dumps(dict(scene=hidden_value, actions=rows), ensure_ascii=False)
+            elif stage == 'remote_initiative':
+                yield '{"action":null}'
+            else:
+                yield '{}'
+        with patch('engine.chat_stream', side_effect=stream):
+            engine.run_job(repo.path, job, engine.Worker(epoch=0, api_key='test-private-provider-key'))
+        assert repo.get_job(job)['status'] == 'saved'
+        return repo.list_turns(sid)[-1]
+
+    old = finish(jid, old_rows)
+    new = finish(repo.begin_job(sid, 'Налить сок.', 'turn', dict(CONFIG)), current_rows)
+    assert json.loads(old['choices_json']) == [dict(action=row['text'], speech='') for row in old_rows]
+    with TestClient(create_app(repo.path)) as client:
+        def audit(turn):
+            res = client.get(f"/api/saves/{sid}/turns/{turn['id']}/choice-diagnostics",
+                             params={'variant': turn['active_variant_id']})
+            assert res.status_code == 200 and res.headers['cache-control'] == 'no-store'
+            assert hidden_value not in res.text and 'test-private-provider-key' not in res.text and 'За нас!' not in res.text
+            return res.json()
+        previous, latest = audit(old), audit(new)
+        assert previous['contract'] == 'narrative-actions/1'
+        assert previous['raw']['missing'] == 6 and previous['saved_turn']['empty'] == 6
+        assert latest['contract'] == client.get('/api/health').json()['choice_contract'] == 'narrative-actions/2'
+        assert latest['raw']['null'] == 1
+        assert latest['raw']['fields'] == {'text': 2, 'speech': 2}
+        for stage in ('raw', 'checkpoint', 'published', 'saved_variant', 'saved_turn'):
+            assert latest[stage]['rows'] == 2 and latest[stage]['spoken'] == 1
+        assert latest['generating_build'] == client.get('/api/health').json()['backend_build']
+        assert latest['same_saved_choices'] is True
+        assert client.get(f"/api/saves/{sid}/turns/{old['id']}/choice-diagnostics",
+                          params={'variant': new['active_variant_id']}).status_code == 409
+        projection = client.get(f'/api/saves/{sid}').json()
+        assert projection['physical_choice_source']['variant_id'] == new['active_variant_id']
+        assert projection['turns'][-1]['choices'][0]['speech'] == 'За нас!'
+        assert projection['turns'][-2]['choices'] == json.loads(old['choices_json'])

@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {diagnostics} from './navigation';
 import {defaults} from '../src/types';
 
 test.afterEach(async({request})=>{await request.post('/test/scene255-reset')});
@@ -107,6 +108,15 @@ test('six authored actions survive reload and keep the editable draft', async ({
   });
   await input.fill('Открываю альбом на первой странице.');
   expect((await read()).revision).toBe(revision);
+  await diagnostics(page);
+  await page.getByRole('tab',{name:'Варианты',exact:true}).click();
+  const report=page.getByRole('region',{name:'Диагностика вариантов'});
+  await expect(report).toContainText('Контракт запроса narrative-actions/2');
+  for(const label of ['Ответ модели','После декодирования','При первой публикации','Вариант в SQLite','Ход в SQLite','Получено для физической сцены','Карточки в интерфейсе']){
+    const row=report.getByRole('row').filter({has:page.getByRole('rowheader',{name:label,exact:true})});
+    await expect(row.getByRole('cell')).toHaveText(['6','1']);
+  }
+
 });
 
 test('a free direction from an incapacitated hero follows the observer camera', async ({page, request}) => {

@@ -10,6 +10,7 @@ RECORDED_FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open
           'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
           'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
 FORMAT = 'JSON со сценой и вариантами'
+SPEECH_CONTRACT_ID = 'narrative-actions/2'
 EXPLICIT_FORMAT = FORMAT + ' (прямая речь)'
 CHOICE_CONTRACT = (
     'В actions предложи шесть разных возможных продолжений открытой сцены на языке истории. '
@@ -53,6 +54,14 @@ def requested(messages):
 
 def explicit_speech(messages):
     return str(_reply_format(messages)).startswith(EXPLICIT_FORMAT)
+
+
+def contract_id(messages):
+    if explicit_speech(messages):
+        return SPEECH_CONTRACT_ID
+    if requested(messages):
+        return 'narrative-actions/1'
+    return 'legacy' if messages else None
 
 
 def _complete_metadata(remainder):

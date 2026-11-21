@@ -8,8 +8,8 @@ import launcher
 def test_existing_server_does_not_reinstall_or_start_another(tmp_path,monkeypatch):
     monkeypatch.setattr(launcher,'RUNTIME',tmp_path)
     monkeypatch.setattr(launcher,'STATE',tmp_path/'server.json')
-    launcher.STATE.write_text(json.dumps({'url':'http://127.0.0.1:8000','token':'private'}))
-    with patch('launcher.request',return_value={'service':'ai-rpg-engine'}),patch('launcher.prepare') as prepare,patch('launcher.subprocess.Popen') as spawn:
+    launcher.STATE.write_text(json.dumps({'url':'http://127.0.0.1:8000','token':'private','frontend_digest':launcher.frontend_digest()}))
+    with patch('launcher.request',return_value={'service':'ai-rpg-engine','backend_build':launcher.server_build()}),patch('launcher.prepare') as prepare,patch('launcher.subprocess.Popen') as spawn:
         launcher.start(open_browser=False)
     prepare.assert_not_called();spawn.assert_not_called()
 
@@ -39,3 +39,17 @@ def test_frontend_hash_tracks_source_changes(tmp_path,monkeypatch):
     before=launcher.frontend_digest()
     (tmp_path/'src/main.tsx').write_text('b')
     assert before!=launcher.frontend_digest()
+
+
+@pytest.mark.parametrize('health', [{'service':'ai-rpg-engine'},
+                                    {'service':'ai-rpg-engine','backend_build':{'id':'older'}}])
+def test_update_detects_old_running_server_without_stopping_an_active_game(tmp_path, monkeypatch, health):
+    monkeypatch.setattr(launcher, 'RUNTIME', tmp_path)
+    monkeypatch.setattr(launcher, 'STATE', tmp_path / 'server.json')
+    launcher.STATE.write_text(json.dumps({'url':'http://127.0.0.1:8000','token':'private'}))
+    with patch('launcher.request', return_value=health) as request, patch('launcher.prepare') as prepare:
+        with pytest.raises(RuntimeError, match=r'stop.bat.*start.bat'):
+            launcher.start(open_browser=False)
+    request.assert_called_once_with('http://127.0.0.1:8000/api/health')
+    prepare.assert_not_called()
+    assert launcher.STATE.exists()

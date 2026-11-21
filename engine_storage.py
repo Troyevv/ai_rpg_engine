@@ -593,7 +593,9 @@ class EngineStorage:
                         warnings.append(warning)
                 db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(warnings,ensure_ascii=False),job_id))
             if publish:
-                marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1)
+                from backend.services.choice_diagnostics import shape
+                marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1,
+                              choices=shape(choices))
                 db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._published_scene',json(?)) WHERE id=?",
                            (json.dumps(marker), job_id))
             self._archive_memory(db, job['save_id'], state)

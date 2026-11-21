@@ -1,4 +1,4 @@
-import { Check, Footprints, LoaderCircle, MessageCircle } from 'lucide-react';
+import { Check, ArrowUpRight, LoaderCircle, MessageCircle } from 'lucide-react';
 import { memo } from 'react';
 import type { Choice } from './types';
 
@@ -16,7 +16,7 @@ type CardProps = {
 };
 
 export const NarrativeChoiceCard = memo(function NarrativeChoiceCard({ choice, disabled, selected, sending, choose }: CardProps) {
-  const Icon = sending ? LoaderCircle : selected ? Check : choice.speech ? MessageCircle : Footprints;
+  const Icon = sending ? LoaderCircle : selected ? Check : choice.speech ? MessageCircle : ArrowUpRight;
   return <button type="button" className={'narrative-choice-card' + (selected ? ' choice-selected' : '')}
     disabled={disabled} aria-pressed={selected} aria-busy={sending || undefined}
     onClick={() => choose(choiceText(choice))}>
