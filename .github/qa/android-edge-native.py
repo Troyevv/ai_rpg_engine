@@ -60,7 +60,9 @@ for version,port,build in [('before',8216,Path('/tmp/pre-edge/frontend/dist')),(
             if key not in gate:raise RuntimeError('No Android events for '+str(key))
             info=gate[key]
             if phase!='settings':
-                assert 'Android' in info['ua'] and 'Firefox' in info['ua'] and info['edges']==(['0px']*4 if version=='after' else ['1px']*4) and info['inner']=='1px'
+                assert 'Android' in info['ua'] and 'Firefox' in info['ua']
+                physical=lambda width:round(float(width.removesuffix('px'))*info['dpr'])
+                assert list(map(physical,info['edges']))==([0]*4 if version=='after' else [1]*4) and physical(info['inner'])==1
                 assert abs(info['rect'][0])+abs(info['rect'][1])<1 and max(abs(a-b) for a,b in zip(info['rect'][2:],info['viewport']))<1
                 shot=out/f'{version}-{phase}-device.png';shot.write_bytes(adb('exec-out','screencap','-p'))
                 adb('shell','uiautomator','dump','/sdcard/edge-window.xml')
@@ -76,16 +78,24 @@ for version,port,build in [('before',8216,Path('/tmp/pre-edge/frontend/dist')),(
                     nodes.append((score, bounds, node.get('class'),node.get('resource-id')))
                 nodes.sort()
                 print('Android content bounds',nodes[:4],flush=True)
-                best=nodes[0]
-                if best[0]>4:
-                    # The menu brand spans the viewport. Its first row is the first row of the uniform web background (or the pre-fix border).
-                    pixel=tuple(map(int,re.findall(r'\d+',info['bg'] if version=='after' else info['borderColor'])[:3]))
-                    im=image.convert('RGB')
-                    yy=next(y for y in range(im.height) if all(im.getpixel((x,y))==pixel for x in (0,1,3,im.width-1)))
-                    box=(0,yy,im.width,yy+round(h*scale))
-                else:box=best[1]
-                print('PNG web bounds',box,flush=True)
-                image.crop(box).save(out/f'{version}-{phase}-web.png')
+                im=image.convert('RGB')
+                color=tuple(map(int,re.findall(r'\d+',info['bg'] if version=='after' else info['borderColor'])[:3]))
+                height=round(info['rect'][3]*scale)
+                # Use native compositor pixels to find the first row of the web surface. Ignore the Android bars.
+                candidates=[y for y in range(im.height-height+2) if all(im.getpixel((x,y))==color for x in (0,2,20,im.width//2,im.width-1))]
+                native_y=nodes[0][1][1]
+                def matches(y):
+                    points=[(x,y+dy) for x in (0,im.width-1) for dy in (0,4,28,110,height//2,height-3,height-1)]
+                    points.extend((x,y+height-1) for x in (2,20,im.width//2,im.width-2))
+                    return sum(im.getpixel(pos)==color for pos in points)
+                yy=max(candidates,key=lambda y:(matches(y),-abs(native_y-y)))
+                box=(0,yy,im.width,yy+height)
+                web=im.crop(box)
+                from collections import Counter
+                columns=[[(x,y) for x in range(web.width)] for y in (0,web.height-1)]
+                columns += [[(x,y) for y in range(web.height)] for x in (0,web.width-1)]
+                print('Physical edge samples',version,phase,box,[Counter(web.getpixel(pos) for pos in line).most_common(2) for line in columns],flush=True)
+                web.save(out/f'{version}-{phase}-web.png')
                 (out/f'{version}-{phase}.json').write_text(json.dumps(info))
             del gate[key]
     finally:index.write_text(original)

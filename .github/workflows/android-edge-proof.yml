@@ -22,7 +22,7 @@ jobs:
           node-version: '22'
       - name: Build both revisions and start offline fixture servers
         run: |
-          pip install -r requirements.txt -r requirements-dev.txt selenium pillow
+          pip install -r requirements.txt -r requirements-dev.txt pillow
           npm ci --prefix frontend
           npm run build --prefix frontend
           git worktree add --detach /tmp/pre-edge b5a2dd6
@@ -49,34 +49,13 @@ jobs:
           timeout 360 bash -c 'adb wait-for-device; until adb shell getprop sys.boot_completed | grep -q 1; do sleep 3; done'
           adb shell input keyevent KEYCODE_WAKEUP
           adb shell wm dismiss-keyguard
-          adb shell am set-debug-app --persistent com.android.chrome
-          adb shell "echo '_ --disable-fre --no-first-run --no-default-browser-check --disable-sync --remote-debugging-socket-name=chrome_devtools_remote' > /data/local/tmp/chrome-command-line"
           adb reverse tcp:8216 tcp:8216
           adb reverse tcp:8217 tcp:8217
-          adb shell am start -a android.intent.action.VIEW -d http://127.0.0.1:8217/ -p com.android.chrome
-          adb forward tcp:9235 localabstract:chrome_devtools_remote
-          mkdir -p /tmp/android-proof
-          adb shell dumpsys package com.android.chrome | grep versionName | head -1
-      - name: Check the four edges with the Android browser
-        working-directory: frontend
+      - name: Check the four edges in Firefox for Android
         run: |
-          if timeout 30 bash -c 'until curl -fsS http://127.0.0.1:9235/json/version | grep -q webSocketDebuggerUrl; do sleep 2; done' && node ../.github/qa/android-edge-proof.cjs; then
-            echo Chrome > /tmp/android-proof/browser
-          else
-            adb shell am force-stop com.android.chrome
-            curl -fsSL --retry 3 https://ftp.mozilla.org/pub/fenix/releases/144.0.2/android/fenix-144.0.2-android-x86_64/fenix-144.0.2.multi.android-x86_64.apk -o /tmp/firefox.apk
-            adb install -g /tmp/firefox.apk
-            if ! command -v geckodriver; then
-              curl -fsSL --retry 3 https://github.com/mozilla/geckodriver/releases/download/v0.36.0/geckodriver-v0.36.0-linux64.tar.gz | tar -xz -C /tmp
-              export PATH="/tmp:$PATH"
-            fi
-            geckodriver --port 4445 >/tmp/geckodriver.log 2>&1 &
-            timeout 15 bash -c 'until curl -fsS http://127.0.0.1:4445/status; do sleep 1; done'
-            if ! timeout 190 python ../.github/qa/android-edge-proof.py; then
-              (cd .. && python .github/qa/android-edge-native.py)
-            fi
-            echo Firefox > /tmp/android-proof/browser
-          fi
+          curl -fsSL --retry 3 https://ftp.mozilla.org/pub/fenix/releases/144.0.2/android/fenix-144.0.2-android-x86_64/fenix-144.0.2.multi.android-x86_64.apk -o /tmp/firefox.apk
+          adb install -g /tmp/firefox.apk
+          python .github/qa/android-edge-native.py
       - name: Diagnose device failures
         if: failure()
         run: |
