@@ -462,13 +462,26 @@ test('the action sheet moves one stop at a time and preserves suggestions after 
   const revision = async () =>
     (await (await request.get('/api/saves/' + selected.save)).json()).revision;
   const before = await revision();
-  await swipe(page, grip, 0, 70, { cancel: true });
+  async function dragGrip(dy:number, cancel=false) {
+    // A change in sheet height moves the grip in the bottom-anchored story.
+    // Aim the next contact at its visible position after the previous snap.
+    await panel.locator('.gesture-sheet-body').evaluate(async body => {
+      await Promise.all(body.getAnimations().map(animation => animation.finished));
+    });
+    const hitGrip = grip.evaluate(button => new Promise<boolean>(resolve => {
+      window.addEventListener('pointerdown', event => resolve(event.composedPath().includes(button)),
+        {capture:true, once:true});
+    }));
+    await swipe(page, grip, 0, dy, {cancel});
+    expect(await hitGrip).toBe(true);
+  }
+  await dragGrip(70, true);
   await expect(panel).toHaveAttribute('data-stop', '2');
-  await swipe(page, grip, 0, 64);
+  await dragGrip(64);
   await expect(panel).toHaveAttribute('data-stop', '1');
-  await swipe(page, grip, 0, 64);
+  await dragGrip(64);
   await expect(panel).toHaveAttribute('data-stop', '0');
-  await swipe(page, grip, 0, -80);
+  await dragGrip(-80);
   await expect(panel).toHaveAttribute('data-stop', '1');
   await grip.click();
   await expect(panel).toHaveAttribute('data-stop', '2');
