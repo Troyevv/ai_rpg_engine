@@ -1,0 +1,89 @@
+name: Android menu perimeter proof
+on:
+  push:
+    branches: [feat/274-interface-skins]
+    paths: [.github/workflows/android-edge-proof.yml, .github/qa/android-edge-proof.cjs]
+permissions:
+  contents: read
+jobs:
+  chrome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build both revisions and start offline fixture servers
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+          git worktree add --detach /tmp/pre-edge b5a2dd6
+          ln -s "$PWD/frontend/node_modules" /tmp/pre-edge/frontend/node_modules
+          npm run build --prefix /tmp/pre-edge/frontend
+          E2E_PORT=8217 python tests/e2e_server.py >/tmp/after-server.log 2>&1 &
+          cd /tmp/pre-edge
+          E2E_PORT=8216 python tests/e2e_server.py >/tmp/before-server.log 2>&1 &
+      - name: Start accelerated Android with stock Chrome
+        run: |
+          sudo chmod a+rw /dev/kvm
+          sdkmanager "system-images;android-34;google_apis_playstore;x86_64" "emulator" >/tmp/sdk.log
+          echo no | avdmanager create avd -n edges -k 'system-images;android-34;google_apis_playstore;x86_64' -d pixel_5 -f
+          echo "hw.lcd.width=720" >> ~/.android/avd/edges.avd/config.ini
+          echo "hw.lcd.height=1560" >> ~/.android/avd/edges.avd/config.ini
+          echo "hw.lcd.density=300" >> ~/.android/avd/edges.avd/config.ini
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" -avd edges -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/android.log 2>&1 &
+          timeout 360 bash -c 'adb wait-for-device; until adb shell getprop sys.boot_completed | grep -q 1; do sleep 3; done'
+          adb shell input keyevent KEYCODE_WAKEUP
+          adb shell wm dismiss-keyguard
+          adb shell am set-debug-app --persistent com.android.chrome
+          adb shell "echo 'chrome --disable-fre --no-first-run --disable-sync' > /data/local/tmp/chrome-command-line"
+          adb reverse tcp:8216 tcp:8216
+          adb reverse tcp:8217 tcp:8217
+          adb shell am start -a android.intent.action.VIEW -d http://127.0.0.1:8217/ -p com.android.chrome
+          adb forward tcp:9235 localabstract:chrome_devtools_remote
+          timeout 120 bash -c 'until curl -fsS http://127.0.0.1:9235/json/version | grep -q webSocketDebuggerUrl; do sleep 2; done'
+      - name: Check the four edges with the Android browser
+        working-directory: frontend
+        run: node ../.github/qa/android-edge-proof.cjs
+      - name: Attach full native captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-menu-perimeter
+          path: /tmp/android-proof
+      - name: Export comparison for the pull request
+        run: |
+          python - <<'PY'
+          from PIL import Image,ImageDraw,ImageFont
+          from pathlib import Path
+          import base64
+          root=Path('/tmp/android-proof')
+          sheet=Image.new('RGB',(1312,1505),'#1c2025')
+          d=ImageDraw.Draw(sheet)
+          font=lambda n:ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',n)
+          d.text((12,8),'Chrome на Android 14 · полноэкранное меню',font=font(32),fill='white')
+          for col,version in enumerate(('before','after')):
+           for row,state in enumerate(('top','bottom')):
+            x=col*656+9;y=row*724+61
+            name=('До исправления' if col==0 else 'После исправления')+' · '+('начало меню' if row==0 else 'после прокрутки')
+            d.text((x,y),name,font=font(22),fill='white')
+            raw=Image.open(root/(version+'-'+state+'-device.png')).convert('RGB')
+            raw.thumbnail((321,676))
+            sheet.paste(raw,(x,y+31))
+            web=Image.open(root/(version+'-'+state+'-web.png')).convert('RGB')
+            for label,box,dy in [('Верхний край',(0,0,108,32),95),('Левый край',(0,220,108,252),221),('Правый край',(web.width-108,220,web.width,252),347),('Нижний край',(web.width-108,web.height-32,web.width,web.height),473)]:
+             d.text((x+329,y+dy),label,font=font(17),fill='#ddd')
+             sheet.paste(web.crop(box).resize((302,90),Image.Resampling.NEAREST),(x+329,y+dy+24))
+          path=root/'android-menu-edges.webp';sheet.save(path,quality=91,method=6)
+          data=base64.b64encode(path.read_bytes()).decode()
+          for i in range(0,len(data),24000):print('::notice title=Android proof part '+str(i//24000)+'::'+data[i:i+24000])
+          PY
