@@ -194,6 +194,9 @@
   #root .nr-send>span {display:none}
   #root .nr-stop {min-height:40px;font-size:12px}
   #root .nr-composerhint {display:none}
+  #root .nr-composerhint:has(.nr-recover) {display:flex}
+  #root .nr-composerhint:has(.nr-recover)>:not(.nr-recover) {display:none}
+  #root .nr-recover {min-height:44px}
 }
 @container app (max-width:360px) {
   #root .nr-actorvalue .nr-miniav {display:none}

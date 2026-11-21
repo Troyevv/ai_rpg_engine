@@ -189,6 +189,8 @@ def scripted_stream(**kwargs):
         if not kwargs.get('response_format'):
             yield 'Лада пришла и рассказала об открытой мастерской. Она обещала показать её герою. Следом вошёл Александр Константинович Волконский.'
             return
+    if any('TEST_CONTACT_FREE_WORLD' in message['content'] for message in kwargs['messages']):
+        phone_mode = 'silent'
     if phone_mode in ('group152', 'digital_style'):
         if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
             group_semantic_fail_once=False
@@ -559,7 +561,6 @@ def scripted_stream(**kwargs):
         from test_draft_world import fixture
         candidate=fixture()
         if 'TEST_CONTACT_FREE_WORLD' in full:
-            phone_mode='silent'
             candidate['world'].pop('contacts',None)
             candidate['world']['communication']={'text_message':True,'voice_call':True,'presentation':'phone'}
         if 'TEST_MOTIVATION_OBJECTS' in full:

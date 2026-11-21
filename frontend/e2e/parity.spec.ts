@@ -38,6 +38,7 @@ test("scenario → summary → world → save → start → action → regenerat
   await page
     .getByRole("button", { name: "Сохранить мир", exact: true })
     .click();
+  await expect(page.locator('.library-dialog')).toBeVisible();
   const picker=page.getByRole('combobox',{name:'Выбрать мир'});
   if(await picker.isVisible()){
     await picker.click();

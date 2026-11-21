@@ -10,6 +10,7 @@ for (const mode of ['new_place','unknown_place']) test(`163 ${mode}: exchange, c
  const source=(await state()).physical_choice_source;
  await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
  await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');

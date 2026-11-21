@@ -24,6 +24,7 @@ test('all recipients: no contact, keyboard, send once, history and unanswered ca
   expect(recipient.can_send && recipient.can_call).toBeTruthy();
   await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
+  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
   await phone.getByLabel('Поиск адресата').fill(recipient.subject.name);
   const row=phone.locator('.phone-recipient').filter({hasText:recipient.subject.name});
   await expect(row).toHaveCount(1);
@@ -46,6 +47,7 @@ test('all recipients: no contact, keyboard, send once, history and unanswered ca
   await phone.getByRole('button',{name:'Переписки',exact:true}).click();
   await phone.getByRole('button').filter({hasText:recipient.subject.name}).click();
   await expect(phone.getByText('Первое обращение без контакта.',{exact:true})).toBeVisible();
+  await phone.getByRole('button',{name:'К перепискам',exact:true}).click();
   await phone.getByRole('button',{name:'Контакты',exact:true}).click();
   await phone.getByLabel('Поиск адресата').fill(recipient.subject.name);
   await row.getByRole('button',{name:/Позвонить:/}).click();
@@ -65,6 +67,7 @@ test('directory search, localization and two skins at large text size', async ({
   await page.goto('/');
   await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
+  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
   if(process.env.REACHABILITY_QA) await page.screenshot({path:`/tmp/reachability129-${info.project.name}-parchment.png`});
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.evaluate(()=>{document.documentElement.style.fontSize='200%';});
@@ -91,7 +94,8 @@ test('saved labels share the directory with unsaved NPCs and remain editable', a
   await page.goto('/');
   await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
-  await expect(phone.getByRole('button',{name:'Добавить контакт',exact:true})).toHaveCount(0);
+  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+  await expect(phone.getByRole('button',{name:'Добавить контакт',exact:true})).toBeEnabled();
   await expect(phone.locator('.phone-directory-tabs')).toHaveCount(0);
   await phone.getByLabel('Поиск адресата').fill('Вера');
   await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
@@ -108,5 +112,6 @@ test('saved labels share the directory with unsaved NPCs and remain editable', a
   await expect(phone.locator('.phone-recipient')).toHaveCount(1);
   await page.reload();
   await page.getByRole('button',{name:/^Телефон/}).click();
+  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
   await expect(phone.getByRole('button',{name:'Коллега',exact:true})).toBeVisible();
 });

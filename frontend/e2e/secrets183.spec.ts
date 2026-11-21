@@ -81,6 +81,12 @@ test('spoiler fog disperses over the same card without collapsing the list or co
  expect(slotId).toBeTruthy();
  const card=browser.locator(`[data-secret-id="${slotId}"]`);
  const top=()=>card.evaluate(e=>e.getBoundingClientRect().top);
+ // Finish the dossier's entrance before measuring movement caused by the reveal.
+ await card.evaluate(async e=>{
+  const transitions:Animation[]=[];
+  for(let node:Element|null=e;node;node=node.parentElement)transitions.push(...node.getAnimations());
+  await Promise.allSettled(transitions.filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished));
+ });
  const previousTop=await top(), previousHeight=await card.evaluate(e=>e.getBoundingClientRect().height);
  const delayed=await delaySpoilers(page);
  await toggle.press('Space');await delayed.received;

@@ -24,7 +24,7 @@ for (const width of [1440, 768, 393, 360])
       await request.post("/test/ui-completion-seed?checkpoint=ui-inspector")
     ).json();
     await page.addInitScript(
-      (s) => localStorage.setItem("selection", JSON.stringify(s)),
+      (s) => {localStorage.setItem("selection", JSON.stringify(s));sessionStorage.setItem("dossier-expanded","yes")},
       s,
     );
     const original = await (await request.get(`/api/saves/${s.save}`)).json();

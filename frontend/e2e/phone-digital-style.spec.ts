@@ -23,6 +23,7 @@ for(const group of [false,true]) {
   };
   if(group)await openHistory();
   else {
+   await phone.getByRole('button',{name:'Контакты',exact:true}).click();
    await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
    await phone.getByRole('button',{name:'Написать',exact:true}).click();
   }

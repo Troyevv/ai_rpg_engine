@@ -534,7 +534,7 @@ export function Game({
           </div>
           <div className="nr-composerhint"><span>Ctrl + Enter — отправить · Enter — новая строка</span><span data-counter>{draft ? draft.length : 'Действие определяешь ты'}</span><button className="nr-textsize" aria-label="Настройки отображения" onClick={openDisplay}>Аа</button>
             {!mobile && <button className="story-diagnostics" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</button>}
-            {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
+            {rejected&&<button className="nr-recover" onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
 
           </div></div>
         </div>

@@ -34,7 +34,7 @@ for(const theme of ['graphite','parchment']){
   await expect(toast(page)).toHaveCount(0);
   await page.waitForTimeout(6800); // Exceeds the real delivery interval while covered.
   expect(await acknowledged(page,s,events[0].id)).toBe(false);
-  await page.getByRole('region',{name:'Телефон персонажа'}).getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+  await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
   await expect(toast(page)).toHaveAttribute('data-notice-id',events[0].id);
   // Leaving the app unmounts Game, including the pending presentation queue.
   await page.goto('/offline.html');

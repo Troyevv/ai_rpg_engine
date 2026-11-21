@@ -27,6 +27,7 @@ for(const theme of ['graphite','parchment']){
    writeFileSync(join(evidence,`${prefix}.json`),JSON.stringify({revision:s.revision,clock:s.state.world_clock,plans:s.state.world.scheduled_events,phone:s.state.phone,turns:s.turns.map((t:any)=>({kind:t.kind,presentation:t.presentation,assistant_text:t.assistant_text}))},null,2));
   };
   await page.getByRole('button',{name:/^Телефон/}).click();
+  if(!baseline)await screen.getByRole('button',{name:'Контакты',exact:true}).click();
   await screen.getByRole('button',{name:'Вера работа',exact:true}).click();
   await screen.getByRole('button',{name:'Написать',exact:true}).click();
   await screen.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');
@@ -39,7 +40,7 @@ for(const theme of ['graphite','parchment']){
    await expect.poll(async()=>{const s=await(await request.get(`/api/saves/${selected.save}`)).json();return Object.keys(s.state.world.scheduled_events).length}).toBe(1);
   }
   await capture('message');
-  await screen.getByRole('button',{name:'Свернуть телефон'}).click();
+  await page.getByRole('button',{name:'Свернуть телефон'}).click();
   await nav(page,'Календарь');
   if(!baseline)await expect(page.locator('.save-workspace')).toContainText('Встреча по договорённости');
   await capture('calendar');await page.keyboard.press('Escape');
@@ -49,8 +50,12 @@ for(const theme of ['graphite','parchment']){
    await capture('participant');await page.keyboard.press('Escape');
   }
   await page.getByRole('button',{name:/^Телефон/}).click();
-  await screen.getByRole('button',{name:'Контакты',exact:true}).click();
-  await screen.getByRole('button',{name:'Позвонить',exact:true}).click();
+  if(baseline){
+    await screen.getByRole('button',{name:'Контакты',exact:true}).click();
+    await screen.getByRole('button',{name:'Позвонить',exact:true}).click();
+  } else {
+    await screen.getByRole('button',{name:/^Позвонить:/}).click();
+  }
   if(baseline){
    await expect(screen.getByRole('button',{name:'Перейти к разговору'})).toBeVisible();
    await screen.getByRole('button',{name:'Перейти к разговору'}).click();
@@ -100,6 +105,7 @@ test('122 ten sequential messages leave no phone cards or story mutations',async
  const story=page.locator('.story-scroll');await expect(story.locator('.turn')).toHaveCount(1);
  const text=(await story.locator('.narrative-text').allTextContents()).map(s=>s.trim());
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  for(let i=0;i<10;i++){
   await phone.getByLabel('Сообщение в телефоне').fill(`Сообщение ${i+1}. Подробности разговора.`);

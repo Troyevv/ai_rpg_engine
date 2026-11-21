@@ -102,7 +102,7 @@ test('phone reading queues a disclosure until the phone closes; first dossier vi
  await page.locator('.phone-peek').click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  const committed=page.waitForResponse(r=>r.url().endsWith(`/saves/${s.save}/phone`)&&r.request().method()==='POST');
- await phone.locator('.phone-notifications button').first().click();
+ await phone.locator('button.phone-thread').filter({has:page.getByLabel(/^Непрочитано:/)}).first().click();
  expect((await committed).ok()).toBe(true);
  await expect(phone).toContainText('Я написала роман.');
  await expect(page.locator('.story-toast')).toHaveCount(0);

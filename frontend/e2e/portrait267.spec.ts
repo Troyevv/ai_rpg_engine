@@ -144,7 +144,11 @@ test('workshop fits the cast by age and preserves a revision-21 portrait until c
  expect((await stored()).descriptor).toMatchObject({face_revision:4,nose_shape:'arched',eye_shape:'hooded',lip_shape:'fine'});
  await button('Готово').click();
  const grid=page.locator('.ww-characters-grid');
- await grid.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(img=>(img as HTMLImageElement).decode())));
+ await grid.locator('img').evaluateAll(nodes=>Promise.all(nodes.map(node=>{
+  const image=node as HTMLImageElement;
+  image.loading='eager';
+  return image.decode();
+ })));
  await grid.screenshot({path:info.outputPath('family-cards.png'),scale:'css'});
  const dossier = button('Досье Илья Волков');
  // Saving refreshes the collection. A trial click follows the current card
