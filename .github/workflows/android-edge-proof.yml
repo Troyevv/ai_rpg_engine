@@ -38,10 +38,12 @@ jobs:
           export PATH="$(dirname "$sdk_tool"):$ANDROID_HOME/platform-tools:$PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           sdkmanager "system-images;android-34;google_apis_playstore;x86_64" "emulator" >/tmp/sdk.log
-          echo no | avdmanager create avd -n edges -k 'system-images;android-34;google_apis_playstore;x86_64' -d pixel_5 -f
-          echo "hw.lcd.width=720" >> ~/.android/avd/edges.avd/config.ini
-          echo "hw.lcd.height=1560" >> ~/.android/avd/edges.avd/config.ini
-          echo "hw.lcd.density=300" >> ~/.android/avd/edges.avd/config.ini
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/avds"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | avdmanager create avd -n edges -p "$ANDROID_AVD_HOME/edges.avd" -k 'system-images;android-34;google_apis_playstore;x86_64' -d pixel_5 -f
+          echo "hw.lcd.width=720" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
+          echo "hw.lcd.height=1560" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
+          echo "hw.lcd.density=300" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
           adb start-server
           "$ANDROID_HOME/emulator/emulator" -avd edges -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/android.log 2>&1 &
           timeout 360 bash -c 'adb wait-for-device; until adb shell getprop sys.boot_completed | grep -q 1; do sleep 3; done'
