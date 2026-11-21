@@ -7,6 +7,42 @@ export function choiceText({ action, speech }: Choice) {
   return action + (action.trimEnd().endsWith(':') ? ' ' : ': ') + '«' + speech + '»';
 }
 
+type ColumnPlan = {
+  difference: number; // Left height minus right height, including the space after each card.
+  column: number;
+  previous: ColumnPlan | null;
+};
+
+function balancedColumns(heights: number[], gap: number) {
+  let plans: ColumnPlan[] = [{ difference: 0, column: 0, previous: null }];
+  for (const height of heights) {
+    const next = new Map<number, ColumnPlan>();
+    for (const plan of plans) {
+      // Prefer the earlier visual position when equally balanced layouts exist.
+      const shorter = plan.difference <= 0 ? 0 : 1;
+      for (const column of [shorter, 1 - shorter]) {
+        const difference = plan.difference + (column === 0 ? 1 : -1) * (height + gap);
+        const imbalance = Math.abs(difference);
+        // Mirror-image and equal differences have the same possible final heights.
+        if (!next.has(imbalance)) next.set(imbalance, { difference, column, previous: plan });
+      }
+    }
+    plans = Array.from(next.values());
+    // Ten cards have at most 512 distinct partitions. Bound work for oversized saved menus.
+    if (plans.length > 512) {
+      plans.sort((a, b) => Math.abs(a.difference) - Math.abs(b.difference));
+      plans.length = 512;
+    }
+  }
+  let best = plans.reduce((a, b) => Math.abs(a.difference) <= Math.abs(b.difference) ? a : b);
+  const columns = [];
+  while (best.previous) {
+    columns.push(best.column);
+    best = best.previous;
+  }
+  return columns.reverse();
+}
+
 export function NarrativeChoiceList({ ref, children }: {
   ref: RefObject<HTMLDivElement | null>;
   children: ReactElement[];
@@ -22,11 +58,12 @@ export function NarrativeChoiceList({ ref, children }: {
       if (style.gridTemplateColumns.split(' ').length !== 2) return;
       const gap = parseFloat(style.rowGap);
       const heights = cards.map(card => card.getBoundingClientRect().height);
+      const columns = balancedColumns(heights, gap);
       const nextTop = [0, 0];
 
-      // Place in reading order. Margins in one grid row give the list its natural height.
+      // Position the existing buttons without changing screen-reader or keyboard order.
       cards.forEach((card, i) => {
-        const column = nextTop[0] <= nextTop[1] ? 0 : 1;
+        const column = columns[i];
         card.style.setProperty('--choice-column', String(column + 1));
         card.style.setProperty('--choice-offset', nextTop[column] + 'px');
         nextTop[column] += heights[i] + gap;

@@ -1,5 +1,8 @@
 import {test,expect} from '@playwright/test';
 import {scrollByTouch} from './touch';
+import romance from '../../tests/fixtures/choice_speech/romance.json' with {type: 'json'};
+import ensemble from '../../tests/fixtures/choice_speech/ensemble.json' with {type: 'json'};
+import silent from '../../tests/fixtures/choice_speech/silent.json' with {type: 'json'};
 
 test('choice proposals survive reload without committing action; free input remains available',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -180,59 +183,76 @@ test('proposal types, confirmation, exact editable speech and a single pending s
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
 });
 
-test('unequal action cards fill the first available column in keyboard order', async ({page, request}, info) => {
-  test.skip(info.project.name !== 'desktop', 'Exercises both layouts by resizing the same game');
-  const choices = [
-    {action: 'Расспросить Соню о письме', speech: 'Ты сказала, что нашла его утром. Вспомни, пожалуйста, где именно лежал конверт? Если кто-то оставил его на подоконнике до дождя, на бумаге должны были остаться следы.'},
-    {action: 'Осмотреть конверт.', speech: ''},
-    {action: 'Подойти к окну.', speech: ''},
-    {action: 'Сверить дату с записью в календаре и проверить, кто в тот вечер дежурил у входа в старую библиотеку.', speech: ''},
-    {action: 'Попросить показать обратный адрес', speech: 'Можно взглянуть? Кажется, я узнаю этот почерк.'},
-    {action: 'Открыть письмо.', speech: ''},
-  ];
-  const selection = await (await request.post('/test/choices-seed')).json();
-  const path = '/api/saves/' + selection.save;
-  const save = await (await request.get(path)).json();
-  save.turns.find((t: {id: number}) => t.id === save.physical_choice_source.turn_id).choices = choices;
-  await page.route('**' + path, route => route.fulfill({json: save}));
-  await page.addInitScript(s => localStorage.setItem('selection', JSON.stringify(s)), selection);
-  await page.emulateMedia({reducedMotion: 'reduce'});
-  await page.goto('/');
-  const cards = page.locator('.choices button');
-  await expect(cards.locator('strong')).toHaveText(choices.map(c => c.action));
+// Recorded Narrative responses with both silent actions and direct speech.
+const menus = [
+  [romance.actions[5], romance.actions[3], romance.actions[0]],
+  ensemble.actions.slice(0, 5),
+  romance.actions,
+  [...silent.actions.slice(0, 4), ...ensemble.actions],
+];
 
-  for (const width of [1440, 1024, 850, 390, 1440]) {
-    await page.setViewportSize({width, height: 900});
-    const columns = width > 850 ? 2 : 1;
-    await expect(async () => {
-      const {list, boxes, gap} = await cards.evaluateAll(nodes => {
-        const container = nodes[0].parentElement!;
-        return {
-          list: container.getBoundingClientRect().toJSON(),
-          boxes: nodes.map(n => n.getBoundingClientRect().toJSON()),
-          gap: parseFloat(getComputedStyle(container).rowGap),
-        };
-      });
-      const nextTop = Array<number>(columns).fill(list.top);
-      const cardWidth = (list.width - (columns - 1) * gap) / columns;
-      expect(boxes[0].height).toBeGreaterThan(boxes[1].height + gap);
-      for (const box of boxes) {
-        const column = nextTop.indexOf(Math.min(...nextTop));
-        expect(box.width).toBeCloseTo(cardWidth, 1);
-        expect(box.left).toBeCloseTo(list.left + column * (cardWidth + gap), 1);
-        expect(box.top).toBeCloseTo(nextTop[column], 1);
-        nextTop[column] = box.bottom + gap;
-      }
-      expect(list.bottom).toBeCloseTo(Math.max(...nextTop) - gap, 1);
-    }).toPass({timeout: 5000});
-  }
+for (const actions of menus) {
+  test(`balances ${actions.length} measured choices and keeps their accessible order`, async ({page, request}, info) => {
+    test.skip(info.project.name !== 'desktop', 'Resizes the same list across both layouts');
+    const selection = await (await request.post('/test/choices-seed')).json();
+    const path = '/api/saves/' + selection.save;
+    const save = await (await request.get(path)).json();
+    const choices = actions.map(a => ({action: a.text, speech: a.speech || ''}));
+    save.turns.find((t: {id: number}) => t.id === save.physical_choice_source.turn_id).choices = choices;
+    await page.route('**' + path, route => route.fulfill({json: save}));
+    await page.addInitScript(s => localStorage.setItem('selection', JSON.stringify(s)), selection);
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await page.goto('/');
+    const cards = page.locator('.choices').getByRole('button');
+    await expect(cards.locator('strong')).toHaveText(actions.map(a => a.text));
+    await expect(cards.locator('.choice-speech')).toHaveText(actions.flatMap(a => a.speech ? ['«' + a.speech + '»'] : []));
 
-  await cards.first().focus();
-  for (let i = 1; i < choices.length; i++) {
-    await page.keyboard.press('Tab');
-    await expect(cards.nth(i)).toBeFocused();
-  }
-  await page.keyboard.press('Enter');
-  await expect(cards.last()).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue(choices.at(-1)!.action);
-});
+    for (const width of [1440, 1024, 850, 390, 1440]) {
+      await page.setViewportSize({width, height: 900});
+      const columns = width > 850 ? 2 : 1;
+      await expect(async () => {
+        const {list, boxes, gap, clipped} = await cards.evaluateAll(nodes => {
+          const container = nodes[0].parentElement!;
+          return {
+            list: container.getBoundingClientRect().toJSON(),
+            boxes: nodes.map(n => n.getBoundingClientRect().toJSON()),
+            gap: parseFloat(getComputedStyle(container).rowGap),
+            clipped: nodes.some(n => n.scrollHeight > n.clientHeight || n.scrollWidth > n.clientWidth),
+          };
+        });
+        expect(clipped).toBe(false);
+        const nextTop = Array<number>(columns).fill(list.top);
+        const cardWidth = (list.width - (columns - 1) * gap) / columns;
+        for (const box of boxes) {
+          const column = Math.round((box.left - list.left) / (cardWidth + gap));
+          expect(box.width).toBeCloseTo(cardWidth, 1);
+          expect(box.left).toBeCloseTo(list.left + column * (cardWidth + gap), 1);
+          expect(box.top).toBeCloseTo(nextTop[column], 1);
+          nextTop[column] = box.bottom + gap;
+        }
+        expect(list.bottom).toBeCloseTo(Math.max(...nextTop) - gap, 1);
+        if (columns === 2) {
+          // Independent oracle: enumerate every partition of the actual browser heights.
+          let minimum = Infinity;
+          for (let mask = 1; mask < (1 << boxes.length) - 1; mask++) {
+            const difference = boxes.reduce((sum, box, i) =>
+              sum + ((mask & (1 << i)) ? 1 : -1) * (box.height + gap), 0);
+            minimum = Math.min(minimum, Math.abs(difference));
+          }
+          expect(Math.abs(nextTop[0] - nextTop[1])).toBeCloseTo(minimum, 1);
+        }
+      }).toPass({timeout: 5000});
+    }
+
+    await cards.first().focus();
+    for (let i = 0; i < actions.length; i++) {
+      if (i) await page.keyboard.press('Tab');
+      await expect(cards.nth(i)).toBeFocused();
+      await expect(cards.nth(i)).toHaveAccessibleName(actions[i].text + (actions[i].speech ? ' «' + actions[i].speech + '»' : ''));
+    }
+    await page.keyboard.press('Enter');
+    await expect(cards.last()).toHaveAttribute('aria-pressed', 'true');
+    const last = actions.at(-1)!;
+    await expect(page.getByLabel('Своё действие или реплика')).toHaveValue(last.text + (last.speech ? ': «' + last.speech + '»' : ''));
+  });
+}
