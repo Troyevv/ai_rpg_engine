@@ -1,46 +1,38 @@
-/* A preset composes a layout of real content slots with a material and palette.
-   The theme picker establishes the same scope on each sample as on the app. */
+/* Layout recipes own composition, silhouette and relief. Existing components
+   own their foregrounds, surfaces and interaction-state colors. */
 [data-layout] {
   --slots: "mark copy";
   --tracks: auto minmax(0,1fr);
   --caption: none;
   --stamp-size: 1.8rem;
   --stamp-shape: var(--radius-sm);
-  --stamp-face: var(--accent-soft);
-  --stamp-ink: var(--accent);
-  --plate: var(--surface-1);
   --edge: 0 1px 0 var(--border);
-  --rule: 1px solid var(--border);
+  --rule-width: 1px;
+  --rule-style: solid;
   --panel-shape: var(--radius-lg);
   --key-shape: var(--radius-sm);
-  --bar: var(--surface-1);
-  --selected-edge: inset 3px 0 var(--accent);
   --heading-direction: row;
   --heading-align: center;
   --message-shape: var(--radius-md);
   --mark-align: start;
   --nav-align: start;
   --entry-offset: 3px;
-  --heading-ink: var(--text);
 }
 [data-layout=signal] {
   --slots: "copy mark";
   --tracks: minmax(0,1fr) auto;
   --caption: block;
   --stamp-shape: 0;
-  --edge: inset 3px 0 var(--accent), inset -1px -3px var(--skin-secondary);
+  --edge: inset 3px 0 var(--border-strong), inset -1px -3px var(--border-strong);
   --panel-shape: 0 14px 0 0;
-  --bar: linear-gradient(105deg,var(--accent-soft),var(--bg) 65%);
-  --selected-edge: inset 5px 0 var(--accent), inset -2px 0 var(--skin-secondary);
   --entry-offset: -4px;
 }
 [data-layout=instrument] {
   --stamp-size: 2.6rem;
   --stamp-shape: 50%;
-  --stamp-face: var(--bg);
-  --rule: 2px solid var(--border);
+  --rule-width: 2px;
+  --rule-style: solid;
   --edge: inset 0 2px var(--border-strong), inset 0 -3px var(--bg);
-  --bar: var(--skin-material),var(--surface-1);
   --caption: block;
   --mark-align: center;
 }
@@ -50,13 +42,10 @@
   --mark-align: center;
   --stamp-shape: 2px 2px 50% 50%;
   --stamp-size: 2.2rem;
-  --stamp-face: var(--accent);
-  --stamp-ink: var(--bg);
-  --rule: 3px double var(--border-strong);
-  --bar: var(--skin-material),var(--surface-1);
+  --rule-width: 3px;
+  --rule-style: double;
   --edge: inset 0 0 0 3px var(--surface-1), inset 0 0 0 4px var(--border);
   --nav-align: center;
-  --heading-ink: var(--accent);
 }
 [data-layout=seal] {
   --slots: "copy mark";
@@ -65,19 +54,17 @@
   --stamp-shape: 50%;
   --mark-align: center;
   --edge: inset -1px -2px var(--border-strong);
-  --bar: var(--skin-material),var(--surface-1);
   --panel-shape: 24px 6px;
   --message-shape: 17px 4px;
 }
 [data-layout=margin] {
   --stamp-size: 1.65rem;
   --stamp-shape: 0;
-  --stamp-face: transparent;
   --panel-shape: 0;
   --caption: block;
-  --rule: 1px solid var(--border-strong);
+  --rule-width: 1px;
+  --rule-style: solid;
   --edge: 2px 3px var(--surface-2), 3px 4px var(--border-strong);
-  --bar: linear-gradient(0deg,var(--accent-soft),var(--surface-1) 75%);
   --heading-direction: column;
   --heading-align: start;
 }
@@ -86,42 +73,35 @@
   --stamp-shape: 50%;
   --stamp-size: 1.7rem;
   --mark-align: center;
-  --edge: inset 0 -2px var(--accent);
-  --bar: var(--skin-material),var(--surface-1);
+  --edge: inset 0 -2px var(--border-strong);
 }
 [data-layout=bill] {
   --slots: "mark" "copy";
   --tracks: minmax(0,1fr);
-  --stamp-ink: var(--bg);
-  --stamp-face: var(--accent);
   --stamp-shape: 0;
   --stamp-size: 1.6rem;
   --caption: block;
   --edge: 4px 4px var(--bg), 5px 5px var(--border-strong);
-  --bar: var(--skin-material),var(--surface-1);
-  --rule: 2px solid var(--border-strong);
-  --heading-ink: var(--accent);
+  --rule-width: 2px;
+  --rule-style: solid;
 }
 [data-layout=index] {
   --slots: "mark" "copy";
   --tracks: minmax(0,1fr);
   --caption: block;
   --stamp-shape: 0;
-  --rule: 1px solid var(--border-strong);
+  --rule-width: 1px;
+  --rule-style: solid;
   --edge: 0 3px var(--bg),0 4px var(--border);
-  --bar: linear-gradient(110deg,var(--surface-3),var(--bg));
   --heading-direction: column;
   --heading-align: start;
 }
 [data-layout=command] {
-  --bar: var(--bg);
   --stamp-size: 1.4rem;
-  --stamp-face: transparent;
-  --plate: var(--bg);
   --panel-shape: 0;
   --edge: inset 2px 0 var(--border-strong);
-  --rule: 1px dashed var(--border-strong);
-  --selected-edge: inset 6px 0 var(--accent);
+  --rule-width: 1px;
+  --rule-style: dashed;
   --entry-offset: 0px;
 }
 [data-layout=key] {
@@ -129,88 +109,71 @@
   --tracks: minmax(0,1fr) auto;
   --caption: block;
   --stamp-size: 2.1rem;
-  --stamp-face: var(--bg);
   --edge: inset 0 2px var(--border-strong),0 4px var(--bg),0 5px var(--border-strong);
-  --bar: linear-gradient(var(--surface-3),var(--surface-1));
-  --rule: 2px solid var(--border);
+  --rule-width: 2px;
+  --rule-style: solid;
   --mark-align: center;
 }
 
 /* Materials within a layout determine the instrument, binding or type of seal. */
 [data-theme=graphite] {
-  --plate: linear-gradient(115deg,var(--surface-2),var(--surface-1));
   --stamp-shape: 9px;
-  --edge: 0 2px 6px #0002;
+  --edge: 0 2px 6px var(--shadow-color);
 }
 [data-theme=cyberpunk] {
-  --plate: linear-gradient(125deg,#132c38,var(--surface-1) 58%);
   --key-shape: 0 9px 0 5px;
   --message-shape: 0 12px 0 9px;
 }
 [data-theme=industrial] {
   --stamp-shape: 4px;
-  --plate: linear-gradient(115deg,#394147,var(--surface-1) 55%);
-  --selected-edge: inset 0 -3px var(--accent);
 }
 [data-theme=space] {
   --panel-shape: 18px 5px 18px 5px;
   --key-shape: 16px;
-  --edge: inset 4px 0 #8199b7, inset 6px 0 var(--bg);
-  --plate: radial-gradient(ellipse at top left,#293e58,var(--surface-1) 75%);
-  --rule: 1px solid var(--border);
+  --edge: inset 4px 0 var(--border-strong), inset 6px 0 var(--bg);
+  --rule-width: 1px;
+  --rule-style: solid;
   --message-shape: 18px 18px 18px 4px;
 }
 [data-theme=medieval] {
   --panel-shape: 4px;
-  --plate: linear-gradient(90deg,#33271b,var(--surface-1) 45%,#382a1e);
   --key-shape: 2px 2px 8px 8px;
 }
 [data-theme=arcane] {
-  --plate: radial-gradient(ellipse at right,#443056,var(--surface-1) 75%);
   --heading-direction: row-reverse;
-  --rule: 3px double var(--border);
+  --rule-width: 3px;
+  --rule-style: double;
 }
 [data-theme=gothic] {
   --stamp-shape: 70% 70% 2px 2px;
   --panel-shape: 30px 30px 3px 3px;
-  --plate: linear-gradient(0deg,var(--surface-1) 45%,#38202d);
   --key-shape: 15px 15px 2px 2px;
 }
 [data-theme=parchment] {
-  --plate: linear-gradient(90deg,#e4d7be 2px,#f9f2e4 3px);
   --stamp-shape: 0 0 8px 0;
-  --stamp-face: #e3d1ac;
   --key-shape: 1px;
 }
 [data-theme=urban] {
-  --plate: linear-gradient(90deg,transparent 26px,#78acb65c 26px 28px,transparent 28px),var(--surface-1);
   --panel-shape: 3px 14px 14px 3px;
-  --selected-edge: inset 3px 0 var(--accent),inset 0 -1px var(--border);
 }
 [data-theme=street] {
-  --plate: linear-gradient(172deg,#393740 0 18%,var(--surface-1) 18%);
   --stamp-shape: 0 6px 0 1px;
   --panel-shape: 1px;
   --key-shape: 0;
 }
 [data-theme=noir] {
-  --stamp-ink: #212121;
-  --stamp-face: #ddd;
-  --plate: linear-gradient(#323232 2.4rem,var(--surface-1) 2.4rem);
   --key-shape: 0;
-  --heading-ink: var(--text);
 }
 [data-theme=terminal] {
-  --heading-ink: var(--accent);
   --key-shape: 0;
   --message-shape: 0;
 }
 [data-theme=post-apocalypse] {
   --slots: "copy mark";
   --tracks: minmax(0,1fr) auto;
-  --plate: linear-gradient(110deg,#40362a 0 6px,var(--surface-1) 6px);
-  --rule: 1px dashed #ab9377;
-  --edge: inset 0 -3px #604836,2px 2px #15130e;
+  --rule-width: 1px;
+  --rule-style: dashed;
+  --edge: inset 0 -3px var(--border),2px 2px var(--bg);
   --stamp-shape: 2px 7px;
   --key-shape: 2px;
 }
@@ -218,21 +181,16 @@
   --stamp-shape: 48% 68% 48% 64%;
   --panel-shape: 10px 32px 18px 26px;
   --key-shape: 18px 12px;
-  --plate: radial-gradient(ellipse at right,#2a4b48,var(--surface-1) 75%);
   --message-shape: 20px 10px;
 }
 [data-theme=occult] {
   --slots: "copy mark";
   --tracks: minmax(0,1fr) auto;
   --stamp-shape: 50%;
-  --stamp-face: #472d3b;
   --panel-shape: 3px 17px 3px 3px;
-  --plate: linear-gradient(90deg,var(--surface-1) 85%,#37242e);
-  --heading-ink: #e6c3c4;
   --key-shape: 3px 12px;
 }
 [data-theme=retro] {
-  --plate: linear-gradient(165deg,#514236,var(--surface-1) 80%);
   --panel-shape: 12px;
   --stamp-shape: 5px 5px 9px 9px;
 }
@@ -241,11 +199,7 @@
   --tracks: minmax(0,1fr) auto;
   --panel-shape: 18px;
   --key-shape: 24px;
-  --edge: inset 0 -2px #cd8cd4, 0 2px 9px #67c9d51a;
-  --plate: linear-gradient(110deg,#202639,#152936);
-  --bar: linear-gradient(100deg,#182d38,#231f35);
-  --stamp-face: #2a2540;
-  --stamp-ink: #f1b4e9;
+  --edge: inset 0 -2px var(--border-strong), 0 2px 9px var(--shadow-color);
 }
 
 .skin-heading {
@@ -256,17 +210,18 @@
   min-width:0;
 }
 .skin-heading > div, .skin-copy {min-width:0;overflow-wrap:anywhere}
+/* The existing choice marker and phone glyph retain their component colors. */
 #root .skin-stamp {
   display:inline-grid;
   flex:none;
   place-items:center;
   width:var(--stamp-size);
   height:var(--stamp-size);
-  border:1px solid color-mix(in srgb,var(--stamp-ink),transparent 64%);
+  border-width:1px;
+  border-style:solid;
   border-radius:var(--stamp-shape);
-  background:var(--stamp-face);
-  color:var(--stamp-ink);
 }
+#root .skin-stamp:not(.choice-mark) {border-color:var(--border)}
 #root .skin-stamp svg {width:58%;height:58%;stroke-width:1.65}
 .skin-heading > .skin-stamp {--stamp-size:2.85rem}
 #root .hero-copy > .skin-stamp {--stamp-size:clamp(2.6rem,5vw,4.8rem)}
@@ -279,13 +234,12 @@ html:is([data-skin=wood],[data-skin=paper],[data-skin=ornate],[data-theme=occult
 html[data-layout=command] {--reader-type:ui-monospace}
 html[data-layout] #root :is(.nr-context h1,.phone-page-heading h2,.call-scene-header h2,.inspector-page-heading h1,.dialog-title,.atelier-hero h1,.ww-hero h1) {
   font-family:var(--skin-heading);
-  color:var(--heading-ink);
   letter-spacing:var(--skin-tracking);
 }
 #root .nr-context {
   padding:clamp(12px,1.5vw,22px);
-  background:var(--plate);
-  border:var(--rule);
+  border-color:var(--v3-line,#2b3035);
+  border-width:var(--rule-width);border-style:var(--rule-style);
   box-shadow:var(--edge);
   border-radius:var(--panel-shape);
 }
@@ -296,99 +250,66 @@ html[data-layout] #root :is(.nr-context h1,.phone-page-heading h2,.call-scene-he
   grid-template-areas:var(--slots);
   grid-template-columns:var(--tracks);
   align-content:start;
-  background:var(--plate);
-  border:var(--rule);
+  border-width:var(--rule-width);border-style:var(--rule-style);
   border-radius:var(--panel-shape);
   box-shadow:var(--edge);
 }
 #root :is(.theme-options > button,.narrative-choice-card) > .skin-stamp {grid-area:mark;align-self:var(--mark-align)}
 #root :is(.theme-options > button,.narrative-choice-card) > .skin-copy {grid-area:copy}
 #root .theme-options > button {gap:10px;padding:14px}
-#root .theme-options strong {font-family:var(--skin-heading);color:var(--text);line-height:1.35}
-#root .theme-options small {color:var(--text);font-family:var(--ui-font)}
+#root .theme-options .skin-stamp {color:var(--accent);border-color:var(--border-strong);box-shadow:inset 0 -2px var(--text-muted)}
+#root .theme-options strong {font-family:var(--skin-heading);line-height:1.35}
+#root .theme-options small {font-family:var(--ui-font)}
 #root .choice-kind {
   display:var(--caption);
-  color:var(--accent);
+  color:var(--text-muted);
   font:600 .65rem/1.4 var(--ui-font);
   letter-spacing:.09em;
   text-transform:uppercase;
 }
 #root .choice-action {font-family:var(--skin-heading);font-weight:600}
-#root .choice-speech {font-family:var(--reader-type,var(--story-font));border-inline-start:var(--rule)}
-#root :is(.theme-options>button,.narrative-choice-card):enabled:hover {
-  border-color:var(--accent);
-  background-color:var(--surface-2);
-}
-#root :is(.choices,.call-suggestions) > .narrative-choice-card[aria-pressed=true] {
-  background:var(--accent-soft);
-  border-color:var(--accent);
-  box-shadow:var(--selected-edge);
-}
+#root .choice-speech {font-family:var(--reader-type,var(--story-font));border-inline-start-width:var(--rule-width);border-inline-start-style:var(--rule-style)}
 #root .narrative-choice-card:active:enabled {translate:0 1px}
-#root .narrative-choice-card:disabled:not([aria-busy=true]) {opacity:.6}
-#root .narrative-choice-card[aria-busy=true] {opacity:1;cursor:progress}
-#root .theme-options>button:focus-visible,
-#root .narrative-choice-card:focus-visible {outline:2px solid var(--accent);outline-offset:-3px}
-
 html[data-layout] #root :is(.nr-topbar,.ww-topbar,.inspector-topbar,.mobile-menu-brand,.ph-topbar,.call-scene-header) {
-  background:var(--bar);
-  border-block-end:var(--rule);
+  border-block-end-width:var(--rule-width);
+  border-block-end-style:var(--rule-style);
 }
 #root :is(.ww-panel,.ww-hero,.ww-record-card,.ww-character-card,.inspector-card,.inspector-knowledge-card,.atelier-scope .paper,.fl-card,.mobile-menu-card,.settings-scroll fieldset) {
-  background:var(--plate);
-  border:var(--rule);
+  border-width:var(--rule-width);border-style:var(--rule-style);
   border-radius:var(--panel-shape);
   box-shadow:var(--edge);
 }
 #root :is(.inspector-card-heading,.atelier-scope .card-head,.dialog-header) {
-  border-block-end:var(--rule);
+  border-block-end:var(--rule-width) var(--rule-style) var(--border);
   padding-block-end:.7rem;
 }
 #root :is(.nav-links,.ww-sidebar nav,.ww-menu-dialog nav) button {
   border-radius:var(--key-shape);
   justify-content:var(--nav-align);
 }
-#root :is(.nav-links,.ww-sidebar nav,.ww-menu-dialog nav,.section-tabs,.phone-bottom) :is(.current,[aria-current=page],[aria-pressed=true],[aria-selected=true]) {
-  box-shadow:var(--selected-edge);
-  background:var(--accent-soft);
-  color:var(--accent);
-}
 #root .narrative-shell .nav-rail,
-#root .ww-sidebar {background-color:var(--surface-1);border-inline-end:var(--rule)}
+#root .ww-sidebar {border-inline-end-width:var(--rule-width);border-inline-end-style:var(--rule-style)}
 #root :is(.nr-rpentry,.nr-managemententry,.nr-send,.ww-primary,.ww-soft,.ui-button,.choice-trigger,.atelier-scope .primary,.phone-list-actions button,.section-tabs button,.phone-bottom button) {
   border-radius:var(--key-shape);
 }
 #root :is(.nr-composer,.atelier-editor,.settings-scroll input:not([type=checkbox]):not([type=range]),.atelier-scope .name-input,.phone-body .phone-search,.call-scene textarea) {
-  border:var(--rule);
+  border-width:var(--rule-width);border-style:var(--rule-style);
   border-radius:var(--key-shape);
-  background-color:var(--skin-input-bg);
 }
-#root :is(.nr-composer,.atelier-editor):focus-within {outline:2px solid var(--accent);outline-offset:-2px}
-#root .nr-rpentry:hover {color:var(--text)}
 #root .phone-thread {
-  background:var(--plate);
-  border:var(--rule);
+  border-width:var(--rule-width);border-style:var(--rule-style);
   border-radius:var(--panel-shape);
   box-shadow:var(--edge);
   margin-block-end:6px;
 }
-#root .phone-thread:hover {border-color:var(--accent)}
-#root .phone-message {border:var(--rule);border-radius:var(--message-shape);background:var(--plate)}
-#root .phone-message.outgoing {background:var(--accent-soft);border-inline-end:3px solid var(--accent)}
-#root .phone-message footer {border-block-start:1px solid var(--border);padding-top:4px}
-#root .phone-day time, #root .ph-demo {background:var(--accent-soft);color:var(--accent);border-radius:var(--key-shape);padding:3px 8px}
-#root :is(.dialog-content,.runtime-notice),html[data-layout] [data-sonner-toast].story-toast {
-  border:var(--rule);
-  background-color:var(--surface-elevated);
-  box-shadow:var(--edge),var(--shadow-dialog);
+#root .phone-message {border:var(--rule-width) var(--rule-style) transparent;border-radius:var(--message-shape)}
+#root .phone-message.outgoing {border-inline-end-width:3px}
+#root .phone-day time, #root .ph-demo {border-radius:var(--key-shape);padding:3px 8px}
+#root :is(.dialog-content,.runtime-notice), html[data-layout] [data-sonner-toast].story-toast {
+  border-width:var(--rule-width);
+  border-style:var(--rule-style);
 }
-html[data-layout] [data-sonner-toast].story-toast {
-  background:var(--plate);color:var(--text);border-radius:var(--panel-shape);
-  border-inline-start:4px solid var(--notice-ink,var(--accent));
-}
-.story-toast[data-type=error] {--notice-ink:var(--danger)}
-#root [aria-invalid=true],#root .atelier-scope .param.bad {border-color:var(--danger)}
-#root :is(.settings-scroll,.atelier-scope) input:is([type=checkbox],[type=range]) {accent-color:var(--accent)}
+html[data-layout] [data-sonner-toast].story-toast {border-radius:var(--panel-shape)}
 
 @media(prefers-reduced-motion:no-preference) {
   html:not([data-no-motion]) #root .narrative-choice-card {animation:skin-card-arrive min(var(--skin-motion),250ms) ease-out}
@@ -411,8 +332,6 @@ html[data-layout] [data-sonner-toast].story-toast {
 /* Section labels, row metadata and message transcripts share the same grammar.
    Keep the order of focusable rows independent of the position of their metadata. */
 [data-layout] {
-  --label-face:transparent;
-  --label-ink:var(--accent);
   --label-inset:0;
   --label-form:var(--key-shape);
   --thread-columns:44px minmax(0,1fr) auto;
@@ -421,13 +340,9 @@ html[data-layout] [data-sonner-toast].story-toast {
   --meta-justify:end;
   --meta-rule:1px solid var(--border);
   --section-direction:row;
-  --time-face:var(--accent-soft);
   --time-side:0;
-  --tab-style:var(--rule);
 }
 [data-layout=signal], [data-layout=bill], [data-layout=index] {
-  --label-face:var(--accent);
-  --label-ink:var(--bg);
   --label-inset:.22em .65em;
   --thread-slots:"portrait name" "portrait meta";
   --thread-columns:44px minmax(0,1fr);
@@ -435,28 +350,22 @@ html[data-layout] [data-sonner-toast].story-toast {
   --bubble-slots:"sender" "meta" "body" "read";
 }
 [data-layout=signal] {--section-direction:row-reverse;--label-form:0 7px 0 0}
-[data-layout=index] {--label-form:4px 7px 0 0;--time-side:3px double var(--border-strong);--time-face:transparent}
+[data-layout=index] {--label-form:4px 7px 0 0;--time-side:3px double var(--border-strong);}
 [data-layout=instrument], [data-layout=key] {
-  --label-face:var(--bg);
-  --label-ink:var(--accent);
   --label-inset:.32em .7em;
   --thread-slots:"meta portrait name";
   --thread-columns:auto 44px minmax(0,1fr);
-  --time-side:3px solid var(--accent);
-  --time-face:var(--bg);
+  --time-side:3px solid var(--border);
 }
 [data-layout=crest] {
   --label-inset:.2em .7em;
-  --label-face:var(--accent-soft);
   --label-form:2px 2px 7px 7px;
   --thread-slots:"portrait name" "portrait meta";
   --thread-columns:44px minmax(0,1fr);
   --meta-justify:start;
-  --tab-style:3px double var(--border-strong);
 }
 [data-layout=margin], [data-layout=command] {
-  --time-face:transparent;
-  --time-side:2px solid var(--accent);
+  --time-side:2px solid var(--border);
   --thread-slots:"meta name" "portrait name";
   --thread-columns:3.3rem minmax(0,1fr);
   --meta-justify:start;
@@ -469,39 +378,31 @@ html[data-layout] [data-sonner-toast].story-toast {
   --thread-columns:minmax(0,1fr) 44px;
   --meta-justify:start;
   --label-inset:.25em .75em;
-  --label-face:var(--accent-soft);
   --label-form:20px;
 }
 html[data-layout] #root :is(.inspector-card-heading,.atelier-param) {flex-direction:var(--section-direction)}
 #root .call-scene-header > div {flex:1;min-width:0;overflow-wrap:anywhere}
-#root .call-scene .call-end {color:#ffe3e1}
 #root .call-scene-text .player-action {
-  border:var(--rule);border-radius:var(--panel-shape);
-  background:var(--plate);box-shadow:var(--edge)
+  border:var(--rule-width) var(--rule-style) transparent;border-radius:var(--panel-shape);
+  box-shadow:var(--edge)
 }
 #root .call-scene-text :is(.player-action .eyebrow,.call-speaker) {
-  display:table;color:var(--label-ink);background:var(--label-face);
+  display:table;
   border-radius:var(--label-form);padding:var(--label-inset)
 }
 html[data-layout] #root :is(.inspector-nav-group>p,.inspector-page-heading .eyebrow,.ww-sidebar nav small,.choice-kind,.phone-section-label,.phone-message-sender,.settings-scroll legend,.inspector-card-heading h2,.atelier-scope .overline) {
   width:fit-content;
   max-width:100%;
-  color:var(--label-ink);
-  background:var(--label-face);
   padding:var(--label-inset);
   border-radius:var(--label-form);
 }
 #root :is(.atelier-scope .section-icon,.atelier-scope .icon-tile,.mobile-menu-icon) {
-  color:var(--stamp-ink);
-  background:var(--stamp-face);
   border-radius:var(--stamp-shape);
 }
-#root .ph-owner .skin-stamp svg {color:inherit}
 #root .inspector-hero-time {
   padding:.65rem 1rem;
   border-inline-start:var(--time-side);
   border-radius:var(--key-shape);
-  background:var(--time-face);
   font-variant-numeric:tabular-nums;
 }
 #root .phone-thread {grid-template-columns:var(--thread-columns);grid-template-areas:var(--thread-slots);row-gap:3px}
@@ -513,35 +414,23 @@ html[data-layout] #root :is(.inspector-nav-group>p,.inspector-page-heading .eyeb
 #root .phone-message p {grid-area:body}
 #root .phone-message button {grid-area:read;justify-self:start}
 #root .phone-message footer {grid-area:meta}
-#root .phone-message footer {border-block-start:var(--meta-rule);justify-content:var(--meta-justify)}
+#root .phone-message footer {border-block-start:var(--meta-rule);padding-top:4px;justify-content:var(--meta-justify)}
 html:is([data-layout=margin],[data-layout=index],[data-layout=command],[data-layout=bill],[data-layout=signal]) #root .phone-message footer {
   border-block-start:0;border-block-end:var(--meta-rule);padding:0 0 .25rem;margin:0
 }
 #root .phone-device {font-family:var(--ui-font)}
 #root .call-scene-text {font-family:var(--reader-type,var(--ui-font))}
+/* Native controls continue to paint checked, disabled and forced-color states. */
 #root .settings-scroll .check input[type=checkbox] {
-  appearance:none;
-  display:inline-grid;
-  place-content:center;
   flex:none;
-  width:1.25rem;height:1.25rem;
-  border:1px solid var(--border-strong);
-  border-radius:var(--key-shape);
-  background:var(--skin-input-bg);
-  vertical-align:middle;
-}
-#root .settings-scroll .check input[type=checkbox]:checked {
-  background:var(--accent);border-color:var(--accent);
-}
-#root .settings-scroll .check input[type=checkbox]:checked::after {
-  content:"";width:.63rem;height:.35rem;
-  border:solid var(--accent-contrast);border-width:0 0 2px 2px;transform:rotate(-45deg);
+  width:1.25rem;
+  height:1.25rem;
+  clip-path:inset(0 round var(--key-shape));
 }
 @media(forced-colors:active) {
-  #root .settings-scroll .check input[type=checkbox] {appearance:auto}
+  #root .settings-scroll .check input[type=checkbox] {clip-path:none}
 }
 #root .mobile-menu-tools .mobile-menu-switch {border-radius:var(--key-shape)}
-#root .mobile-menu-card .mobile-menu-icon {border:var(--tab-style)}
 /* Bindings and consoles have different entry rhythms in stacked menus. */
 html:is([data-layout=command],[data-layout=margin],[data-layout=index]) #root .mobile-menu-card {
   flex-direction:row;align-items:center;justify-content:flex-start;
@@ -553,21 +442,21 @@ html:is([data-layout=signal],[data-layout=seal],[data-layout=bill]) #root .mobil
 html:is([data-layout=instrument],[data-layout=key]) #root .mobile-menu-card {
   flex-direction:column;align-items:center;justify-content:center;text-align:center
 }
-html[data-layout=command] #root .choice-mark {border:0;border-inline-end:2px solid var(--accent);padding-inline-end:3px}
+html[data-layout=command] #root .choice-mark {border-width:0;border-inline-end-width:2px;border-inline-end-style:solid;padding-inline-end:3px}
 html[data-layout=command] #root :is(.nav-links .current,.ww-sidebar nav [aria-current=page]) {
-  background:var(--accent);color:var(--bg);font-weight:700
+  font-weight:700
 }
-html[data-layout=command] #root .nr-context {border-inline:0;border-block:1px dashed var(--accent);box-shadow:none}
+html[data-layout=command] #root .nr-context {border-inline:0;border-block:1px dashed var(--border);box-shadow:none}
 html[data-layout=crest] #root .narrative-choice-card {justify-items:center;text-align:center}
-html[data-layout=crest] #root .choice-speech {border-inline:0;border-block-start:var(--rule);padding:.35rem 0 0}
+html[data-layout=crest] #root .choice-speech {border-inline:0;border-block-start:var(--rule-width) var(--rule-style) var(--v3-line,#81704d);padding:.35rem 0 0}
 html[data-layout=index] #root .choices .narrative-choice-card,
 html[data-theme=street] #root .choices .narrative-choice-card {grid-template-areas:"mark caption" "copy copy";grid-template-columns:auto 1fr}
 html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card .skin-copy {display:contents}
 html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card .choice-kind {grid-area:caption;align-self:center}
 html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card :is(.choice-action,.choice-speech) {grid-column:1/-1}
-html[data-layout=margin] #root .narrative-choice-card .choice-mark {height:100%;border:0;border-inline-end:var(--rule);border-radius:0}
-html[data-layout=track] #root .narrative-choice-card .choice-mark {outline:1px solid var(--accent);outline-offset:3px}
-html[data-layout=seal] #root .skin-heading .skin-stamp {outline:1px dotted var(--accent);outline-offset:3px}
+html[data-layout=margin] #root .narrative-choice-card .choice-mark {height:100%;border-width:0;border-inline-end-width:var(--rule-width);border-inline-end-style:var(--rule-style);border-radius:0}
+html[data-layout=track] #root .narrative-choice-card .choice-mark {outline:1px solid;outline-offset:3px}
+html[data-layout=seal] #root .skin-heading .skin-stamp {outline:1px dotted var(--border);outline-offset:3px}
 html[data-layout=instrument] #root .skin-heading .skin-stamp {box-shadow:inset 0 0 0 3px var(--surface-1),inset 0 0 0 4px var(--border-strong)}
 @container app (min-width:1000px) {
   html:is([data-layout=margin],[data-layout=index]) #root .inspector-world-hero {flex-direction:column;align-items:stretch}
@@ -576,11 +465,40 @@ html[data-layout=instrument] #root .skin-heading .skin-stamp {box-shadow:inset 0
     display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;
   }
   html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param {
-    display:grid;grid-template-columns:1fr auto;align-content:start;border:var(--rule);
+    display:grid;grid-template-columns:1fr auto;align-content:start;border-width:var(--rule-width);border-style:var(--rule-style);
     padding:.6rem;border-radius:var(--key-shape);min-width:0
   }
   html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param>span:nth-child(2) {grid-column:1/-1;grid-row:2}
   html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param>svg {grid-column:2;grid-row:1}
+}
+
+/* Draw the route, index tab and folded corner as line work. The face
+   underneath remains the choice's own surface in every interaction state. */
+#root .choices .narrative-choice-card {position:relative}
+html[data-layout=track] #root .choices .narrative-choice-card::before {
+  content:"";
+  position:absolute;
+  inset-block:0;
+  inset-inline-start:calc(1rem + var(--stamp-size) / 2);
+  border-inline-start:1px solid var(--border);
+  pointer-events:none;
+}
+html[data-layout=track] #root .choices .choice-mark {position:relative}
+html:is([data-layout=index],[data-layout=bill],[data-layout=signal]) #root .choices .choice-kind {
+  box-shadow:inset 0 -1px var(--border);
+}
+html[data-theme=street] #root .choices .narrative-choice-card::after {
+  content:"";
+  position:absolute;
+  inset-block-start:0;
+  inset-inline-end:0;
+  width:.6rem;
+  height:.6rem;
+  border-inline-start:1px solid var(--border);
+  border-block-end:1px solid var(--border);
+  transform:skew(-10deg);
+  transform-origin:top right;
+  pointer-events:none;
 }
 
 #root .call-suggestions > .narrative-choice-card {
@@ -591,4 +509,5 @@ html[data-layout=instrument] #root .skin-heading .skin-stamp {box-shadow:inset 0
 }
 #root .call-suggestions .skin-stamp {--stamp-size:1.1rem}
 #root .call-suggestions .choice-kind {display:none}
-#root .call-suggestions :is(.choice-action,.choice-speech) {font-size:.8rem}
+#root .call-suggestions :is(.choice-action,.choice-speech) {color:inherit;font-size:.8rem}
+#root .call-suggestions .choice-mark {color:inherit;background:transparent;border-color:var(--border)}

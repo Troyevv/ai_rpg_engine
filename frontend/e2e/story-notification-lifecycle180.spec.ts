@@ -59,7 +59,11 @@ for(const theme of ['graphite','parchment']){
   const before=await view(request,s);
   const read=await request.post(`/api/saves/${s.save}/phone`,{data:{revision:before.revision,command:{action:'read',event_id:s.event,operation_id:'late-mount180'}}});expect(read.ok(),await read.text()).toBe(true);
   const after=await read.json(),event=after.state.notification_history[0];
-  await page.reload(); // First notification component receiving this committed event.
+  await page.reload();
+  await expect(page.locator('.ww-topbar')).toBeVisible();
+  await expect(toast(page)).toHaveCount(0);
+  expect(await acknowledged(page,s,event.id)).toBe(false);
+  await nav(page,'Игра'); // First active Narrative view after the off-screen commit.
   await expect(toast(page)).toHaveAttribute('data-notice-id',event.id);
   await toast(page).getByRole('button',{name:'Подробнее'}).click();
   await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(1);
