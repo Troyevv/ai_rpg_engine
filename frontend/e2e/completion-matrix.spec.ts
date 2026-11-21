@@ -70,7 +70,6 @@ test('T12 dense family is bounded and can be recentered from accessible list',as
 test('T03 T11 contextual date and empty character card open the shared workspace',async({page,request},info)=>{
  await seed(page,request,'ui-family');await page.goto('/');
  await page.getByLabel('Своё действие или реплика').fill('Контекстный черновик');
- if(info.project.name==='mobile')await page.locator('.mobile-scene-line').click();
  await page.getByRole('button',{name:'Открыть календарь',exact:true}).click();
  const area=page.locator('.save-workspace');await expect(area.locator('.rdp-root')).toBeVisible();
  await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Контекстный черновик');

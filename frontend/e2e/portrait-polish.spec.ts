@@ -154,8 +154,9 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
  await readReady;
  try {
   await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
-  const control=info.project.name==='mobile'?page.locator('.mobile-pov button').first():page.getByLabel('Управляемый персонаж',{exact:true});
+  const control=page.getByLabel('Управляемый персонаж',{exact:true});
   await expect(control).toBeDisabled();
+  if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();
   await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
   releaseRead();await viewReady;
   await expect(control).toBeDisabled();
@@ -163,6 +164,7 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
  } finally {releaseRead();releaseView();}
  await page.unrouteAll({behavior:'wait'});
  await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeEnabled();
+ if(await page.locator('.dialog-content:visible').count())await page.keyboard.press('Escape');
  // Make the existing exit transition observable independently of HTTP speed.
  await page.addStyleTag({content:'.dialog-content[data-state="closed"],.dialog-overlay[data-state="closed"] { animation-duration: 1s !important; }'});
  for(const [id,name] of [['qa_timur','Тимур Серов'],['qa_kirill','Кирилл Ларин (ГГ)']]) {

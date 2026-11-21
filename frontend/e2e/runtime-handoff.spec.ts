@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {defaults} from '../src/types';
-import {nav,searchCharacter} from './navigation';
+import {nav,searchCharacter,camera} from './navigation';
 
 test('original export identities and rejected opening recover through real API then turn reload turn',async({page,request},info)=>{
  const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/runtime_handoff/world.json',import.meta.url),'utf8'));
@@ -33,7 +33,7 @@ test('original export identities and rejected opening recover through real API t
  await expect(page.locator('.inspector-workspace')).not.toContainText('marina_volkova');
  // Close the inspector using the normal game navigation on both layouts.
  await page.keyboard.press('Escape');
- await page.getByRole('button',{name:info.project.name==='mobile'?'Камера и журнал мира':'Камера · Журнал',exact:true}).click();
+ await camera(page);
  await expect(page.locator('.camera-cast article')).toHaveCount(19);
  await expect(page.locator('.camera-cast')).toContainText('Виктория Соловьёва');
  await expect(page.locator('.camera-cast')).not.toContainText('Без имени');

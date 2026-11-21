@@ -24,21 +24,19 @@ export async function nav(page:Page,name:string){
  await page.getByRole('button',{name,exact:true}).last().click();
 }
 export async function actor(page:Page,id:string,name:string){
- const mobile=!await page.getByLabel('Управляемый персонаж').isVisible();
- if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
+ const field=page.getByLabel('Управляемый персонаж',{exact:true});
  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
- if(!mobile)await chooseOption(page.getByLabel('Управляемый персонаж'), id);
- else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
+ await chooseOption(field,id);
  const response=await committed;
  expect(response.ok(),await response.text()).toBe(true);
- const after=await response.json();
- expect(after.state.controlled_actor_id).toBe(id);
- if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveJSProperty('value', id);
- else await expect(page.locator('.mobile-pov button').first()).toHaveText(after.state.characters.find((c:{id:string})=>c.id===id).name.replace(' (ГГ)','')+' ▾');
- await expect(page.getByLabel('Управляемый персонаж').or(page.locator('.mobile-pov button').first())).toBeEnabled();
- // API commit can precede Radix's CSS exit/unmount. A following actor switch
- // must open a fresh sheet, not interact with the previous closing surface.
- if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect((await response.json()).state.controlled_actor_id).toBe(id);
+ await expect(field).toHaveJSProperty('value',id);
+ await expect(field).toContainText(name.replace(' (ГГ)',''));
+ await expect(field).toBeEnabled();
+}
+export async function camera(page:Page){
+ if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();
+ await page.getByRole('button',{name:'Камера · Журнал',exact:true}).click();
 }
 export async function diagnostics(page:Page){
  if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();

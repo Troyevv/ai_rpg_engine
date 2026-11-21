@@ -51,7 +51,7 @@ test('touch scrolls through ten proposals and back to the story without selectin
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');
  const cards=page.locator('.choices button'), story=page.locator('.story-scroll');
- const toggle=page.locator('.action-panel-toggle').first(), panel=toggle.locator('..');
+ const panel=page.locator('.story .action-panel').first(), toggle=panel.locator('.action-panel-toggle');
  const draft=page.getByLabel('Своё действие или реплика');
  await expect(cards).toHaveCount(10);
  await cards.first().evaluate(el=>el.scrollIntoView({block:'start'}));

@@ -1,6 +1,6 @@
 import {chooseOption} from './choice-navigation';
 import {test,expect,type Page} from '@playwright/test';
-import {nav,actor,diagnostics,pickCharacter} from './navigation';
+import {nav,actor,diagnostics,pickCharacter,camera} from './navigation';
 
 const palette=['graphite','gothic','parchment','noir','neon'];
 async function noOverflow(page:Page){
@@ -90,8 +90,7 @@ test('legacy world defaults, auto selection, keyboard tabs and reduced motion re
  await actor(page,target.id,target.name);await expect(page.locator('.turn')).toHaveCount(1);
  await expect(page.locator('.pov-divider')).toHaveCount(0);
  await expect(page.locator('.turn').first()).toHaveCSS('transform','none');
- if((page.viewportSize()?.width||1440)<768){await page.locator('.mobile-pov button').last().click();}
- else await page.getByRole('button',{name:'Камера · Журнал'}).click();
+ await camera(page);
  await expect(page.getByRole('heading',{name:'Камера мира'})).toBeVisible();
  await page.locator('.camera-tabs button').first().focus();await page.keyboard.press('End');
  await expect(page.locator('.camera-tabs button').last()).toHaveAttribute('aria-pressed','true');
