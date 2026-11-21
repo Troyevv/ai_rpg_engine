@@ -14,9 +14,13 @@ def main():
     if not ledger.is_file():
         raise SystemExit('Missing budget ledger; refusing to reset spending history')
     manifest = json.loads((Path(directory) / 'manifest.json').read_text())
-    budget = Budget(ledger, Path(directory) if manifest.get('stage') == 'B' else None,
-                    stage_c=Path(directory) if manifest.get('stage') == 'C' else None,
-                    stage_c_followup=manifest.get('followup', False))
+    if manifest.get('postfix_retest'):
+        from .postfix_budget import PostfixBudget
+        budget = PostfixBudget(Path(directory))
+    else:
+        budget = Budget(ledger, Path(directory) if manifest.get('stage') == 'B' else None,
+                        stage_c=Path(directory) if manifest.get('stage') == 'C' else None,
+                        stage_c_followup=manifest.get('followup', False))
     if mode == 'live' and MODEL not in llm.get_deepseek_models():
         raise SystemExit('Configured model unavailable')
 
