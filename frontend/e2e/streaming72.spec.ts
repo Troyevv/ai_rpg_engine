@@ -25,7 +25,9 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  (window as any).EventSource=class extends EventTarget {onopen:any;onerror:any; constructor(url:string){super();if(!url.includes('stream72'))return new Real(url) as any;(window as any).testStream=this;queueMicrotask(()=>this.onopen?.(new Event('open')))}close(){}};
  },s);
  let markdown=0;page.on('request',r=>{if(r.url().endsWith('/markdown'))markdown++});
- await page.goto('/');await expect(page.locator('.turn')).toHaveCount(60);await page.getByRole('button',{name:'Предыдущий ход'}).click();await frames(page,60);
+ await page.goto('/');await expect(page.locator('.turn')).toHaveCount(60);
+ if(!baseline)await page.getByRole('button',{name:'Предыдущий ход'}).click();
+ await frames(page,60);
  const beforeRequests=markdown;
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
  await page.getByLabel('Своё действие или реплика').fill(job.user_text!);await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
@@ -109,7 +111,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const upAfter=await scroller.evaluate(el=>el.scrollTop);
  const stable=await page.evaluate(()=>{const w=window as any;return w.streamNode?.isConnected && document.querySelector('.turn:last-of-type .narrative-text')===w.streamNode});
  if(!baseline){expect(stable).toBe(true);expect(Math.abs(upAfter-up)).toBeLessThan(2);expect(streamedRequests).toBeLessThanOrEqual(2);expect(await page.evaluate(()=>(window as any).oldMutations)).toBe(0)}
- await page.getByRole('button',{name:'К последнему ответу'}).click();await frames(page,30);
+ await page.getByRole('button',{name:baseline?'К последней сцене':'К последнему ответу'}).click();await frames(page,30);
  if(!baseline)expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
  await expect(page.locator('.turn').last()).toContainText('Абзац 18.');
  await page.getByLabel('Своё действие или реплика').fill('Черновик не потерять');
