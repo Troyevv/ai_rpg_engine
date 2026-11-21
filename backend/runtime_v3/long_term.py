@@ -548,14 +548,23 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         with_arrival = config.get('_extraction_contract',1) >= 10 and group_index == len(chosen)-1
         narrative_instruction = instruction
         if with_arrival:
+            from backend.runtime_v3.narrative_frame import EXPLICIT_FORMAT, CHOICE_CONTRACT
             destination = current_time(original, report['actual_target'])
             pov = original['camera'].get('pov_actor_id') or original['camera'].get('controlled_actor_id')
             narrative_instruction += (' Верни JSON: scene — закрытая сцена этой группы, '
                 'arrival — короткая открытая сцена на конечную дату перехода для POV '
                 + str(pov or 'наблюдателя') + ' (' + str(destination['date']) + ' ' + destination['time'] + '). '
-                'Не разглашай частные события группы в arrival. actions — ровно шесть разных продолжений '
-                'открытой сцены, каждое {"text":"…","facts":[]} с ID ранее известных POV сведений, '
-                'либо пустым списком для непосредственно видимой сцены.')
+                'Не разглашай частные события группы в arrival. ')
+            if version >= 11:
+                from backend.runtime_v3.life import capabilities
+                actor_choices = protected and original['camera']['mode'] == 'actor' and capabilities(original, protected)['can_act']
+                viewpoint = (f'Предложи поступки героя {protected} в открытой сцене arrival.'
+                             if actor_choices else 'Для arrival предложи направления наблюдения.')
+                narrative_instruction += viewpoint + ' ' + EXPLICIT_FORMAT + '. ' + CHOICE_CONTRACT
+            else:
+                narrative_instruction += ('actions — ровно шесть разных продолжений '
+                    'открытой сцены, каждое {"text":"…","facts":[]} с ID ранее известных POV сведений, '
+                    'либо пустым списком для непосредственно видимой сцены.')
         narrative = ""
         max_input = config.get("_budget_caps", {}).get("max_input")
         try:
@@ -574,7 +583,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
                 for message in messages:
                     if message['role'] == 'system':
-                        message['content'] = message['content'].replace(PROSE_ONLY_OUTPUT, '')
+                        message['content'] = message['content'].replace(PROSE_ONLY_OUTPUT, '').replace('Не выводи варианты действий.', '')
             from backend.services.token_budget import preflight_downstream, extraction_output, extraction_reserve
             from context_builder import estimate
             preflight_downstream(config, lambda reserve: build_context(camera, [], instruction, 'background',
@@ -598,7 +607,12 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     artifacts = parse(narrative) if enabled(camera['world_state']) else []
                     public = _scene_text(wire.get('arrival'))
                     if isinstance(public, str) and public.strip():
-                        arrival = (report['actual_target'], public, {'actions':wire.get('actions')})
+                        frame = {'actions': wire.get('actions')}
+                        # Replayed stages can carry an older authoring contract.
+                        if any(m['content'].startswith('Текущий ввод\n') and EXPLICIT_FORMAT in m['content']
+                               for m in messages):
+                            frame['_explicit_speech'] = True
+                        arrival = (report['actual_target'], public, frame)
             if cancelled is not None and cancelled.is_set():
                 return None
             if not narrative.strip():

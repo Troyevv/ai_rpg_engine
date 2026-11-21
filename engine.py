@@ -357,7 +357,7 @@ def run_job(path, job_id, handle):
                         storage.job_progress(job_id, 'generating', narrative=narrative)
                         last_write = time.monotonic()
                 if version >= 9 and not correction:
-                    decoded = narrative_frame.read(authored, complete=True) if structured_menu else None
+                    decoded = narrative_frame.recorded_reply(authored, messages) if structured_menu else None
                     if decoded:
                         narrative, frame = decoded
                         suggestions = []

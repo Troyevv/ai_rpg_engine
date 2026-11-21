@@ -121,3 +121,58 @@ test('touch scrolls through ten proposals and back to the story without selectin
    expect((await (await request.get(path)).json()).revision).toBe(save.revision);
  } finally {await finger.detach()}
 });
+
+test('proposal types, confirmation, exact editable speech and a single pending submission', async ({page, request}, info) => {
+  const selection = await (await request.post('/test/choices-seed')).json();
+  const path = '/api/saves/' + selection.save;
+  const save = await (await request.get(path)).json();
+  const turn = save.turns.find((row:{id:number}) => row.id === save.physical_choice_source.turn_id);
+  const action = 'Позвать Соню';
+  const speech = 'Сонь…  Слышишь?\nЯ здесь.';
+  const exact = action + ': «' + speech + '»';
+  turn.choices = [{action, speech}, {action:'Подвинуть чашку.', speech:''}, ...turn.choices];
+  await page.route('**' + path, route => route.fulfill({json:save}));
+  await page.addInitScript(s => localStorage.setItem('selection',JSON.stringify(s)),selection);
+  if (info.project.name === 'mobile') await page.setViewportSize({width:320,height:690});
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto('/');
+  const cards = page.locator('.choices button'), spoken = cards.first(), silent = cards.nth(1);
+  const draft = page.getByLabel('Своё действие или реплика');
+  await expect(spoken.locator('strong')).toHaveText(action);
+  expect(await spoken.locator('.choice-speech').textContent()).toBe('«' + speech + '»');
+  await expect(silent.locator('.choice-speech')).toHaveCount(0);
+  expect((await silent.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await spoken.focus();
+  await page.keyboard.press('Enter');
+  await expect(spoken).toHaveAttribute('aria-pressed','true');
+  await expect(draft).toHaveValue(exact);
+  await silent.click();
+  await page.getByRole('button',{name:'Отмена',exact:true}).click();
+  await expect(silent).toHaveAttribute('aria-pressed','false');
+  await expect(spoken).toHaveAttribute('aria-pressed','true');
+  await draft.fill('Своими словами.');
+  await expect(spoken).toHaveAttribute('aria-pressed','false');
+  await spoken.click();
+  await page.getByRole('button',{name:'Заменить черновик'}).click();
+  const requests:string[] = [];
+  let release!: () => void;
+  const responseGate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**' + path + '/turns', async route => {
+    requests.push(route.request().postDataJSON().text);
+    await responseGate;
+    await route.fulfill({status:503,json:{detail:'Контрольная пауза связи'}});
+  });
+  try {
+    await draft.press('Control+Enter');
+    await expect(spoken).toHaveAttribute('aria-busy','true');
+    await expect(silent).toBeDisabled();
+    await draft.press('Control+Enter');
+    await expect(page.getByLabel('Отправить действие')).toBeDisabled();
+    expect(requests).toEqual([exact]);
+  } finally { release(); }
+  await expect(spoken).toBeEnabled();
+  await expect(spoken).not.toHaveAttribute('aria-busy','true');
+  await expect(draft).toHaveValue(exact);
+  await expect(spoken).toHaveAttribute('aria-pressed','true');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
+});

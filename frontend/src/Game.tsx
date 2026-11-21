@@ -1,4 +1,4 @@
-import {choiceText, NarrativeChoice} from './NarrativeChoice';
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {ActionPanel} from './gestures/panels';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
@@ -113,10 +113,12 @@ export function Game({
   };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
   const choiceTurn=physicalChoiceTurn(save);
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
-  const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
+  const [selectedChoice,setSelectedChoice]=useState<string|null>(null);
+  const [sendingChoice,setSendingChoice]=useState<string|null>(null);
   const [pendingChoice,setPendingChoice]=useState<string|null>(null);
   useEffect(()=>{setSelectedChoice(null);setPendingChoice(null)},[choiceKey]);
-  const writeChoice=(text:string)=>{
+  const writeChoice=(text:string, choice=text)=>{
+    setSelectedChoice(choice);
     setDraft(text);
     sessionStorage.setItem(draftKey,text);
     input.current?.focus({preventScroll:true});
@@ -194,6 +196,7 @@ export function Game({
       setSubmitted(j);
       if (kind === "turn" && channel === "physical" && text === draftRef.current) {
         setDraft("");
+        setSelectedChoice(null);
         sessionStorage.removeItem(draftKey);
       }
     });
@@ -202,14 +205,27 @@ export function Game({
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
     refreshControl(after);jumpToLatest();
   });
-  const observe=(actor?:string,scene?:string,direction?:string)=>void run(async()=>{
+  const observe=(actor?:string,scene?:string,direction?:string)=>run(async()=>{
     if(!save)return;
     if(actor&&!direction){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,direction,revision:save.revision,config:prefs.game,api_key:apiKey});
-    if(direction && direction===draftRef.current){setDraft("");sessionStorage.removeItem(draftKey)}
+    if(direction && direction===draftRef.current){setDraft("");setSelectedChoice(null);sessionStorage.removeItem(draftKey)}
     setSubmitted(j);jumpToLatest();
   });
-  const submitDraft=()=>observeInstead&&actorId ? observe(actorId,undefined,draft) : turn("turn");
+  const chooseProposal=useStableEvent((text:string)=>{
+    if(draftRef.current.trim() && draftRef.current!==text){
+      history.pushState({...history.state,choiceDraft:true},'');
+      setPendingChoice(text);
+    } else writeChoice(text);
+  });
+  const submitDraft=async()=>{
+    if(requestLock.current || !canSubmit || !draft.trim())return;
+    setSendingChoice(selectedChoice);
+    try {
+      if(observeInstead && actorId) await observe(actorId,undefined,draft);
+      else await turn("turn");
+    } finally { setSendingChoice(null); }
+  };
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
 
   const stableRun=useStableEvent(run);
@@ -421,22 +437,9 @@ export function Game({
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <ActionPanel label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
                     {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
-                      <button type="button"
-                        className={selectedChoice===i?"choice-selected":""}
-                        key={i}
-                        disabled={!canSubmit}
-                        onClick={() => {
-                          setSelectedChoice(i);
-                          const text=choiceText(c);
-                          if(draftRef.current.trim()&&draftRef.current!==text){
-                            history.pushState({...history.state,choiceDraft:true},'');
-                            setPendingChoice(text);
-                          }
-                          else writeChoice(text);}
-                        }
-                      >
-                        <NarrativeChoice choice={c}/>
-                      </button>
+                      <NarrativeChoiceCard key={i} choice={c} disabled={!canSubmit}
+                        selected={selectedChoice===choiceText(c)} sending={sendingChoice===choiceText(c)}
+                        choose={chooseProposal}/>
                     ))}
                   </div></ActionPanel>
                   {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
@@ -485,7 +488,7 @@ export function Game({
               <DialogTitle>В поле уже есть черновик</DialogTitle>
               <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
               <div className="actions">
-                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice);closeChoice()}}>Добавить к черновику</Button>
+                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice,pendingChoice!);closeChoice()}}>Добавить к черновику</Button>
                 <Button variant="outline" onClick={()=>{writeChoice(pendingChoice!);closeChoice()}}>Заменить черновик</Button>
                 <Button variant="ghost" onClick={closeChoice}>Отмена</Button>
               </div>
@@ -499,6 +502,7 @@ export function Game({
               aria-label={directionInput ? "Направление истории" : "Своё действие или реплика"}
               value={draft}
               onChange={(e) => {
+                setSelectedChoice(null);
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}

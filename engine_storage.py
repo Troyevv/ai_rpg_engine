@@ -368,8 +368,8 @@ class EngineStorage:
                     return
                 from backend.runtime_v3.suggestions import split_suggestions
                 from backend.runtime_v3 import narrative_frame
-                decoded = (narrative_frame.read(row[0], complete=True)
-                           if narrative_frame.requested(json.loads(job.get('context_json') or '[]')) else None)
+                recorded = json.loads(job.get('context_json') or '[]')
+                decoded = narrative_frame.recorded_reply(row[0], recorded)
                 frame = None
                 if decoded:
                     prose, frame = decoded

@@ -404,7 +404,8 @@ def assert_child_after_advance(years, stage, age):
     )
 
 
-def test_due_process_reference_survives_an_unrelated_invalid_lta_record():
+@pytest.mark.parametrize("version", [10, 11])
+def test_due_process_reference_survives_an_unrelated_invalid_lta_record(version):
     from backend.runtime_v3.calendar import age_on, current_time
     initial = state()
     initial["reproduction_policy"]["gestation_days"] = 280
@@ -423,18 +424,26 @@ def test_due_process_reference_survives_an_unrelated_invalid_lta_record():
 
     public = "Через пять лет в доме горит свет."
     actions = [dict(text=f"Действие {i}") for i in range(6)]
+    if version >= 11:
+        for row in actions:
+            row["speech"] = None
 
     def generate(stage, messages, *args, **kwargs):
         if "extraction" in stage:
             completed = next(m["content"] for m in messages if m["content"].startswith("completed_narrative"))
             assert json.loads(completed.split("\n", 1)[1]) == text
             return iter([json.dumps(payload)])
+        from backend.runtime_v3.narrative_frame import EXPLICIT_FORMAT
+        assert any(EXPLICIT_FORMAT in m['content'] for m in messages) == (version >= 11)
         wire = dict(scene={"text":text}, arrival={"text":public, "time":"21:52"}, actions=actions)
         return iter([json.dumps(wire)])
 
-    after, _, report = run(before, request, generate=generate, config={"_extraction_contract":10})
+    after, _, report = run(before, request, generate=generate, config={"_extraction_contract":version})
     result = after["world_state"]
-    assert after["_public_arrival"] == (public, {"actions":actions})
+    expected = {"actions":actions}
+    if version >= 11:
+        expected["_explicit_speech"] = True
+    assert after["_public_arrival"] == (public, expected)
     assert report["llm_calls"] == 2
     assert any(row["section"] == "unrelated_bad_section" for row in report["diagnostics"])
     assert result["pregnancies"][pregnancy["id"]]["birth_minute"] == pregnancy["due_minute"]

@@ -676,7 +676,7 @@ def stream(**kwargs):
         from backend.services.provider_attempt import identity
         if identity()['stage'] == 'narrative':
             actions = ['Открыть альбом','Выйти во двор','Позвать хозяйку','Заварить чай','Осмотреть окно','Послушать радио']
-            rows = [dict(text=t, facts=[]) for t in actions]
+            rows = [dict(text=t, speech=None, facts=[]) for t in actions]
             rows[2]['speech'] = 'Анна, можно взглянуть на альбом?'
             yield json.dumps(dict(scene='У окна лежит альбом.', actions=rows), ensure_ascii=False)
         else:

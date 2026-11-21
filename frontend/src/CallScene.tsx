@@ -1,5 +1,5 @@
 import {backSwipe} from './gestures/surface';
-import {choiceText, NarrativeChoice} from './NarrativeChoice';
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {ActionPanel} from './gestures/panels';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -50,7 +50,24 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
  useEffect(()=>{if(obscured)collapse()},[obscured]);
  const wasActive=useRef(active);
  useEffect(()=>{if(wasActive.current&&!active){collapse();onSelect(null)}wasActive.current=active},[active]);
- const send=async()=>{if(disabled||!active||!draft.trim())return;const text=draft;try{await submit(text)}catch{return}setDraft(current=>current===text?'':current);if(sessionStorage.getItem(key)===text)sessionStorage.removeItem(key)};
+ const sendingRef=useRef(false);
+ const [sending,setSending]=useState(false);
+ const send=async()=>{
+   if(sendingRef.current||disabled||!active||!draft.trim())return;
+   const text=draft;
+   sendingRef.current=true;
+   setSending(true);
+   try {
+     await submit(text);
+     setDraft(current=>current===text?'':current);
+     if(sessionStorage.getItem(key)===text)sessionStorage.removeItem(key);
+   } catch {
+     // The parent reports the failure; the editable draft stays available.
+   } finally {
+     sendingRef.current=false;
+     setSending(false);
+   }
+ };
  if(!call)return null;
  return createPortal(<>
    {minimized&&<button className="call-chip" onClick={expand}><Phone size={18}/><span>{call.label}</span><strong>{t(active?'restore':'history')}</strong></button>}
@@ -67,11 +84,15 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
        <header {...backSwipe(collapse)} className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
        <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
          {active&&choices.length>0&&<ActionPanel label="Варианты продолжения" hidden={working}><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
-           {choices.map(c=><button key={JSON.stringify([c.action,c.speech])} type="button" disabled={disabled} onClick={()=>{
+           {choices.map(c=>{
              const text=choiceText(c);
-             const next=draft.trim() ? draft+'\n'+text : text;
-             setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
-           }}><NarrativeChoice choice={c}/></button>)}
+             const selected=draft===text || draft.endsWith('\n'+text);
+             return <NarrativeChoiceCard key={JSON.stringify([c.action,c.speech])} choice={c}
+               disabled={disabled||sending} selected={selected} sending={selected&&sending} choose={value=>{
+                 const next=draft.trim() ? draft+'\n'+value : value;
+                 setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
+               }}/>;
+           })}
          </div></ActionPanel>}
        </div></div>
        <footer>

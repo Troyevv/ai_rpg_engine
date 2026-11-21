@@ -10,20 +10,24 @@ RECORDED_FORMAT = (_FRAME_PREFIX + ' required "actions": exactly 6 distinct open
           'location_id, present_ids (everyone physically there at the end, including arrivals and the player '
           'in actor mode), elapsed_minutes (actual duration). Omit unknown ending fields.')
 FORMAT = 'JSON со сценой и вариантами'
-AUTHOR_FORMAT = (FORMAT + '. Верни один объект, первым полем scene с полным художественным текстом, '
-    'затем actions. Цель — шесть разных уместных продолжений. Предложения оставляют выбор игроку. '
-    'В text дай короткое конкретное действие в инфинитиве на языке истории. Если герой говорит, '
-    'добавь speech — одну живую дословную реплику без внешних кавычек, в его голосе, с учётом отношений '
-    'и происходящего. Для молчаливого действия опусти speech. Предложи разные намерения, а не '
-    'перефразировки одного ответа. Не объясняй игроку механику и не предрешай реакцию окружающих. '
-    'В режиме наблюдателя предлагай направления сцены, не присваивая игроку речь персонажа. '
-    'Используй только доступные POV сведения. Необязательный facts содержит ID известных этому POV фактов. '
-    'Пример формы (подбери действия для своей сцены):\n'
-    '{"scene":"За окном стемнело. Мёрфи отставила чашку.",'
-    '"actions":[{"text":"Спросить Мёрфи об отце","speech":"Мёрф, а каким ты вообще считаешь папу?"},'
-    '{"text":"Подойти к окну и посмотреть на улицу."},{"text":"Предложить чай","speech":"Ещё тёплый. Налить?"},'
-    '{"text":"Достать семейный альбом."},{"text":"Попросить остаться","speech":"Посиди со мной ещё минутку."},'
-    '{"text":"Выйти во двор подышать."}]}')
+EXPLICIT_FORMAT = FORMAT + ' (прямая речь)'
+CHOICE_CONTRACT = (
+    'В actions предложи шесть разных возможных продолжений открытой сцены на языке истории. '
+    'Это ещё не события: пока игрок не выбрал вариант, герой ничего из предложенного не сделал. '
+    'Для каждого варианта заполни оба поля. Если герой обращается к кому-либо, шутит, спрашивает, '
+    'отвечает или произносит тост, сначала сочини его точные слова в speech без внешних кавычек, '
+    'затем назови поступок коротким инфинитивом в text. Например: '
+    '{"speech":"Сонь, только честно: мне уже прятать бокал?","text":"Поддразнить Соню перед тостом"}. '
+    '«Спросить Соню, что она задумала» без слов героя — незаконченный разговорный вариант. '
+    'Если поступок можно целиком выполнить молча, используй null: '
+    '{"speech":null,"text":"Разлить вино по бокалам."}. Подбери слова и поступки именно этого героя '
+    'по его манере речи, отношениям, известным ему событиям и настроению сцены. Варианты должны '
+    'открывать разные возможности; соотношение речи и действий зависит от происходящего. '
+    'Не предрешай чужую реакцию. Для наблюдателя предлагай направления наблюдения с speech: null. '
+    'Необязательный facts содержит ID известных этому POV фактов.'
+)
+AUTHOR_FORMAT = (EXPLICIT_FORMAT + '. Верни один объект, первым полем scene с полным художественным '
+                 'текстом, затем массив actions. ' + CHOICE_CONTRACT)
 _DECODER = json.JSONDecoder()
 _JSON_FENCE = re.compile(r'^\s*```json[ \t]*\r?\n', re.IGNORECASE)
 _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
@@ -32,15 +36,23 @@ _START = re.compile(r'^\s*\{\s*"scene"\s*:\s*"')
 _ACTION_ROW = re.compile(r'\{(?:[^{}"\\]|"(?:[^"\\]|\\.)*")*\}(?=\s*[,\]])')
 
 
-def requested(messages):
+def _reply_format(messages):
     for msg in reversed(messages):
         content = msg.get('content', '')
         if content.startswith('Текущий ввод\n'):
             try:
-                return json.loads(content.split('\n', 1)[1]).get('response_format', '').startswith((FORMAT, _FRAME_PREFIX, 'JSON: сначала "scene"'))
+                return json.loads(content.split('\n', 1)[1]).get('response_format', '')
             except (ValueError, AttributeError):
-                return False
-    return False
+                return ''
+    return ''
+
+
+def requested(messages):
+    return str(_reply_format(messages)).startswith((FORMAT, _FRAME_PREFIX, 'JSON: сначала "scene"'))
+
+
+def explicit_speech(messages):
+    return str(_reply_format(messages)).startswith(EXPLICIT_FORMAT)
 
 
 def _complete_metadata(remainder):
@@ -175,6 +187,16 @@ def read(text, *, complete):
     return None
 
 
+def recorded_reply(text, messages):
+    """Keep the contract with its authored frame through recovery and later publication."""
+    if not requested(messages):
+        return None
+    decoded = read(text, complete=True)
+    if decoded and explicit_speech(messages):
+        decoded[1]['_explicit_speech'] = True
+    return decoded
+
+
 def scene_fields(frame):
     ending = frame.get('ending')
     if not isinstance(ending, dict):
@@ -191,6 +213,7 @@ def menu(frame, state):
     """Scope retained actions to the same viewpoint and its declared facts."""
     actions = frame.get('actions')
     actions = actions if isinstance(actions, list) else []
+    explicit = frame.get('_explicit_speech') is True
     camera = state['camera']
     pov = camera.get('pov_actor_id') or camera.get('controlled_actor_id')
     seen, choices = set(), []
@@ -206,14 +229,20 @@ def menu(frame, state):
                state['knowledge'].get(pov+':'+fid, {}).get('status') != 'known' for fid in refs):
             continue
         # The author owns both strings. Historical text-only entries remain literal.
-        speech = item.get('speech', '')
-        if not isinstance(speech, str) or len(text.strip()) + len(speech.strip()) > 800:
+        if explicit and 'speech' not in item:
+            continue
+        speech = item.get('speech')
+        if speech is None:
+            speech = ''
+        elif not isinstance(speech, str) or (explicit and not speech.strip()):
+            continue
+        if len(text.strip()) + len(speech) > 800:
             continue
         key = tuple(' '.join(part.casefold().split()) for part in (text, speech))
         if key in seen:
             continue
         seen.add(key)
-        choice = dict(action=text.strip(), speech=speech.strip())
+        choice = dict(action=text.strip(), speech=speech)
         if state['meta'].get('interaction_focus') == 'call':
             choice['interaction_channel'] = 'call'
         choices.append(choice)
