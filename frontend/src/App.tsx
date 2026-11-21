@@ -1,3 +1,4 @@
+import {ReadingDisplay} from './ReadingDisplay';
 import {dismissTransient} from './lib/transientBack';
 import {useRootDialogBack} from './lib/useRootDialogBack';
 import {PortraitModels} from './workshop/PortraitCommission';
@@ -12,7 +13,7 @@ import {
   Settings2,
   Feather,
   PanelRight,
-  Library as LibraryIcon,
+  PanelsTopLeft, MessagesSquare, ChevronDown,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -83,6 +84,7 @@ export default function App() {
   useEffect(()=>{if(!workspace)return;requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.save-workspace:not([hidden]) header button')?.focus());const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('[role="dialog"],.inspector-workspace:not([hidden])')){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
   const [view, setView] = useState<"game" | "prepare">("game");
   const [library, setLibrary] = useState(false);
+  const [display,setDisplay]=useState(false);
   const [settings, setSettings] = useState(false);
   const [inspector, setInspector] = useState(false);
   const [storyTarget,setStoryTarget]=useState<StoryNotice|null>(null);
@@ -222,15 +224,11 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
-  if(chatOpen)return <ThemeProvider world={null} preview><ThemedToaster/><ChatMode source={chatSource} onBack={()=>{setChatOpen(false);localStorage.setItem("active-mode","narrative")}} onConnections={()=>setSettings(true)}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,"PUT");setPrefs(p)}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
-  return (
-    <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
-      <ThemedToaster />
-      {!mobile&&<nav className="nav-rail" aria-label="Главная навигация">
+  const navigation=(act:(action:()=>void)=>void)=>(<nav className="nav-rail" inert={inspector&&!mobile} aria-label="Главная навигация">
         <button
           className="brand"
           aria-label="AI RPG Engine"
-          onClick={() => navigate("game")}
+          onClick={()=>act(()=>navigate("game"))}
         >
           <Feather size={26} /><span>NARRATIVE</span>
         </button>
@@ -238,45 +236,45 @@ export default function App() {
         <div className="nav-links">
           <button
             className={view === "game" && !workspace && !inspector ? "current" : ""}
-            onClick={() => navigate("game")}
+            onClick={()=>act(()=>navigate("game"))}
           >
             <BookOpen />
             <span>Игра</span>
           </button>
           <button
             className={view === "prepare" ? "current" : ""}
-            onClick={() => navigate("prepare")}
+            onClick={()=>act(()=>navigate("prepare"))}
           >
             <Feather />
             <span>Создать</span>
           </button>
-          {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-nav-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} className={inspector&&panel===id?'current':''} aria-current={inspector&&panel===id?'page':undefined} onClick={()=>inspect(id)}><Icon/><span>{panelLabel(id)}</span></button>)}</div>)}
-          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>openWorkspace(section)}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?'Календарь':'Родословная'}</span></button>)}</div>
-          <button disabled={!world} onClick={()=>setWorldInfo(true)}><Settings2/><span>{it('settings')}</span></button>
+          {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-nav-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} className={inspector&&panel===id?'current':''} aria-current={inspector&&panel===id?'page':undefined} onClick={()=>act(()=>inspect(id))}><Icon/><span>{panelLabel(id)}</span></button>)}</div>)}
+          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>act(()=>openWorkspace(section))}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?'Календарь':'Родословная'}</span></button>)}</div>
+          <button disabled={!world} onClick={()=>act(()=>setWorldInfo(true))}><Settings2/><span>{it('settings')}</span></button>
         </div>
-        <button className="nav-settings" disabled={prefsLoading} onClick={() => setSettings(true)}>
+        <button className="nav-settings" disabled={prefsLoading} onClick={()=>act(()=>setSettings(true))}>
           <Settings2 />
           <span>Настройки</span>
         </button>
-      </nav>}
+      </nav>);
+  const menu=<MobileNavigation open={mobileMenu} setOpen={setMobileMenu}>{navigation}</MobileNavigation>;
+  return (
+    <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={chatOpen?null:world} preview={chatOpen||view==='prepare'}><ThemedToaster/><div inert={chatOpen} className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
+      {!mobile&&navigation(action=>action())}
       <div className="app-main">
-        <header className="topbar" hidden={inspector}>
-          <div className="topbar-start">
-            <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
-          </div>
-          <div className="topbar-title">
-            <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
-              <LibraryIcon size={17} />
-              <span>
-                {view === "prepare"
-                  ? "Мастерская"
-                  : world?.name || "Твои истории"}
-              </span>
-              <span className="muted">⌄</span>
+        <header className="topbar nr-topbar" inert={inspector}>
+          <div className="nr-topstart">
+            {mobile && !inspector && menu}
+            <button className="breadcrumb nr-worldpicker" title={world?.name || 'Твои истории'} onClick={()=>setLibrary(true)}>
+              <span className="nr-world-symbol"><PanelsTopLeft size={18}/></span>
+              <span className="nr-worldcopy"><strong data-current-world>{view==='prepare'?'Мастерская':world?.name || 'Твои истории'}</strong>
+                <small className="nr-worldsub"><span>{save?.name || 'Библиотека'}</span><i/><span>Narrative</span></small></span>
+              <ChevronDown size={14}/>
             </button>
           </div>
-          <div className="topbar-actions">
-            {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<>
+          <div className="topbar-actions nr-topactions">
+            <button className="nr-rpentry" onClick={()=>openChat()}><MessagesSquare/>RP-чат</button>
+            {!mobile && <><span className="nr-topdivider"/>
               {view === "game" && (
                 <Button
                   variant="ghost"
@@ -335,7 +333,8 @@ export default function App() {
           </div>
         ) : (view !== "prepare" || !!save) && (
           <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
-            presentationActive={view==="game"&&!workspace&&!inspector&&!mobileMenu&&!library&&!settings&&!worldInfo}
+            presentationActive={!chatOpen&&view==="game"&&!workspace&&!inspector&&!mobileMenu&&!library&&!settings&&!worldInfo}
+            openDisplay={()=>setDisplay(true)} openSettings={()=>setSettings(true)} toggleFocus={()=>setReading(!reading)} reading={reading}
             openStory={openStory}
             key={`${selection.world}-${selection.save}`}
             world={world}
@@ -350,6 +349,7 @@ export default function App() {
         )}
       </div>
       {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
+      <ReadingDisplay open={display} close={()=>setDisplay(false)} prefs={prefs} save={async next=>{await api(`/settings/${profile}`,next,"PUT");setPrefs(next)}}/>
       <Settings
         open={settings}
         onOpenChange={setSettings}
@@ -373,7 +373,7 @@ export default function App() {
         key={`${selection.world}:${selection.save}:${save?.state.controlled_actor_id}:${save?.state.camera?.pov_actor_id}:${save?.state.camera?.mode}`}
         infoOpen={worldInfo}
         setInfoOpen={setWorldInfo}
-        navigation={mobile&&inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:undefined}
+        navigation={mobile&&inspector?menu:undefined}
         world={world}
         save={save}
         open={inspector}
@@ -385,7 +385,12 @@ export default function App() {
         setCharacter={setCharacter}
         refresh={refresh}
       />
-    </div></ThemeProvider></PortraitModels.Provider>
+    </div>
+    {chatOpen&&<div className="rp-chat-stage"><ChatMode source={chatSource} onConnections={()=>setSettings(true)} onBack={()=>{
+      setChatOpen(false);localStorage.setItem("active-mode","narrative");
+      requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.nr-rpentry')?.focus({preventScroll:true}));
+    }}/></div>}
+    </ThemeProvider></PortraitModels.Provider>
   );
 }
 

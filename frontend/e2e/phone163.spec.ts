@@ -27,7 +27,7 @@ for (const mode of ['new_place','unknown_place']) test(`163 ${mode}: exchange, c
   expect(after.job.error).toBeFalsy();
   expect(JSON.stringify(requests)).toContain('remote_semantics_repair');
  }
- await phone.getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await nav(page,'Календарь');
  if(mode==='new_place') await expect(page.locator('.save-workspace')).toContainText('Встреча по договорённости');
  else await expect(page.locator('.save-workspace')).not.toContainText('Встреча по договорённости');

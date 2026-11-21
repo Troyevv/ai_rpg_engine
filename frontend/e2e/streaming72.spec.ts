@@ -25,7 +25,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  (window as any).EventSource=class extends EventTarget {onopen:any;onerror:any; constructor(url:string){super();if(!url.includes('stream72'))return new Real(url) as any;(window as any).testStream=this;queueMicrotask(()=>this.onopen?.(new Event('open')))}close(){}};
  },s);
  let markdown=0;page.on('request',r=>{if(r.url().endsWith('/markdown'))markdown++});
- await page.goto('/');await expect(page.locator('.turn')).toHaveCount(60);await frames(page,60);
+ await page.goto('/');await expect(page.locator('.turn')).toHaveCount(60);await page.getByRole('button',{name:'Предыдущий ход'}).click();await frames(page,60);
  const beforeRequests=markdown;
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
  await page.getByLabel('Своё действие или реплика').fill(job.user_text!);await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
@@ -49,7 +49,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   if(!baseline&&length===700&&info.project.name==='mobile'){
     await page.locator('[data-mobile-menu-trigger]').tap();
     await expect(page.locator('.mobile-game-menu')).toBeVisible();
-    await page.locator('.mobile-menu-close').tap();
+    await page.locator('.mobile-game-menu .dialog-close').tap();
     await expect(page.locator('.mobile-game-menu')).toHaveCount(0);
     await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик во время генерации');
   }
@@ -109,7 +109,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const upAfter=await scroller.evaluate(el=>el.scrollTop);
  const stable=await page.evaluate(()=>{const w=window as any;return w.streamNode?.isConnected && document.querySelector('.turn:last-of-type .narrative-text')===w.streamNode});
  if(!baseline){expect(stable).toBe(true);expect(Math.abs(upAfter-up)).toBeLessThan(2);expect(streamedRequests).toBeLessThanOrEqual(2);expect(await page.evaluate(()=>(window as any).oldMutations)).toBe(0)}
- await page.getByRole('button',{name:'К последней сцене'}).click();await frames(page,30);
+ await page.getByRole('button',{name:'К последнему ответу'}).click();await frames(page,30);
  if(!baseline)expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
  await expect(page.locator('.turn').last()).toContainText('Абзац 18.');
  await page.getByLabel('Своё действие или реплика').fill('Черновик не потерять');
@@ -159,7 +159,7 @@ test('leave for authoring and return during generation without losing the stream
  expect(await page.evaluate(()=>!(window as any).navStream.closed&&(window as any).navNode===document.querySelector('.narrative-text'))).toBe(true);
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик при переходе');
  await expect(page.getByText('Обновляет состояние мира',{exact:true})).toBeVisible();
- await expect(page.getByRole('button',{name:'Отправить действие',exact:true})).toBeDisabled();
+ await expect(page.locator('.nr-stop')).toBeVisible();
  await expect(page.locator('.narrative-text')).toContainText('Абзац 18.');
  if(capture)await mkdir(evidence,{recursive:true});await page.close();if(capture)await copyFile(await page.video()!.path(),`${evidence}/navigation-${info.project.name}.webm`);
 });

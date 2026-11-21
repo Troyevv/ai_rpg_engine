@@ -11,7 +11,7 @@ export const DialogContent = React.forwardRef<
   React.ElementRef<typeof Primitive.Content>,
   React.ComponentPropsWithoutRef<typeof Primitive.Content>
 >(({ className, children, ...props }, ref) => (
-  <Primitive.Portal>
+  <Primitive.Portal container={document.getElementById("root")}>
     <Primitive.Overlay className="dialog-overlay" />
     <Primitive.Content
       ref={ref}

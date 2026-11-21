@@ -15,7 +15,7 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(story).toContainText('пока не стучит');await expect(page.locator('.choices')).toContainText('Посмотреть на часы');
  await input.fill('Черновик физического действия');await capture('before');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  const before=await state();const start=before.state.world_clock.minute;
  const speech=async(text:string)=>{await call.getByLabel('Реплика в звонке').fill(text);await call.getByLabel('Сказать собеседнику').click()};
@@ -60,7 +60,7 @@ for(const mode of ['office-recovery','office-rejected'])test(`optional call extr
  const seed=await(await request.post(`/test/phone-seed?incoming=false&decision=${mode}`)).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);await page.goto('/');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  await call.getByLabel('Реплика в звонке').fill('Встретимся через час?');await call.getByLabel('Сказать собеседнику').click();
  await expect.poll(async()=>(await(await request.get(`/api/saves/${seed.save}`)).json()).job.status).toBe('saved');

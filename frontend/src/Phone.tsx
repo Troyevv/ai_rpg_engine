@@ -1,14 +1,16 @@
+import {PhoneFrame} from './PhoneFrame';
+import {useMobile} from './mobile';
 import {dismissTransient} from './lib/transientBack';
 import {phoneText as t} from "./lib/phone";
 import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
 import { formatDateLabel } from "./gameDate";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   Phone as PhoneIcon,
   MessageCircle,
   ContactRound,
-  X, ArrowLeft, Send, Users, Plus, ArrowDown,
+  Smartphone, ArrowLeft, Send, Users, Plus, ArrowDown, Search,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { PhoneChatList, PhoneMessages } from "./PhoneContent";
@@ -103,21 +105,13 @@ export function Phone({
   const ownerKey = `${save.id}:${phone?.actor_id}`;
   const [owner, setOwner] = useState(ownerKey);
   const trigger = useRef<HTMLButtonElement>(null);
-  const [dock, setDock] = useState(110);
-  useEffect(() => {
-    const composer = trigger.current?.closest(".composer");
-    if (!composer) return;
-    const observer = new ResizeObserver(() =>
-      setDock(Math.ceil(composer.getBoundingClientRect().height) + 8),
-    );
-    observer.observe(composer);
-    return () => observer.disconnect();
-  }, [ownerKey]);
+  const mobile=useMobile();
   const screen = useRef<HTMLDivElement>(null);
   const drafts = useRef<Record<string, string>>({});
   const requestLock = useRef(false);
   const autoReadAttempt = useRef<string | null>(null);
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
+  useLayoutEffect(()=>{currentOwner.current=ownerKey;return ()=>{currentOwner.current=""}},[ownerKey]);
   const [membersOpen, setMembersOpen] = useState(false);
   const [away, setAway] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -128,14 +122,14 @@ export function Phone({
   const [detail, setDetail] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [entry, setEntry] = useState(true);
+
   const messages = useRef<HTMLDivElement>(null);
   const reading = useRef<Record<string,{top:number;pinned:boolean}>>({});
 
   useEffect(()=>{const close=()=>setOpen(false);window.addEventListener("save-workspace-opened",close);return()=>window.removeEventListener("save-workspace-opened",close)},[]);
   useEffect(()=>{const show=()=>{if(phone)setOpen(true)};window.addEventListener("phone-open",show);return()=>window.removeEventListener("phone-open",show)},[phone]);
   const [open, setOpen] = useState(false),
-    [tab, setTab] = useState("contacts");
+    [tab, setTab] = useState("messages");
   const [conversation, setConversation] = useState<string | null>(null),
     [contact, setContact] = useState<string | null>(null);
   const [text, setText] = useState(""),
@@ -149,6 +143,7 @@ export function Phone({
   }, [busy, onBusyChange]);
   const [editContact, setEditContact] = useState<string | null>(null);
   const contactLabels=useRef(new Map<string,string>());
+  const [address,setAddress] = useState("");
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false),
     [grouping, setGrouping] = useState(false);
@@ -164,7 +159,7 @@ export function Phone({
   const revealComposer = () => {
     const viewport = screen.current;
     const form = viewport?.querySelector<HTMLFormElement>('.phone-composer');
-    if (!viewport || !form?.contains(document.activeElement) || !matchMedia('(max-width:767px)').matches) return;
+    if (!viewport || !form?.contains(document.activeElement) || !mobile) return;
     const bounds = viewport.getBoundingClientRect(), content = form.getBoundingClientRect();
     if (content.bottom > bounds.bottom) viewport.scrollTop += content.bottom - bounds.bottom;
     else if (content.top < bounds.top) viewport.scrollTop -= bounds.top - content.top;
@@ -191,7 +186,7 @@ export function Phone({
   };
   useEffect(() => {
     if (!open) return;
-    screen.current?.focus();
+    screen.current?.focus({preventScroll:true});
     const resize = new ResizeObserver(revealComposer);
     if (screen.current) resize.observe(screen.current);
     const escape = (e: KeyboardEvent) => {
@@ -228,7 +223,7 @@ export function Phone({
   }, [open]);
   useEffect(() => {
     setOwner(ownerKey); setMembersOpen(false); setAway(false);
-    setDetail(null); setSearch(""); setEntry(true);
+    setDetail(null); setSearch("");
     setRecipient(null);
     setOpen(false);
     setContact(null);
@@ -237,8 +232,8 @@ export function Phone({
     setError("");
     setEditContact(null);
     setAdding(false);
-    setTab("contacts");
-    contactLabels.current.clear();setLabel("");
+    setTab(phone?.capabilities.text_message ? "messages" : "calls");
+    contactLabels.current.clear();setLabel("");setAddress("");
     setGrouping(false);
     setGroupMembers([]);
     setGroupName("");
@@ -267,7 +262,7 @@ export function Phone({
   const listKey = `${ownerKey}:${tab}:${detail || ''}:${grouping}:${membersOpen}`;
   useLayoutEffect(() => { if(list.current) list.current.scrollTop=listPositions.current[listKey] || 0; }, [listKey,open,conversation,contact,recipient]);
 
-  if (!phone || owner !== ownerKey) return null;
+  if (!phone || !(phone.capabilities.text_message || phone.capabilities.voice_call) || owner !== ownerKey) return null;
   const locked = busy || disabled || save.state.actor_capabilities?.can_act===false || !!save.state.protagonist_required;
   const perform = async (command: Record<string, unknown>) => {
     if (locked || requestLock.current) return;
@@ -290,7 +285,7 @@ export function Phone({
       const next = 'save' in response ? response.save : response;
       if('job' in response && 'save' in response)onJob(response.job);
       onCommit(next);
-      if(command.action==='call'){setTab('calls');setEntry(false)}
+      if(command.action==='call'){setTab('calls');}
       return next;
     } catch (e) {
       if(currentOwner.current===owner)setError(e instanceof Error ? e.message : t("failed"));
@@ -321,7 +316,7 @@ export function Phone({
     const existing = phone.conversations.find(c => !c.group && c.active && c.participants.some(p => p.id === r.id));
     if (existing) { void openChat(existing); return; }
     setRecipient(r.id); setContact(null); setConversation(null);
-    setTab("messages"); setEntry(false);
+    setTab("messages");
   };
   const openChat = async (c: Conversation) => {
     returnFocus.current=document.activeElement as HTMLElement;
@@ -331,7 +326,6 @@ export function Phone({
     setConversation(c.id);
     setContact(null);
     setTab("messages");
-    setEntry(false);
     if (phone.events.some((e) => e.conversation_id === c.id && e.unread))
       await perform({ action: "read", conversation_id: c.id });
   };
@@ -385,42 +379,37 @@ export function Phone({
     requestLock.current=true;setBusy(true);
     try {
       if(active(job))await api(`/jobs/${job.id}/stop`,{});
-      const next=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:call.id,operation_id:crypto.randomUUID()}});
+      const request=phoneOperation(`phone-request:${ownerKey}`,{action:'end',event_id:call.id});
+      const next=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:request.payload});
+      request.complete();
       if(currentOwner.current===ownerKey){onJob({...job,status:'stopped'});onCommit(next)}
     }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
   const inChat = tab==='messages' && !!(conversation || contact || recipient);
   const nested = adding || editContact!==null || inChat || (tab==='contacts' && !!detail) || grouping;
-  const title = membersOpen ? 'Участники группы' : grouping && tab==='messages' ? 'Новая группа' : inChat ? selected?.title || target?.label || recipientTarget?.subject.name : tab==='contacts' ? detail ? currentContact?.label : 'Контакты' : tab==='calls' ? 'Звонки' : 'Переписки';
+  const title = adding ? editContact ? 'Изменить контакт' : 'Новый контакт' : membersOpen ? 'Участники группы' : grouping && tab==='messages' ? 'Новая группа' : inChat ? selected?.title || target?.label || recipientTarget?.subject.name : tab==='contacts' ? detail ? currentContact?.label : 'Контакты' : tab==='calls' ? 'Звонки' : 'Сообщения';
+  const chatRecipient=phone.capabilities.voice_call ? recipients.find(r=>r.id===(recipient||target?.subject.id||selected?.participants.find(p=>p.id!==phone.actor_id)?.id)) : undefined;
   const jobHere=job?.kind==='communication'&&(job.presentation?.call_id?tab==='calls':tab==='messages'&&!!conversation&&job.presentation?.conversation_id===conversation);
   return (
-    <div
-      className="phone-affordance"
-      style={{ "--phone-dock-bottom": `${dock}px` } as CSSProperties}
-    >
-
-      <div
-        className={`phone-device ${open ? "is-open" : ""} ${call?.status === "ringing" ? "is-ringing" : ""}`}
-        data-testid="phone-device"
-      >
+    <>
         <button ref={trigger}
-          className="phone-peek"
+          className="phone-peek nr-phonebutton"
           aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
           aria-expanded={open}
           onClick={() => open ? close() : setOpen(true)}
         >
-          <span className="phone-camera" />
-          <PhoneIcon size={18} />
-          <span>Телефон</span>
+          <Smartphone size={16} />
+          <span className="nr-phone-label">Телефон</span>
           {(unread > 0 || call) && (
             <span
-              className="phone-led"
+              className="nr-unread"
               aria-label={
                 call ? "Входящий или активный звонок" : "Новые сообщения"
               }
-            />
+            >{unread || '•'}</span>
           )}
         </button>
+        <PhoneFrame save={save} open={open} close={close} closeLabel="Свернуть телефон">
         <div
           className="phone-screen"
           ref={screen}
@@ -429,20 +418,13 @@ export function Phone({
           tabIndex={-1}
           inert={!open}
           aria-hidden={!open}
-          onKeyDown={e=>{
-            if(e.key!=='Tab')return;
-            const nodes=Array.from(screen.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),summary')||[]).filter(n=>n.getClientRects().length);
-            const first=nodes[0], last=nodes.at(-1);
-            if(e.shiftKey&&(document.activeElement===first||document.activeElement===screen.current)){e.preventDefault();last?.focus()}
-            else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===screen.current)){e.preventDefault();first?.focus()}
-          }}
         >
-          <header className="phone-top">
+          <header className={"phone-top"+(nested?"":" phone-page-heading")}>
             {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ArrowLeft size={20}/></Button>}
             {inChat && !membersOpen && <span className="phone-header-avatar" aria-label="Участники переписки">{selected?.group ? <Users size={24}/> : (selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject) ? avatar((selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject)!) : null}</span>}
-            <div className="phone-heading" aria-busy={busy}><strong title={title}>{title}</strong><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : save.state.characters.find(c=>c.id===phone.actor_id)?.name}</small></div>
+            <div className="phone-heading" aria-busy={busy}><h2 title={title}>{title}</h2><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : null}</small></div>
             {inChat && selected?.group && selected.active && !membersOpen && <Button variant="ghost" size="icon" aria-label="Управление участниками" onClick={()=>setMembersOpen(true)}><Users size={20}/></Button>}
-            <Button variant="ghost" size="icon" aria-label="Свернуть телефон" onClick={close}><X size={20}/></Button>
+            {inChat && !selected?.group && chatRecipient?.can_call && <Button variant="ghost" size="icon" aria-label={'Позвонить: '+chatRecipient.subject.name} disabled={locked||!!call} onClick={()=>void perform({action:'call',character_id:chatRecipient.id})}><PhoneIcon/></Button>}
           </header>
           {error && <div className="phone-error" role="alert"><span>{error}</span><button disabled={busy} onClick={async()=>{
             if(requestLock.current||locked)return;requestLock.current=true;setBusy(true);
@@ -491,17 +473,18 @@ export function Phone({
             </section>
           )}
           <div ref={list} onScroll={e=>{listPositions.current[listKey]=e.currentTarget.scrollTop}} className={`phone-body ${inChat && !membersOpen ? 'phone-chat' : ''}`}>
-            {entry&&unread>0&&<section className="phone-notifications"><h3>Новые сообщения · {unread}</h3>{phone.conversations.filter(c=>phone.events.some(e=>e.conversation_id===c.id&&e.unread)).map(c=><button key={c.id} onClick={()=>void openChat(c)}>{c.title}<small>Открыть сообщение</small></button>)}</section>}
+
             {tab === "contacts" && (
               <>
-                {!detail&&<>
-                  <label className="phone-search">{t("searchRecipient")}<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("searchPlaceholder")}/></label>
+                {!detail&&!adding&&<>
+                  <Button variant="secondary" onClick={()=>{setAddress('');setLabel('');setEditContact(null);setAdding(true)}}><Plus/>Добавить контакт</Button>
+                  <label className="phone-search"><Search aria-hidden size={17}/><input aria-label={t("searchRecipient")} type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("searchPlaceholder")}/></label>
                   <section className="phone-directory" aria-label={t("directory")}>
                     {visibleRecipients.map(r=>{
                       const saved = savedRecipient(r);
                       return <article className="phone-row phone-recipient" key={r.id}>
                         {avatar(r.subject)}
-                        <button className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
+                        <button className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);}else chooseRecipient(r)}}>
                           <strong>{saved?.label || r.subject.name}</strong>
                           {saved && saved.label !== r.subject.name && <small>{r.subject.name}</small>}
                         </button>
@@ -519,18 +502,18 @@ export function Phone({
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      void perform({
+                      void perform(editContact ? {
                         action: "edit_contact",
                         contact_id: editContact,
                         label,
                         blocked:
                           phone.contacts.find((c) => c.id === editContact)
                             ?.blocked || false,
-                      }).then((next) => {
+                      } : {action:"add_contact", label:label.trim(), address:address.trim()}).then((next) => {
                         if (next) {
                           if(editContact)contactLabels.current.delete(editContact);
                           setEditContact(null);setAdding(false);
-                          setLabel("");
+                          setLabel("");setAddress("");
                         }
                       });
                     }}
@@ -544,14 +527,15 @@ export function Phone({
                         required
                       />
                     </label>
-                    <button disabled={locked}>Сохранить контакт</button>
+                    {!editContact&&<label>Адрес или номер<input required value={address} maxLength={160} onChange={e=>setAddress(e.target.value)}/></label>}
+                    <button disabled={locked||!label.trim()||(!editContact&&!address.trim())}>Сохранить контакт</button>
                   </form>
                 )}
-                {(detail?phone.contacts.filter(c=>c.id===detail):legacyContacts.filter(c=>matchesSearch(c.label+' '+c.address))).map((c) => (
+                {!adding&&(detail?phone.contacts.filter(c=>c.id===detail):legacyContacts.filter(c=>matchesSearch(c.label+' '+c.address))).map((c) => (
                   <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
-                      <button className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
+                      <button className="phone-contact-name" onClick={()=>{setDetail(c.id);}}><strong>{c.label}</strong></button>
                       <small>
                         {c.address}
                         {c.blocked
@@ -625,8 +609,8 @@ export function Phone({
                     </div>}
                   </article>
                 ))}
-                {!detail&&<h3>Экстренные службы · в игре</h3>}
-                {!detail&&phone.emergency.map((e) => (
+                {!adding&&!detail&&<h3>Экстренные службы · в игре</h3>}
+                {!adding&&!detail&&phone.emergency.map((e) => (
                   <div className="phone-row" key={e.service}>
                     <span>
                       {services[e.service]} · {e.number || "Номер не настроен"}
@@ -647,7 +631,7 @@ export function Phone({
               <>
                 {!conversation && !contact && !recipient ? (
                   <>
-                    {!grouping && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><Plus size={18}/>{t("newMessage")}</Button>
+                    {!grouping && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><Plus size={18}/>{t("write")}</Button>
                     <Button variant="ghost" onClick={() => setGrouping(true)}><Users size={18}/>Создать группу</Button></div>}
                     {grouping && (
                       <form
@@ -829,7 +813,7 @@ export function Phone({
               </>
             )}
           </div>
-          <nav className="phone-bottom" aria-label="Разделы телефона">
+          <nav hidden={!!nested} className="phone-bottom" aria-label="Разделы телефона">
             {(
               [
                 ["calls", "Звонки", PhoneIcon],
@@ -842,7 +826,7 @@ export function Phone({
                 aria-label={label}
                 title={label}
                 aria-pressed={tab === key}
-                onClick={() => {setTab(key);setEntry(false);setMembersOpen(false);setGrouping(false)}}
+                onClick={() => {setTab(key);setMembersOpen(false);setGrouping(false)}}
               >
                 <Icon size={20} /><span>{key==='messages'?'Чаты':label}</span>
                 {key === "messages" && unread > 0 && <small>{unread}</small>}
@@ -850,7 +834,7 @@ export function Phone({
             ))}
           </nav>
         </div>
-      </div>
-    </div>
+        </PhoneFrame>
+    </>
   );
 }

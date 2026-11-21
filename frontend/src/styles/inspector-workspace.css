@@ -183,7 +183,7 @@
   white-space: nowrap;
   margin-top: 2px;
 }
-@media (min-width: 768px) and (max-width: 900px) {
+@container app (min-width:681px) and (max-width: 900px) {
   .narrative-shell .nav-rail .brand {
     font-size: 10px;
     letter-spacing: 1px;
@@ -919,7 +919,7 @@
     flex-basis: calc(100% - 104px);
   }
 }
-@media (max-width: 767px) {
+@container app (max-width:680px) {
   .narrative-shell {
     --inspector-nav-width: 0px;
     --inspector-top-height: 56px;
@@ -1081,7 +1081,7 @@
 .inspector-timeline-time svg {
   color: var(--accent);
 }
-@media (max-width: 767px) {
+@container app (max-width:680px) {
   .inspector-timeline-event {
     padding-left: 16px;
     gap: 8px;

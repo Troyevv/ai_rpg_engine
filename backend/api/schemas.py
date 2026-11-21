@@ -129,9 +129,9 @@ class Preferences(DTO):
     summary: ModelConfig
     game: ModelConfig
     local: Load
-    font_size: int = Field(default=18, ge=14, le=24)
+    font_size: int = Field(default=17, ge=14, le=24)
     line_height: float = Field(default=1.8, ge=1.3, le=2.2)
-    reading_width: int = Field(default=800, ge=600, le=1100)
+    reading_width: int = Field(default=820, ge=600, le=1100)
     link_names: bool = True
 
 class Markdown(DTO):

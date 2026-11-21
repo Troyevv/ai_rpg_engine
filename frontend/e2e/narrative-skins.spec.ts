@@ -21,7 +21,7 @@ test('all skins, four mobile widths, time skip and rollback',async({page,request
    await expect(page.getByRole('dialog').last()).toBeVisible();
    expect(await page.getByRole('dialog').last().evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
    if(width===390||width===1440){
-    fingerprints.add(await page.getByRole('dialog').last().evaluate(el=>{const c=getComputedStyle(el);return [c.borderRadius,c.borderWidth,c.borderStyle,c.backgroundImage,getComputedStyle(document.querySelector('h1')!).fontFamily].join('|')}));
+    fingerprints.add(await page.getByRole('dialog').last().evaluate(el=>{const c=getComputedStyle(el);return [c.borderRadius,c.borderWidth,c.borderStyle,c.backgroundImage,c.backgroundColor,c.color,getComputedStyle(document.querySelector('h1')!).fontFamily].join('|')}));
     if(['industrial','parchment','cyberpunk','biotech'].includes(theme.id))await page.screenshot({path:info.outputPath(`${theme.id}-${width}.png`),animations:'disabled'});
    }
    await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
@@ -42,7 +42,7 @@ test('all skins, four mobile widths, time skip and rollback',async({page,request
 });
 
 // Screenshots are CI artifacts; assertions catch missing/intrusive art as well as borders.
-test('skin artwork is visible, distinct and outside the reading surface',async({page,request},info)=>{
+test('skins preserve distinct palettes and a clear V3 reading surface',async({page,request},info)=>{
  const selection=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.emulateMedia({reducedMotion:'reduce'});
@@ -53,23 +53,13 @@ test('skin artwork is visible, distinct and outside the reading surface',async({
   await request.put(`/api/worlds/${selection.world}/presentation`,{data:{theme_id:id}});
   await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',id);
   await page.locator('.story-scroll').evaluate(el=>el.scrollTop=0);
-  const art=page.locator('.skin-header-art');
-  if(id==='graphite'){
-   await expect(art).toHaveCount(0);await expect(page.locator('.theme-decoration')).toHaveCount(0);
-  }else{
-   await expect(art).toBeVisible();await expect(art).toHaveCSS('pointer-events','none');
-   const bounds=await art.boundingBox();expect(bounds!.height).toBeGreaterThanOrEqual(56);
-   const title=await page.locator('.story-heading h1').boundingBox();
-   expect(bounds!.y+bounds!.height).toBeLessThanOrEqual(title!.y);
-   expect(await art.evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
-   const paths=await art.locator('path').evaluateAll(nodes=>nodes.map(el=>el.getAttribute('d')).join('|'));
-   expect(paths.length).toBeGreaterThan(100);drawings.add(paths);
-   await expect(page.locator('.theme-decoration')).toHaveCSS('pointer-events','none');
-  }
-  for(const selector of ['.pov-controls','.scene-bar','.composer','.topbar']){
-   const widths=await page.locator(selector).evaluateAll(nodes=>nodes.map(el=>{const c=getComputedStyle(el);return [c.borderLeftWidth,c.borderRightWidth]}));
-   for(const sides of widths)expect(sides).toEqual(['0px','0px']);
-  }
+  const reader=page.locator('.nr-content');
+  await expect(reader).toBeVisible();
+  await expect(page.locator('.skin-header-art')).toHaveCount(0);
+  drawings.add(await reader.evaluate(el=>['--bg','--surface-1','--accent'].map(v=>getComputedStyle(el).getPropertyValue(v)).join('|')));
+  const composer=await page.locator('.composer').boundingBox();
+  const panel=await page.locator('.story-scroll').boundingBox();
+  expect(panel!.y+panel!.height).toBeLessThanOrEqual(composer!.y+1);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.getByRole('textbox',{name:'Своё действие или реплика'}).fill('Осматриваюсь');
   await expect(page.getByRole('button',{name:'Отправить действие'})).toBeEnabled();
@@ -78,5 +68,5 @@ test('skin artwork is visible, distinct and outside the reading surface',async({
   await expect(page.getByRole('dialog').last()).toBeVisible();
   await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
  }
- expect(drawings.size).toBe(5);
+ expect(drawings.size).toBe(6);
 });

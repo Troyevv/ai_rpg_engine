@@ -1,13 +1,13 @@
 import { useId, useState, type ReactNode } from 'react';
 import { tr } from '../../lib/interfaceText';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 
 export function ActionPanel({
-  children,
+  children, count,
   label,
   hidden = false,
 }: {
-  hidden?: boolean;
+  count?: number; hidden?: boolean;
   children: ReactNode;
   label: string;
 }) {
@@ -29,9 +29,10 @@ export function ActionPanel({
         aria-controls={bodyId}
         onClick={() => setStep((s) => (s === 2 ? 0 : s + 1))}
       >
-        {label}
+        <Sparkles aria-hidden size={16}/>{label}{count!==undefined&&<span className="choice-count">{count}</span>}<span className="choice-level">{['Свёрнуто','Компактно','Полностью'][step]}</span>
         {step === 2 ? <ChevronUp aria-hidden="true" size={16} /> : <ChevronDown aria-hidden="true" size={16} />}
       </button>
+      {count!==undefined&&<span className="action-panel-hint">или напиши своё</span>}
       <div className="action-panel-body" id={bodyId} inert={step === 0}>
         {children}
       </div>

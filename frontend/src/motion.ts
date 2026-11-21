@@ -1,3 +1,4 @@
+import {useAnimations} from './lib/animations';
 import {useReducedMotion, type Variants} from 'framer-motion';
 
 export const motionTiming={fast:.14, normal:.24, slow:.48};
@@ -15,7 +16,9 @@ export const motionPresets={
  povTransition:{hidden:{opacity:0,y:10},visible:{opacity:1,y:0,transition:{duration:motionTiming.slow,ease}}},
 } satisfies Record<string,Variants>;
 export function useMotionPreset(name:keyof typeof motionPresets){
- const reduced=useReducedMotion();
+ const systemReduced=useReducedMotion();
+  const animations=useAnimations();
+  const reduced=systemReduced||!animations;
  // MotionConfig disables transforms; this also removes stagger and long transitions.
  return reduced?motionPresets.fade:motionPresets[name];
 }

@@ -279,7 +279,7 @@ export function Inspector({
   const [dossierTab, setDossierTab] = useState<DossierTab>("overview");
   useEffect(()=>{if(open&&storyTarget?.character_ids?.length)setDossierTab('secrets')},[open,storyTarget]);
   const [expanded, setExpanded] = useState(
-    () => sessionStorage.getItem("dossier-expanded") !== "no",
+    () => sessionStorage.getItem("dossier-expanded") === "yes",
   );
   const [query, setQuery] = useState("");
   const [near, setNear] = useState(false);
@@ -428,6 +428,7 @@ export function Inspector({
   const section = inspectorSections.find((s) => s.id === panel)!;
   return (
     <>
+      {open&&<div className="inspector-backdrop" aria-hidden onClick={back}/>}
       <section
         className="inspector-workspace"
         hidden={!open}
@@ -477,6 +478,12 @@ export function Inspector({
             </span>
           </Button>
         </header>
+        <div className="inspector-layout">
+          <nav className="inspector-sections" aria-label="Разделы инспектора">
+            {inspectorSections.map(({id,icon:Icon})=><button key={id} aria-current={panel===id?'page':undefined} onClick={()=>setPanel(id)}>
+              <Icon size={16}/>{panelLabel(id)}
+            </button>)}
+          </nav>
         <div
           ref={scrollRef}
           className={`inspector-scroll ${expanded ? "dossier-expanded" : "inspector-compact"}`}
@@ -585,6 +592,7 @@ export function Inspector({
                 </div>
               ))}
           </div>
+        </div>
         </div>
       </section>
       <Dialog open={infoOpen} onOpenChange={setInfoOpen}>

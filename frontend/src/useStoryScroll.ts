@@ -4,7 +4,7 @@ import {useCallback,useLayoutEffect,useRef,useState} from 'react';
  * Never start smooth-scroll animations: a single pending frame coalesces resizes.
  * Keep a visible article anchor while unpinned, including regeneration above it.
  */
-export function useStoryScroll(saveId?:number|string){
+export function useStoryScroll(saveId?:number|string, startAtTop=false){
   const scroll=useRef<HTMLDivElement>(null),pinned=useRef(true);
   const liveText=useRef<HTMLDivElement>(null),followingProse=useRef(false);
   const [away,setAway]=useState(false);
@@ -87,9 +87,9 @@ export function useStoryScroll(saveId?:number|string){
   },[remember,schedule]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el)return;
-    pinned.current=true;followingProse.current=false;anchor.current=null;lastTop.current=0;setAway(false);
-    try {const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved){pinned.current=saved.pinned;el.scrollTop=saved.top;setAway(!saved.pinned)}}catch{/* old UI preference */}
-    remember();schedule();
+    pinned.current=!startAtTop;followingProse.current=false;anchor.current=null;lastTop.current=0;setAway(false);
+    try {const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved){pinned.current=saved.pinned;el.scrollTop=saved.top;setAway(!saved.pinned && saved.top>0)}}catch{/* old UI preference */}
+    remember();if(startAtTop && el.scrollTop===0)anchor.current=null; schedule();
     const observer=new ResizeObserver(schedule);observer.observe(el);
     if(el.firstElementChild)observer.observe(el.firstElementChild);
     const upwardIntent=()=>{upwardInputUntil.current=performance.now()+250};

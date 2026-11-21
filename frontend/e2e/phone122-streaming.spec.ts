@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import {copyFile,mkdir} from 'node:fs/promises';
 import type {Job,Save,Turn} from '../src/types';
-test.use({video:'on'});
+test.use({video:process.env.PHONE133_FOLLOWUP_EVIDENCE||process.env.PHONE122_EVIDENCE?'on':'off'});
 const prose=Array.from({length:30},(_,i)=>`Реплика ${i+1}. В трубке слышен спокойный голос. Собеседница делает паузу и продолжает длинный рассказ о планах на ближайшую неделю.`).join('\n\n');
 async function frames(page:Page,n=20){await page.evaluate(n=>new Promise<void>(resolve=>{let i=0;const tick=()=>++i>=n?resolve():requestAnimationFrame(tick);requestAnimationFrame(tick)}),n)}
 for(const reduced of [false,true])test(`122 call bursty SSE and independent anchors ${reduced?'reduced':'motion'}`,async({page,request},info)=>{
@@ -15,7 +15,7 @@ for(const reduced of [false,true])test(`122 call bursty SSE and independent anch
  },selected);
  await page.goto('/');await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  let save:Save=await(await request.get(`/api/saves/${selected.save}`)).json();
  const callId=save.state.phone!.events.find(e=>e.status==='answered')!.id;
@@ -89,7 +89,7 @@ test('133 call stop restores unsaved speech without hanging up',async({page,requ
  },s);
  await page.goto('/');await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  let save:Save=await(await request.get(`/api/saves/${s.save}`)).json();
  const callId=save.state.phone!.events.find(e=>e.status==='answered')!.id;

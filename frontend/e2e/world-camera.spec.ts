@@ -7,7 +7,7 @@ test('camera, observer continuation, timeline and immutable playback',async({pag
  await page.goto('/');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- const open=async()=>page.getByRole('button',{name:isMobile?'Камера и журнал мира':'Камера · Журнал',exact:true}).click();
+ const open=async()=>{if(isMobile)await page.getByLabel('Ещё действия').click();await page.getByRole('button',{name:'Камера · Журнал',exact:true}).click()};
  await open();
  const dialog=page.getByRole('dialog');
  await expect(dialog.getByRole('heading',{name:'Камера мира'})).toBeVisible();

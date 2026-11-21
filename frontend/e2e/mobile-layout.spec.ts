@@ -7,7 +7,7 @@ for(const width of [360,390,412,430])test(`mobile story layout ${width}px`,async
  await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.choices button')).toHaveCount(6);
  await expect(page.locator('.nav-rail')).toHaveCount(0);
- await expect(page.locator('.mobile-context')).toBeVisible();
+ await expect(page.locator('.nr-actorcontrol')).toBeVisible();
  const story=await page.locator('.story-scroll').boundingBox();expect(story!.height).toBeGreaterThan(480);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
  await page.getByLabel('Своё действие или реплика').fill(Array(12).fill('Длинная строка действия').join('\n'));
@@ -16,9 +16,9 @@ for(const width of [360,390,412,430])test(`mobile story layout ${width}px`,async
  await page.getByRole('button',{name:'Отправить действие'}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await page.locator('.story-scroll').evaluate(el=>{el.scrollTop=0});
- await expect(page.getByRole('button',{name:'К последней сцене'})).toBeVisible();
- await page.getByRole('button',{name:'К последней сцене'}).click();
- await expect(page.getByRole('button',{name:'К последней сцене'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'К последнему ответу'})).toBeVisible();
+ await page.getByRole('button',{name:'К последнему ответу'}).click();
+ await expect(page.getByRole('button',{name:'К последнему ответу'})).toHaveCount(0);
  // Emulate a keyboard-driven visualViewport resize; physical keyboard behaviour is a separate device check.
  await page.getByLabel('Своё действие или реплика').focus();
  await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:440});visualViewport!.dispatchEvent(new Event('resize'))});
@@ -28,7 +28,7 @@ for(const width of [360,390,412,430])test(`mobile story layout ${width}px`,async
  await page.getByLabel('Своё действие или реплика').blur();
  await page.locator('.story-scroll').evaluate(el=>{el.scrollTop=0});
  await page.screenshot({path:`test-results/mobile-${width}.png`});
- await page.getByRole('button',{name:'Камера и журнал мира'}).click();
+ await page.getByLabel('Ещё действия').click();await page.getByRole('button',{name:'Камера · Журнал'}).click();
  await expect(page.getByRole('heading',{name:'Камера мира'})).toBeVisible();
  expect(await page.getByRole('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);

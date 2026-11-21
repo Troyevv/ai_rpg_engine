@@ -5,19 +5,15 @@ async function geometry(page: Page) {
   const journal = await page.getByRole('button', {name: /^История уведомлений, /}).boundingBox();
   expect(management).not.toBeNull();
   expect(journal).not.toBeNull();
-  const left = management!, right = journal!;
-  expect(Math.abs(left.y + left.height / 2 - right.y - right.height / 2)).toBeLessThanOrEqual(1);
-  expect(left.x + left.width + 7).toBeLessThanOrEqual(right.x);
-  const toolbar = page.getByRole('group', {name: 'Действия истории', exact: true});
-  await expect(toolbar.locator(':scope > .current-game-entry > button, :scope > .story-journal-trigger')).toHaveCount(2);
-  const box = (await toolbar.boundingBox())!;
-  const header = (await page.locator('.topbar').boundingBox())!;
-  expect(Math.abs(box.y - header.y - header.height)).toBeLessThanOrEqual(1);
-  expect(box.height - Math.max(left.height, right.height)).toBeLessThanOrEqual(12);
-  expect(left.x).toBeGreaterThanOrEqual(box.x);
-  expect(right.x + right.width).toBeLessThanOrEqual(box.x + box.width);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect(await toolbar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const toolbar=page.getByRole('group',{name:'Действия истории'});
+  const box=(await toolbar.boundingBox())!;
+  const header=(await page.locator('.topbar').boundingBox())!;
+  expect(Math.abs(box.y-header.y-header.height)).toBeLessThanOrEqual(1);
+  expect(management!.y).toBeGreaterThanOrEqual(box.y);
+  expect(management!.y+management!.height).toBeLessThanOrEqual(box.y+box.height+1);
+  await expect(page.locator('.nr-context .story-journal-trigger')).toHaveCount(1);
+  expect(await toolbar.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   return box;
 }
 
@@ -48,12 +44,12 @@ for (const theme of ['graphite', 'parchment']) {
 
       await management.focus();
       await management.press('Enter');
-      await expect(page.getByRole('dialog').getByRole('heading', {name: 'Текущая игра', exact: true})).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('heading', {name: 'Управление игрой', exact: true})).toBeVisible();
       await expect(page.locator('.narrative-toolbar [role="dialog"]')).toHaveCount(0);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(management).toBeFocused();
-      await page.keyboard.press('Tab');
+      await journal.focus();
       await expect(journal).toBeFocused();
       await journal.press('Enter');
       await expect(page.getByRole('dialog').getByRole('heading', {name: 'События истории', exact: true})).toBeVisible();
@@ -113,9 +109,7 @@ for (const theme of ['graphite', 'parchment']) {
   }
 }
 
-// Three groups keep the world title centered even when left/right controls
-// differ in width. Long names must truncate inside their own grid track.
-test('Narrative header: centered world title, bounded controls and ordinary Chat navigation',async({page,request},info)=>{
+test('Narrative header keeps world selection and Chat reachable with long names',async({page,request},info)=>{
   test.setTimeout(120000);
   const seed=await(await request.post('/test/story168-seed')).json();
   await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);
@@ -126,19 +120,19 @@ test('Narrative header: centered world title, bounded controls and ordinary Chat
     await page.setViewportSize({width,height:width<768?780:900});
     for(title of titles){
       await page.goto('/');const header=page.locator('.topbar'),world=header.locator('.breadcrumb');await expect(world).toContainText(title);await expect(world).toHaveAttribute('title',title);
-      await expect(header.locator(':scope > div')).toHaveCount(3);await expect(page.locator('.chat-copy-entry')).toHaveCount(0);
+      await expect(header.locator(':scope > div')).toHaveCount(2);await expect(page.locator('.chat-copy-entry')).toHaveCount(0);
       if(width>=768)await expect(header.getByRole('button',{name:'О мире',exact:true})).toBeVisible();
       const h=(await header.boundingBox())!,t=(await world.boundingBox())!;
-      expect(Math.abs(t.x+t.width/2-(h.x+h.width/2))).toBeLessThanOrEqual(1);
+      expect(t.x).toBeGreaterThanOrEqual(h.x);
       const groups=await header.locator(':scope > div').evaluateAll(nodes=>nodes.map(el=>el.getBoundingClientRect().toJSON()));
-      expect(groups[0].right).toBeLessThanOrEqual(groups[1].left);expect(groups[1].right).toBeLessThanOrEqual(groups[2].left);
+      expect(groups[0].right).toBeLessThanOrEqual(groups[1].left);
       for(const button of await header.locator('button').all()){
         const b=(await button.boundingBox())!;expect(b.x).toBeGreaterThanOrEqual(h.x);expect(b.x+b.width).toBeLessThanOrEqual(h.x+h.width);
         expect(Math.abs(b.y+b.height/2-(t.y+t.height/2))).toBeLessThanOrEqual(1);
         if(width<768)expect(b.height).toBeGreaterThanOrEqual(44);
       }
       const left=(await header.getByRole('button',{name:'RP-чат',exact:true}).boundingBox())!;
-      expect(left.x+left.width).toBeLessThanOrEqual(t.x);const action=(await header.locator('.topbar-actions button').first().boundingBox())!;expect(t.x+t.width).toBeLessThanOrEqual(action.x);
+      expect(t.x+t.width).toBeLessThanOrEqual(left.x);const action=(await header.locator('.topbar-actions button').first().boundingBox())!;expect(t.x+t.width).toBeLessThanOrEqual(action.x);
       expect(await header.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     }
   }
@@ -146,7 +140,7 @@ test('Narrative header: centered world title, bounded controls and ordinary Chat
     await expect(page.locator('.topbar').getByRole('button',{name:'О мире',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'Режим чтения',exact:true}).click();await expect(page.locator('.nav-rail')).toBeHidden();
     const h=(await page.locator('.topbar').boundingBox())!,t=(await page.locator('.breadcrumb').boundingBox())!;
-    expect(Math.abs(t.x+t.width/2-(h.x+h.width/2))).toBeLessThanOrEqual(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(t.x).toBeGreaterThanOrEqual(h.x);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await page.getByRole('button',{name:'Выйти из чтения',exact:true}).click();
   }
   await page.locator('.breadcrumb').click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);

@@ -230,9 +230,9 @@ export const defaults: Preferences = {
     flash_attention: true,
     offload_kv_cache_to_gpu: true,
   },
-  font_size: 18,
+  font_size: 17,
   line_height: 1.8,
-  reading_width: 800,
+  reading_width: 820,
   link_names: true,
 };
 export const active = (job: Job | null | undefined) =>

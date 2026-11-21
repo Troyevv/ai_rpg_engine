@@ -211,7 +211,7 @@
 @media(max-width:600px){.pov-controls label{width:100%;flex-wrap:wrap}.pov-controls select{flex:1}}
 
 /* Separate mobile presentation: header + context strip + independently scrolling story + composer. */
-@media (max-width:767px) {
+@container app (max-width:680px) {
  .app-shell {position:fixed;inset:var(--app-top,0px) 0 auto;height:var(--app-height,100dvh);width:100%;overflow:hidden;flex-direction:column}
  .app-main,.game {min-height:0;min-width:0;flex:1;overflow:hidden}
  .topbar {height:48px;min-height:48px;padding:0 8px;gap:4px;flex-shrink:0}
@@ -246,12 +246,12 @@
  .keyboard-open .mobile-context {display:none}
 }
 
-@media(max-width:767px){
+@container app (max-width:680px){
  .topbar{padding-top:env(safe-area-inset-top);height:calc(48px + env(safe-area-inset-top));min-height:calc(48px + env(safe-area-inset-top))}
  .background-exit{align-items:stretch}
 }
 
-@media(max-width:767px) {
+@container app (max-width:680px) {
  .world-camera.mobile-sheet { width:100%; }
  .camera-cast article { align-items:stretch; flex-direction:column; }
  .camera-actions { flex-direction:row; }
@@ -263,14 +263,14 @@
  .mobile-pov>button:last-child { flex-shrink:0; min-width:44px; }
 }
 
-@media(max-width:767px) {
+@container app (max-width:680px) {
  .library-dialog .world-grid { grid-template-columns:minmax(0,1fr); }
  .world-card-wrap .world-card { gap:8px; padding:18px 48px 18px 18px; min-height:0; }
  .world-card-wrap .world-card strong { font-size:1.45rem; }
 
 }
 
-@media(max-width:767px){
+@container app (max-width:680px){
  .world-workshop { padding:1rem; }
  .world-workshop h1 { font-size:1.8rem; }
  .world-workshop .document { padding:1rem 0; }
@@ -282,7 +282,7 @@
  .world-workshop .draft-section { min-width:0; }
 }
 
-@media(max-width:767px){
+@container app (max-width:680px){
  html,body,#root { max-width:100%; overflow-x:clip; }
  .world-workshop { padding:18px 16px 100px; }
  .world-workshop .workshop-content,.world-workshop .draft-field,.world-workshop .draft-entity { min-width:0; max-width:100%; }
@@ -309,7 +309,7 @@
 }
 
 /* Shared responsive rules are last: no component has a theme-specific layout. */
-@media(max-width:767px) {
+@container app (max-width:680px) {
  .dialog-content { top:auto; bottom:0; left:0; transform:none; width:100%; max-width:100%; max-height:calc(var(--app-height,100dvh) - 12px); border-radius:var(--radius-xl) var(--radius-xl) 0 0; padding:24px 18px max(20px,env(safe-area-inset-bottom)); }
 
  .ui-button,.section-tabs > button,summary { min-height:44px; }
@@ -340,7 +340,7 @@
 }
 
 /* Issue #126: full viewport navigation, separate from the contextual sheets. */
-@media (max-width:767px) {
+@container app (max-width:680px) {
  .mobile-game-menu.dialog-content {
   top:var(--app-top,0px);bottom:auto;left:0;transform:none;
   width:100%;max-width:100%;height:var(--app-height,100dvh);max-height:var(--app-height,100dvh);

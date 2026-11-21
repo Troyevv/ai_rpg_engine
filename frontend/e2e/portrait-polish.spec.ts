@@ -117,7 +117,7 @@ test('portrait viewer, editor, error recovery, semantic tabs and resize drafts',
  await authors(phone,request,s.save,['qa_kirill','qa_vera']);
  const draft=phone.getByLabel('Сообщение в телефоне');await draft.fill('Черновик после увеличения текста');
  await page.setViewportSize({width:393,height:800});await expect(draft).toHaveValue('Черновик после увеличения текста');
- await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+ await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
  await page.getByRole('button',{name:/^Телефон/}).click();
  await expect(draft).toHaveValue('Черновик после увеличения текста');await portrait(phone.locator('.phone-header-avatar img'),'qa_vera');
  await page.keyboard.press('Escape');await expect(phone.locator('.phone-conversations')).toBeVisible();
@@ -153,7 +153,7 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
  await page.screenshot({path:`${evidence}/after-${info.project.name}-temporary-owner.png`});
  await readReady;
  try {
-  await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+  await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
   const control=info.project.name==='mobile'?page.locator('.mobile-pov button').first():page.getByLabel('Управляемый персонаж',{exact:true});
   await expect(control).toBeDisabled();
   await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();

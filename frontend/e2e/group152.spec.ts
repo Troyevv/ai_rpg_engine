@@ -34,7 +34,7 @@ for (const theme of ['graphite','parchment']) {
   await expect.poll(async()=>(await view()).job.status).toBe('saved');
   await expect(phone.locator('.phone-message')).toHaveCount(4);
   await expect(phone.getByText('Тимур, здорово! Покажешь потом?',{exact:true})).toBeVisible();
-  await phone.getByRole('button',{name:'Свернуть телефон'}).click();
+  await page.getByRole('button',{name:'Свернуть телефон'}).click();
   await physical(); // the communication source is consumed, no second reaction
   expect((await view()).state.phone.events).toHaveLength(4);
   await physical(); // spontaneous attempt after thirty world minutes

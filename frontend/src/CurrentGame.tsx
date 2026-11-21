@@ -1,3 +1,4 @@
+import {calendarDate} from './gameDate';
 import { Choice } from "@/components/ui/choice";
 import { CommunicationSettings } from "./CommunicationSettings";
 import { WeatherSettings } from "./WeatherSettings";
@@ -247,6 +248,7 @@ export function CurrentGame({
     <>
       <div className="current-game-entry">
         <Button
+          aria-label="Управление игрой" className="nr-managemententry"
           ref={trigger}
           variant="outline"
           onClick={() => {
@@ -255,7 +257,7 @@ export function CurrentGame({
           }}
         >
           <Settings2 size={16} />
-          Управление игрой
+          <span className="nr-desktoplabel">Управление игрой</span><span className="nr-mobilelabel">Управление</span>
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -270,8 +272,7 @@ export function CurrentGame({
           }}
         >
           <header className="management-header">
-            <span className="management-kicker">Управление прохождением</span>
-            <DialogTitle>Текущая игра</DialogTitle>
+            <DialogTitle>Управление игрой</DialogTitle>
             <DialogDescription>
               Время, персонажи и настройки этого прохождения.
             </DialogDescription>
@@ -296,9 +297,11 @@ export function CurrentGame({
               <section className="management-stack">
                 <div className="management-clock">
                   <span className="management-kicker">Сейчас в мире</span>
+                  <strong className="management-time">{save.state.world_clock?.projection?.time}</strong>
                   <SceneClock save={save} />
                   <p>{save.state.scene_meta?.location || "Место не указано"}</p>
                 </div>
+          {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
                 <div className="management-time-options">
                   <article className="management-card">
                     <Clock className="management-icon" />

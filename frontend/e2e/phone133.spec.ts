@@ -32,7 +32,7 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
   await check();
  }
  if(!baseline){await expect(phone).not.toContainText(/История обработки|диагностика|Технические|решений за цикл|remote_semantics/);await expect(phone.locator('pre')).toHaveCount(0)}
- await capture('messages');await phone.getByRole('button',{name:'Свернуть телефон'}).click();await check();
+ await capture('messages');await page.getByRole('button',{name:'Свернуть телефон'}).click();await check();
  await expect(main).toHaveValue('Черновик основной сцены');await capture('choices');
  await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();await check();

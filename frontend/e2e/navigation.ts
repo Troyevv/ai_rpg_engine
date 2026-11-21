@@ -9,15 +9,17 @@ export async function nav(page:Page,name:string){
   }
  }
 
- const button=page.getByRole('button',{name,exact:true}).last();
- if((page.viewportSize()?.width||1440)<768){
-  await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'Меню игры'}).click();
-  if(name==='Создать')name='Создать мир';
-  if(name==='Игра'){await page.locator('.mobile-menu-resume').click();return}
-  if(name==='Режим чтения'||name==='Выйти из чтения'){
-   await page.getByRole('switch',{name:'Режим чтения'}).click();
-   await page.getByRole('button',{name:'Закрыть',exact:true}).click();return;
-  }
+ const inspector=page.locator('.inspector-workspace:visible');
+ if(await inspector.count()){
+  const section=inspector.getByRole('navigation',{name:'Разделы инспектора'}).getByRole('button',{name,exact:true});
+  if(await section.count()){await section.click();return}
+  await page.keyboard.press('Escape');
+ }
+ if(await page.getByRole('button',{name:'Меню игры',exact:true}).isVisible()){
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  if(name==='Режим чтения'||name==='Выйти из чтения')await page.getByLabel('Ещё действия').click();
+  else await page.getByRole('button',{name:'Меню игры'}).click();
+
  }
  await page.getByRole('button',{name,exact:true}).last().click();
 }
@@ -39,11 +41,11 @@ export async function actor(page:Page,id:string,name:string){
  if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 export async function diagnostics(page:Page){
- if(await page.locator('.mobile-story-tools').isVisible() && await page.locator('.mobile-story-tools').getAttribute('open')===null)await page.locator('.mobile-story-tools summary').click();
+ if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();
  await page.getByRole('button',{name:'Диагностика',exact:true}).click();
 }
 export async function gameAction(page:Page,name:string){
- const menu=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Текущая игра',exact:true})});
+ const menu=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Управление игрой',exact:true})});
  if(!await menu.isVisible())await page.locator('.current-game-entry button').click();
  const section=name==='Политика истории'?'Настройки':name==='Сменить главного героя'?'Персонажи':'Время';
  await menu.getByRole('tablist',{name:'Разделы текущей игры'}).getByRole('tab',{name:section,exact:true}).click();

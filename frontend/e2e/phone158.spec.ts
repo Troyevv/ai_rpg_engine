@@ -3,7 +3,7 @@ const phone=(page:Page)=>page.getByRole('region',{name:'Телефон перс�
 async function seed(page:Page,request:APIRequestContext,query='incoming=false&polish=true') {
  const selected=await(await request.post(`/test/phone-seed?${query}`)).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
- await page.goto('/');await page.getByRole('button',{name:/^Телефон/}).click();return selected;
+ await page.goto('/');await page.getByRole('button',{name:/^Телефон/}).click();await phone(page).getByRole('button',{name:'Контакты',exact:true}).click();return selected;
 }
 async function chat(page:Page){
  await phone(page).getByRole('button',{name:'Переписки',exact:true}).click();
@@ -11,7 +11,7 @@ async function chat(page:Page){
 }
 test('158 Back, focus, drafts, groups, real timestamps and isolated scroll',async({page,request},info)=>{
  const selected=await seed(page,request);
- await phone(page).getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await page.getByLabel('Своё действие или реплика').fill('Мой основной черновик');
  await page.getByRole('button',{name:/^Телефон/}).click();
  await chat(page);
@@ -32,12 +32,12 @@ test('158 Back, focus, drafts, groups, real timestamps and isolated scroll',asyn
  await page.goBack();await expect(phone(page).locator('.phone-conversations')).toBeVisible();
  await phone(page).locator('.phone-thread').filter({hasText:'Вера Ларина'}).click();
  await expect(phone(page).getByLabel('Сообщение в телефоне')).toHaveValue('Черновик Вере');
- await phone(page).getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Мой основной черновик');
  await expect(page.locator('.choices button').first()).toBeVisible();
  await page.getByRole('button',{name:/^Телефон/}).click();
  await expect(phone(page).getByLabel('Сообщение в телефоне')).toHaveValue('Черновик Вере');
- await phone(page).getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();await chat(page);
  await expect(phone(page).getByLabel('Сообщение в телефоне')).toHaveValue('Черновик Вере');
  const save=await(await request.get(`/api/saves/${selected.save}`)).json();
@@ -119,7 +119,7 @@ test('158 revision conflict retains draft; refresh and actor switch preserve pri
  await phone(page).getByRole('button',{name:'Отправить сообщение',exact:true}).click();
  await expect(phone(page).locator('.phone-message')).toContainText('После конфликта');
  await input.fill('Приватный черновик Кирилла');
- await phone(page).getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  const {actor}=await import('./navigation');await actor(page,'qa_timur','Тимур Серов');
  await page.getByRole('button',{name:/^Телефон/}).click();
  await expect(phone(page)).not.toContainText('После конфликта');

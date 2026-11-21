@@ -7,11 +7,11 @@ import {NpcReview} from './NpcReview';
 import {phoneText as t} from "./lib/phone";
 import {CurrentGame} from './CurrentGame';
 import {SceneClock} from './SceneClock';
-import {calendarDate} from './gameDate';
+import {phoneOperation} from './lib/phoneRequests';
 import {advanceDomainLabel} from './lib/longTerm';
 import {LongTermAdvance} from './LongTermAdvance';
-import {SkinHeader} from './ThemeDecorationLayer';
-import {useTheme,themes} from './ThemeProvider';
+
+
 import {Phone} from './Phone';
 import {CallScene} from './CallScene';
 import {TimeSkip} from './TimeSkip';
@@ -20,11 +20,11 @@ import {NarrativeTurn} from "./NarrativeTurn";
 import {useStableEvent} from "./hooks";
 import {useStoryScroll} from "./useStoryScroll";
 import {presentationEntries,surfaceEntries,physicalChoiceTurn} from "./presentationEntries";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Clock,
-  MapPin,
+  CheckCheck, ChevronUp, Ellipsis, Orbit, ScanEye, Square, X,
   Send,
   RotateCcw,
   Undo2,
@@ -49,14 +49,14 @@ import { Textarea } from "./components/ui/textarea";
 import {NarrativePolicy} from './NarrativePolicy';
 import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
-import {useMobile,MobileScene} from './mobile';
+import {useMobile} from './mobile';
 export function Game({
   presentationActive=true,
   world,
   save,
   refresh,
   choose,
-  openLibrary,
+  openLibrary, openDisplay, openSettings, toggleFocus, reading,
   openStory,
   openCharacter,
   prefs,
@@ -67,14 +67,13 @@ export function Game({
   save: Save | null;
   refresh: () => void;
   choose: (w: number, s?: number) => void;
-  openLibrary: () => void;
+  openLibrary: () => void; openDisplay: () => void; openSettings:()=>void; toggleFocus:()=>void; reading:boolean;
   openStory: (notice:StoryNotice) => void;
   openCharacter: (id: string) => void;
   prefs: Preferences;
   apiKey: string;
 }) {
-  const {presentation}=useTheme();
-  const decoration=themes.find(t=>t.id===presentation.theme_id)?.decoration||'none';
+  const [more,setMore]=useState(false);
   const mobile=useMobile();
   const [notices,setNotices]=useState(()=>localStorage.getItem('relationship-notices')!=='off');
 
@@ -98,9 +97,12 @@ export function Game({
   // revision has reached the parent projection. refresh() itself is asynchronous.
   const busy=requestBusy||phoneBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
-  const [submitted, setSubmitted] = useState<Job | null>(null);
+  const [submitted, updateSubmitted] = useState<Job | null>(null);
   const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
-  const {scroll,away,jumpToLatest,onScroll,revealMenu,liveText}=useStoryScroll(viewScope);
+  const currentScope=useRef(viewScope);
+  currentScope.current=viewScope;
+  const setSubmitted=useCallback((next:Job|null)=>{if(currentScope.current===viewScope)updateSubmitted(next)},[viewScope]);
+  const {scroll,away,jumpToLatest,onScroll,revealMenu,liveText}=useStoryScroll(viewScope,true);
   const [selectedCall,setSelectedCall]=useState<string|null>(null);
   const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
   useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
@@ -112,6 +114,8 @@ export function Game({
     setSelectedCall(id);
   };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
   const choiceTurn=physicalChoiceTurn(save);
+  const choicesBelongToActor=save?.state.camera?.mode==='observer'||(choiceTurn?.pov_actor_id||mainActor)===actorId;
+  const physicalChoices=(choicesBelongToActor ? choiceTurn?.choices : [])?.filter(c=>(c.interaction_channel||"physical")==="physical") || [];
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
   const [selectedChoice,setSelectedChoice]=useState<string|null>(null);
   const [sendingChoice,setSendingChoice]=useState<string|null>(null);
@@ -193,7 +197,8 @@ export function Game({
         revision: save.revision,
         api_key: apiKey,
       });
-      setSubmitted(j);
+      if(currentScope.current!==viewScope)return;
+      setSubmitted(j);jumpToLatest();
       if (kind === "turn" && channel === "physical" && text === draftRef.current) {
         setDraft("");
         setSelectedChoice(null);
@@ -226,7 +231,7 @@ export function Game({
       else await turn("turn");
     } finally { setSendingChoice(null); }
   };
-  useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
+  useEffect(()=>{if(!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,108)+'px'},[draft,mobile]);
 
   const stableRun=useStableEvent(run);
   const stableTurn=useStableEvent(turn);
@@ -237,9 +242,16 @@ export function Game({
   }));
   const allEntries=presentationEntries(save,job);
   const entries=surfaceEntries(allEntries,'physical');
+  const historyKey='history-expanded:'+viewScope;
+  const [past,setPast]=useState(()=>sessionStorage.getItem(historyKey)==='true');
+  const [historyBefore,setHistoryBefore]=useState(()=>entries.at(-1)?.turn.sequence??0);
+  useLayoutEffect(()=>{
+    setPast(sessionStorage.getItem(historyKey)==='true');
+    setHistoryBefore(entries.at(-1)?.turn.sequence??0);
+  },[historyKey]);
   const callEntries=surfaceEntries(allEntries,'call',actorId,selectedCall);
   const latestCall=callEntries.at(-1);
-  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn liveTextRef={!toolsOnly && physicalStream && entry.identity===job?.id ? liveText : undefined} toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false,hidden=false)=>world&&save?<NarrativeTurn latest={entry.identity===entries.at(-1)?.identity} hidden={hidden} liveTextRef={!toolsOnly && physicalStream && entry.identity===job?.id ? liveText : undefined} toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
     <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
       {!!job.narrative_complete && ['start','turn','background','pov'].includes(job.kind) && <Button disabled={busy || running} onClick={()=>void run(async()=>{
@@ -299,18 +311,37 @@ export function Game({
         <p className="welcome-foot">ТВОЙ МИР · ТВОЙ ТЕМП · ТВОЯ ИСТОРИЯ</p>
       </main>
     );
+  const actorName=state?.characters.find(c=>c.id===actorId)?.name;
+  const cameraActions=<>
+    <button className="nr-camerabutton" onClick={()=>{setMore(false);setCameraOpen(true)}}><ScanEye/>Камера · Журнал</button>
+    <button className="nr-backgroundbutton" disabled={busy||turnLocked||!save?.turns.length} onClick={()=>{setMore(false);void turn("background","")}}><Orbit/>Мир без ГГ</button>
+    {actorId!==mainActor&&mainActor&&<Button variant="ghost" size="sm" disabled={busy||turnLocked} onClick={()=>{setMore(false);switchActor(mainActor)}}>Вернуться к {state?.characters.find(c=>c.id===mainActor)?.name}</Button>}
+  </>;
   return (
-    <main className="game">
+    <main className="game" style={{"--sf-reading-width":prefs.reading_width+"px","--sf-font-size":prefs.font_size+"px","--sf-line-height":prefs.line_height} as React.CSSProperties}>
       {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');
-      }} end={async()=>{await run(async()=>{const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:selectedCall,operation_id:crypto.randomUUID()}});refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
+      }} end={async()=>{await run(async()=>{const request=phoneOperation(`phone-request:${save.id}:${save.state.phone?.actor_id}`,{action:'end',event_id:selectedCall});const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:request.payload});request.complete();refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
         {callEntries.map(e=>renderEntry(e))}
       </CallScene>}
-      {save&&<div className="narrative-toolbar" role="group" aria-label="Действия истории">
+      {save&&<div className="narrative-toolbar nr-gamebar" role="group" aria-label="Действия истории">
         <CurrentGame refresh={refreshControl} save={save} disabled={busy||turnLocked} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
-        <StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>
+
+        <div className="nr-actorcontrol"><label className="nr-actorvalue">
+          <span className="nr-miniav nr-avatarplayer" aria-hidden>{actorName?.slice(0,1)}</span>
+          <Choice aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onValueChange={switchActor}>
+            {!actorId&&<option value="">Наблюдение</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?' · основной герой':''}</option>)}
+          </Choice></label></div>
+        {!mobile && cameraActions}
+        {mobile && <Button className="nr-mobilemore" variant="outline" size="icon" aria-label="Ещё действия" onClick={()=>setMore(true)}><Ellipsis/></Button>}
+        <Dialog open={mobile && more} onOpenChange={setMore}><DialogContent className="narrative-more"><DialogTitle>Ещё действия</DialogTitle>{cameraActions}
+          <Button onClick={()=>{setMore(false);toggleFocus()}}>{reading?'Выйти из чтения':'Режим чтения'}</Button>
+          <Button onClick={()=>{setMore(false);openDisplay()}}>Отображение</Button>
+          <Button onClick={()=>{setMore(false);openSettings()}}>Настройки</Button>
+          <Button onClick={()=>{setMore(false);setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>
+        </DialogContent></Dialog>
       </div>}
       {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||turnLocked||!save.turns.length||!!save.state.protagonist_required} submit={async request=>{
                       if(requestLock.current)throw new Error('Дождись завершения текущего действия.');
@@ -330,48 +361,23 @@ export function Game({
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||turnLocked} observe={observe} control={switchActor}/>}
       {save&&<NpcReview key={save.id} save={save} locked={busy||turnLocked} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
       {save&&<Diagnostics saveId={save.id} choiceView={{turn:choiceTurn,list:choicesElement,revision:save.revision}} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{recovery(false)}</>}</>}/>}
-      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||turnLocked} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
-        <label>Управляемый персонаж<Choice aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</Choice></label>
-        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
-        <Button variant="ghost" size="sm" onClick={()=>setCameraOpen(true)}>Камера · Журнал</Button>
-        <Button variant="outline" size="sm" disabled={busy||turnLocked||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
-      </div>}
-      <div className="scene-bar">
-        <button className="scene-calendar-entry" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}>
-          <Clock size={14} />
-          <SceneClock save={save} fallback={meta?.time}/>
-        </button>
-        <span>
-          <MapPin size={14} />
-          {meta?.location || "Место не указано"}
-        </span>
-        <div className="scene-near">
-          <span className="muted">Рядом</span>
-          {state?.characters
-            .filter((c) => meta?.present_ids.includes(c.id) && !c.is_player)
-            .map((c) => (
-              <button key={c.id} onClick={() => openCharacter(c.id)}>
-                {c.name.replace(" (ГГ)", "")}
-              </button>
-            ))}
-          {!meta?.present_ids.length && <span className="muted">—</span>}
-        </div>
-      </div>
-      </>}
       <div
-        className="story-scroll"
+        className="story-scroll nr-feed"
         ref={scroll}
         onScroll={onScroll}
       >
         <div
-          className="story"
-          style={{
-            maxWidth: prefs.reading_width,
-            fontSize: prefs.font_size,
-            lineHeight: prefs.line_height,
-          }}
+          className="story nr-content"
         >
-          {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+          <section className="nr-context" aria-label="Текущая сцена">
+            <div className="nr-contexttop"><div><h1>{meta?.location || world.name}</h1>
+              <button className="nr-datetime" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}><Clock/><SceneClock save={save} fallback={meta?.time}/></button>
+            </div>{save&&<span className="nr-saved"><CheckCheck/>{running?'Идёт ход':'Сохранено'}</span>}</div>
+            <div className="nr-contextbottom"><span className="nr-nearlabel">Рядом</span>
+              <div className="nr-people">{state?.characters.filter(c=>meta?.present_ids.includes(c.id)&&c.id!==actorId).map(c=><button key={c.id} className="nr-person" onClick={()=>openCharacter(c.id)}><span className="nr-miniav" aria-hidden>{c.name.slice(0,1)}</span>{c.name.replace(" (ГГ)","")}</button>)}</div>
+              {save&&<StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>}</div>
+          </section>
+
           {save?.state.last_long_term_advance&&<details className="skip-diagnostics advance-result" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
             {save.state.last_long_term_advance.status==='incomplete'&&<p role="status">Симуляция неполная. Принятые события сохранены; часть причин осталась без результата.</p>}
             {save.state.last_long_term_advance.status==='calendar_only'&&<p>Изменился календарь. Жизнь NPC в этом переходе не моделировалась.</p>}
@@ -382,15 +388,6 @@ export function Game({
             {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
           </details>}
           {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
-          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
-          <div className="story-heading">
-            <SkinHeader pack={decoration}/>
-            <p className="eyebrow">
-              {save ? save.name : "Начало истории"}
-            </p>
-            <h1 title={world.name}>{world.name}</h1>
-            <div className="chapter-rule" aria-hidden="true">✦</div>
-          </div>
           {!save ? (
             <div className="empty-state">
               <Markdown text={world.state.scene} />
@@ -410,7 +407,8 @@ export function Game({
             </div>
           ) : (
             <>
-              {entries.map(e=>renderEntry(e))}
+              {entries.length>1 && <div className="nr-pasttoggle"><button className="nr-textbutton" aria-expanded={past} onClick={()=>{setHistoryBefore(entries.at(-1)?.turn.sequence??0);setPast(!past);sessionStorage.setItem(historyKey,String(!past))}}><ChevronUp/>Предыдущий ход</button><span className="nr-feedline"/></div>}
+              {entries.map((e,i)=>renderEntry(e,false,!past && i<entries.length-1 && e.turn.sequence<historyBefore))}
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
@@ -435,8 +433,8 @@ export function Game({
                     <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <ActionPanel label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
-                    {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
+                  <ActionPanel count={physicalChoices.length} label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
+                    {physicalChoices.map((c, i) => (
                       <NarrativeChoiceCard key={i} choice={c} disabled={!canSubmit}
                         selected={selectedChoice===choiceText(c)} sending={sendingChoice===choiceText(c)}
                         choose={chooseProposal}/>
@@ -482,7 +480,11 @@ export function Game({
         </div>
       </div>
       {save && (
-        <div className="composer">
+        <div className="composer nr-composerarea">            {away&&<button className="nr-jump"
+              onClick={jumpToLatest}
+            >
+              <ArrowDown size={13} />К последнему ответу
+            </button>}<div className="nr-composercontent">
           <Dialog open={pendingChoice!==null} onOpenChange={open=>{if(!open)closeChoice()}}>
             <DialogContent onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
               <DialogTitle>В поле уже есть черновик</DialogTitle>
@@ -494,8 +496,9 @@ export function Game({
               </div>
             </DialogContent>
           </Dialog>
-          <Phone recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
-          <div className="composer-inner">
+          <div className="nr-writingstatus"><span className="nr-writeidentity"><i className="nr-smallstatus"/>{actorName || 'Наблюдение'}</span><span data-draft-status>{physicalStream?'Идёт ответ':draft?'Черновик':'Твой ход'}</span>{draft&&<button className="nr-clear" aria-label="Очистить черновик" onClick={()=>{writeChoice('');setSelectedChoice(null)}}><X/></button>}</div>
+          <div className="composer-inner nr-composer">
+            <Phone recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
             <Textarea
               ref={input}
               rows={1}
@@ -507,7 +510,7 @@ export function Game({
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
               disabled={!canAct && !observeInstead}
-              placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
+              placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":mobile?"Твоё действие…":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" && !e.nativeEvent.isComposing &&
@@ -520,24 +523,20 @@ export function Game({
                 }
               }}
             />
-            <Button
+            {physicalStream && active(job) ? <Button className="nr-stop" onClick={stopJob}><Square/>Стоп</Button> : <Button className="nr-send"
               aria-label={directionInput ? "Отправить направление истории" : "Отправить действие"}
               size="icon"
               disabled={!canSubmit || !draft.trim()}
               onClick={submitDraft}
             >
-              <Send size={19} />
-            </Button>
+              <span>Отправить</span><Send size={19} />
+            </Button>}
           </div>
-          <div className="composer-footer">
-            <span>{directionInput?"Можно задать своё направление истории.":"Твоё действие всегда важнее предложенных вариантов."}</span>
+          <div className="nr-composerhint"><span>Ctrl + Enter — отправить · Enter — новая строка</span><span data-counter>{draft ? draft.length : 'Действие определяешь ты'}</span><button className="nr-textsize" aria-label="Настройки отображения" onClick={openDisplay}>Аа</button>
+            {!mobile && <button className="story-diagnostics" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</button>}
             {rejected&&<button onClick={() => document.getElementById('turn-recovery')?.scrollIntoView({block:'center'})}>К восстановлению хода</button>}
-            {away&&<button
-              onClick={jumpToLatest}
-            >
-              <ArrowDown size={13} />К последней сцене
-            </button>}
-          </div>
+
+          </div></div>
         </div>
       )}
     </main>
