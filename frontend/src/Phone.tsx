@@ -10,7 +10,7 @@ import {
   Phone as PhoneIcon,
   MessageCircle,
   ContactRound,
-  Smartphone, ArrowLeft, Send, Users, Plus, ArrowDown, Search,
+  Smartphone, ChevronLeft, Send, Users, Plus, ArrowDown, Search, SquarePen, MessagesSquare,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { PhoneChatList, PhoneMessages } from "./PhoneContent";
@@ -422,7 +422,7 @@ export function Phone({
           aria-hidden={!open}
         >
           <header hidden={!!dialing} className={"phone-top"+(nested?"":" phone-page-heading")}>
-            {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ArrowLeft size={20}/></Button>}
+            {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ChevronLeft size={20}/></Button>}
             {inChat && !membersOpen && <span className="phone-header-avatar" aria-label="Участники переписки">{selected?.group ? <Users size={24}/> : (selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject) ? avatar((selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject)!) : null}</span>}
             <div className="phone-heading" aria-busy={busy}><h2 title={title}>{title}</h2><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : null}</small></div>
             {inChat && selected?.group && selected.active && !membersOpen && <Button variant="ghost" size="icon" aria-label="Управление участниками" onClick={()=>setMembersOpen(true)}><Users size={20}/></Button>}
@@ -634,7 +634,7 @@ export function Phone({
               <>
                 {!conversation && !contact && !recipient ? (
                   <>
-                    {!grouping && phone.capabilities.text_message && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><Plus size={18}/>{t("write")}</Button>
+                    {!grouping && phone.capabilities.text_message && <div className="phone-list-actions"><Button variant="secondary" onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}><SquarePen size={18}/>{t("write")}</Button>
                     <Button variant="ghost" onClick={() => setGrouping(true)}><Users size={18}/>Создать группу</Button></div>}
                     {grouping && (
                       <form
@@ -820,7 +820,7 @@ export function Phone({
             {(
               [
                 ["calls", "Звонки", PhoneIcon],
-                ["messages", "Переписки", MessageCircle],
+                ["messages", "Переписки", MessagesSquare],
                 ["contacts", "Контакты", ContactRound],
               ] as const
             ).filter(([key])=>key==='contacts'||(key==='calls'?phone.capabilities.voice_call:phone.capabilities.text_message)).map(([key, label, Icon]) => (

@@ -92,12 +92,14 @@
 .phone-section-label,.phone-body h3 {font-size:.8rem;font-weight:600;color:var(--text-muted);margin:14px 0 6px;}
 .phone-list-actions {display:flex;flex-wrap:wrap;gap:6px;padding-bottom:8px;}
 .phone-list-actions button {flex:1;font-size:.8rem;}
-.phone-thread {display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;padding:15px 9px;background:transparent;color:var(--text);border:0;border-bottom:1px solid var(--border);border-radius:0!important;text-align:left;}
+.phone-thread {display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;padding:15px 9px;background:transparent;color:var(--text);border:0;border-radius:11px;text-align:left;}
+.phone-thread+.phone-thread {border-top:1px solid var(--v3-line,#2a3037);border-top-left-radius:0;border-top-right-radius:0}
+.phone-thread:hover {background:var(--v3-panel,#22282f)}
 .phone-thread-avatar {display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--accent-soft);color:var(--accent);}
 .phone-thread-copy {display:grid;gap:5px;min-width:0;}
 .phone-thread-copy strong {font-size:14px;font-weight:500;line-height:1.4;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-.phone-preview {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:.8rem;line-height:1.45;color:var(--text-muted);}
-.phone-thread-meta {align-self:start;display:grid;justify-items:end;gap:8px;font-size:.65rem;color:var(--text-muted);padding-top:3px;}
+.phone-preview {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:13px;line-height:1.5;color:var(--text-muted);}
+.phone-thread-meta {align-self:start;display:grid;justify-items:end;gap:8px;font-size:12px;line-height:1.5;color:var(--text-muted);}
 .phone-unread {min-width:20px;padding:2px 6px;border-radius:20px;background:var(--accent);color:var(--accent-contrast);text-align:center;font-weight:700;}
 .phone-empty {min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;color:var(--text-muted);padding:24px 16px;}
 .phone-empty p {margin:0;font-size:.85rem;line-height:1.5;}
@@ -152,7 +154,7 @@
 .phone-heading h2 {margin:0;font:550 16px/1.3 Inter,sans-serif;overflow-wrap:anywhere}
 .phone-page-heading {border:0}
 .ph-close {display:grid;place-items:center}
-#root .phone-list-actions {padding-inline:4px}
+#root .phone-list-actions {padding-inline:6px}
 #root .phone-bottom button span {font-size:inherit}
 #root .phone-bottom[hidden] {display:none}
 #root .phone-device {font:14px/1.5 Inter,sans-serif}
@@ -168,7 +170,15 @@ html:not([data-theme=graphite]) #root .ph-close {background:var(--surface-2);col
 .phone-thread:nth-child(3n) .avatar-fallback {--avatar-bg:#40392d;--avatar-ink:#ddc89f}
 .phone-device .avatar-fallback svg {display:none}
 .phone-device .avatar-fallback .portrait-initials {position:static;inset:auto;width:auto;font:500 14px/1 Inter,sans-serif;color:inherit;background:transparent}
-@container app (max-width:680px){.phone-thread {padding:17px 12px}.phone-message {font-size:15px;line-height:1.6;padding:12px 14px}}
+@container app (max-width:680px){
+ #root .phone-list-actions {padding-inline:10px}
+ .phone-thread {padding:17px 12px}
+ .phone-thread-copy strong {font-size:15px}
+ .phone-preview {font-size:14px}
+ .phone-messages {padding:20px 18px 18px;gap:12px}
+ .phone-message {font-size:15px;line-height:1.6;padding:12px 14px}
+ .phone-message footer {font-size:12px}
+}
 
 .phone-screen [hidden] {display:none!important}
 .phone-connecting .phone-body {display:none}
