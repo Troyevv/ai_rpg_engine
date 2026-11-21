@@ -168,3 +168,12 @@ html:not([data-theme=graphite]) #root .ph-close {background:var(--surface-2);col
 .phone-device .avatar-fallback svg {display:none}
 .phone-device .avatar-fallback .portrait-initials {position:static;inset:auto;width:auto;font:500 14px/1 Inter,sans-serif;color:inherit;background:transparent}
 @container app (max-width:680px){.phone-thread {padding:17px 12px}.phone-message {font-size:15px;line-height:1.6;padding:12px 14px}}
+
+.phone-screen [hidden] {display:none!important}
+.phone-connecting .phone-body {display:none}
+.phone-connecting .phone-call {display:flex;flex:1;min-height:0;flex-direction:column;flex-wrap:nowrap;gap:16px;padding:0 0 14px;overflow:auto;background:transparent;border:0}
+.phone-connecting .call-scene-header {align-self:stretch;margin-bottom:auto}
+.phone-connecting .phone-call>strong {flex:0;font:500 18px/1.4 Inter,sans-serif}
+.phone-connecting .phone-call>.character-avatar {box-shadow:0 0 0 12px #d2b47709}
+.phone-connecting .phone-call>button {width:calc(100% - 34px);min-height:46px;margin-top:auto;background:#562e32;color:#f0cccc;border:1px solid #87504f}
+.phone-compose-row button:disabled,.call-scene form button:disabled {background:var(--surface-2);color:var(--text-subtle)}

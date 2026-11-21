@@ -1,6 +1,5 @@
-import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
-import {ActionPanel} from './components/ui/action-panel';
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {choiceText} from './NarrativeChoice';
+import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {PhoneFrame} from './PhoneFrame';
 import {PhoneOff,Phone,Send,ArrowDown} from 'lucide-react';
@@ -49,6 +48,12 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
  useEffect(()=>{if(obscured)collapse()},[obscured]);
  const wasActive=useRef(active);
  useEffect(()=>{if(wasActive.current&&!active){collapse();onSelect(null)}wasActive.current=active},[active]);
+ useLayoutEffect(()=>{
+   const el=input.current;
+   if(!el||minimized)return;
+   el.style.height='auto';
+   el.style.height=Math.min(el.scrollHeight,108)+'px';
+ },[draft,minimized,active]);
  const sendingRef=useRef(false);
  const [sending,setSending]=useState(false);
  const send=async()=>{
@@ -73,19 +78,18 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
    <PhoneFrame save={save} open={!minimized} close={collapse} closeLabel={t('minimize')} dialogLabel={t('scene')}>
      <section ref={panel} tabIndex={-1} className="call-scene">
        <header className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={44}/><div><h2>{call.label}</h2><small title={call.time_label}><Phone size={12}/>{active?'На линии':t('ended')}</small></div>{active&&<button aria-label={t('end')} className="call-end" disabled={active&&disabled} onClick={()=>void end()}><PhoneOff size={18}/></button>}</header>
-       <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
-         {active&&choices.length>0&&<ActionPanel label="Варианты продолжения" hidden={working}><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
+       <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}</div></div>
+         {active&&!working&&choices.length>0&&<div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
            {choices.map(c=>{
              const text=choiceText(c);
              const selected=draft===text || draft.endsWith('\n'+text);
-             return <NarrativeChoiceCard key={JSON.stringify([c.action,c.speech])} choice={c}
-               disabled={disabled||sending} selected={selected} sending={selected&&sending} choose={value=>{
-                 const next=draft.trim() ? draft+'\n'+value : value;
-                 setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
-               }}/>;
+             return <button key={JSON.stringify([c.action,c.speech])} type="button" aria-pressed={selected}
+               title={text} aria-label={text} disabled={disabled||sending} onClick={()=>{
+                 const next=draft.trim() ? draft+'\n'+text : text;
+                 setDraft(next);sessionStorage.setItem(key,next);input.current?.focus({preventScroll:true});
+               }}>{c.action||c.speech}</button>;
            })}
-         </div></ActionPanel>}
-       </div></div>
+         </div>}
        <footer>
          {active&&<div className="call-activity" data-state={activity}><p role="status" aria-live="polite" aria-atomic="true">{working&&<span className="call-activity-dots" aria-hidden="true"><i/><i/><i/></span>}{t(activity)}</p>{stop&&canStopCall(job)&&<button disabled={stopping} onClick={stop}>{t('callStop')}</button>}</div>}
          {active&&restoreSpeech&&!draft&&<button disabled={disabled} onClick={()=>{const text=job!.user_text!;setDraft(text);sessionStorage.setItem(key,text);input.current?.focus()}}>{t('restoreSpeech')}</button>}

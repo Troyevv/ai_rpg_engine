@@ -472,9 +472,9 @@
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-@media (max-width: 600px) {
+@container app (max-width: 680px) {
   .dialog-content.current-game-panel {
-    width: calc(100vw - 16px);
+    width: calc(100% - 16px);
     max-height: calc(var(--app-height, 100dvh) - 16px);
     padding: 0;
   }
@@ -519,7 +519,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .dialog-content.advance-panel {
-    width: calc(100vw - 16px);
+    width: calc(100% - 16px);
     max-height: calc(var(--app-height, 100dvh) - 16px);
     padding: 20px 16px;
     padding-bottom: max(20px, env(safe-area-inset-bottom));

@@ -386,6 +386,7 @@ export function Phone({
       if(currentOwner.current===ownerKey){onJob({...job,status:'stopped'});onCommit(next)}
     }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
+  const dialing=call?.outgoing && call.status==='ringing' && tab==='calls';
   const inChat = tab==='messages' && !!(conversation || contact || recipient);
   const nested = adding || editContact!==null || inChat || (tab==='contacts' && !!detail) || grouping;
   const title = adding ? editContact ? 'Изменить контакт' : 'Новый контакт' : membersOpen ? 'Участники группы' : grouping && tab==='messages' ? 'Новая группа' : inChat ? selected?.title || target?.label || recipientTarget?.subject.name : tab==='contacts' ? detail ? currentContact?.label : 'Контакты' : tab==='calls' ? 'Звонки' : 'Сообщения';
@@ -412,7 +413,7 @@ export function Phone({
         </button>
         <PhoneFrame save={save} open={open} close={close} closeLabel="Свернуть телефон">
         <div
-          className="phone-screen"
+          className={dialing?"phone-screen phone-connecting":"phone-screen"}
           ref={screen}
           role="region"
           aria-label="Телефон персонажа"
@@ -420,7 +421,7 @@ export function Phone({
           inert={!open}
           aria-hidden={!open}
         >
-          <header className={"phone-top"+(nested?"":" phone-page-heading")}>
+          <header hidden={!!dialing} className={"phone-top"+(nested?"":" phone-page-heading")}>
             {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ArrowLeft size={20}/></Button>}
             {inChat && !membersOpen && <span className="phone-header-avatar" aria-label="Участники переписки">{selected?.group ? <Users size={24}/> : (selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject) ? avatar((selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject)!) : null}</span>}
             <div className="phone-heading" aria-busy={busy}><h2 title={title}>{title}</h2><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : null}</small></div>
@@ -438,7 +439,8 @@ export function Phone({
           {call&&tab==='messages'&&(conversation||contact||recipient)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
           {call && !(tab==='messages'&&(conversation||contact||recipient)) && (
             <section className="phone-call" aria-label="Текущий звонок">
-              {avatar(call.subject)}
+              {dialing&&<header className="call-scene-header">{avatar(call.subject)}<div><h2>{call.label}</h2><small><PhoneIcon size={12}/>Вызов…</small></div></header>}
+              {dialing?<CharacterAvatar subject={call.subject} saveId={save.id} size={88}/>:avatar(call.subject)}
               <strong>{call.label}</strong>
               <span role="status" aria-live="polite">
                 {call.status==='ringing'&&<span className="phone-dialing" aria-hidden="true">● </span>}{status[call.status]} ·{" "}
@@ -814,7 +816,7 @@ export function Phone({
               </>
             )}
           </div>
-          <nav hidden={!!nested} className="phone-bottom" aria-label="Разделы телефона">
+          <nav hidden={!!nested||!!dialing} className="phone-bottom" aria-label="Разделы телефона">
             {(
               [
                 ["calls", "Звонки", PhoneIcon],

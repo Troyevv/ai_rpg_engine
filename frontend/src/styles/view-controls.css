@@ -71,7 +71,7 @@
   interpolate-size: allow-keywords;
   max-height: max-content;
 }
-@media (any-pointer: coarse), (max-width: 767px) {
+@media (any-pointer: coarse) {
   .action-panel .choices {
     gap: 6px;
     margin: 0;
@@ -85,7 +85,9 @@
 }
 .action-panel[data-stop='1'] > .action-panel-body {
   overflow-y: auto;
-  max-height: 20dvh;
+  max-height: 224px;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
 }
 @media (prefers-reduced-motion: no-preference) {
   .action-panel-body { transition: max-height .16s ease-out; }
@@ -94,7 +96,7 @@
   height: 100%;
   max-width: 100%;
 }
-@media (max-width: 767px) {
+@container app (max-width: 680px) {
   .sheet-size-button {
     display: grid; place-items: center; min-width: 44px; min-height: 44px; margin-inline: auto;
     color: var(--text-muted); border: 0; background: transparent; flex: none;

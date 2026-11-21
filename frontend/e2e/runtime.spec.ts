@@ -29,7 +29,10 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  page.once('dialog',d=>d.accept());
  await page.locator('.turn').first().getByRole('button',{name:'Ещё вариант'}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- if(await page.locator('.mobile-variants').isVisible()){await expect(page.locator('.mobile-variants')).toContainText('2 / 2');await page.getByRole('button',{name:'Предыдущий вариант'}).click();await expect(page.locator('.mobile-variants')).toContainText('1 / 2')}else{await expect(page.getByText('Вариант 2 / 2')).toBeVisible();await page.locator('.variant-controls').getByRole('button',{name:'1',exact:true}).click();await expect(page.getByText('Вариант 1 / 2')).toBeVisible()}
+ const variants=page.locator('.turn .variant-controls');
+ await expect(variants).toContainText('2 из 2');
+ await variants.getByRole('button',{name:'Предыдущий вариант'}).click();
+ await expect(variants).toContainText('1 из 2');
  await diagnostics(page);
  await expect(page.getByRole('dialog')).toContainText('Cache');
  await expect(page.getByRole('dialog')).toContainText('low');

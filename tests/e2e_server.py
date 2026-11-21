@@ -421,10 +421,15 @@ def scripted_stream(**kwargs):
         voice=current_phone['communication'].get('focus')=='call'
         # AI-editor fixtures reset the optional phone scenario between tests.
         if (phone_mode or '').startswith('office'):
-            from call_continuity_fixture import response,BEFORE,AFTER
+            from call_continuity_fixture import response,BEFORE,AFTER,OFFER
             task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
             if voice:
                 value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+                if isinstance(value,dict) and phone_mode=='office' and task['player_input']==OFFER:
+                    value['choices'].extend([
+                        dict(action='Уточнить место встречи',speech='Где встретимся?',interaction_channel='call',grounding=dict(fact_ids=[],from_scene=True)),
+                        dict(action='Спросить кое-что лично',speech='',interaction_channel='call',grounding=dict(fact_ids=[],from_scene=True)),
+                    ])
                 if isinstance(value,dict) and phone_mode=='office-recovery':
                     value.pop('physical_projections',None)
                     value['choices']=[]

@@ -6,7 +6,7 @@ test('canonical date, observances and server time skip preview survive reload',a
  const selected=await(await request.post('/test/calendar-seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');
- await expect(page.locator('.scene-bar, .mobile-scene-line')).toContainText('8 октября 2026 года');
+ await expect(page.getByRole('button',{name:'Открыть календарь',exact:true})).toContainText('8 октября 2026 года');
  await page.getByRole('button',{name:'Управление игрой',exact:true}).click();
  await page.getByRole('tab',{name:'Время',exact:true}).click();
  await page.getByText('Ближайшие даты',{exact:true}).click();
@@ -21,7 +21,7 @@ test('canonical date, observances and server time skip preview survive reload',a
  expect(unchanged.state.world_clock.minute).toBe(before.state.world_clock.minute);
  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
  await page.reload();
- await expect(page.locator('.scene-bar, .mobile-scene-line')).toContainText('8 октября 2026 года');
+ await expect(page.getByRole('button',{name:'Открыть календарь',exact:true})).toContainText('8 октября 2026 года');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  expect(errors).toEqual([]);
 });

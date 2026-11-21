@@ -1,10 +1,10 @@
 .call-scene {flex:1;min-height:0;display:flex;flex-direction:column;overflow:clip}
-.call-scene-header {display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border)}
-.call-scene-header h2 {font:600 16px/1.4 Inter,sans-serif;margin:0}.call-scene-header p,.call-scene-header small {font-size:11px;margin:0;color:var(--text-muted)}
+.call-scene-header {display:flex;gap:11px;align-items:center;padding:15px 15px 18px;border-bottom:1px solid var(--border)}
+.call-scene-header h2 {font:500 15px/1.4 Inter,sans-serif;margin:0}.call-scene-header p,.call-scene-header small {font-size:11px;margin:0;color:var(--text-muted)}
 .call-scene-header .character-avatar {border-radius:50%}
 .call-scene .call-end {margin-left:auto;flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#613638;color:#f4cecc}
 .call-scene-scroll {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;overflow-anchor:none}
-.call-scene-text {padding:15px;font:14px/1.65 Inter,sans-serif;overflow-wrap:anywhere}
+.call-scene-text {padding:19px 18px 16px;font:15px/1.7 Inter,sans-serif;overflow-wrap:anywhere}
 .call-scene-text .turn {margin:0 0 12px}.call-scene-text .prose {font-family:inherit}
 .call-scene footer {padding:8px 12px;border-top:1px solid var(--border)}
 .call-scene form {display:flex;align-items:end;gap:8px}
@@ -19,22 +19,28 @@
 
 .phone-dialing{display:inline-block;color:var(--accent);animation:call-pulse 1.2s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.phone-dialing{animation:none}}
 
-.call-suggestions { display: grid; gap: .4rem; margin-block: .8rem; }
-.call-suggestions button { text-align: start; padding: .65rem .8rem; }
-.call-suggestions {display:flex;flex-wrap:wrap;gap:6px}
-.call-suggestions .narrative-choice-card {flex:1 1 120px;min-width:0;height:auto;padding:8px 10px;border-radius:10px;font:13px/1.45 Inter,sans-serif}
-.call-suggestions .choice-icon {display:none}
+.call-suggestions {display:flex;flex:none;align-items:stretch;flex-wrap:wrap;gap:7px;padding:5px 12px 13px;max-height:27%;overflow:auto}
+.call-suggestions>button {flex:1 1 115px;min-width:0;height:auto;padding:9px 11px;min-height:38px;border:1px solid var(--v3-line,#45483f);background:var(--v3-panel,#292c27);color:var(--v3-text,#d3ccbb);border-radius:8px;text-align:start;font:12px/1.5 Inter,sans-serif}
+.call-suggestions>button[aria-pressed=true] {border-color:var(--accent)}
 .call-scene .call-activity {min-height:26px;margin:0 0 6px;font-size:11px}
 .call-scene-actions button {border:0;background:transparent;color:var(--text-muted)}
 .call-scene textarea {min-height:44px}
 
-.call-scene-header small {display:flex;align-items:center;gap:5px;color:var(--text-muted)}
+.call-scene-header small {display:flex;align-items:center;gap:5px;margin-top:5px;color:var(--v3-muted,#b0c5b2)}
 .call-activity[data-state="connected"] {position:absolute;clip-path:inset(50%);height:1px;width:1px;overflow:hidden}
 .call-speaker {margin:0 0 7px;color:var(--accent);font-size:12px}
-.call-scene-text .player-action {margin:0 0 16px;padding:0;border:0;background:none}
+.call-scene-text .player-action {margin:0 0 22px;padding:12px;border:0;border-radius:10px;background:var(--accent-soft)}
 .call-scene-text .player-action .eyebrow {font-size:11px;letter-spacing:0;text-transform:none;color:var(--text-muted)}
 .call-scene footer {flex:none;background:var(--surface-1);padding:12px 16px}
-.call-scene form {align-items:center}
-.call-scene form textarea {background:transparent;line-height:1.5;min-height:44px}
+.call-scene form {align-items:flex-end}
+.call-scene form textarea {background:var(--v3-panel,#14191f);line-height:1.5;min-height:44px}
 .call-scene form button {display:grid;place-items:center;width:44px;height:44px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--accent)}
-@container app (max-width:680px){.call-scene-text {font:16px/1.8 Inter,sans-serif;padding:18px 20px}}
+@container app (max-width:680px){
+ .call-scene-header {padding:14px 19px 18px}
+ .call-scene-header h2 {font-size:16px}
+ .call-scene-text {font:16px/1.75 Inter,sans-serif;padding:23px 22px 19px}
+ .call-suggestions {padding:4px 16px 14px}
+ .call-suggestions>button {min-height:44px;font-size:13px}
+ .call-scene footer {padding:12px 15px 15px}
+ .call-scene form textarea,.call-scene form button {min-height:46px}
+}

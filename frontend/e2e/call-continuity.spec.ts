@@ -27,6 +27,11 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(story).not.toContainText('Да, договорились');
  await expect(page.locator('.choices')).toContainText('ответить Виктории');
  await expect(call).not.toContainText('Виктория трижды стучит');await capture('during-call');
+ const options=call.getByRole('group',{name:'Варианты продолжения звонка'});
+ await expect(options.getByRole('button')).toHaveCount(2);
+ await options.getByRole('button',{name:/Уточнить место встречи/}).click();
+ await expect(call.getByLabel('Реплика в звонке')).toHaveValue('Уточнить место встречи: «Где встретимся?»');
+ await expect(page.locator('.choices')).not.toContainText('Уточнить место встречи');
  await call.getByLabel('Свернуть звонок').click();await expect(input).toHaveValue('Черновик физического действия');await capture('during-physical');
  await page.getByRole('button',{name:/Вернуться к звонку/}).click();await speech('Я скоро освобожусь.');
  await expect.poll(async()=>(await state()).job.status).toBe('saved');
