@@ -218,7 +218,10 @@
 @font-face {font-family:Inter;src:url('../assets/inter/inter-cyrillic.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0400-052F,U+2116}
 @font-face {font-family:Inter;src:url('../assets/inter/inter-latin.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
 #root {container:app / inline-size;position:relative;top:var(--app-top,0px);height:var(--app-height,100dvh);overflow:clip}
-.narrative-shell,.phone-device {--reader-gutter:32px;--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
+.narrative-shell {--reader-gutter:32px}
+.nr-topbar,.game-preserved,.phone-device {--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
+html[data-theme=graphite] :is(.nr-topbar,.game-preserved,.phone-device,.current-game-panel,.library-dialog,.settings-dialog,.reading-display,.narrative-more) {--bg:#131517;--surface-1:#191c20;--accent:#d2b477;--text:#ecebe7}
+.game-preserved {background:var(--bg)}
 #root .narrative-shell {height:100%;overflow:clip}
 #root .app-main,.game-preserved,.game {min-height:0;overflow:clip}
 #root .nr-topbar {justify-content:space-between}
@@ -274,11 +277,9 @@ html:not([data-theme=graphite]) {
 #root .story-journal-trigger {border:0;background:transparent}
 #root .nr-actorvalue .choice-trigger {padding:4px 0}
 #root .nr-miniav {line-height:1}
-#root .narrative-shell {--inspector-nav-width:170px}
 #root .nr-jump {z-index:2}
 html[data-no-motion] *,html[data-no-motion] *::before,html[data-no-motion] *::after {transition-duration:0s!important;animation-duration:0s!important;scroll-behavior:auto!important}
 .dialog-content.reading-display {width:min(340px,100%);padding:24px;border-radius:12px}
-@container app (max-width:680px) {#root .narrative-shell {--inspector-nav-width:0px}}
 
 #root .settings-dialog:has(.settings-scroll) {display:flex;flex-direction:column;gap:16px;overflow:hidden}
 #root .settings-scroll {min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 4px}
@@ -289,14 +290,10 @@ html[data-no-motion] *,html[data-no-motion] *::before,html[data-no-motion] *::af
 #root .library-dialog .world-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
 #root .library-dialog .world-card {min-width:0;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:18px}
 #root .library-dialog .world-card.selected {border-color:var(--accent)}
-#root .inspector-workspace {left:auto;width:min(540px,100%);border-left:1px solid var(--border);box-shadow:-18px 0 64px #0004}
-#root .inspector-workspace:has(.dossier-expanded) {width:calc(100% - var(--inspector-nav-width))}
-#root .inspector-compact .inspector-grid {grid-template-columns:1fr}
 #root .phone-scrim.is-open {pointer-events:auto}
 @container app (max-width:680px) {
  #root :is(.settings-dialog,.library-dialog,.current-game-panel,.narrative-more) {position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;transform:none;border:0;border-radius:0;padding:max(20px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
  #root .current-game-panel .sheet-height-control {display:none}
- #root .inspector-workspace {width:100%}
  #root .settings-dialog input,#root .phone-device :is(input,textarea) {font-size:16px}
 }
 
@@ -325,19 +322,9 @@ html[data-hide-turn-times] .turn-clock {display:none}
 .action-panel-heading {display:flex;align-items:center;justify-content:space-between;gap:8px}
 .action-panel-hint {padding:5px 0;font:11px/1.5 Inter,sans-serif;color:var(--text-muted)}
 @container app (max-width:680px){#root .reading-display {right:12px;bottom:144px}.action-panel-hint {display:none}}
-.inspector-backdrop {position:absolute;inset:0;z-index:35;background:#080a0bad}
-.inspector-layout {display:flex;flex:1;min-height:0;min-width:0}
-.inspector-sections {display:flex;flex-direction:column;flex:none;gap:4px;width:120px;padding:16px 8px;border-right:1px solid var(--border);overflow:auto}
-.inspector-sections button {display:flex;align-items:center;gap:8px;padding:10px 6px;min-height:40px;border-radius:8px;border:1px solid transparent;color:var(--text-muted);font-size:12px;text-align:left}
-.inspector-sections button[aria-current=page] {color:var(--accent);background:var(--accent-soft);border-color:var(--border)}
-.inspector-layout .inspector-scroll {min-width:0;flex:1}
-.inspector-layout .inspector-compact .inspector-page {padding:18px 14px;width:100%}
 .rp-chat-stage {position:absolute;z-index:38;inset:0;display:flex;align-items:center;justify-content:center;background:#080a0cb8;padding:24px}
 .rp-chat-stage .chat-mode {width:min(1000px,100%);height:100%;border:1px solid var(--border);border-radius:16px}
 @container app (max-width:680px){
- .inspector-layout {flex-direction:column}
- .inspector-sections {flex-direction:row;width:100%;border-right:0;border-bottom:1px solid var(--border);padding:6px 12px}
- .inspector-sections button {flex:none;min-height:44px}
  .rp-chat-stage {padding:0}
  .rp-chat-stage .chat-mode {width:100%;border:0;border-radius:0}
 }
@@ -356,13 +343,11 @@ html[data-hide-turn-times] .turn-clock {display:none}
 #root .management-clock .scene-clock {font:14px/1.65 Inter,sans-serif;color:var(--text-muted)}
 #root .management-time-options .management-icon {padding:8px;background:var(--accent-soft);border-radius:9px;width:36px;height:36px}
 #root .management-time-options button {padding:0;background:transparent;border:0;color:var(--accent);box-shadow:none;justify-content:space-between;width:100%}
-#root .inspector-workspace .inspector-world-hero h2 {font:600 18px/1.5 Inter,sans-serif}
 @container app (min-width:681px){
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay {background:transparent;backdrop-filter:none}
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay::before {content:"";position:absolute;inset:0 0 0 170px;background:#07090db8;backdrop-filter:blur(3px);pointer-events:none}
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) :is(.library-dialog,.settings-dialog,.current-game-panel) {left:calc(50% + 85px);width:min(920px,calc(100% - 218px));max-width:none}
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-content:not(.reading-display) {left:calc(50% + 85px);max-width:calc(100% - 202px)}
- #root .inspector-backdrop {left:170px;backdrop-filter:blur(3px)}
+ #root:has(.narrative-shell:not(.reading,.workshop-open,.inspector-open)):not(:has(.save-workspace,.rp-chat-stage)) .dialog-overlay {background:transparent;backdrop-filter:none}
+ #root:has(.narrative-shell:not(.reading,.workshop-open,.inspector-open)):not(:has(.save-workspace,.rp-chat-stage)) .dialog-overlay::before {content:"";position:absolute;inset:0 0 0 var(--inspector-nav-width);background:#07090db8;backdrop-filter:blur(3px);pointer-events:none}
+ #root:has(.narrative-shell:not(.reading,.workshop-open,.inspector-open)):not(:has(.save-workspace,.rp-chat-stage)) :is(.library-dialog,.settings-dialog,.current-game-panel) {left:calc(50% + var(--inspector-nav-width)/2);width:min(920px,calc(100% - var(--inspector-nav-width) - 48px));max-width:none}
+ #root:has(.narrative-shell:not(.reading,.workshop-open,.inspector-open)):not(:has(.save-workspace,.rp-chat-stage)) .dialog-content:not(.reading-display) {left:calc(50% + var(--inspector-nav-width)/2);max-width:calc(100% - var(--inspector-nav-width) - 32px)}
 }
 @container app (max-width:680px){
  #root .library-layout {display:block}

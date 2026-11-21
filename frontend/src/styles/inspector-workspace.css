@@ -1,7 +1,7 @@
 /* #86 uses the Skin System palette and the single #83 expansion preference.
    All content styles are scoped; dossier cards/portrait/editor styles stay in #83. */
+:root { --inspector-nav-width: 214px; }
 .narrative-shell {
-  --inspector-nav-width: 214px;
   --inspector-top-height: 64px;
 }
 .narrative-shell [hidden] {
@@ -9,7 +9,7 @@
 }
 .narrative-shell .nav-rail {
   width: var(--inspector-nav-width);
-  padding: 22px 9px;
+  padding: 22px 14px 16px;
   align-items: stretch;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -17,69 +17,68 @@
 .narrative-shell .nav-rail .brand {
   display: flex;
   width: auto;
-  height: 22px;
+  height: 42px;
   justify-content: flex-start;
-  gap: 11px;
+  gap: 14px;
   border: 0;
-  margin: 0 8px 28px;
-  font: 600 10px/1.4 var(--ui-font);
-  letter-spacing: 1.7px;
+  margin: 0 10px 26px;
+  font: 600 13px/1.4 var(--ui-font);
+  letter-spacing: 2px;
   white-space: nowrap;
   overflow-wrap: normal;
   flex-shrink: 0;
 }
 .narrative-shell .nav-rail .brand svg {
-  width:22px; height:22px;
   flex-shrink: 0;
 }
 .inspector-world-label {
   display: grid;
-  gap: 6px;
-  padding: 0 0 16px;
-  margin: 0 7px 12px;
+  gap: 7px;
+  padding: 0 10px 20px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .inspector-world-label small {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .narrative-shell .nav-links {
-  gap: 0;
+  gap: 4px;
 }
 .narrative-shell .nav-links button,
 .narrative-shell .nav-settings {
   flex-direction: row;
   justify-content: flex-start;
-  gap: 10px;
+  gap: 12px;
   text-align: left;
-  padding: 9px;
-  min-height: 38px;
-  font-size: 11px;
+  padding: 10px 12px;
+  min-height: 44px;
+  font-size: 13px;
   line-height: 1.4;
 }
 .narrative-shell .nav-links button span,
 .narrative-shell .nav-settings span {
-  font-size: 11px;
+  font-size: 13px;
 }
 .narrative-shell .nav-links svg,
 .narrative-shell .nav-settings svg {
-  width: 14px;
-  height: 14px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0;
 }
 .inspector-nav-group {
   display: grid;
-  gap: 0;
-  margin-top: 24px;
+  gap: 3px;
+  margin-top: 12px;
 }
 .inspector-nav-group > p {
-  font-size: 8px;
-  letter-spacing: 1px;
+  font-size: 9px;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
   color: var(--text-subtle);
-  margin: 0 9px 10px;
+  margin: 6px 12px 8px;
 }
 .narrative-shell .nav-links button.current {
   background: var(--accent-soft);
@@ -95,7 +94,7 @@
   flex-shrink: 0;
 }
 .narrative-shell .nav-settings {
-  margin-top: 24px;
+  margin-top: 20px;
 }
 .narrative-shell .save-workspace {
   left: var(--inspector-nav-width);
@@ -875,7 +874,7 @@
   }
 }
 @media (max-width: 1100px) {
-  .narrative-shell {
+  :root {
     --inspector-nav-width: 190px;
   }
   .inspector-scroll {
@@ -889,7 +888,7 @@
   }
 }
 @media (max-width: 850px) {
-  .narrative-shell {
+  :root {
     --inspector-nav-width: 175px;
   }
   .narrative-shell .nav-rail {

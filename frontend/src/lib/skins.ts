@@ -1,6 +1,6 @@
 /** Base geometry + independent decoration + accent. Presets are only compositions. */
 export const themes=[
- {id:'graphite',name:'Graphite',description:'Чистые панели · современная типографика',base:'modern',decoration:'none',accent:'#d2b477',bg:'#131517',surface:'#191c20',text:'#ecebe7'},
+ {id:'graphite',name:'Graphite',description:'Чистые панели · современная типографика',base:'modern',decoration:'none',accent:'#dbb980',bg:'#141619',surface:'#1b1e22',text:'#ecebe6'},
  {id:'cyberpunk',name:'Cyberpunk',description:'HUD · неоновые направляющие · сетка',base:'hud',decoration:'cyberpunk',accent:'#6edde0',bg:'#09131c',surface:'#12212c',text:'#e4f3f8'},
  {id:'industrial',name:'Industrial',description:'Металлические панели · болты · маркировка',base:'metal',decoration:'industrial',accent:'#e7be68',bg:'#171a1c',surface:'#242a2d',text:'#e8e8e1'},
  {id:'medieval',name:'Medieval',description:'Дерево · железные накладки · гербы',base:'wood',decoration:'medieval',accent:'#d9b783',bg:'#1d1712',surface:'#2c231b',text:'#eee1c9'},

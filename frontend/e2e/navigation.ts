@@ -9,12 +9,6 @@ export async function nav(page:Page,name:string){
   }
  }
 
- const inspector=page.locator('.inspector-workspace:visible');
- if(await inspector.count()){
-  const section=inspector.getByRole('navigation',{name:'Разделы инспектора'}).getByRole('button',{name,exact:true});
-  if(await section.count()){await section.click();return}
-  await page.keyboard.press('Escape');
- }
  if(await page.locator('[data-mobile-menu-trigger]:visible').count()){
   await expect(page.getByRole('dialog')).toHaveCount(0);
   if(name==='Режим чтения'||name==='Выйти из чтения')await page.getByLabel('Ещё действия').click();
@@ -23,7 +17,9 @@ export async function nav(page:Page,name:string){
    if(name==='Создать')name='Создать мир';
    if(name==='Игра'){await page.locator('.mobile-menu-resume').click();return}
   }
-
+ } else {
+  const link=page.getByRole('navigation',{name:'Главная навигация'}).getByRole('button',{name,exact:true});
+  if(await link.count()){await link.click();return}
  }
  await page.getByRole('button',{name,exact:true}).last().click();
 }

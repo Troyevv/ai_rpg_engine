@@ -279,7 +279,7 @@ export function Inspector({
   const [dossierTab, setDossierTab] = useState<DossierTab>("overview");
   useEffect(()=>{if(open&&storyTarget?.character_ids?.length)setDossierTab('secrets')},[open,storyTarget]);
   const [expanded, setExpanded] = useState(
-    () => sessionStorage.getItem("dossier-expanded") === "yes",
+    () => sessionStorage.getItem("dossier-expanded") !== "no",
   );
   const [query, setQuery] = useState("");
   const [near, setNear] = useState(false);
@@ -428,15 +428,8 @@ export function Inspector({
   const section = inspectorSections.find((s) => s.id === panel)!;
   return (
     <>
-      {open&&<div className="inspector-backdrop" aria-hidden onClick={back}/>}
       <section
         className="inspector-workspace"
-        onKeyDown={e=>{
-          if(e.key!=='Tab'||!e.currentTarget.contains(e.target as Node))return;
-          const nodes=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')).filter(n=>n.tabIndex>=0&&n.getClientRects().length);
-          if(e.shiftKey&&e.target===nodes[0]){e.preventDefault();nodes.at(-1)?.focus()}
-          else if(!e.shiftKey&&e.target===nodes.at(-1)){e.preventDefault();nodes[0]?.focus()}
-        }}
         hidden={!open}
         aria-label={panelLabel(panel)}
       >
@@ -484,12 +477,6 @@ export function Inspector({
             </span>
           </Button>
         </header>
-        <div className="inspector-layout">
-          <nav className="inspector-sections" aria-label="Разделы инспектора">
-            {inspectorSections.map(({id,icon:Icon})=><button key={id} aria-current={panel===id?'page':undefined} onClick={()=>setPanel(id)}>
-              <Icon size={16}/>{panelLabel(id)}
-            </button>)}
-          </nav>
         <div
           ref={scrollRef}
           className={`inspector-scroll ${expanded ? "dossier-expanded" : "inspector-compact"}`}
@@ -598,7 +585,6 @@ export function Inspector({
                 </div>
               ))}
           </div>
-        </div>
         </div>
       </section>
       <Dialog open={infoOpen} onOpenChange={setInfoOpen}>

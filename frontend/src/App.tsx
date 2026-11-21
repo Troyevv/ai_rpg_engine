@@ -14,7 +14,7 @@ import {
   Settings2,
   Feather,
   PanelRight,
-  PanelsTopLeft, MessagesSquare, ChevronDown,
+  PanelsTopLeft, MessagesSquare, ChevronDown, Library as LibraryIcon,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -225,39 +225,7 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
-  const navigation=(act:(action:()=>void)=>void)=>(<nav className="nav-rail" inert={inspector&&!mobile} aria-label={tr('Главная навигация','Main navigation')}>
-        <button
-          className="brand"
-          aria-label="AI RPG Engine"
-          onClick={()=>act(()=>navigate("game"))}
-        >
-          <Feather size={26} /><span>NARRATIVE</span>
-        </button>
-        {world&&<div className="inspector-world-label"><strong title={world.name}>{world.name}</strong><small>{save?.name||it("original")} · {it("baseline")} v{world.version}</small></div>}
-        <div className="nav-links">
-          <button
-            className={view === "game" && !workspace && !inspector ? "current" : ""}
-            onClick={()=>act(()=>navigate("game"))}
-          >
-            <BookOpen />
-            <span>{tr('Игра','Game')}</span>
-          </button>
-          <button
-            className={view === "prepare" ? "current" : ""}
-            onClick={()=>act(()=>navigate("prepare"))}
-          >
-            <Feather />
-            <span>{tr('Создать','Create world')}</span>
-          </button>
-          {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-nav-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} className={inspector&&panel===id?'current':''} aria-current={inspector&&panel===id?'page':undefined} onClick={()=>act(()=>inspect(id))}><Icon/><span>{panelLabel(id)}</span></button>)}</div>)}
-          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>act(()=>openWorkspace(section))}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?tr('Календарь','Calendar'):tr('Родословная','Family tree')}</span></button>)}</div>
-          <button disabled={!world} onClick={()=>act(()=>setWorldInfo(true))}><Settings2/><span>{it('settings')}</span></button>
-        </div>
-        <button className="nav-settings" disabled={prefsLoading} onClick={()=>act(()=>setSettings(true))}>
-          <Settings2 />
-          <span>{tr('Настройки','Settings')}</span>
-        </button>
-      </nav>);
+  const workspaceHeader = Boolean(workspace) && !mobile;
   const menu=<MobileNavigation
     activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu}
     world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)}
@@ -265,21 +233,72 @@ export default function App() {
   />;
   return (
     <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={chatOpen?null:world} preview={chatOpen||view==='prepare'}><ThemedToaster/><div inert={chatOpen} className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
-      {!mobile&&navigation(action=>action())}
+      {!mobile&&<nav className="nav-rail" aria-label={tr('Главная навигация','Main navigation')}>
+        <button
+          className="brand"
+          aria-label="AI RPG Engine"
+          onClick={() => navigate("game")}
+        >
+          <Feather size={26} /><span>NARRATIVE</span>
+        </button>
+        {world&&<div className="inspector-world-label"><strong title={world.name}>{world.name}</strong><small>{save?.name||it("original")} · {it("baseline")} v{world.version}</small></div>}
+        <div className="nav-links">
+          <button
+            className={view === "game" && !workspace && !inspector ? "current" : ""}
+            onClick={() => navigate("game")}
+          >
+            <BookOpen />
+            <span>{tr('Игра','Game')}</span>
+          </button>
+          <button
+            className={view === "prepare" ? "current" : ""}
+            onClick={() => navigate("prepare")}
+          >
+            <Feather />
+            <span>{tr('Создать','Create world')}</span>
+          </button>
+          {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-nav-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} className={inspector&&panel===id?'current':''} aria-current={inspector&&panel===id?'page':undefined} onClick={()=>inspect(id)}><Icon/><span>{panelLabel(id)}</span></button>)}</div>)}
+          <div className="inspector-nav-group"><p>{it('currentGame')}</p>{(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section&&!inspector?'current':''} onClick={()=>openWorkspace(section)}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?tr('Календарь','Calendar'):tr('Родословная','Family tree')}</span></button>)}</div>
+          <button disabled={!world} onClick={()=>setWorldInfo(true)}><Settings2/><span>{it('settings')}</span></button>
+        </div>
+        <button className="nav-settings" disabled={prefsLoading} onClick={() => setSettings(true)}>
+          <Settings2 />
+          <span>{tr('Настройки','Settings')}</span>
+        </button>
+      </nav>}
       <div className="app-main">
-        <header className="topbar nr-topbar" inert={inspector}>
-          <div className="nr-topstart">
-            {mobile && !inspector && menu}
-            <button className="breadcrumb nr-worldpicker" title={world?.name || 'Твои истории'} onClick={()=>setLibrary(true)}>
-              <span className="nr-world-symbol"><PanelsTopLeft size={18}/></span>
-              <span className="nr-worldcopy"><strong data-current-world>{view==='prepare'?'Мастерская':world?.name || 'Твои истории'}</strong>
-                <small className="nr-worldsub"><span>{save?.name || 'Библиотека'}</span><i/><span>Narrative</span></small></span>
-              <ChevronDown size={14}/>
-            </button>
-          </div>
-          <div className="topbar-actions nr-topactions">
-            <button className="nr-rpentry" onClick={()=>openChat()}><MessagesSquare/>RP-чат</button>
-            {!mobile && <><span className="nr-topdivider"/>
+        <header className={workspaceHeader?"topbar":"topbar nr-topbar"} hidden={inspector}>
+          {workspaceHeader ? (
+            <>
+              <div className="topbar-start">
+                <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
+              </div>
+              <div className="topbar-title">
+                <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
+                  <LibraryIcon size={17} />
+                  <span>
+                    {view === "prepare"
+                      ? "Мастерская"
+                      : world?.name || "Твои истории"}
+                  </span>
+                  <span className="muted">⌄</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="nr-topstart">
+              {mobile && !inspector && menu}
+              <button className="breadcrumb nr-worldpicker" title={world?.name || 'Твои истории'} onClick={()=>setLibrary(true)}>
+                <span className="nr-world-symbol"><PanelsTopLeft size={18}/></span>
+                <span className="nr-worldcopy"><strong data-current-world>{view==='prepare'?'Мастерская':world?.name || 'Твои истории'}</strong>
+                  <small className="nr-worldsub"><span>{save?.name || 'Библиотека'}</span><i/><span>Narrative</span></small></span>
+                <ChevronDown size={14}/>
+              </button>
+            </div>
+          )}
+          <div className={workspaceHeader?"topbar-actions":"topbar-actions nr-topactions"}>
+            {!workspaceHeader&&<button className="nr-rpentry" onClick={()=>openChat()}><MessagesSquare/>RP-чат</button>}
+            {!mobile && <>{!workspaceHeader&&<span className="nr-topdivider"/>}
               {view === "game" && (
                 <Button
                   variant="ghost"
