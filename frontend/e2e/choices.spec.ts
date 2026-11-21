@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {swipe} from './touch';
+import {scrollByTouch} from './touch';
 
 test('choice proposals survive reload without committing action; free input remains available',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -51,7 +51,7 @@ test('touch scrolls through ten proposals and back to the story without selectin
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');
  const cards=page.locator('.choices button'), story=page.locator('.story-scroll');
- const grip=page.locator('.gesture-sheet-grip').first(), panel=grip.locator('..');
+ const toggle=page.locator('.action-panel-toggle').first(), panel=toggle.locator('..');
  const draft=page.getByLabel('Своё действие или реплика');
  await expect(cards).toHaveCount(10);
  await cards.first().evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -91,13 +91,16 @@ test('touch scrolls through ten proposals and back to the story without selectin
    const bottom=await story.evaluate(el=>el.scrollTop);
    await dragCard(145);
    await expect.poll(()=>story.evaluate(el=>el.scrollTop)).toBeLessThan(bottom-35);
-   await grip.scrollIntoViewIfNeeded();
-   await swipe(page,grip,0,64);
+   await toggle.scrollIntoViewIfNeeded();
+   await toggle.tap();
+   await expect(panel).toHaveAttribute('data-stop','0');
+   await expect(toggle).toHaveAttribute('aria-expanded','false');
+   await toggle.tap();
    await expect(panel).toHaveAttribute('data-stop','1');
-   const body=panel.locator('.gesture-sheet-body');
+   const body=panel.locator('.action-panel-body');
    const box=await body.boundingBox();
    if(!box)throw Error('Compact list is hidden');
-   await swipe(page,body,0,-Math.min(85,box.height*.6),{from:.4});
+   await scrollByTouch(page,body,-Math.min(85,box.height*.6),{from:.4});
    await expect.poll(()=>body.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
    await expect(panel).toHaveAttribute('data-stop','1');
    // On Android, a tap during native momentum first brakes the list.
@@ -111,7 +114,7 @@ test('touch scrolls through ten proposals and back to the story without selectin
      }
      requestAnimationFrame(frame);
    }));
-   await grip.tap();
+   await toggle.tap();
    await expect(panel).toHaveAttribute('data-stop','2');
    await expect(draft).toBeInViewport();
    await cards.last().tap();

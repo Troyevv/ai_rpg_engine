@@ -1,4 +1,3 @@
-import {dismissNotice} from './gestures/panels';
 import {useEffect,useRef,useState} from 'react';
 import type {Save,Job} from './types';
 import {relationshipLabel} from './lib/relationships';
@@ -20,7 +19,7 @@ export function RuntimeNotifications({save,job,enabled}:{save:Save|null;job:Job|
  const name=(id?:string)=>save?.state.characters.find(c=>c.id===id)?.name||id;
  const labels:Record<string,string>={goals:'Цель выполнена',intentions:'Намерение выполнено',obligations:notice.status==='completed'?'Обязательство выполнено':'Обязательство'};
  const dismiss=()=>setQueue(q=>q[0]?.id===notice.id?q.slice(1):q);
- return <div {...dismissNotice(dismiss)} className={`runtime-notice ${notice.direction||'up'}`} role="status" aria-live="polite">
+ return <div className={`runtime-notice ${notice.direction||'up'}`} role="status" aria-live="polite">
  {notice.kind==='relationship'?<><strong>{name(notice.source_id)} → {name(notice.target_id)} {notice.direction==='mixed'?'↕':notice.direction==='up'?'↑':'↓'}</strong><p>{Object.entries(notice.deltas||{}).map(([key,n])=>`${relationshipLabel(key)} ${n>0?'+':''}${n}`).join(' · ')}</p></>:<><strong>{notice.status==='completed'?'✓':'+'} {labels[notice.field||'']}</strong><p>{notice.text}</p></>}
  <button aria-label="Закрыть уведомление" onClick={dismiss}>×</button></div>;
 }

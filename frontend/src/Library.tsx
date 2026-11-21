@@ -1,5 +1,4 @@
-import {rowActions} from './gestures/rows';
-import {RefreshRegion} from './gestures/RefreshRegion';
+import {RefreshRegion} from './components/ui/refresh-region';
 import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
 import { BookOpen, Plus, Upload, X } from "lucide-react";
@@ -95,7 +94,7 @@ export function Library({
         <RefreshRegion refresh={()=>setRefreshKey(n=>n+1)}>
         <div className="world-grid">
           {worlds.map((w) => (
-            <article {...rowActions()} className="world-card-wrap" data-world-id={w.id} key={w.id}><button
+            <article className="world-card-wrap" data-world-id={w.id} key={w.id}><button
               aria-label={`Открыть ${w.name}`}
               onClick={() => selectWorld(w.id)}
               className={`world-card ${selected === w.id ? "selected" : ""}`}
@@ -120,8 +119,7 @@ export function Library({
             <h3>Прохождения</h3>
 
             {saves.map((s) => (
-              <button
-                {...rowActions()} key={s.id}
+              <button key={s.id}
                 onClick={() => {
                   choose(selected, s.id);
                   onOpenChange(false);
@@ -224,7 +222,7 @@ export function Library({
         </details>
       </DialogContent>
       <Dialog open={!!deleting} onOpenChange={v=>{if(!v&&!busy)setDeleting(null)}}>
-        <DialogContent data-gesture-confirm=""><DialogHeader><DialogTitle>Удалить «{deleting?.name}»?</DialogTitle><DialogDescription>История будет перемещена в удалённые.</DialogDescription></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Удалить «{deleting?.name}»?</DialogTitle><DialogDescription>История будет перемещена в удалённые.</DialogDescription></DialogHeader>
         <div className="actions"><Button variant="ghost" disabled={busy} onClick={()=>setDeleting(null)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{if(!deleting)return;await api(`/worlds/${deleting.id}`,undefined,"DELETE");setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));if(selected===deleting.id)selectWorld(undefined);setDeleting(null);toast.success("История перемещена в удалённые")})}>Удалить</Button></div></DialogContent>
       </Dialog>
     </Dialog>

@@ -1,6 +1,5 @@
-import {backSwipe} from './gestures/surface';
 import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
-import {ActionPanel} from './gestures/panels';
+import {ActionPanel} from './components/ui/action-panel';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {PhoneOff,Minimize2,Phone,Send,ArrowDown} from 'lucide-react';
@@ -81,7 +80,7 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
          else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
        }
      }}>
-       <header {...backSwipe(collapse)} className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
+       <header className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
        <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
          {active&&choices.length>0&&<ActionPanel label="Варианты продолжения" hidden={working}><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
            {choices.map(c=>{

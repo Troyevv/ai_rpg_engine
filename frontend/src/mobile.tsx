@@ -1,4 +1,3 @@
-import {drawer,dismissLayer} from './gestures/panels';
 import {inspectorSections,it,panelLabel,type Panel} from './lib/inspector';
 import {gameLocale,profileDate} from './gameDate';
 import {CharacterAvatar} from './Portrait';
@@ -66,7 +65,7 @@ export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,
  const time=clock?.projection;
  const date=time?.date?profileDate(time.date,(clock?.calendar as {profile?:Parameters<typeof profileDate>[1]})?.profile,'weekday'):time?`${copy.day} ${time.day}`:'';
  const sections=(group:'worldGroup'|'storyGroup')=>inspectorSections.filter(s=>s.group===group).map(({id,key,icon:Icon})=><button key={id} disabled={!world} aria-current={activePanel===id?'page':undefined} className={`mobile-menu-card menu-${key}`} onClick={()=>close(()=>inspect(id))}><span className="mobile-menu-icon"><Icon aria-hidden="true"/></span><span>{panelLabel(id)}</span></button>);
- return <><Button {...drawer(()=>setOpen(true),()=>close(),".mobile-game-menu",1)} ref={trigger} data-mobile-menu-trigger size="icon" variant="ghost" aria-label={copy.title} onClick={()=>setOpen(true)}><Menu/></Button>
+ return <><Button ref={trigger} data-mobile-menu-trigger size="icon" variant="ghost" aria-label={copy.title} onClick={()=>setOpen(true)}><Menu/></Button>
  <Dialog open={open} onOpenChange={value=>value?setOpen(true):close()}><DialogContent className="mobile-game-menu inspector-mobile-palette" onCloseAutoFocus={event=>{
   event.preventDefault();
   // Wait for Radix to remove the exiting dialog/focus trap before opening
@@ -74,7 +73,7 @@ export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,
   const action=pending.current;pending.current=null;
   if(action)action();else trigger.current?.focus({preventScroll:true});
  }}>
- <header {...dismissLayer(1,()=>close())} className="mobile-menu-brand"><BookOpen aria-hidden="true"/><div><small>NARRATIVE WORLD</small><strong>{world?.name||copy.noWorld}</strong></div><DialogClose className="mobile-menu-close" aria-label={copy.close}><X aria-hidden="true"/></DialogClose></header>
+ <header className="mobile-menu-brand"><BookOpen aria-hidden="true"/><div><small>NARRATIVE WORLD</small><strong>{world?.name||copy.noWorld}</strong></div><DialogClose className="mobile-menu-close" aria-label={copy.close}><X aria-hidden="true"/></DialogClose></header>
  <div className="mobile-menu-scroll">
  <DialogHeader><DialogTitle>{copy.title}</DialogTitle><DialogDescription>{copy.subtitle}</DialogDescription></DialogHeader>
  <button className="mobile-menu-resume" disabled={!save} onClick={()=>close(()=>go('game'))}>

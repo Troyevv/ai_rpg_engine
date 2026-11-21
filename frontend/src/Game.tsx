@@ -1,5 +1,5 @@
 import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
-import {ActionPanel} from './gestures/panels';
+import {ActionPanel} from './components/ui/action-panel';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
 import type {StoryNotice} from './types';
@@ -300,7 +300,7 @@ export function Game({
       </main>
     );
   return (
-    <main className="game" data-gesture-busy={generating}>
+    <main className="game">
       {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} choices={latestCall?.committed ? latestCall.turn.choices.filter(c=>c.interaction_channel==='call') : []} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
@@ -484,7 +484,7 @@ export function Game({
       {save && (
         <div className="composer">
           <Dialog open={pendingChoice!==null} onOpenChange={open=>{if(!open)closeChoice()}}>
-            <DialogContent data-gesture-confirm="" onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
+            <DialogContent onCloseAutoFocus={event=>{event.preventDefault();input.current?.focus({preventScroll:true})}}>
               <DialogTitle>В поле уже есть черновик</DialogTitle>
               <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
               <div className="actions">

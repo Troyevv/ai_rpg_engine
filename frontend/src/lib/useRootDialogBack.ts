@@ -15,9 +15,7 @@ export function useRootDialogBack() {
     const sync = () => {
       if (consuming) return;
       const state = history.state || {};
-      const layer =
-        topDialog() ||
-        document.querySelector<HTMLElement>('.gesture-actions,.choice-popup');
+      const layer = topDialog() || document.querySelector<HTMLElement>('.choice-popup');
       const routed =
         state.inspectorOpen ||
         state.saveWorkspace ||

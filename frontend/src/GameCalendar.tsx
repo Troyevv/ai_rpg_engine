@@ -1,4 +1,3 @@
-import {pages,surface} from './gestures/surface';
 import { useEffect, useState } from "react";
 import {
   ChevronLeft,
@@ -270,7 +269,7 @@ export function GameCalendar({
       aria-label="Календарь игры"
     >
       <div className="calendar-toolbar">
-        <div {...surface({id:"period",group:"navigation",axis:"x",allowButton:true,finish:({delta})=>move(delta<0?step:-step)})} className="calendar-period">
+        <div className="calendar-period">
           <button
             aria-label={yearView ? "Предыдущий год" : "Предыдущий месяц"}
             disabled={!shiftMonth(month, -step, profile)}
@@ -292,7 +291,7 @@ export function GameCalendar({
           Сегодня в игре
         </button>
         <div
-          {...pages([false,true],yearView,setYearView)} className="calendar-view-switch"
+          className="calendar-view-switch"
           role="group"
           aria-label="Представление календаря"
         >

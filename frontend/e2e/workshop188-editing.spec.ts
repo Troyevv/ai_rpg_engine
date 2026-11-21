@@ -1,4 +1,3 @@
-import {swipe} from './touch';
 import {chooseOption} from './choice-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -58,7 +57,7 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
  await expect(field.getByRole('alert')).toBeVisible();await expect(field.getByLabel('Внешность',{exact:true})).toHaveValue(old);await expect(field.getByLabel('Указание генератору')).toHaveValue('WORKSHOP188 invalid');
  const diagnostic=await(await request.get(url+'/raw')).json();expect(diagnostic.operation).toBe('field');expect(diagnostic.model_response.text).toContain('not a literary value');expect(diagnostic.application.error).toBeTruthy();
  await page.screenshot({path:test.info().outputPath(`field-error-${skin}-${info.project.name}.png`)});
- if(info.project.name==='mobile')await swipe(page,field.locator('.dialog-title'),0,95);else await field.getByRole('button',{name:'Закрыть',exact:true}).click();await dossier.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
+ await field.getByRole('button',{name:'Закрыть',exact:true}).click();await dossier.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
  await field.locator('summary').filter({hasText:'Изменить это поле с ИИ'}).click();await expect(field.getByLabel('Указание генератору')).toHaveValue('WORKSHOP188 invalid');
  await field.getByLabel('Указание генератору').fill('WORKSHOP188 Измени только цвет волос на светлый.');await field.getByRole('checkbox').check();await field.getByRole('button',{name:'Перегенерировать поле',exact:true}).click();
  await expect(field.getByRole('heading',{name:'Вариант от ИИ',exact:true})).toBeVisible();expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);const proposal=field.locator('.ww-field-proposal');

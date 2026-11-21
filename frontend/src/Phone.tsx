@@ -1,7 +1,4 @@
-import {phoneDock} from './gestures/panels';
 import {dismissTransient} from './lib/transientBack';
-import {pages,backSwipe} from './gestures/surface';
-import {rowActions} from './gestures/rows';
 import {phoneText as t} from "./lib/phone";
 import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
@@ -127,9 +124,6 @@ export function Phone({
   const list = useRef<HTMLDivElement>(null);
   const listPositions = useRef<Record<string, number>>({});
   const returnFocus = useRef<HTMLElement | null>(null);
-  // An explicit visit to a conversation retains the normal read receipt.
-  // Moving a panel or browsing tabs must not mark hidden messages as read.
-  const browsingByGesture=useRef(false);
   const focusKey = useRef<string | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<string | null>(null);
@@ -251,7 +245,7 @@ export function Phone({
   }, [save.id, phone?.actor_id]);
   useLayoutEffect(() => {
     if (!open) {autoReadAttempt.current=null;return;}
-    if (browsingByGesture.current || tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
+    if (tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
     const attempt=`${ownerKey}:${conversation}:${save.revision}`;
     if(autoReadAttempt.current===attempt)return;
     autoReadAttempt.current=attempt;
@@ -402,7 +396,6 @@ export function Phone({
   return (
     <div
       className="phone-affordance"
-      onClickCapture={()=>{browsingByGesture.current=false}}
       style={{ "--phone-dock-bottom": `${dock}px` } as CSSProperties}
     >
 
@@ -410,8 +403,7 @@ export function Phone({
         className={`phone-device ${open ? "is-open" : ""} ${call?.status === "ringing" ? "is-ringing" : ""}`}
         data-testid="phone-device"
       >
-        <button
-          {...phoneDock(open,()=>{browsingByGesture.current=true;if(open)close();else setOpen(true)})} ref={trigger}
+        <button ref={trigger}
           className="phone-peek"
           aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
           aria-expanded={open}
@@ -445,12 +437,12 @@ export function Phone({
             else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===screen.current)){e.preventDefault();first?.focus()}
           }}
         >
-          <header {...backSwipe(back)} className="phone-top">
+          <header className="phone-top">
             {nested && <Button variant="ghost" size="icon" aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'} onClick={back}><ArrowLeft size={20}/></Button>}
             {inChat && !membersOpen && <span className="phone-header-avatar" aria-label="Участники переписки">{selected?.group ? <Users size={24}/> : (selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject) ? avatar((selected?.participants.find(p=>p.id!==phone.actor_id) || target?.subject || recipientTarget?.subject)!) : null}</span>}
             <div className="phone-heading" aria-busy={busy}><strong title={title}>{title}</strong><small>{inChat ? selected?.group ? `${selected.participants.length} участников` : 'Личная переписка' : save.state.characters.find(c=>c.id===phone.actor_id)?.name}</small></div>
             {inChat && selected?.group && selected.active && !membersOpen && <Button variant="ghost" size="icon" aria-label="Управление участниками" onClick={()=>setMembersOpen(true)}><Users size={20}/></Button>}
-            <Button {...phoneDock(true,close)} variant="ghost" size="icon" aria-label="Свернуть телефон" onClick={close}><X size={20}/></Button>
+            <Button variant="ghost" size="icon" aria-label="Свернуть телефон" onClick={close}><X size={20}/></Button>
           </header>
           {error && <div className="phone-error" role="alert"><span>{error}</span><button disabled={busy} onClick={async()=>{
             if(requestLock.current||locked)return;requestLock.current=true;setBusy(true);
@@ -509,7 +501,7 @@ export function Phone({
                       const saved = savedRecipient(r);
                       return <article className="phone-row phone-recipient" key={r.id}>
                         {avatar(r.subject)}
-                        <button {...rowActions('.phone-row')} className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
+                        <button className="phone-contact-name" data-phone-focus={`recipient:${r.id}`} disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){returnFocus.current=document.activeElement as HTMLElement;focusKey.current=`recipient:${r.id}`;setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
                           <strong>{saved?.label || r.subject.name}</strong>
                           {saved && saved.label !== r.subject.name && <small>{r.subject.name}</small>}
                         </button>
@@ -559,7 +551,7 @@ export function Phone({
                   <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
-                      <button {...rowActions('.phone-row')} className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
+                      <button className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
                       <small>
                         {c.address}
                         {c.blocked
@@ -837,7 +829,7 @@ export function Phone({
               </>
             )}
           </div>
-          <nav {...pages(['calls','messages','contacts'] as const,tab,key=>{browsingByGesture.current=true;setTab(key);setEntry(false);setMembersOpen(false);setGrouping(false)})} className="phone-bottom" aria-label="Разделы телефона">
+          <nav className="phone-bottom" aria-label="Разделы телефона">
             {(
               [
                 ["calls", "Звонки", PhoneIcon],

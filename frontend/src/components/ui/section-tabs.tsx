@@ -1,4 +1,3 @@
-import {pages} from '../../gestures/surface';
 import {useId, useRef, type ReactNode} from 'react';
 import {motion, useReducedMotion} from 'framer-motion';
 import {motionTiming,ease} from '../../motion';
@@ -7,7 +6,7 @@ type Item<T extends string>={id:T;label:string;icon?:ReactNode};
 /** Shared segmented navigation. Existing button semantics remain for navigation groups. */
 export function SectionTabs<T extends string>({items,value,onChange,label,className='',tablist=false,panelId}:{items:readonly Item<T>[];value:T;onChange:(id:T)=>void;label:string;className?:string;tablist?:boolean;panelId?:string}){
  const id=useId();const ref=useRef<HTMLDivElement>(null);const reduced=useReducedMotion();
- return <div {...pages(items.map(item=>item.id),value,onChange)} ref={ref} className={`section-tabs ${className}`} role={tablist?'tablist':'group'} aria-label={label}
+ return <div ref={ref} className={`section-tabs ${className}`} role={tablist?'tablist':'group'} aria-label={label}
  onKeyDown={e=>{
   if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
   e.preventDefault();const i=items.findIndex(t=>t.id===value);

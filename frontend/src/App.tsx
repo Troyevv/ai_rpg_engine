@@ -1,7 +1,5 @@
 import {dismissTransient} from './lib/transientBack';
 import {useRootDialogBack} from './lib/useRootDialogBack';
-import {backSwipe,pages} from './gestures/surface';
-import {useControls} from './gestures/preferences';
 import {PortraitModels} from './workshop/PortraitCommission';
 import {requestId} from './lib/requestId';
 import "./styles/current-game.css";
@@ -266,7 +264,7 @@ export default function App() {
           <div className="topbar-start">
             <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
           </div>
-          <div {...pages(["game","prepare"] as const,view,navigate)} className="topbar-title">
+          <div className="topbar-title">
             <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
               <LibraryIcon size={17} />
               <span>
@@ -351,7 +349,7 @@ export default function App() {
           /></div>
         )}
       </div>
-      {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header {...backSwipe(()=>closeWorkspace())}><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
+      {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
       <Settings
         open={settings}
         onOpenChange={setSettings}
@@ -391,4 +389,4 @@ export default function App() {
   );
 }
 
-function ThemedToaster(){const {presentation}=useTheme();const controls=useControls();return <Toaster closeButton swipeDirections={controls.enabled&&controls.panels?['left','right']:[]} theme={presentation.theme_id==='parchment'?'light':'dark'} position="top-center" toastOptions={{className:"story-toast"}}/>}
+function ThemedToaster(){const {presentation}=useTheme();return <Toaster closeButton swipeDirections={[]} theme={presentation.theme_id==='parchment'?'light':'dark'} position="top-center" toastOptions={{className:"story-toast",style:{touchAction:"auto"}}}/>}

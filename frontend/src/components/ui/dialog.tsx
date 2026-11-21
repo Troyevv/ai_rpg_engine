@@ -1,6 +1,4 @@
-import {closeButtonSwipe} from '../../gestures/surface';
-import {SheetHeight} from '../../gestures/panels';
-import {dismissLayer} from '../../gestures/panels';
+import {SheetHeight} from './sheet-height';
 // shadcn/ui Dialog composition (MIT), backed by Radix focus trap and semantics.
 import * as React from "react";
 import * as Primitive from "@radix-ui/react-dialog";
@@ -11,8 +9,8 @@ export const DialogTrigger = Primitive.Trigger;
 export const DialogClose = Primitive.Close;
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof Primitive.Content>,
-  React.ComponentPropsWithoutRef<typeof Primitive.Content> & {gestureBack?:()=>void}
->(({ className, children, gestureBack, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof Primitive.Content>
+>(({ className, children, ...props }, ref) => (
   <Primitive.Portal>
     <Primitive.Overlay className="dialog-overlay" />
     <Primitive.Content
@@ -22,7 +20,7 @@ export const DialogContent = React.forwardRef<
     >
       {className?.split(' ').some(name=>['mobile-sheet','time-skip-sheet','current-game-panel'].includes(name))&&<SheetHeight/>}
       {children}
-      <Primitive.Close {...closeButtonSwipe(gestureBack)} className="dialog-close" aria-label="Закрыть">
+      <Primitive.Close className="dialog-close" aria-label="Закрыть">
         <X size={20} />
       </Primitive.Close>
     </Primitive.Content>
@@ -40,7 +38,6 @@ export const DialogTitle = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Primitive.Title>
 >(({ className, ...props }, ref) => (
   <Primitive.Title
-    {...dismissLayer()}
     ref={ref}
     className={cn("dialog-title", className)}
     {...props}

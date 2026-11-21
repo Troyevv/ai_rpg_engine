@@ -1,4 +1,3 @@
-import {rowActions} from './gestures/rows';
 import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { CharacterAvatar } from "./Portrait";
@@ -26,7 +25,7 @@ export function RelationshipPair({
     return c ? (
       <button
         type="button"
-        {...rowActions(".relationship-card")} className="relationship-person"
+        className="relationship-person"
         data-dossier-link={JSON.stringify([source, target, id])}
         disabled={!onCharacter}
         onClick={() => onCharacter?.(id)}

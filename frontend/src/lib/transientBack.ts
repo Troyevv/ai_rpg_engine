@@ -22,3 +22,20 @@ export function useTransientBack(open: boolean, close: () => void | boolean) {
     };
   }, [open, close]);
 }
+
+export function foreground(host: HTMLElement) {
+  if (
+    !host.isConnected ||
+    host.closest(
+      '[hidden],[inert],[aria-hidden=true],[data-state=closed][role=dialog]'
+    )
+  )
+    return false;
+  const layers = document.querySelectorAll<HTMLElement>(
+    '[role=dialog]:not([data-state=closed]),[role=alertdialog],[role=listbox][data-state=open]'
+  );
+  const top =
+    layers[layers.length - 1] ||
+    document.querySelector('.phone-device.is-open');
+  return !top || top.contains(host);
+}

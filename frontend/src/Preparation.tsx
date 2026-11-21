@@ -356,7 +356,7 @@ function PreparationWorkspace({
           </Button>
         </DialogContent>
       </Dialog>
-      <Dialog open={deleteSummary} onOpenChange={setDeleteSummary}><DialogContent data-gesture-confirm=""><DialogTitle>Удалить текущую выжимку?</DialogTitle><DialogDescription>Её версии и сохранённые миры останутся.</DialogDescription><Button variant="ghost" onClick={()=>setDeleteSummary(false)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{const h=await api<{active_id:number}>(`/documents/summary/${id}`);await api(`/documents/summary/${id}`,{content:"",expected_head:h.active_id});if(alive.current){setDeleteSummary(false);refresh()}})}>Удалить выжимку</Button></DialogContent></Dialog>
+      <Dialog open={deleteSummary} onOpenChange={setDeleteSummary}><DialogContent><DialogTitle>Удалить текущую выжимку?</DialogTitle><DialogDescription>Её версии и сохранённые миры останутся.</DialogDescription><Button variant="ghost" onClick={()=>setDeleteSummary(false)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{const h=await api<{active_id:number}>(`/documents/summary/${id}`);await api(`/documents/summary/${id}`,{content:"",expected_head:h.active_id});if(alive.current){setDeleteSummary(false);refresh()}})}>Удалить выжимку</Button></DialogContent></Dialog>
     </main>
   );
 }

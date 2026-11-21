@@ -1,8 +1,8 @@
 import {test,expect} from '@playwright/test';
 import {nav,pickCharacter} from './navigation';
-const out='../docs/manual_qa/narrative_v4/issue83-evidence';
 test('portrait original and edit surfaces retain circular crop in both skins',async({page,request},info)=>{
  const s=await(await request.post('/test/appearance-seed')).json();await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
+ const out=process.env.PORTRAIT_EVIDENCE_DIR || info.outputDir;
  if(info.project.name==='mobile')await page.setViewportSize({width:360,height:800});
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_vera');
@@ -16,5 +16,16 @@ test('portrait original and edit surfaces retain circular crop in both skins',as
  const avatar=page.locator('.character-profile .portrait-control .character-avatar');await expect(avatar.locator('img')).toBeVisible();expect(await avatar.evaluate(e=>getComputedStyle(e).borderRadius)).toBe('50%');
  await page.screenshot({path:`${out}/portrait-card-${info.project.name}-${skin}.png`,animations:'disabled'});
  await avatar.click();await expect(page.getByRole('heading',{name:'Портрет в полном размере'})).toBeVisible();await page.screenshot({path:`${out}/portrait-viewer-${info.project.name}-${skin}.png`,animations:'disabled'});
+ const viewer=page.locator('.portrait-dialog');
+ const scale=viewer.getByRole('slider',{name:'Масштаб просмотра'});
+ await viewer.getByRole('button',{name:'Увеличить',exact:true}).click();
+ await expect(scale).toHaveValue('1.5');
+ await viewer.getByText('Перемещение',{exact:true}).click();
+ await viewer.getByRole('button',{name:'Вправо',exact:true}).click();
+ await expect.poll(()=>viewer.locator('.portrait-original').evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+ await viewer.getByRole('button',{name:'Сбросить масштаб',exact:true}).click();
+ await expect(scale).toHaveValue('1');
+ await viewer.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await expect(viewer).toHaveCount(0);
  }
 });

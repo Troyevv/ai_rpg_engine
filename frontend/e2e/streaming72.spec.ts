@@ -1,4 +1,4 @@
-import {swipe} from './touch';
+import {scrollByTouch} from './touch';
 import {test,expect,type Page} from '@playwright/test';
 import {mkdir,writeFile,copyFile} from 'node:fs/promises';
 import {nav} from './navigation';
@@ -47,10 +47,9 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   await emit({narrative:narrative.slice(0,length)});
   if(length===90)await page.getByLabel('Своё действие или реплика').fill('Черновик во время генерации');
   if(!baseline&&length===700&&info.project.name==='mobile'){
-    await swipe(page,page.locator('[data-mobile-menu-trigger]'),-100,0);
+    await page.locator('[data-mobile-menu-trigger]').tap();
     await expect(page.locator('.mobile-game-menu')).toBeVisible();
-    await expect(page.locator('.gesture-tip')).toHaveCount(0);
-    await swipe(page,page.locator('.mobile-menu-brand'),100,1);
+    await page.locator('.mobile-menu-close').tap();
     await expect(page.locator('.mobile-game-menu')).toHaveCount(0);
     await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик во время генерации');
   }
@@ -92,7 +91,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const scroller=page.locator('.story-scroll');await scroller.evaluate(el=>el.scrollTop=el.scrollHeight/2);await frames(page);
  if(info.project.name==='mobile'){
   const before=await scroller.evaluate(el=>el.scrollTop);
-  await swipe(page,scroller,0,135);
+  await scrollByTouch(page,scroller,135);
   await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeLessThan(before);
   await scroller.evaluate(el=>new Promise<void>(resolve=>{
    let last=el.scrollTop,stable=0;

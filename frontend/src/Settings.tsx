@@ -1,4 +1,3 @@
-import {GestureSettings} from './gestures/Controls';
 import { ModelBudget } from "./ModelBudget";
 import { Choice } from "@/components/ui/choice";
 import {ThemeSelector} from "./ThemeProvider";
@@ -77,7 +76,6 @@ export function Settings({
             Модели работают за сценой. Здесь можно настроить каждую задачу.
           </DialogDescription>
         </DialogHeader>
-        <GestureSettings/>
         <details><summary>Основные промпты и версии</summary>{promptNames.map(name=><Button key={name} size="sm" variant="ghost" onClick={()=>setPrompt(name)}>{name}</Button>)}</details>
         <Versions kind="prompt" owner={prompt} open={!!prompt} close={()=>setPrompt("")}/>
         <label>

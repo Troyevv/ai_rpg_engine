@@ -1,10 +1,6 @@
-import {PanControls} from './gestures/PanControls';
-import {pages} from './gestures/surface';
-import {mastered} from './gestures/preferences';
-import {useControls} from './gestures/preferences';
+import {PanControls} from './components/ui/pan-controls';
 import { Choice } from "@/components/ui/choice";
-import {useTransientBack} from './lib/transientBack';
-import {foreground} from './gestures/surface';
+import {foreground, useTransientBack} from './lib/transientBack';
 import { useEffect, useMemo, useState, useRef, memo } from "react";
 import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import {
@@ -101,7 +97,6 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
   useEffect(()=>{let live=true;setRootsError('');setRoots([]);api<{id:string;name:string}[]>(`/saves/${save.id}/genealogy-roots`).then(r=>{if(live)setRoots(r)}).catch(e=>{if(live)setRootsError(e.message)});return()=>{live=false}},[save.id,save.revision,save.state.controlled_actor_id,retry]);
   const [search,setSearch]=useWorkspaceView(viewState, "search", "");
   const [view,setView]=useWorkspaceView<'graph'|'list'>(viewState, 'view', 'graph');
-  const controls=useControls();
   const [root, setRoot] = useWorkspaceView(viewState, "root",
       rootId || save.state.controlled_actor_id || save.state.protagonist_id || save.state.characters[0]?.id || "",
     ),
@@ -165,9 +160,9 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
   const personLink=(id:string)=>{const n=graph?.nodes.find(n=>n.id===id);return n&&<button className="family-relative" onClick={()=>{setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}} key={id}><CharacterAvatar subject={n} saveId={save.id} size={32}/><span>{n.name}</span></button>};
   return (
     <section className="genealogy" aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<Choice value={matchingRoots.some(c=>c.id===root)?root:""} onValueChange={selectedValue => {setGraph(null);setSelected(null);setRoot(selectedValue)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label></div>
-      <p hidden={!controls.enabled||!controls.images} className="family-touch-hint">Перемещай дерево пальцем. Кнопка «Вся семья» покажет общий обзор.</p>
+      <p className="family-touch-hint">Кнопка «Вся семья» покажет общий обзор.</p>
       <p className="family-reading-hint">Родители сверху, дети снизу. Общая ветвь объединяет только подтверждённых биологических родителей. Остальные связи подписаны отдельно.</p>
-      <div className="family-view-tools"><div {...pages(['graph','list'] as const,view,setView)} className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>
+      <div className="family-view-tools"><div className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>
         Глубина ветвей{" "}
         <input
           aria-label="Глубина родословной"
@@ -188,17 +183,16 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
       ) : (
         <>
           <div className={`family-tree-layout ${view==='graph'&&geometry?.cards.length?'has-relations':''}`}>
-          {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}{view==='graph'&&<div data-gesture="image" data-gesture-group="images" className="family-graph" onKeyDownCapture={e=>{const edge=(e.target as Element).closest('.react-flow__edge')?.getAttribute('data-id');if(edge&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setEdgeDetail(edge);return}const id=(e.target as Element).closest('.react-flow__node')?.getAttribute('data-id');if(id&&!(e.target as HTMLElement).closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}}}>
+          {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}{view==='graph'&&<div className="family-graph" onKeyDownCapture={e=>{const edge=(e.target as Element).closest('.react-flow__edge')?.getAttribute('data-id');if(edge&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setEdgeDetail(edge);return}const id=(e.target as Element).closest('.react-flow__node')?.getAttribute('data-id');if(id&&!(e.target as HTMLElement).closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}}}>
             <ReactFlow
-              panOnDrag={controls.enabled&&controls.images || !matchMedia("(any-pointer:coarse)").matches}
-              zoomOnPinch={controls.enabled&&controls.images}
+              panOnDrag={!matchMedia("(any-pointer:coarse)").matches}
+              zoomOnPinch={false}
               zoomOnDoubleClick={false}
               nodes={layout.nodes}
               edges={layout.edges}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
-              onMoveStart={event=>{if(event)window.dispatchEvent(new Event('gesture-start'))}}
-              onMoveEnd={(event,viewport)=>{viewState?.set(`viewport:${graphKey}`,viewport);if(event?.type.startsWith('touch'))mastered('image')}}
+              onMoveEnd={(_,viewport)=>viewState?.set(`viewport:${graphKey}`,viewport)}
               onEdgeClick={(_,e)=>setEdgeDetail(e.id)}
               deleteKeyCode={null}
               edgesReconnectable={false}

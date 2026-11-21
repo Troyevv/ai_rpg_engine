@@ -7,9 +7,9 @@ import {
   DialogTitle,
 } from './dialog';
 import { Button } from './button';
-import { tr } from '../../gestures/preferences';
+import { tr } from '../../lib/interfaceText';
 
-/** Close button, Back and swipe ask the same owner before disposing of a local edit. */
+/** Close and Back ask the same owner before disposing of a local edit. */
 export function DraftDialog({
   dirty,
   onOpenChange,
@@ -29,7 +29,7 @@ export function DraftDialog({
       {children}
       {confirm && props.open && (
         <Dialog open onOpenChange={setConfirm}>
-          <DialogContent data-gesture-confirm="">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>
                 {tr('Закрыть без сохранения?', 'Discard this edit?')}

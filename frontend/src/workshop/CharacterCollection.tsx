@@ -1,4 +1,3 @@
-import {rowActions} from '../gestures/rows';
 import type {ReactNode} from 'react';
 import {LayoutGrid,List,Search,Plus} from 'lucide-react';
 import {CharacterAvatar,type PortraitSubject} from '../Portrait';
@@ -6,7 +5,7 @@ export type WorkshopCharacter=PortraitSubject&{can_update_eyes?:boolean;can_upda
 export type CollectionView={query:string;filter:string;page:number;list:boolean};
 export const emptyCollection:CollectionView={query:'',filter:'all',page:1,list:false};
 export function CharacterCard({card,wid,author,protagonist,onOpen,compact=false}:{card:WorkshopCharacter;wid:string;author:boolean;protagonist?:string|null;compact?:boolean;onOpen:(id:string)=>void}) {
- return <button {...rowActions()} className={`ww-character-card ${compact?'is-compact':''}`} onClick={()=>onOpen(card.id)} aria-label={`Досье ${card.name}`}><div className="ww-card-art"><CharacterAvatar framing="plate" subject={card} workspaceId={wid} author={author} size="100%"/><span>{card.id===protagonist?'Главный герой':'Персонаж'}</span></div><div className="ww-card-copy"><strong>{card.name}</strong><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')||'История ещё не описана'}</p>{!compact&&card.fields['Характер']&&<p className="ww-character-personality">{card.fields['Характер']}</p>}</div></button>;
+ return <button className={`ww-character-card ${compact?'is-compact':''}`} onClick={()=>onOpen(card.id)} aria-label={`Досье ${card.name}`}><div className="ww-card-art"><CharacterAvatar framing="plate" subject={card} workspaceId={wid} author={author} size="100%"/><span>{card.id===protagonist?'Главный герой':'Персонаж'}</span></div><div className="ww-card-copy"><strong>{card.name}</strong><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')||'История ещё не описана'}</p>{!compact&&card.fields['Характер']&&<p className="ww-character-personality">{card.fields['Характер']}</p>}</div></button>;
 }
 export function CharacterCollection({characters,wid,author,protagonist,view,setView,onOpen,onAdd,disabled,portraitAction,groups=[]}:{characters:WorkshopCharacter[];wid:string;author:boolean;protagonist?:string|null;portraitAction?:ReactNode;groups?:{id:string;label:string;ids:string[]}[];view:CollectionView;setView:(v:CollectionView)=>void;onOpen:(id:string)=>void;onAdd:()=>void;disabled:boolean}) {
  const query=view.query.trim().toLocaleLowerCase('ru');const filtered=characters.filter(c=>(!query||[c.name,...c.aliases||[],...Object.values(c.fields)].join(' ').toLocaleLowerCase('ru').includes(query))&&(view.filter==='all'||(view.filter==='hero'?c.id===protagonist:view.filter==='others'?c.id!==protagonist:!!groups.find(g=>g.id===view.filter)?.ids.includes(c.id))));

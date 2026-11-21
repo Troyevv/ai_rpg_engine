@@ -1,4 +1,3 @@
-import {pages,backSwipe} from './gestures/surface';
 import { Choice } from "@/components/ui/choice";
 import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
@@ -26,8 +25,7 @@ import { type World, type Save, type State, type Scene, active } from "./types";
 import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
 import type {StoryNotice} from './types';
-import {useTransientBack} from './lib/transientBack';
-import {foreground} from './gestures/surface';
+import {foreground, useTransientBack} from './lib/transientBack';
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
 import { dossierText, type DossierTab } from "./lib/dossier";
@@ -113,8 +111,7 @@ export function CharacterPicker({
     button.current?.focus({ preventScroll: true });
   };
   return (
-    <div
-      {...pages(cards.map(c=>c.id),character,setCharacter,"cards")} className="inspector-character-toolbar"
+    <div className="inspector-character-toolbar"
       ref={root}
       onKeyDown={(e) => {
         if (e.key === "Escape" && open) {
@@ -436,9 +433,9 @@ export function Inspector({
         hidden={!open}
         aria-label={panelLabel(panel)}
       >
-        <header {...backSwipe(back)} className="inspector-topbar">
+        <header className="inspector-topbar">
           {navigation}
-          <div {...pages(inspectorSections.map(s=>s.id),panel,setPanel)} className="inspector-breadcrumb">
+          <div className="inspector-breadcrumb">
             <span title={world.name}>{world.name}</span>
             <span>/</span>
             <strong>{panelLabel(panel)}</strong>

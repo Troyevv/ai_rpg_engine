@@ -1,6 +1,5 @@
 import {DraftDialog} from './components/ui/draft-dialog';
-import {ZoomView} from './gestures/ZoomView';
-import {rowActions} from './gestures/rows';
+import {ZoomView} from './components/ui/zoom-view';
 import {PortraitCommission} from './workshop/PortraitCommission';
 import {useEffect, useRef, useState, type CSSProperties} from 'react';
 import {Pencil} from 'lucide-react';
@@ -65,7 +64,7 @@ export function ViewablePortrait(props:Parameters<typeof CharacterAvatar>[0]) {
 }
 function OriginalViewer({src,label,onClose}:{src:string;label:string;onClose:()=>void}) {
  return <Dialog open onOpenChange={v=>!v&&onClose()}><DialogContent className="portrait-dialog"><DialogTitle>Портрет в полном размере</DialogTitle><DialogDescription>Оригинал без кадрирования. Увеличивай и перемещай изображение.</DialogDescription>
-  <ZoomView portrait className="portrait-original" label="Оригинал портрета">
+  <ZoomView className="portrait-original" label="Оригинал портрета">
    <img src={src} alt={label} draggable={false}/>
   </ZoomView>
  </DialogContent></Dialog>;
@@ -105,7 +104,7 @@ export function PortraitControl({card,save,workspaceId,refresh,disabled=false,co
    minAge!==String(selected?.min_age??'')||maxAge!==String(selected?.max_age??'')||
    crop.x!==savedCrop.x||crop.y!==savedCrop.y||crop.zoom!==savedCrop.zoom;
  const studioDirty=()=>!!editor.current?.querySelector('[data-portrait-dirty=true]');
- return <div {...rowActions(undefined,':scope > button')} className="portrait-control">
+ return <div className="portrait-control">
   <CharacterAvatar framing={workspaceId?'plate':'avatar'} subject={card} saveId={sid} workspaceId={workspaceId} author size="var(--dossier-portrait-size)" onClick={()=>{viewOrigin.current=null;setSelected(card.portrait||null);setMode('view')}}/>
   <button type="button" className="portrait-pencil" aria-label="Редактировать портрет" disabled={disabled} onClick={()=>void open()}><span className="portrait-pencil-face"><Pencil size={16}/></span></button>
   {mode==='view'&&<OriginalViewer src={selected?portraitUrl(sid,card.id,selected,workspaceId,true):proceduralPortrait(card.procedural_portrait)||''} label={selected?.label||'Полный портрет'} onClose={()=>setMode(viewOrigin.current)}/>}

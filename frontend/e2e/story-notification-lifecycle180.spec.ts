@@ -1,4 +1,3 @@
-import {swipe} from './touch';
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
 import {nav,pickCharacter} from './navigation';
 const toast=(page:Page)=>page.locator('.story-toast');
@@ -21,8 +20,7 @@ async function acknowledged(page:Page,s:any,id:string,kind='toast'){
 }
 async function dismiss(page:Page,id:string){
  await expect(toast(page)).toHaveAttribute('data-notice-id',id);
- if(test.info().project.name==='mobile')await swipe(page,toast(page).locator('.story-toast-icon'),100,0);
- else await toast(page).getByRole('button',{name:'Скрыть уведомление'}).click();
+ await toast(page).getByRole('button',{name:'Скрыть уведомление'}).click();
  await expect(page.locator('.story-toast[data-notice-id='+JSON.stringify(id)+']')).toHaveCount(0);
 }
 for(const theme of ['graphite','parchment']){

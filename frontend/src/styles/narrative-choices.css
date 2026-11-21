@@ -46,20 +46,20 @@
   white-space: pre-wrap;
 }
 @media (hover:hover) {
-  .gesture-sheet .narrative-choice-card:hover:enabled {
+  .action-panel .narrative-choice-card:hover:enabled {
     border-color: var(--border-strong);
     background-color: var(--surface-2);
   }
 }
-.gesture-sheet .narrative-choice-card:focus-visible {
+.action-panel .narrative-choice-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
 }
-.gesture-sheet .narrative-choice-card:active:enabled {
+.action-panel .narrative-choice-card:active:enabled {
   transform: scale(.99);
   background-color: var(--accent-soft);
 }
-.gesture-sheet .narrative-choice-card[aria-pressed="true"] {
+.action-panel .narrative-choice-card[aria-pressed="true"] {
   background-color: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
   border-color: var(--accent);
 }
@@ -67,18 +67,18 @@
   color: var(--surface-1);
   background: var(--accent);
 }
-.gesture-sheet .narrative-choice-card:disabled {
+.action-panel .narrative-choice-card:disabled {
   opacity: .62;
   cursor: default;
 }
-.gesture-sheet .narrative-choice-card[aria-busy="true"] { opacity: 1; cursor: progress; }
+.action-panel .narrative-choice-card[aria-busy="true"] { opacity: 1; cursor: progress; }
 .narrative-choice-card[aria-busy="true"] svg { animation: proposal-sending .85s linear infinite; }
 @keyframes proposal-arrive {
   from { opacity: .45; translate: 0 3px; }
 }
 @keyframes proposal-sending { to { rotate: 1turn; } }
 @media (prefers-reduced-motion: reduce) {
-  .gesture-sheet .narrative-choice-card, .narrative-choice-card[aria-busy="true"] svg {
+  .action-panel .narrative-choice-card, .narrative-choice-card[aria-busy="true"] svg {
     animation: none;
     transition: none;
     transform: none;

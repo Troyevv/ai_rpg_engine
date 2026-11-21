@@ -26,7 +26,7 @@ export function Versions({kind,owner,open,close,changed}:{kind:string;owner:stri
    <Button disabled={busy||loading} onClick={()=>void commit()}>Сохранить новую версию</Button>
    <Dialog open={rollback} onOpenChange={setRollback}>
      <DialogTrigger asChild><Button variant="outline" disabled={busy||loading||!selected||selected===history.active_id}>Откатить к выбранной</Button></DialogTrigger>
-     <DialogContent data-gesture-confirm=""><DialogHeader><DialogTitle>Восстановить версию № {selected}?</DialogTitle>
+     <DialogContent><DialogHeader><DialogTitle>Восстановить версию № {selected}?</DialogTitle>
        <DialogDescription>Выбранная версия станет активной. Текущая сохранится в истории.</DialogDescription></DialogHeader>
        <div className="actions"><Button variant="outline" onClick={()=>setRollback(false)}>Отмена</Button>
          <Button disabled={busy} onClick={()=>{setRollback(false);void commit(selected)}}>Восстановить версию</Button></div>

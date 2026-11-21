@@ -73,7 +73,7 @@ export function ChatCreationEditor({defaults,source,onCreated,onConnections}:{de
   const edit=(v:string)=>{setText(v);setApproved(false);write(d?`chat-creation-edit:${d.id}`:'chat-create-memory',v)};
   const reset=(next:'idea'|'ready'|'source')=>{write('chat-create-active','');setD(null);setJob(null);setMode(next);setApproved(false);setPartial(false);creationToken.current=token();setText('');setError('')};
   if(restoring)return <p role="status">Восстанавливаем черновик создания…</p>;
-  return <section data-gesture-busy={active} className="chat-creation">
+  return <section className="chat-creation">
     {!d&&<><div className="chat-creation-methods" aria-label="Способ создания кампании">{(['idea','ready','source'] as const).map((m,i)=><Button key={m} aria-pressed={mode===m} disabled={active||busy} variant={mode===m?'default':'outline'} onClick={()=>{if(m!==mode)reset(m)}}>{['Создать по идее','Использовать готовую выжимку','Импортировать существующий мир'][i]}</Button>)}</div>
     {drafts.length>0&&<details><summary>Сохранённые черновики создания</summary>{drafts.map(x=><Button key={x.id} disabled={active||busy} variant="ghost" onClick={()=>void run(async()=>adopt(await api(`/chat/creations/${x.id}`)))}>{x.name} · {x.status}</Button>)}</details>}</>}
     <details className="chat-creation-setup" open={!job}><summary>Идея и параметры кампании</summary><div className="chat-form-stack">

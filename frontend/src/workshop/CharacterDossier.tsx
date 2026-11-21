@@ -1,4 +1,3 @@
-import {pages} from '../gestures/surface';
 import { Choice } from "@/components/ui/choice";
 import {Children,useId,useState,type ReactNode} from 'react';
 import {Pencil,Sparkles,Trash2} from 'lucide-react';
@@ -73,7 +72,7 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
    {card&&<div className="ww-dossier"><aside className="ww-dossier-aside">
     {author?<PortraitControl key={wid+card.id} card={card} workspaceId={wid} refresh={refresh} disabled={locked}/>:<ViewablePortrait framing="plate" subject={card} workspaceId={wid} size="100%"/>}
     {!card.portrait&&card.procedural_portrait&&<small className="ww-dossier-illustration-note">Стилизованная иллюстрация</small>}
-    <div {...pages(characters.map(c=>c.id),card.id,onSelect,"cards")} className="ww-dossier-identity"><h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p></div>
+    <div className="ww-dossier-identity"><h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p></div>
     <div className="ww-dossier-switcher"><label>Найти персонажа<input type="search" aria-label="Найти персонажа в досье" value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Другие персонажи<Choice aria-label="Переключить досье" value={card.id} onValueChange={selectedValue => onSelect(selectedValue)}>
      {characters.filter(c=>c.id===card.id||c.name.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label></div>
     <div className="ww-dossier-nav">{characters.slice(Math.max(0,index-3),Math.max(0,index-3)+7).map(c=>

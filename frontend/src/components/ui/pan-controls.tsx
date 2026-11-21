@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
-import { tr } from './preferences';
+import { tr } from '../../lib/interfaceText';
 
 export function PanControls({
   move,
@@ -13,7 +13,7 @@ export function PanControls({
     [ArrowDown, 0, 1, 'Вниз', 'Down'],
   ] as const;
   return (
-    <details className="gesture-pan-menu nopan nodrag">
+    <details className="viewer-pan-controls nopan nodrag">
       <summary>{tr('Перемещение', 'Pan')}</summary>
       <div>
         {directions.map(([Icon, x, y, ru, en]) => (

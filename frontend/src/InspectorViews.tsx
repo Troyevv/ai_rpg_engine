@@ -1,4 +1,3 @@
-import {pages} from './gestures/surface';
 import { Choice } from "@/components/ui/choice";
 import {RelationshipCard} from './RelationshipCard';
 import {relationshipRows} from './lib/relationshipRows';
@@ -116,7 +115,7 @@ export function RelationsView({
       </div>
       {actor && (
         <div
-          {...pages(['both','out','in'],direction,setDirection)} className="inspector-segments"
+          className="inspector-segments"
           role="group"
           aria-label="Направление отношений"
         >

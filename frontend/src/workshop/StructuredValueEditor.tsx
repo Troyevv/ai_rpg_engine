@@ -1,4 +1,3 @@
-import {ReorderGrip} from '../gestures/ReorderGrip';
 import { Choice } from "@/components/ui/choice";
 import {useState} from 'react';
 import {runtimeLabels,enumLabels} from '../runtimePresentation';
@@ -24,7 +23,7 @@ export function StructuredValueEditor({value,onChange,schema,definitions={},labe
   if(refs)return <fieldset><legend>{label}</legend>{refs.map(([id,name])=><label key={id}><input type="checkbox" checked={rows.includes(id)} onChange={e=>onChange(e.target.checked?[...rows,id]:rows.filter(v=>v!==id))}/>{name}</label>)}{reset}</fieldset>;
   const item=schemaOf(s.items,definitions);const add=()=>onChange([...rows,item.default??(item.type==='object'||item.properties?{}:item.type==='number'||item.type==='integer'?0:'')]);
   const move=(from:number,to:number)=>{const next=[...rows];next.splice(to,0,...next.splice(from,1));onChange(next)};
-  return <fieldset className="ww-structured"><legend>{label}</legend>{rows.map((row,i)=><div className="ww-structured-row" key={i}><ReorderGrip move={to=>move(i,to)}/><StructuredValueEditor value={row} schema={s.items} definitions={definitions} label={`${label} · ${i+1}`} onChange={v=>onChange(rows.map((r,j)=>i===j?v:r))} references={references}/><div className="ww-record-actions"><button type="button" onClick={()=>onChange(rows.filter((_,j)=>j!==i))}>Удалить запись {i+1}</button><button type="button" disabled={!i} onClick={()=>move(i,i-1)}>Выше</button><button type="button" disabled={i===rows.length-1} onClick={()=>move(i,i+1)}>Ниже</button></div></div>)}<button type="button" onClick={add}>Добавить запись</button>{reset}</fieldset>;
+  return <fieldset className="ww-structured"><legend>{label}</legend>{rows.map((row,i)=><div className="ww-structured-row" key={i}><StructuredValueEditor value={row} schema={s.items} definitions={definitions} label={`${label} · ${i+1}`} onChange={v=>onChange(rows.map((r,j)=>i===j?v:r))} references={references}/><div className="ww-record-actions"><button type="button" onClick={()=>onChange(rows.filter((_,j)=>j!==i))}>Удалить запись {i+1}</button><button type="button" disabled={!i} onClick={()=>move(i,i-1)}>Выше</button><button type="button" disabled={i===rows.length-1} onClick={()=>move(i,i+1)}>Ниже</button></div></div>)}<button type="button" onClick={add}>Добавить запись</button>{reset}</fieldset>;
  }
  if(type==='object'){
   const record=(value||{}) as Record<string,unknown>;const keys=[...new Set([...Object.keys(s.properties||{}),...Object.keys(record)])];

@@ -1,4 +1,4 @@
-import {ZoomView} from '../gestures/ZoomView';
+import {ZoomView} from '../components/ui/zoom-view';
 import { Choice } from "@/components/ui/choice";
 import {useEffect,useState,type ReactNode} from 'react';
 import {CharacterAvatar} from '../Portrait';
