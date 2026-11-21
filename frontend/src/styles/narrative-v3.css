@@ -224,7 +224,7 @@
 @font-face {font-family:Inter;src:url('../assets/inter/inter-latin.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
 #root {container:app / inline-size;position:relative;top:var(--app-top,0px);height:var(--app-height,100dvh);overflow:clip}
 .narrative-shell {--reader-gutter:32px}
-.nr-topbar,.game-preserved,.phone-device {--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
+html[data-theme=graphite] :is(.nr-topbar,.game-preserved,.phone-device) {--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
 html[data-theme=graphite] :is(.nr-topbar,.game-preserved,.phone-device,.current-game-panel,.library-dialog,.settings-dialog,.reading-display,.narrative-more) {--bg:#131517;--surface-1:#191c20;--accent:#d2b477;--text:#ecebe7}
 .game-preserved {background:var(--bg)}
 #root .narrative-shell {height:100%;overflow:clip}
@@ -297,7 +297,7 @@ html[data-no-motion] *,html[data-no-motion] *::before,html[data-no-motion] *::af
 #root .library-dialog .world-card.selected {border-color:var(--accent)}
 #root .phone-scrim.is-open {pointer-events:auto}
 @container app (max-width:680px) {
- #root :is(.settings-dialog,.library-dialog,.current-game-panel,.narrative-more) {position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;transform:none;border:0;border-radius:0;padding:max(20px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
+ #root :is(.settings-dialog,.library-dialog,.current-game-panel,.narrative-more) {position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;transform:none;--dialog-border-style:none;border:0 var(--dialog-border-style);border-radius:0;padding:max(20px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom))}
  #root .current-game-panel .sheet-height-control {display:none}
  #root .settings-dialog input,#root .phone-device :is(input,textarea) {font-size:16px}
 }
@@ -342,7 +342,8 @@ html[data-hide-turn-times] .turn-clock {display:none}
 .library-selected h3,#root .library-dialog .world-card strong {font:600 17px/1.5 Inter,sans-serif}
 #root .library-layout .save-list {margin:0;padding:0;min-width:0;border:0}
 .library-selected .library-remove {width:44px;height:44px;display:grid;place-items:center}
-#root .settings-dialog:has(.settings-scroll)>.section-tabs {display:grid;grid-template-columns:repeat(3,1fr);width:100%}
+#root .settings-dialog:has(.settings-scroll)>.section-tabs {display:flex;flex-wrap:wrap;width:100%}
+#root .settings-dialog>.section-tabs>button {flex:1 1 max-content;padding-inline:8px}
 #root .settings-connections {padding:14px 16px;background:var(--surface-2);border-radius:10px}
 #root .management-calendar {justify-self:start;color:var(--accent)}
 #root .management-clock .scene-clock {font:14px/1.65 Inter,sans-serif;color:var(--text-muted)}

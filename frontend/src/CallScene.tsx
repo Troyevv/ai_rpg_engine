@@ -1,4 +1,4 @@
-import {choiceText} from './NarrativeChoice';
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {PhoneFrame} from './PhoneFrame';
@@ -83,11 +83,11 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
            {choices.map(c=>{
              const text=choiceText(c);
              const selected=draft===text || draft.endsWith('\n'+text);
-             return <button key={JSON.stringify([c.action,c.speech])} type="button" aria-pressed={selected}
-               title={text} aria-label={text} disabled={disabled||sending} onClick={()=>{
-                 const next=draft.trim() ? draft+'\n'+text : text;
+             return <NarrativeChoiceCard key={JSON.stringify([c.action,c.speech])} choice={c} compact
+               selected={selected} sending={false} disabled={disabled||sending} choose={value=>{
+                 const next=draft.trim() ? draft+'\n'+value : value;
                  setDraft(next);sessionStorage.setItem(key,next);input.current?.focus({preventScroll:true});
-               }}>{c.action||c.speech}</button>;
+               }}/>;
            })}
          </div>}
        <footer>

@@ -1,3 +1,4 @@
+import {SkinStamp} from './ThemeProvider';
 import { Choice } from "@/components/ui/choice";
 import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
@@ -487,7 +488,7 @@ export function Inspector({
           <div className="inspector-page">
             {panel !== "Персонажи" ? (
               <div className="inspector-page-heading">
-                <div>
+                <div className="skin-heading"><SkinStamp/><div>
                   <span className="eyebrow">
                     {it(panel === "Мир" ? "overview" : section.group)}
                   </span>
@@ -500,7 +501,7 @@ export function Inspector({
                           : section.key,
                     )}
                   </h1>
-                  <p>{it(`${section.key}Sub` as "worldSub")}</p>
+                  <p>{it(`${section.key}Sub` as "worldSub")}</p></div>
                 </div>
                 {panel === "Сцена" && save && (
                   <Button

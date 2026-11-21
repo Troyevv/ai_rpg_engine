@@ -70,3 +70,89 @@ test('skins preserve distinct palettes and a clear V3 reading surface',async({pa
  }
  expect(drawings.size).toBe(6);
 });
+
+test('skin compositions lay out real action and speech slots without clipping',async({page,request},info)=>{
+ const selected=await(await request.post('/test/choices-seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
+ const mobile=info.project.name==='mobile';
+ await page.setViewportSize({width:mobile?320:1440,height:mobile?844:900});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const layouts=new Set<string>();
+ for(const theme of themes){
+  await request.put('/api/worlds/'+selected.world+'/presentation',{data:{theme_id:theme.id}});
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme.id);
+  const cards=page.locator('.choices button');
+  await expect(cards).toHaveCount(6);
+  await cards.first().focus();
+  await expect(cards.first()).toBeFocused();
+  const rows=await cards.evaluateAll(nodes=>nodes.map(card=>{
+   const style=getComputedStyle(card);
+   return {
+    fits:card.scrollWidth<=card.clientWidth+1 && card.scrollHeight<=card.clientHeight+1,
+    areas:style.gridTemplateAreas,
+    animated:style.animationName!=='none',
+   };
+  }));
+  expect(rows.every(row=>row.fits&&!row.animated),theme.name).toBe(true);
+  layouts.add(rows[0].areas);
+ }
+ // An accidental return to the universal V3 two-column card survives palette tests.
+ expect(layouts.size).toBeGreaterThanOrEqual(4);
+});
+
+test('presets preserve Narrative surfaces and the semantic colors of the game menu', async ({page, request}) => {
+  test.setTimeout(180_000);
+  const selection = await (await request.post('/test/choices-seed')).json();
+  await page.addInitScript(s => localStorage.setItem('selection', JSON.stringify(s)), selection);
+  await page.setViewportSize({width: 390, height: 844});
+  await page.emulateMedia({reducedMotion: 'reduce'});
+
+  // Resolve the pre-#275 component roles in their actual scope. Graphite has
+  // local overrides in both Narrative and the mobile inspector palette.
+  async function expectPaint(selector: string, ink: string, fill: string) {
+    const element = page.locator(selector).first();
+    const colors = await element.evaluate((el, [ink, fill]) => {
+      const probe = document.createElement('span');
+      probe.style.color = ink;
+      probe.style.backgroundColor = fill;
+      el.append(probe);
+      const style = getComputedStyle(probe);
+      const expected = {ink: style.color, fill: style.backgroundColor};
+      probe.remove();
+      return expected;
+    }, [ink, fill]);
+    await expect(element).toHaveCSS('color', colors.ink);
+    await expect(element).toHaveCSS('background-color', colors.fill);
+    await expect(element).toHaveCSS('background-image', 'none');
+  }
+
+  for (const theme of themes) {
+    const response = await request.put(`/api/worlds/${selection.world}/presentation`, {data: {theme_id: theme.id}});
+    expect(response.ok()).toBe(true);
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id);
+    const choice = page.locator('.choices button').first();
+    await expect(choice).toBeVisible();
+    await page.getByLabel('Своё действие или реплика').fill('');
+    await expectPaint('.choices button', 'var(--text)', 'var(--v3-panel, #1d2125)');
+    await expectPaint('.choices .choice-mark', 'var(--v3-text, #d7bd83)', 'var(--v3-panel, #393226)');
+    await choice.click();
+    await page.mouse.move(0, 0);
+    await expect(choice).toHaveAttribute('aria-pressed', 'true');
+    await expectPaint('.choices button', 'var(--text)', 'var(--v3-panel, #2f2b23)');
+    await expectPaint('.choices .choice-mark', 'var(--v3-ink, #26241e)', 'var(--accent)');
+
+    await page.getByRole('button', {name: 'Меню игры', exact: true}).click();
+    await expect(page.locator('.mobile-game-menu')).toHaveCSS('border-width', '0px');
+    await expectPaint('.mobile-game-menu', 'var(--text)', 'var(--bg)');
+    await expectPaint('.mobile-menu-resume', 'var(--text)', 'var(--accent-soft)');
+    await expectPaint('.menu-world', 'var(--text)', 'var(--surface-2)');
+    for (const [section, role] of Object.entries({
+      world: 'overview', scene: 'family', characters: 'personality', relations: 'relationships',
+    })) {
+      const ink = `var(--dossier-${role})`;
+      await expectPaint(`.menu-${section} .mobile-menu-icon`, ink, `color-mix(in srgb, ${ink} 12%, transparent)`);
+    }
+  }
+});

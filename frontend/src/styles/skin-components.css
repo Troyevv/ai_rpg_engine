@@ -1,0 +1,519 @@
+/* Layout recipes own composition, silhouette and relief. Existing components
+   own their foregrounds, surfaces and interaction-state colors. */
+[data-layout] {
+  --slots: "mark copy";
+  --tracks: auto minmax(0,1fr);
+  --caption: none;
+  --stamp-size: 1.8rem;
+  --stamp-shape: var(--radius-sm);
+  --edge: 0 1px 0 var(--border);
+  --rule-width: 1px;
+  --rule-style: solid;
+  --panel-shape: var(--radius-lg);
+  --key-shape: var(--radius-sm);
+  --heading-direction: row;
+  --heading-align: center;
+  --message-shape: var(--radius-md);
+  --mark-align: start;
+  --nav-align: start;
+  --entry-offset: 3px;
+}
+[data-layout=signal] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --caption: block;
+  --stamp-shape: 0;
+  --edge: inset 3px 0 var(--border-strong), inset -1px -3px var(--border-strong);
+  --panel-shape: 0 14px 0 0;
+  --entry-offset: -4px;
+}
+[data-layout=instrument] {
+  --stamp-size: 2.6rem;
+  --stamp-shape: 50%;
+  --rule-width: 2px;
+  --rule-style: solid;
+  --edge: inset 0 2px var(--border-strong), inset 0 -3px var(--bg);
+  --caption: block;
+  --mark-align: center;
+}
+[data-layout=crest] {
+  --slots: "mark" "copy";
+  --tracks: minmax(0,1fr);
+  --mark-align: center;
+  --stamp-shape: 2px 2px 50% 50%;
+  --stamp-size: 2.2rem;
+  --rule-width: 3px;
+  --rule-style: double;
+  --edge: inset 0 0 0 3px var(--surface-1), inset 0 0 0 4px var(--border);
+  --nav-align: center;
+}
+[data-layout=seal] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --stamp-size: 2.5rem;
+  --stamp-shape: 50%;
+  --mark-align: center;
+  --edge: inset -1px -2px var(--border-strong);
+  --panel-shape: 24px 6px;
+  --message-shape: 17px 4px;
+}
+[data-layout=margin] {
+  --stamp-size: 1.65rem;
+  --stamp-shape: 0;
+  --panel-shape: 0;
+  --caption: block;
+  --rule-width: 1px;
+  --rule-style: solid;
+  --edge: 2px 3px var(--surface-2), 3px 4px var(--border-strong);
+  --heading-direction: column;
+  --heading-align: start;
+}
+[data-layout=track] {
+  --slots: "mark copy";
+  --stamp-shape: 50%;
+  --stamp-size: 1.7rem;
+  --mark-align: center;
+  --edge: inset 0 -2px var(--border-strong);
+}
+[data-layout=bill] {
+  --slots: "mark" "copy";
+  --tracks: minmax(0,1fr);
+  --stamp-shape: 0;
+  --stamp-size: 1.6rem;
+  --caption: block;
+  --edge: 4px 4px var(--bg), 5px 5px var(--border-strong);
+  --rule-width: 2px;
+  --rule-style: solid;
+}
+[data-layout=index] {
+  --slots: "mark" "copy";
+  --tracks: minmax(0,1fr);
+  --caption: block;
+  --stamp-shape: 0;
+  --rule-width: 1px;
+  --rule-style: solid;
+  --edge: 0 3px var(--bg),0 4px var(--border);
+  --heading-direction: column;
+  --heading-align: start;
+}
+[data-layout=command] {
+  --stamp-size: 1.4rem;
+  --panel-shape: 0;
+  --edge: inset 2px 0 var(--border-strong);
+  --rule-width: 1px;
+  --rule-style: dashed;
+  --entry-offset: 0px;
+}
+[data-layout=key] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --caption: block;
+  --stamp-size: 2.1rem;
+  --edge: inset 0 2px var(--border-strong),0 4px var(--bg),0 5px var(--border-strong);
+  --rule-width: 2px;
+  --rule-style: solid;
+  --mark-align: center;
+}
+
+/* Materials within a layout determine the instrument, binding or type of seal. */
+[data-theme=graphite] {
+  --stamp-shape: 9px;
+  --edge: 0 2px 6px var(--shadow-color);
+}
+[data-theme=cyberpunk] {
+  --key-shape: 0 9px 0 5px;
+  --message-shape: 0 12px 0 9px;
+}
+[data-theme=industrial] {
+  --stamp-shape: 4px;
+}
+[data-theme=space] {
+  --panel-shape: 18px 5px 18px 5px;
+  --key-shape: 16px;
+  --edge: inset 4px 0 var(--border-strong), inset 6px 0 var(--bg);
+  --rule-width: 1px;
+  --rule-style: solid;
+  --message-shape: 18px 18px 18px 4px;
+}
+[data-theme=medieval] {
+  --panel-shape: 4px;
+  --key-shape: 2px 2px 8px 8px;
+}
+[data-theme=arcane] {
+  --heading-direction: row-reverse;
+  --rule-width: 3px;
+  --rule-style: double;
+}
+[data-theme=gothic] {
+  --stamp-shape: 70% 70% 2px 2px;
+  --panel-shape: 30px 30px 3px 3px;
+  --key-shape: 15px 15px 2px 2px;
+}
+[data-theme=parchment] {
+  --stamp-shape: 0 0 8px 0;
+  --key-shape: 1px;
+}
+[data-theme=urban] {
+  --panel-shape: 3px 14px 14px 3px;
+}
+[data-theme=street] {
+  --stamp-shape: 0 6px 0 1px;
+  --panel-shape: 1px;
+  --key-shape: 0;
+}
+[data-theme=noir] {
+  --key-shape: 0;
+}
+[data-theme=terminal] {
+  --key-shape: 0;
+  --message-shape: 0;
+}
+[data-theme=post-apocalypse] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --rule-width: 1px;
+  --rule-style: dashed;
+  --edge: inset 0 -3px var(--border),2px 2px var(--bg);
+  --stamp-shape: 2px 7px;
+  --key-shape: 2px;
+}
+[data-theme=biotech] {
+  --stamp-shape: 48% 68% 48% 64%;
+  --panel-shape: 10px 32px 18px 26px;
+  --key-shape: 18px 12px;
+  --message-shape: 20px 10px;
+}
+[data-theme=occult] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --stamp-shape: 50%;
+  --panel-shape: 3px 17px 3px 3px;
+  --key-shape: 3px 12px;
+}
+[data-theme=retro] {
+  --panel-shape: 12px;
+  --stamp-shape: 5px 5px 9px 9px;
+}
+[data-theme=neon] {
+  --slots: "copy mark";
+  --tracks: minmax(0,1fr) auto;
+  --panel-shape: 18px;
+  --key-shape: 24px;
+  --edge: inset 0 -2px var(--border-strong), 0 2px 9px var(--shadow-color);
+}
+
+.skin-heading {
+  display:flex;
+  flex-direction:var(--heading-direction);
+  align-items:var(--heading-align);
+  gap:.75rem;
+  min-width:0;
+}
+.skin-heading > div, .skin-copy {min-width:0;overflow-wrap:anywhere}
+/* The existing choice marker and phone glyph retain their component colors. */
+#root .skin-stamp {
+  display:inline-grid;
+  flex:none;
+  place-items:center;
+  width:var(--stamp-size);
+  height:var(--stamp-size);
+  border-width:1px;
+  border-style:solid;
+  border-radius:var(--stamp-shape);
+}
+#root .skin-stamp:not(.choice-mark) {border-color:var(--border)}
+#root .skin-stamp svg {width:58%;height:58%;stroke-width:1.65}
+.skin-heading > .skin-stamp {--stamp-size:2.85rem}
+#root .hero-copy > .skin-stamp {--stamp-size:clamp(2.6rem,5vw,4.8rem)}
+#root .ph-owner > .skin-stamp {--stamp-size:1.65rem}
+#root .ph-owner > span:last-child {overflow:hidden;text-overflow:ellipsis}
+#root .nr-people, #root .nr-person {min-width:0;max-width:100%}
+#root .nr-person-name {min-width:0;overflow:hidden;text-overflow:ellipsis}
+#root .nr-content {font-family:var(--reader-type,Inter),sans-serif}
+html:is([data-skin=wood],[data-skin=paper],[data-skin=ornate],[data-theme=occult]) {--reader-type:Georgia}
+html[data-layout=command] {--reader-type:ui-monospace}
+html[data-layout] #root :is(.nr-context h1,.phone-page-heading h2,.call-scene-header h2,.inspector-page-heading h1,.dialog-title,.atelier-hero h1,.ww-hero h1) {
+  font-family:var(--skin-heading);
+  letter-spacing:var(--skin-tracking);
+}
+#root .nr-context {
+  padding:clamp(12px,1.5vw,22px);
+  border-color:var(--v3-line,#2b3035);
+  border-width:var(--rule-width);border-style:var(--rule-style);
+  box-shadow:var(--edge);
+  border-radius:var(--panel-shape);
+}
+#root .nr-contexttop {gap:8px}
+#root .theme-options > button,
+#root :is(.choices,.call-suggestions) > .narrative-choice-card {
+  display:grid;
+  grid-template-areas:var(--slots);
+  grid-template-columns:var(--tracks);
+  align-content:start;
+  border-width:var(--rule-width);border-style:var(--rule-style);
+  border-radius:var(--panel-shape);
+  box-shadow:var(--edge);
+}
+#root :is(.theme-options > button,.narrative-choice-card) > .skin-stamp {grid-area:mark;align-self:var(--mark-align)}
+#root :is(.theme-options > button,.narrative-choice-card) > .skin-copy {grid-area:copy}
+#root .theme-options > button {gap:10px;padding:14px}
+#root .theme-options .skin-stamp {color:var(--accent);border-color:var(--border-strong);box-shadow:inset 0 -2px var(--text-muted)}
+#root .theme-options strong {font-family:var(--skin-heading);line-height:1.35}
+#root .theme-options small {font-family:var(--ui-font)}
+#root .choice-kind {
+  display:var(--caption);
+  color:var(--text-muted);
+  font:600 .65rem/1.4 var(--ui-font);
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+#root .choice-action {font-family:var(--skin-heading);font-weight:600}
+#root .choice-speech {font-family:var(--reader-type,var(--story-font));border-inline-start-width:var(--rule-width);border-inline-start-style:var(--rule-style)}
+#root .narrative-choice-card:active:enabled {translate:0 1px}
+html[data-layout] #root :is(.nr-topbar,.ww-topbar,.inspector-topbar,.mobile-menu-brand,.ph-topbar,.call-scene-header) {
+  border-block-end-width:var(--rule-width);
+  border-block-end-style:var(--rule-style);
+}
+#root :is(.ww-panel,.ww-hero,.ww-record-card,.ww-character-card,.inspector-card,.inspector-knowledge-card,.atelier-scope .paper,.fl-card,.mobile-menu-card,.settings-scroll fieldset) {
+  border-width:var(--rule-width);border-style:var(--rule-style);
+  border-radius:var(--panel-shape);
+  box-shadow:var(--edge);
+}
+#root :is(.inspector-card-heading,.atelier-scope .card-head,.dialog-header) {
+  border-block-end:var(--rule-width) var(--rule-style) var(--border);
+  padding-block-end:.7rem;
+}
+#root :is(.nav-links,.ww-sidebar nav,.ww-menu-dialog nav) button {
+  border-radius:var(--key-shape);
+  justify-content:var(--nav-align);
+}
+#root .narrative-shell .nav-rail,
+#root .ww-sidebar {border-inline-end-width:var(--rule-width);border-inline-end-style:var(--rule-style)}
+#root :is(.nr-rpentry,.nr-managemententry,.nr-send,.ww-primary,.ww-soft,.ui-button,.choice-trigger,.atelier-scope .primary,.phone-list-actions button,.section-tabs button,.phone-bottom button) {
+  border-radius:var(--key-shape);
+}
+#root :is(.nr-composer,.atelier-editor,.settings-scroll input:not([type=checkbox]):not([type=range]),.atelier-scope .name-input,.phone-body .phone-search,.call-scene textarea) {
+  border-width:var(--rule-width);border-style:var(--rule-style);
+  border-radius:var(--key-shape);
+}
+#root .phone-thread {
+  border-width:var(--rule-width);border-style:var(--rule-style);
+  border-radius:var(--panel-shape);
+  box-shadow:var(--edge);
+  margin-block-end:6px;
+}
+#root .phone-message {border:var(--rule-width) var(--rule-style) transparent;border-radius:var(--message-shape)}
+#root .phone-message.outgoing {border-inline-end-width:3px}
+#root .phone-day time, #root .ph-demo {border-radius:var(--key-shape);padding:3px 8px}
+/* Full-screen dialogs use the shell's edge. Floating dialogs keep the
+   preset frame, independently of the borders on their children. */
+#root .dialog-content {
+  border-width:var(--rule-width);
+  border-style:var(--dialog-border-style,var(--rule-style));
+}
+#root .runtime-notice, html[data-layout] [data-sonner-toast].story-toast {
+  border-width:var(--rule-width);
+  border-style:var(--rule-style);
+}
+html[data-layout] [data-sonner-toast].story-toast {border-radius:var(--panel-shape)}
+
+@media(prefers-reduced-motion:no-preference) {
+  html:not([data-no-motion]) #root .narrative-choice-card {animation:skin-card-arrive min(var(--skin-motion),250ms) ease-out}
+}
+@keyframes skin-card-arrive {from {opacity:.78;translate:0 var(--entry-offset)}}
+@media(prefers-reduced-motion:reduce) {
+  #root .narrative-choice-card, #root .narrative-choice-card[aria-busy=true] svg {animation:none;transition:none}
+}
+@container app (max-width:680px) {
+  #root .skin-heading {gap:.5rem}
+  #root .skin-heading > .skin-stamp {--stamp-size:2rem}
+  #root .hero-copy > .skin-stamp {--stamp-size:2.35rem}
+  #root .nr-context h1 {font-size:1.18rem}
+  #root .nr-contextbottom {flex-wrap:wrap}
+  #root .nr-people {flex:1 1 60%}
+  #root .theme-options>button {padding:10px;gap:.45rem}
+  #root .theme-options>button .skin-stamp {--stamp-size:1.45rem}
+}
+
+/* Section labels, row metadata and message transcripts share the same grammar.
+   Keep the order of focusable rows independent of the position of their metadata. */
+[data-layout] {
+  --label-inset:0;
+  --label-form:var(--key-shape);
+  --thread-columns:44px minmax(0,1fr) auto;
+  --thread-slots:"portrait name meta";
+  --bubble-slots:"sender" "body" "meta" "read";
+  --meta-justify:end;
+  --meta-rule:1px solid var(--border);
+  --section-direction:row;
+  --time-side:0;
+}
+[data-layout=signal], [data-layout=bill], [data-layout=index] {
+  --label-inset:.22em .65em;
+  --thread-slots:"portrait name" "portrait meta";
+  --thread-columns:44px minmax(0,1fr);
+  --meta-justify:start;
+  --bubble-slots:"sender" "meta" "body" "read";
+}
+[data-layout=signal] {--section-direction:row-reverse;--label-form:0 7px 0 0}
+[data-layout=index] {--label-form:4px 7px 0 0;--time-side:3px double var(--border-strong);}
+[data-layout=instrument], [data-layout=key] {
+  --label-inset:.32em .7em;
+  --thread-slots:"meta portrait name";
+  --thread-columns:auto 44px minmax(0,1fr);
+  --time-side:3px solid var(--border);
+}
+[data-layout=crest] {
+  --label-inset:.2em .7em;
+  --label-form:2px 2px 7px 7px;
+  --thread-slots:"portrait name" "portrait meta";
+  --thread-columns:44px minmax(0,1fr);
+  --meta-justify:start;
+}
+[data-layout=margin], [data-layout=command] {
+  --time-side:2px solid var(--border);
+  --thread-slots:"meta name" "portrait name";
+  --thread-columns:3.3rem minmax(0,1fr);
+  --meta-justify:start;
+  --bubble-slots:"sender" "meta" "body" "read";
+  --meta-rule:1px dashed var(--border-strong);
+}
+[data-layout=seal], [data-layout=track] {
+  --section-direction:row-reverse;
+  --thread-slots:"name portrait" "meta portrait";
+  --thread-columns:minmax(0,1fr) 44px;
+  --meta-justify:start;
+  --label-inset:.25em .75em;
+  --label-form:20px;
+}
+html[data-layout] #root :is(.inspector-card-heading,.atelier-param) {flex-direction:var(--section-direction)}
+#root .call-scene-header > div {flex:1;min-width:0;overflow-wrap:anywhere}
+#root .call-scene-text .player-action {
+  border:var(--rule-width) var(--rule-style) transparent;border-radius:var(--panel-shape);
+  box-shadow:var(--edge)
+}
+#root .call-scene-text :is(.player-action .eyebrow,.call-speaker) {
+  display:table;
+  border-radius:var(--label-form);padding:var(--label-inset)
+}
+html[data-layout] #root :is(.inspector-nav-group>p,.inspector-page-heading .eyebrow,.ww-sidebar nav small,.choice-kind,.phone-section-label,.phone-message-sender,.settings-scroll legend,.inspector-card-heading h2,.atelier-scope .overline) {
+  width:fit-content;
+  max-width:100%;
+  padding:var(--label-inset);
+  border-radius:var(--label-form);
+}
+#root :is(.atelier-scope .section-icon,.atelier-scope .icon-tile,.mobile-menu-icon) {
+  border-radius:var(--stamp-shape);
+}
+#root .inspector-hero-time {
+  padding:.65rem 1rem;
+  border-inline-start:var(--time-side);
+  border-radius:var(--key-shape);
+  font-variant-numeric:tabular-nums;
+}
+#root .phone-thread {grid-template-columns:var(--thread-columns);grid-template-areas:var(--thread-slots);row-gap:3px}
+#root .phone-thread-avatar {grid-area:portrait}
+#root .phone-thread-copy {grid-area:name}
+#root .phone-thread-meta {grid-area:meta;display:flex;flex-wrap:wrap;justify-content:var(--meta-justify);align-items:center}
+#root .phone-message {display:grid;grid-template-areas:var(--bubble-slots);grid-template-columns:minmax(0,1fr)}
+#root .phone-message-sender {grid-area:sender}
+#root .phone-message p {grid-area:body}
+#root .phone-message button {grid-area:read;justify-self:start}
+#root .phone-message footer {grid-area:meta}
+#root .phone-message footer {border-block-start:var(--meta-rule);padding-top:4px;justify-content:var(--meta-justify)}
+html:is([data-layout=margin],[data-layout=index],[data-layout=command],[data-layout=bill],[data-layout=signal]) #root .phone-message footer {
+  border-block-start:0;border-block-end:var(--meta-rule);padding:0 0 .25rem;margin:0
+}
+#root .phone-device {font-family:var(--ui-font)}
+#root .call-scene-text {font-family:var(--reader-type,var(--ui-font))}
+/* Native controls continue to paint checked, disabled and forced-color states. */
+#root .settings-scroll .check input[type=checkbox] {
+  flex:none;
+  width:1.25rem;
+  height:1.25rem;
+  clip-path:inset(0 round var(--key-shape));
+}
+@media(forced-colors:active) {
+  #root .settings-scroll .check input[type=checkbox] {clip-path:none}
+}
+#root .mobile-menu-tools .mobile-menu-switch {border-radius:var(--key-shape)}
+/* Bindings and consoles have different entry rhythms in stacked menus. */
+html:is([data-layout=command],[data-layout=margin],[data-layout=index]) #root .mobile-menu-card {
+  flex-direction:row;align-items:center;justify-content:flex-start;
+  min-height:64px;padding:10px;gap:8px
+}
+html:is([data-layout=signal],[data-layout=seal],[data-layout=bill]) #root .mobile-menu-card {
+  flex-direction:column;align-items:flex-start;justify-content:space-between;gap:6px
+}
+html:is([data-layout=instrument],[data-layout=key]) #root .mobile-menu-card {
+  flex-direction:column;align-items:center;justify-content:center;text-align:center
+}
+html[data-layout=command] #root .choice-mark {border-width:0;border-inline-end-width:2px;border-inline-end-style:solid;padding-inline-end:3px}
+html[data-layout=command] #root :is(.nav-links .current,.ww-sidebar nav [aria-current=page]) {
+  font-weight:700
+}
+html[data-layout=command] #root .nr-context {border-inline:0;border-block:1px dashed var(--border);box-shadow:none}
+html[data-layout=crest] #root .narrative-choice-card {justify-items:center;text-align:center}
+html[data-layout=crest] #root .choice-speech {border-inline:0;border-block-start:var(--rule-width) var(--rule-style) var(--v3-line,#81704d);padding:.35rem 0 0}
+html[data-layout=index] #root .choices .narrative-choice-card,
+html[data-theme=street] #root .choices .narrative-choice-card {grid-template-areas:"mark caption" "copy copy";grid-template-columns:auto 1fr}
+html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card .skin-copy {display:contents}
+html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card .choice-kind {grid-area:caption;align-self:center}
+html:is([data-layout=index],[data-theme=street]) #root .choices .narrative-choice-card :is(.choice-action,.choice-speech) {grid-column:1/-1}
+html[data-layout=margin] #root .narrative-choice-card .choice-mark {height:100%;border-width:0;border-inline-end-width:var(--rule-width);border-inline-end-style:var(--rule-style);border-radius:0}
+html[data-layout=track] #root .narrative-choice-card .choice-mark {outline:1px solid;outline-offset:3px}
+html[data-layout=seal] #root .skin-heading .skin-stamp {outline:1px dotted var(--border);outline-offset:3px}
+html[data-layout=instrument] #root .skin-heading .skin-stamp {box-shadow:inset 0 0 0 3px var(--surface-1),inset 0 0 0 4px var(--border-strong)}
+@container app (min-width:1000px) {
+  html:is([data-layout=margin],[data-layout=index]) #root .inspector-world-hero {flex-direction:column;align-items:stretch}
+  html:is([data-layout=margin],[data-layout=index]) #root .inspector-hero-time {display:flex;flex-direction:row;flex-wrap:wrap;align-items:baseline;max-width:none;gap:1rem;text-align:start}
+  html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-scope .param-list {
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem;
+  }
+  html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param {
+    display:grid;grid-template-columns:1fr auto;align-content:start;border-width:var(--rule-width);border-style:var(--rule-style);
+    padding:.6rem;border-radius:var(--key-shape);min-width:0
+  }
+  html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param>span:nth-child(2) {grid-column:1/-1;grid-row:2}
+  html:is([data-layout=instrument],[data-layout=signal],[data-layout=key]) #root .atelier-param>svg {grid-column:2;grid-row:1}
+}
+
+/* Draw the route, index tab and folded corner as line work. The face
+   underneath remains the choice's own surface in every interaction state. */
+#root .choices .narrative-choice-card {position:relative}
+html[data-layout=track] #root .choices .narrative-choice-card::before {
+  content:"";
+  position:absolute;
+  inset-block:0;
+  inset-inline-start:calc(1rem + var(--stamp-size) / 2);
+  border-inline-start:1px solid var(--border);
+  pointer-events:none;
+}
+html[data-layout=track] #root .choices .choice-mark {position:relative}
+html:is([data-layout=index],[data-layout=bill],[data-layout=signal]) #root .choices .choice-kind {
+  box-shadow:inset 0 -1px var(--border);
+}
+html[data-theme=street] #root .choices .narrative-choice-card::after {
+  content:"";
+  position:absolute;
+  inset-block-start:0;
+  inset-inline-end:0;
+  width:.6rem;
+  height:.6rem;
+  border-inline-start:1px solid var(--border);
+  border-block-end:1px solid var(--border);
+  transform:skew(-10deg);
+  transform-origin:top right;
+  pointer-events:none;
+}
+
+#root .call-suggestions > .narrative-choice-card {
+  grid-template-areas:"mark copy";
+  grid-template-columns:auto minmax(0,1fr);
+  gap:.4rem;align-items:center;align-content:center;
+  min-width:min(100%,8rem);padding:.5rem;
+}
+#root .call-suggestions .skin-stamp {--stamp-size:1.1rem}
+#root .call-suggestions .choice-kind {display:none}
+#root .call-suggestions :is(.choice-action,.choice-speech) {color:inherit;font-size:.8rem}
+#root .call-suggestions .choice-mark {color:inherit;background:transparent;border-color:var(--border)}
