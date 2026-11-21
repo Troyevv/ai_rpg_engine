@@ -67,16 +67,10 @@
   align-items: stretch;
   gap: 10px;
 }
-#root .choices > .narrative-choice-card {display:grid;grid-template-columns:24px minmax(0,1fr);gap:11px;align-items:start;align-self:auto;align-content:start;min-height:60px;min-width:0;padding:14px 15px;text-align:left;background:var(--v3-panel, #1d2125);border:1px solid var(--v3-line, #353a40);border-radius:10px;box-shadow:0 1px 0 #ffffff03;transition:background-color .16s,border-color .16s,transform .12s}
-#root .choice-mark {display:grid;place-items:center;width:24px;height:24px;margin-top:1px;background:var(--v3-panel, #393226);border:1px solid var(--v3-line, #4a4030);color:var(--v3-text, #d7bd83);border-radius:7px}
-#root .choice-mark svg {width:15px;height:15px}
+#root .choices > .narrative-choice-card {gap:11px;align-items:start;align-self:auto;min-height:60px;min-width:0;padding:14px 15px;text-align:left}
 #root .narrative-choice {display:grid;gap:8px;min-width:0;overflow-wrap:anywhere}
 #root .choice-action {font-weight:600;font-size:13px;line-height:1.5;color:var(--v3-text, #e5e5e0)}
 #root .choice-speech {font-size:14px;line-height:1.6;color:var(--v3-muted, #c1c5cb);display:block;white-space:pre-wrap;padding-left:11px;border-left:2px solid var(--v3-line, #81704d)}
-#root .choices > .narrative-choice-card:hover:enabled {background:var(--v3-panel, #282b2d);border-color:var(--v3-line, #8a7650);transform:translateY(-1px)}
-#root .choices > .narrative-choice-card:active:enabled {transform:translateY(0);background:var(--v3-panel, #323027)}
-#root .choices > .narrative-choice-card:focus-visible {outline-offset:-3px}
-#root .choices > .narrative-choice-card[aria-pressed=true] {border-color:var(--v3-line, #b7985e);background:var(--v3-panel, #2f2b23)}
 #root .choices > .narrative-choice-card[aria-pressed=true] .choice-mark {background:var(--accent);color:var(--v3-ink, #26241e);border-color:var(--accent)}
 #root .choices > .narrative-choice-card[aria-pressed=true] .choice-speech {border-color:var(--v3-line, #bda069);color:var(--v3-text, #e1d9c8)}
 #root .choices > .narrative-choice-card[aria-busy=true] .choice-mark svg {animation:nr-spin 1s linear infinite}
@@ -224,7 +218,7 @@
 @font-face {font-family:Inter;src:url('../assets/inter/inter-latin.woff2') format('woff2');font-weight:100 900;font-display:swap;unicode-range:U+0000-00FF,U+2000-206F}
 #root {container:app / inline-size;position:relative;top:var(--app-top,0px);height:var(--app-height,100dvh);overflow:clip}
 .narrative-shell {--reader-gutter:32px}
-.nr-topbar,.game-preserved,.phone-device {--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
+html[data-theme=graphite] :is(.nr-topbar,.game-preserved,.phone-device) {--ui-font:Inter,"Segoe UI",sans-serif;font-family:var(--ui-font)}
 html[data-theme=graphite] :is(.nr-topbar,.game-preserved,.phone-device,.current-game-panel,.library-dialog,.settings-dialog,.reading-display,.narrative-more) {--bg:#131517;--surface-1:#191c20;--accent:#d2b477;--text:#ecebe7}
 .game-preserved {background:var(--bg)}
 #root .narrative-shell {height:100%;overflow:clip}
@@ -342,7 +336,8 @@ html[data-hide-turn-times] .turn-clock {display:none}
 .library-selected h3,#root .library-dialog .world-card strong {font:600 17px/1.5 Inter,sans-serif}
 #root .library-layout .save-list {margin:0;padding:0;min-width:0;border:0}
 .library-selected .library-remove {width:44px;height:44px;display:grid;place-items:center}
-#root .settings-dialog:has(.settings-scroll)>.section-tabs {display:grid;grid-template-columns:repeat(3,1fr);width:100%}
+#root .settings-dialog:has(.settings-scroll)>.section-tabs {display:flex;flex-wrap:wrap;width:100%}
+#root .settings-dialog>.section-tabs>button {flex:1 1 max-content;padding-inline:8px}
 #root .settings-connections {padding:14px 16px;background:var(--surface-2);border-radius:10px}
 #root .management-calendar {justify-self:start;color:var(--accent)}
 #root .management-clock .scene-clock {font:14px/1.65 Inter,sans-serif;color:var(--text-muted)}

@@ -1,3 +1,4 @@
+import {SkinStamp} from '../ThemeProvider';
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
 import {AnimatePresence,motion,useReducedMotion} from 'framer-motion';
 import {AtelierDisclosure} from './AtelierDisclosure';
@@ -88,7 +89,7 @@ export function IdeaAtelier(p:Props) {
   </article>{error&&!panelOpen&&<p className="sp-error" role="alert">{error.message}</p>}
   <div className="fl-actions"><button className="fl-sub" disabled={busy} onClick={()=>{returnToIdea.current=true;setReview(false)}}><ArrowLeft size={16}/>К замыслу</button><button className="fl-primary" disabled={busy} aria-busy={checking} onClick={()=>void check(true)}>{checking?<LoaderCircle size={16} className="atelier-spinner"/>:null}{checking?'Проверяем и запускаем…':'Создать мир'}<ArrowRight size={16}/></button></div></div>
  </motion.section>:<motion.div key="brief" {...move} onAnimationComplete={()=>{if(returnToIdea.current){returnToIdea.current=false;editor.current?.focus({preventScroll:true})}}}>
-  <header className="hero atelier-hero"><div className="hero-art" style={{'--atelier-art':`url(${folio})`} as CSSProperties}/><div className="hero-copy"><div className="overline"><i/>Генератор мира</div><h1>По моей <em>идее</em></h1><p>Опишите мир и людей, с которых начнётся ваша история.</p></div><button className="atelier-method method" onClick={e=>open('methods',e.currentTarget)}><Layers size={14}/><span>Способ создания</span><ChevronRight size={13}/></button></header>
+  <header className="hero atelier-hero"><div className="hero-art" style={{'--atelier-art':`url(${folio})`} as CSSProperties}/><div className="hero-copy skin-heading"><SkinStamp/><div><div className="overline"><i/>Генератор мира</div><h1>По моей <em>идее</em></h1><p>Опишите мир и людей, с которых начнётся ваша история.</p></div></div><button className="atelier-method method" onClick={e=>open('methods',e.currentTarget)}><Layers size={14}/><span>Способ создания</span><ChevronRight size={13}/></button></header>
   <div className="folio-layout atelier-layout"><div className="board atelier-board">
    <section className="paper idea-card atelier-idea"><header className="card-head"><div className="title-line"><NotebookPen className="section-icon"/><h2>Замысел мира</h2></div><button className="subtle" disabled={busy} onClick={e=>open('examples',e.currentTarget)}><Sparkles size={15}/>Примеры</button></header>
     <div className="idea-body">{!p.id?<><label className="field-name" htmlFor="atelier-name">Название истории <span>необязательно</span></label><input className="name-input" id="atelier-name" aria-label="Название черновика" maxLength={120} value={p.name} disabled={busy} onChange={e=>p.onName(e.target.value)} placeholder="Новая история"/></>:<p className="existing-name">{p.name}</p>}

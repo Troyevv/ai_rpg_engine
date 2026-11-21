@@ -6,7 +6,7 @@
  --skin-glow:0 0 0 transparent; --skin-density:1; --skin-divider:solid;
  --skin-motion:240ms; --skin-dec-opacity:.16; --skin-background:none;
 }
-html[data-theme] {
+html[data-theme], .theme-options > button[data-theme] {
  --surface-2:color-mix(in srgb,var(--surface-1),var(--text) 5%);
  --surface-3:color-mix(in srgb,var(--surface-1),var(--text) 10%);
  --surface-elevated:color-mix(in srgb,var(--surface-1),var(--text) 7%);

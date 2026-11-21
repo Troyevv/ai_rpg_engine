@@ -1,3 +1,4 @@
+import {SkinStamp} from './ThemeProvider';
 import { SectionTabs } from "./components/ui/section-tabs";
 import { useAnimations, setAnimations } from "./lib/animations";
 import { ModelBudget } from "./ModelBudget";
@@ -75,7 +76,7 @@ export function Settings({
     >
       <DialogContent className="settings-dialog">
         <DialogHeader>
-          <DialogTitle>Настройки</DialogTitle>
+          <DialogTitle className="skin-heading"><SkinStamp/>Настройки</DialogTitle>
           <DialogDescription>
             Модели работают за сценой. Здесь можно настроить каждую задачу.
           </DialogDescription>

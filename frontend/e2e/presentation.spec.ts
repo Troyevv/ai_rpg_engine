@@ -5,8 +5,10 @@ import {nav,actor,diagnostics,pickCharacter,camera} from './navigation';
 const palette=['graphite','gothic','parchment','noir','neon'];
 async function noOverflow(page:Page){
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- const dialog=page.getByRole('dialog');
- if(await dialog.count()) expect(await dialog.last().evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ // A mobile navigation dialog can close between count() and evaluate().
+ const overflowing=await page.getByRole('dialog').evaluateAll(nodes=>
+  nodes.filter(el=>el.scrollWidth>el.clientWidth+1).map(el=>el.className));
+ expect(overflowing).toEqual([]);
 }
 async function capture(page:Page,path:string){
  // Capture the final UI, not a translucent frame halfway through a dialog transition.
@@ -131,7 +133,7 @@ for(const size of [{width:1920,height:1080},{width:1366,height:768},{width:360,h
   await nav(page,'Мир');await nav(page,'Персонажи');
   await pickCharacter(page,'character_2');await noOverflow(page);
   await capture(page,info.outputPath('inspector.png'));
-  await nav(page,'Отношения');await noOverflow(page);
+  await nav(page,'Отношения');await expect(page.locator('.inspector-workspace')).toHaveAttribute('aria-label','Отношения');await noOverflow(page);
   await capture(page,info.outputPath('relationships.png'));await page.getByRole('button',{name:'Закрыть',exact:true}).click();
   await diagnostics(page);await page.getByRole('tab',{name:'Производительность'}).click();await noOverflow(page);
   await capture(page,info.outputPath('diagnostics.png'));

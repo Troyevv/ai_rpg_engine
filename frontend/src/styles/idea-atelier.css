@@ -508,7 +508,11 @@ html[data-theme=graphite] .atelier-scope .channel:has(:checked){border-color:#b7
 html[data-theme=graphite] .atelier-scope .channel:hover{border-color:#888271}
 .atelier-scope .hero-copy{padding-top:0}
 .ww-scroll:has(.idea-atelier),.ww-scroll:has(.atelier-generation){scrollbar-width:thin;scrollbar-gutter:auto}
-html:not([data-theme=graphite]) .atelier-scope .hero-art{background-size:auto,cover;mix-blend-mode:multiply}
+html:not([data-theme=graphite]) .atelier-scope .hero-art {
+  background-image:linear-gradient(90deg,var(--bg) 10%,var(--bg) 37%,transparent 85%),var(--atelier-art);
+  background-size:auto,max(62%,540px) auto;
+  opacity:.8;
+}
 
 .atelier-scope .sp fieldset.genre-secondary.sp-block{flex-direction:row;align-items:flex-start}
 .atelier-scope .comm-extra .horiz{display:flex;align-items:center;gap:8px}

@@ -70,3 +70,33 @@ test('skins preserve distinct palettes and a clear V3 reading surface',async({pa
  }
  expect(drawings.size).toBe(6);
 });
+
+test('skin compositions lay out real action and speech slots without clipping',async({page,request},info)=>{
+ const selected=await(await request.post('/test/choices-seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
+ const mobile=info.project.name==='mobile';
+ await page.setViewportSize({width:mobile?320:1440,height:mobile?844:900});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const layouts=new Set<string>();
+ for(const theme of themes){
+  await request.put('/api/worlds/'+selected.world+'/presentation',{data:{theme_id:theme.id}});
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme.id);
+  const cards=page.locator('.choices button');
+  await expect(cards).toHaveCount(6);
+  await cards.first().focus();
+  await expect(cards.first()).toBeFocused();
+  const rows=await cards.evaluateAll(nodes=>nodes.map(card=>{
+   const style=getComputedStyle(card);
+   return {
+    fits:card.scrollWidth<=card.clientWidth+1 && card.scrollHeight<=card.clientHeight+1,
+    areas:style.gridTemplateAreas,
+    animated:style.animationName!=='none',
+   };
+  }));
+  expect(rows.every(row=>row.fits&&!row.animated),theme.name).toBe(true);
+  layouts.add(rows[0].areas);
+ }
+ // An accidental return to the universal V3 two-column card survives palette tests.
+ expect(layouts.size).toBeGreaterThanOrEqual(4);
+});

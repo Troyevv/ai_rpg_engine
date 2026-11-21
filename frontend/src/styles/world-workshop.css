@@ -3,7 +3,6 @@
 @font-face{font-family:'Workshop Book';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/workshop/urw-bookman-light.woff) format('woff')}
 /* #175 composition measured from the approved HTML. Existing skin tokens own color/material. */
 .app-shell.workshop-open{grid-template-columns:minmax(0,1fr)}
-.workshop-open>.nav-rail,.workshop-open>.app-main>.topbar{display:none}
 .world-workshop{padding:0!important;overflow:hidden!important;min-height:0;font-family:var(--ui-font);line-height:1.55}
 .ww-shell{display:grid;grid-template-columns:238px minmax(0,1fr);height:100%;min-height:0;--ww-radius:16px;--ww-book:var(--story-font,Georgia,serif)}
 .ww-shell button,.dialog-content.ww-dossier-dialog button,.dialog-content.ww-menu-dialog button,.dialog-content.ww-field-dialog button{cursor:pointer}
