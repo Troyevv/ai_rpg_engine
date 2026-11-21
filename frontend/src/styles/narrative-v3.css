@@ -368,7 +368,8 @@ html[data-hide-turn-times] .turn-clock {display:none}
 #root .management-time-options button {padding:0;background:transparent;border:0;color:var(--accent);box-shadow:none;justify-content:space-between;width:100%}
 #root .inspector-workspace .inspector-world-hero h2 {font:600 18px/1.5 Inter,sans-serif}
 @container app (min-width:681px){
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay {left:170px;background:#07090db8;backdrop-filter:blur(3px)}
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay {background:transparent;backdrop-filter:none}
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay::before {content:"";position:absolute;inset:0 0 0 170px;background:#07090db8;backdrop-filter:blur(3px);pointer-events:none}
  #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) :is(.library-dialog,.settings-dialog,.current-game-panel) {left:calc(50% + 85px);width:min(920px,calc(100% - 218px));max-width:none}
  #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-content:not(.reading-display,.narrative-drawer) {left:calc(50% + 85px);max-width:calc(100% - 202px)}
  #root .inspector-backdrop {left:170px;backdrop-filter:blur(3px)}
