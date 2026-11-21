@@ -56,6 +56,7 @@ for(const theme of ['graphite','parchment']){
  });
  test(`first mount after canonical commit and interrupted first fog view: ${theme}`,async({page,request})=>{
   const s=await setup(page,request,theme);await nav(page,'Создать');
+  await expect(page.locator('.ww-topbar')).toBeVisible();
   const before=await view(request,s);
   const read=await request.post(`/api/saves/${s.save}/phone`,{data:{revision:before.revision,command:{action:'read',event_id:s.event,operation_id:'late-mount180'}}});expect(read.ok(),await read.text()).toBe(true);
   const after=await read.json(),event=after.state.notification_history[0];

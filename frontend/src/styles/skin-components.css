@@ -305,7 +305,13 @@ html[data-layout] #root :is(.nr-topbar,.ww-topbar,.inspector-topbar,.mobile-menu
 #root .phone-message {border:var(--rule-width) var(--rule-style) transparent;border-radius:var(--message-shape)}
 #root .phone-message.outgoing {border-inline-end-width:3px}
 #root .phone-day time, #root .ph-demo {border-radius:var(--key-shape);padding:3px 8px}
-#root :is(.dialog-content,.runtime-notice), html[data-layout] [data-sonner-toast].story-toast {
+/* Full-screen dialogs use the shell's edge. Floating dialogs keep the
+   preset frame, independently of the borders on their children. */
+#root .dialog-content {
+  border-width:var(--rule-width);
+  border-style:var(--dialog-border-style,var(--rule-style));
+}
+#root .runtime-notice, html[data-layout] [data-sonner-toast].story-toast {
   border-width:var(--rule-width);
   border-style:var(--rule-style);
 }

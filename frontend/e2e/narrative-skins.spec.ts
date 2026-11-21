@@ -144,6 +144,7 @@ test('presets preserve Narrative surfaces and the semantic colors of the game me
     await expectPaint('.choices .choice-mark', 'var(--v3-ink, #26241e)', 'var(--accent)');
 
     await page.getByRole('button', {name: 'Меню игры', exact: true}).click();
+    await expect(page.locator('.mobile-game-menu')).toHaveCSS('border-width', '0px');
     await expectPaint('.mobile-game-menu', 'var(--text)', 'var(--bg)');
     await expectPaint('.mobile-menu-resume', 'var(--text)', 'var(--accent-soft)');
     await expectPaint('.menu-world', 'var(--text)', 'var(--surface-2)');
