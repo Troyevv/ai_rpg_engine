@@ -2,75 +2,21 @@ name: Android menu perimeter proof
 on:
   push:
     branches: [feat/274-interface-skins]
-    paths: [.github/workflows/android-edge-proof.yml, .github/qa/android-edge-native.py]
+    paths: [.github/workflows/android-edge-proof.yml]
 permissions:
   contents: read
+  actions: read
 jobs:
-  chrome:
+  export:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Build both revisions and start offline fixture servers
-        run: |
-          pip install -r requirements.txt -r requirements-dev.txt pillow
-          npm ci --prefix frontend
-          npm run build --prefix frontend
-          git worktree add --detach /tmp/pre-edge b5a2dd6
-          ln -s "$PWD/frontend/node_modules" /tmp/pre-edge/frontend/node_modules
-          npm run build --prefix /tmp/pre-edge/frontend
-          E2E_PORT=8217 python tests/e2e_server.py >/tmp/after-server.log 2>&1 &
-          cd /tmp/pre-edge
-          E2E_PORT=8216 python tests/e2e_server.py >/tmp/before-server.log 2>&1 &
-      - name: Start accelerated Android
-        run: |
-          sudo chmod a+rw /dev/kvm
-          sdk_tool=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)
-          export PATH="$(dirname "$sdk_tool"):$ANDROID_HOME/platform-tools:$PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          sdkmanager "system-images;android-34;google_apis_playstore;x86_64" "emulator" >/tmp/sdk.log
-          export ANDROID_AVD_HOME="$RUNNER_TEMP/avds"
-          mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd -n edges -p "$ANDROID_AVD_HOME/edges.avd" -k 'system-images;android-34;google_apis_playstore;x86_64' -d pixel_5 -f
-          echo "hw.lcd.width=720" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
-          echo "hw.lcd.height=1560" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
-          echo "hw.lcd.density=300" >> "$ANDROID_AVD_HOME/edges.avd/config.ini"
-          adb start-server
-          "$ANDROID_HOME/emulator/emulator" -avd edges -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/android.log 2>&1 &
-          timeout 360 bash -c 'adb wait-for-device; until adb shell getprop sys.boot_completed | grep -q 1; do sleep 3; done'
-          adb shell input keyevent KEYCODE_WAKEUP
-          adb shell wm dismiss-keyguard
-          adb reverse tcp:8216 tcp:8216
-          adb reverse tcp:8217 tcp:8217
-      - name: Check the four edges in Firefox for Android
-        run: |
-          curl -fsSL --retry 3 https://ftp.mozilla.org/pub/fenix/releases/144.0.2/android/fenix-144.0.2-android-x86_64/fenix-144.0.2.multi.android-x86_64.apk -o /tmp/firefox.apk
-          adb install -g /tmp/firefox.apk
-          python .github/qa/android-edge-native.py
-      - name: Diagnose device failures
-        if: failure()
-        run: |
-          tail -60 /tmp/android.log || true
-          tail -50 /tmp/geckodriver.log || true
-          tail -8 /tmp/after-server.log || true
-          adb shell dumpsys activity activities | grep topResumedActivity | head -3 || true
-          mkdir -p /tmp/android-proof
-          adb exec-out screencap -p > /tmp/android-proof/diagnostic.png || true
-      - name: Attach full native captures
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: android-menu-perimeter
           path: /tmp/android-proof
+          run-id: 44941674273
+          github-token: ${{ github.token }}
+      - run: python -m pip install --user --break-system-packages pillow
       - name: Export comparison for the pull request
         run: |
           python - <<'PY'
@@ -96,5 +42,6 @@ jobs:
              sheet.paste(web.crop(box).resize((302,90),Image.Resampling.NEAREST),(x+329,y+dy+24))
           path=root/'android-menu-edges.webp';sheet.save(path,quality=91,method=6)
           data=base64.b64encode(path.read_bytes()).decode()
-          for i in range(0,len(data),24000):print('::notice title=Android proof part '+str(i//24000)+'::'+data[i:i+24000])
+          for i in range(0,len(data),1200):
+              print('ANDROID_IMAGE_DATA ' + str(i//1200) + ' ' + data[i:i+1200])
           PY
