@@ -1,7 +1,8 @@
+import {SkinStamp} from './ThemeProvider';
 import {useLayoutEffect, type ReactNode} from 'react';
 import {useMobile} from './mobile';
 import {createPortal} from 'react-dom';
-import {BatteryFull, ChevronDown, Signal, Smartphone, Wifi} from 'lucide-react';
+import {BatteryFull, ChevronDown, Signal, Wifi} from 'lucide-react';
 import type {Save} from './types';
 
 const openFrames=new Set<symbol>();
@@ -33,7 +34,7 @@ export function PhoneFrame({save, open, close, closeLabel, dialogLabel, children
       }}>
       <div className="phone-glass">
         <div className="ph-status" aria-hidden><span>{save.state.world_clock?.projection?.time}</span><i className="ph-island"/><span className="ph-status-icons"><Signal/><Wifi/><BatteryFull/></span></div>
-        <div className="ph-topbar"><span className="ph-owner"><Smartphone/>{owner?.name}</span><span className="ph-demo">В игре</span>
+        <div className="ph-topbar"><span className="ph-owner"><SkinStamp/><span>{owner?.name}</span></span><span className="ph-demo">В игре</span>
           <button className="ph-close" aria-label={closeLabel} onClick={close}><ChevronDown/></button>
         </div>
         {children}

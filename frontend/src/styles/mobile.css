@@ -344,7 +344,7 @@
  .mobile-game-menu.dialog-content {
   top:var(--app-top,0px);bottom:auto;left:0;transform:none;
   width:100%;max-width:100%;height:var(--app-height,100dvh);max-height:var(--app-height,100dvh);
-  border:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);
+  --dialog-border-style:none;border:0 var(--dialog-border-style);border-radius:0;padding:0;background:var(--bg);color:var(--text);
   display:flex;flex-direction:column;gap:0;overflow:hidden;
   animation:mobile-menu-in var(--transition-fast) var(--ease-out);
  }

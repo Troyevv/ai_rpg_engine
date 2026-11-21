@@ -1,3 +1,4 @@
+import {SkinStamp} from './ThemeProvider';
 import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {ActionPanel} from './components/ui/action-panel';
 import { Choice } from "@/components/ui/choice";
@@ -370,11 +371,11 @@ export function Game({
           className="story nr-content"
         >
           <section className="nr-context" aria-label="Текущая сцена">
-            <div className="nr-contexttop"><div><h1>{meta?.location || world.name}</h1>
+            <div className="nr-contexttop"><div className="skin-heading"><SkinStamp/><div><h1>{meta?.location || world.name}</h1>
               <button className="nr-datetime" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}><Clock/><SceneClock save={save} fallback={meta?.time}/></button>
-            </div>{save&&<span className="nr-saved"><CheckCheck/>{running?'Идёт ход':'Сохранено'}</span>}</div>
+            </div></div>{save&&<span className="nr-saved"><CheckCheck/>{running?'Идёт ход':'Сохранено'}</span>}</div>
             <div className="nr-contextbottom"><span className="nr-nearlabel">Рядом</span>
-              <div className="nr-people">{state?.characters.filter(c=>meta?.present_ids.includes(c.id)&&c.id!==actorId).map(c=><button key={c.id} className="nr-person" onClick={()=>openCharacter(c.id)}><span className="nr-miniav" aria-hidden>{c.name.slice(0,1)}</span>{c.name.replace(" (ГГ)","")}</button>)}</div>
+              <div className="nr-people">{state?.characters.filter(c=>meta?.present_ids.includes(c.id)&&c.id!==actorId).map(c=><button key={c.id} className="nr-person" onClick={()=>openCharacter(c.id)}><span className="nr-miniav" aria-hidden>{c.name.slice(0,1)}</span><span className="nr-person-name">{c.name.replace(" (ГГ)","")}</span></button>)}</div>
               {save&&<StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>}</div>
           </section>
 

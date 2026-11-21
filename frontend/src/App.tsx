@@ -1,6 +1,7 @@
 import {tr} from './lib/interfaceText';
 import {ReadingDisplay} from './ReadingDisplay';
 import {dismissTransient} from './lib/transientBack';
+import {enterWorkshop, isWorkshopRoute} from './workshop/useWorkshopBack';
 import {useRootDialogBack} from './lib/useRootDialogBack';
 import {PortraitModels} from './workshop/PortraitCommission';
 import {requestId} from './lib/requestId';
@@ -41,9 +42,10 @@ function restoreModel(initial: Preferences["game"], saved?: Preferences["game"])
 
 export default function App() {
   useRootDialogBack();
-  const [chatOpen,setChatOpen]=useState(()=>localStorage.getItem("active-mode")==="chat");
+  const [chatOpen,setChatOpen]=useState(()=>!isWorkshopRoute() && localStorage.getItem("active-mode")==="chat");
+  useEffect(()=>localStorage.setItem("active-mode",chatOpen?"chat":"narrative"),[chatOpen]);
   const [chatSource,setChatSource]=useState<ChatSource|undefined>();
-  const openChat=(source?:ChatSource)=>{setChatSource(source);setChatOpen(true);localStorage.setItem("active-mode","chat")};
+  const openChat=(source?:ChatSource)=>{setChatSource(source);setChatOpen(true)};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
   const mobileMenuVisible=useRef(mobileMenu);mobileMenuVisible.current=mobileMenu;
@@ -83,7 +85,7 @@ export default function App() {
   };
   useEffect(()=>{const open=(e:Event)=>{const d=(e as CustomEvent).detail;openWorkspace(d.section,d.root,d.returnFocus)};window.addEventListener('save-workspace',open);return()=>window.removeEventListener('save-workspace',open)});
   useEffect(()=>{if(!workspace)return;requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.save-workspace:not([hidden]) header button')?.focus());const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('[role="dialog"],.inspector-workspace:not([hidden])')){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
-  const [view, setView] = useState<"game" | "prepare">("game");
+  const [view, setView] = useState<"game" | "prepare">(() => isWorkshopRoute() ? "prepare" : "game");
   const [library, setLibrary] = useState(false);
   const [display,setDisplay]=useState(false);
   const [settings, setSettings] = useState(false);
@@ -94,6 +96,7 @@ export default function App() {
   const inspectorVisible=useRef(inspector);inspectorVisible.current=inspector;
   useEffect(()=>{const back=()=>{
     if(mobileMenuVisible.current||historyTransition.current)return;
+    if(isWorkshopRoute()){setView("prepare");return;}
     if((inspectorVisible.current||workspaceVisible.current)&&dismissTransient()){
       history.pushState({...history.state,[inspectorVisible.current?'inspectorOpen':'saveWorkspace']:true},'');return;
     }
@@ -120,7 +123,10 @@ export default function App() {
       done();
     });
   };
-  const navigate=(next:"game"|"prepare")=>closeInspector(false,()=>closeWorkspace(false,()=>setView(next)));
+  const navigate=(next:"game"|"prepare")=>closeInspector(false,()=>closeWorkspace(false,()=>{
+    if(next==="prepare")enterWorkshop();
+    setView(next);
+  }));
   const [panel, setPanel] = useState<Panel>("Мир");
   const [character, setCharacter] = useState("");
   const [reading, setReading] = useState(false);
@@ -232,8 +238,8 @@ export default function App() {
     reading={reading} toggleReading={()=>setReading(!reading)}
   />;
   return (
-    <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={chatOpen?null:world} preview={chatOpen||view==='prepare'}><ThemedToaster/><div inert={chatOpen} className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
-      {!mobile&&<nav className="nav-rail" aria-label={tr('Главная навигация','Main navigation')}>
+    <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={chatOpen?null:world} preview={chatOpen||view==='prepare'}><ThemedToaster/><div inert={chatOpen} className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&view==="game"&&!inspector ? "reading" : ""}`}>
+      {view === "game" && !mobile && <nav className="nav-rail" aria-label={tr('Главная навигация','Main navigation')}>
         <button
           className="brand"
           aria-label="AI RPG Engine"
@@ -244,14 +250,13 @@ export default function App() {
         {world&&<div className="inspector-world-label"><strong title={world.name}>{world.name}</strong><small>{save?.name||it("original")} · {it("baseline")} v{world.version}</small></div>}
         <div className="nav-links">
           <button
-            className={view === "game" && !workspace && !inspector ? "current" : ""}
+            className={!workspace && !inspector ? "current" : ""}
             onClick={() => navigate("game")}
           >
             <BookOpen />
             <span>{tr('Игра','Game')}</span>
           </button>
           <button
-            className={view === "prepare" ? "current" : ""}
             onClick={() => navigate("prepare")}
           >
             <Feather />
@@ -267,19 +272,17 @@ export default function App() {
         </button>
       </nav>}
       <div className="app-main">
-        <header className={workspaceHeader?"topbar":"topbar nr-topbar"} hidden={inspector}>
+        {view === "game" && !chatOpen && <header hidden={inspector} className={workspaceHeader?"topbar":"topbar nr-topbar"}>
           {workspaceHeader ? (
             <>
               <div className="topbar-start">
                 <Button variant="ghost" size="sm" onClick={()=>openChat()}>RP-чат</Button>
               </div>
               <div className="topbar-title">
-                <button className="breadcrumb" title={view==='prepare'?'Мастерская':world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
+                <button className="breadcrumb" title={world?.name||'Твои истории'} onClick={() => setLibrary(true)}>
                   <LibraryIcon size={17} />
                   <span>
-                    {view === "prepare"
-                      ? "Мастерская"
-                      : world?.name || "Твои истории"}
+                    {world?.name || "Твои истории"}
                   </span>
                   <span className="muted">⌄</span>
                 </button>
@@ -290,7 +293,7 @@ export default function App() {
               {mobile && !inspector && menu}
               <button className="breadcrumb nr-worldpicker" title={world?.name || 'Твои истории'} onClick={()=>setLibrary(true)}>
                 <span className="nr-world-symbol"><PanelsTopLeft size={18}/></span>
-                <span className="nr-worldcopy"><strong data-current-world>{view==='prepare'?'Мастерская':world?.name || 'Твои истории'}</strong>
+                <span className="nr-worldcopy"><strong data-current-world>{world?.name || 'Твои истории'}</strong>
                   <small className="nr-worldsub"><span>{save?.name || 'Библиотека'}</span><i/><span>Narrative</span></small></span>
                 <ChevronDown size={14}/>
               </button>
@@ -335,7 +338,7 @@ export default function App() {
               )}
             </>}
           </div>
-        </header>
+        </header>}
         {view === "prepare" && (
           <WorldWorkshop
             onBack={()=>navigate("game")} onSettings={()=>setSettings(true)}
@@ -390,7 +393,7 @@ export default function App() {
         open={library}
         onOpenChange={setLibrary}
         choose={choose}
-        prepare={() => setView("prepare")}
+        prepare={() => navigate("prepare")}
         chat={(source)=>{setLibrary(false);openChat(source)}}
       />
       <Inspector
@@ -412,7 +415,7 @@ export default function App() {
       />
     </div>
     {chatOpen&&<div className="rp-chat-stage"><ChatMode source={chatSource} onConnections={()=>setSettings(true)} onBack={()=>{
-      setChatOpen(false);localStorage.setItem("active-mode","narrative");
+      setChatOpen(false);
       requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.nr-rpentry')?.focus({preventScroll:true}));
     }}/></div>}
     </ThemeProvider></PortraitModels.Provider>

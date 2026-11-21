@@ -5,6 +5,7 @@ import {api} from './api';
 import type {World} from './types';
 
 import {themes,type ThemeId} from './lib/skins';
+import {SkinEmblem} from './components/SkinEmblem';
 import {ThemeDecorationLayer} from './ThemeDecorationLayer';
 export {themes};
 export type {ThemeId};
@@ -22,11 +23,11 @@ export function ThemeProvider({world, children,preview=false}:{world:World|null;
   const skin=themes.find(t=>t.id===presentation.theme_id)||themes[0];
   useLayoutEffect(()=>{
     const root=document.documentElement;
-    root.dataset.skin=skin.base;root.dataset.decoration=skin.decoration;
+    root.dataset.layout=skin.layout;root.dataset.skin=skin.base;root.dataset.decoration=skin.decoration;
     for(const [key,value] of Object.entries(preview&&skin.id==='graphite'?{accent:'#e5b98c',bg:'#131615','surface-1':'#1b1f1d',text:'#e3e3db'}:{accent:skin.accent,bg:skin.bg,'surface-1':skin.surface,text:skin.text}))root.style.setProperty('--'+key,value);
     document.documentElement.dataset.theme=presentation.theme_id;
     // Radix portals and toasts inherit the same root tokens as the application.
-    return ()=>{delete root.dataset.theme;delete root.dataset.skin;delete root.dataset.decoration;for(const key of ['accent','bg','surface-1','text'])root.style.removeProperty('--'+key)};
+    return ()=>{delete root.dataset.theme;delete root.dataset.layout;delete root.dataset.skin;delete root.dataset.decoration;for(const key of ['accent','bg','surface-1','text'])root.style.removeProperty('--'+key)};
   },[presentation.theme_id,skin,preview]);
   const select=async(id:ThemeId|'auto')=>{
     if(preview){const value=valid({theme_id:id==='auto'?'graphite':id,mode:'manual'});setPreviewTheme(value);localStorage.setItem('workshop-theme',JSON.stringify(value));return;}
@@ -41,16 +42,21 @@ export function ThemeProvider({world, children,preview=false}:{world:World|null;
   return <ThemeContext.Provider value={{presentation,busy,available:preview||!!world,preview,select}}><ThemeDecorationLayer pack={skin.decoration}/>{children}</ThemeContext.Provider>;
 }
 export const useTheme=()=>useContext(ThemeContext);
+export function SkinStamp(){
+ const {presentation}=useTheme();
+ return <span className="skin-stamp" aria-hidden="true"><SkinEmblem id={presentation.theme_id}/></span>;
+}
 export function ThemeSelector(){
  const {presentation,busy,available,preview,select}=useTheme();
  if(!available)return <p className="muted">Открой мир, чтобы выбрать его оформление.</p>;
  return <section className="theme-selector" aria-label="Тема мира">
   <label>Тема мира<Choice aria-label="Тема мира" value={presentation.mode==='auto'?'auto':presentation.theme_id} disabled={busy} onValueChange={selectedValue => void select(selectedValue as ThemeId|'auto')}>
-   <option value="auto">Автоматически</option>{themes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+   {!preview&&<option value="auto">Автоматически</option>}{themes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
   </Choice></label>
   <p className="muted small">{preview?'Оформление мастерской. Игровые миры сохраняют свои темы.':presentation.mode==='auto'?'Выбрана '+themes.find(t=>t.id===presentation.theme_id)?.name+'. Автовыбор закреплён за этим миром.':'Оформление всех прохождений этого мира.'}</p>
-  <div className="theme-options">{themes.map(t=><button key={t.id} data-theme={t.id} data-skin={t.base} style={{'--accent':t.accent,'--bg':t.bg,'--surface-1':t.surface,'--text':t.text} as import('react').CSSProperties} aria-label={`Тема ${t.name}`} aria-pressed={presentation.theme_id===t.id} disabled={busy} onClick={()=>void select(t.id)}>
-   <span className="theme-swatch" aria-hidden="true"><i/><i/><i/></span><strong>{t.name}</strong><small>{t.description}</small>
+  <div className="theme-options">{themes.map(t=><button key={t.id} data-theme={t.id} data-skin={t.base} data-layout={t.layout} data-decoration={t.decoration} style={{'--accent':t.accent,'--bg':t.bg,'--surface-1':t.surface,'--text':t.text} as import('react').CSSProperties} aria-label={`Тема ${t.name}`} aria-pressed={presentation.theme_id===t.id} disabled={busy} onClick={()=>void select(t.id)}>
+   <span className="skin-stamp" aria-hidden="true"><SkinEmblem id={t.id}/></span>
+   <span className="skin-copy"><strong>{t.name}</strong><small>{t.description}</small></span>
   </button>)}</div>
  </section>;
 }

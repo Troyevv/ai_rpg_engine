@@ -100,6 +100,36 @@ test('menu: five widths, skins, low viewport and no legacy entries',async({page,
  await page.keyboard.press('Escape');
 });
 
+test('full-screen sheets reach the viewport edges while floating panels retain their skin frame', async ({page, request}) => {
+ const selection = await seed(page, request);
+ await request.put(`/api/worlds/${selection.world}/presentation`, {data: {theme_id: 'medieval'}});
+ await page.reload();
+ await expect(page.locator('html')).toHaveAttribute('data-theme', 'medieval');
+
+ for (const width of [390, 1440, 320]) {
+  const mobile = width < 681;
+  await page.setViewportSize({width, height: 844});
+  if (mobile) {
+   const sheet = await menu(page);
+   await expect(sheet).toHaveCSS('border-width', '0px');
+   await expect(sheet).toHaveCSS('outline-style', 'none');
+   await expect(sheet.locator('.menu-world')).toHaveCSS('border-top-width', '3px');
+   await expect(sheet.locator('.menu-world')).toHaveCSS('border-top-style', 'double');
+   await sheet.getByRole('switch').scrollIntoViewIfNeeded();
+   expect(await sheet.boundingBox()).toEqual({x: 0, y: 0, width, height: 844});
+   await page.keyboard.press('Escape');
+  }
+  await nav(page, 'Настройки');
+  const settings = page.locator('.settings-dialog');
+  await expect(settings).toHaveCSS('border-width', mobile ? '0px' : '3px');
+  await expect(settings).toHaveCSS('border-style', mobile ? 'none' : 'double');
+  await page.keyboard.press('Escape');
+  await page.locator('.nr-worldpicker').click();
+  await expect(page.locator('.library-dialog')).toHaveCSS('border-width', mobile ? '0px' : '3px');
+  await page.keyboard.press('Escape');
+ }
+});
+
 test('phone dock: textarea, keyboard, viewport and safe area stay attached',async({page,request})=>{
  await seed(page,request);
  const dock=async()=>{

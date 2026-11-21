@@ -1,4 +1,4 @@
-:is(.choices, .call-suggestions) > .narrative-choice-card {
+.choices > .narrative-choice-card {
   display: grid;
   grid-template-columns: 1.45rem minmax(0, 1fr);
   align-content: center;

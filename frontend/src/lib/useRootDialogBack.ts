@@ -15,6 +15,8 @@ export function useRootDialogBack() {
     const sync = () => {
       if (consuming) return;
       const state = history.state || {};
+      // A library-to-workshop transition promotes this same entry to a route.
+      if (state.worldWorkshop) { owned = false; return; }
       const layer = topDialog() || document.querySelector<HTMLElement>('.choice-popup');
       const routed =
         state.inspectorOpen ||

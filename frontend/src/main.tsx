@@ -7,6 +7,7 @@ import "./index.css";
 import "./styles/view-controls.css";
 import "./styles/narrative-choices.css";
 import "./styles/narrative-v3.css";
+import "./styles/skin-components.css";
 // Retire client-only preferences from earlier PR builds.
 try {
   localStorage.removeItem('interface.gestures.v1');
