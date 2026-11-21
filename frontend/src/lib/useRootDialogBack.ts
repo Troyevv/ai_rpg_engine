@@ -58,6 +58,8 @@ export function useRootDialogBack() {
     };
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true });
+    const root = document.getElementById('root');
+    if (root) observer.observe(root, {childList:true});
     owned = !!history.state?.rootDialog;
     sync();
     window.addEventListener('control-layer-change', sync);

@@ -1,7 +1,6 @@
-import {RefreshRegion} from './components/ui/refresh-region';
 import { Choice } from "@/components/ui/choice";
 import { useEffect, useState } from "react";
-import { BookOpen, Plus, Upload, X } from "lucide-react";
+import { BookOpen, Plus, Upload, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { localDate } from "./dates";
 import { api } from "./api";
@@ -17,13 +16,13 @@ import {
   DialogDescription,
 } from "./components/ui/dialog";
 export function Library({
-  open,
+  open, currentWorld,
   onOpenChange,
   choose,
   prepare,
   chat,
 }: {
-  open: boolean;
+  open: boolean; currentWorld?:number;
   onOpenChange: (v: boolean) => void;
   choose: (world: number, save?: number) => void;
   prepare: () => void;
@@ -58,15 +57,19 @@ export function Library({
     if (!open)return;
     const controller=new AbortController();
     api<WorldItem[]>("/worlds",undefined,"GET",controller.signal)
-      .then(setWorlds).catch(e=>{if(!controller.signal.aborted)toast.error(e.message)});
+      .then(items=>{
+        if(controller.signal.aborted)return;
+        setWorlds(items);
+        setSelected(old=>[old,currentWorld].find(id=>items.some(w=>w.id===id))??items[0]?.id);
+      }).catch(e=>{if(!controller.signal.aborted)toast.error(e.message)});
     return ()=>controller.abort();
-  }, [open,refreshKey]);
+  }, [open,refreshKey,currentWorld]);
   useEffect(() => {
     if (open && selected) {
       const c = new AbortController();
       api<SaveItem[]>(`/worlds/${selected}/saves`, undefined, "GET", c.signal)
-        .then(setSaves)
-        .catch(() => {});
+        .then(items=>{if(!c.signal.aborted)setSaves(items)})
+        .catch(e=>{if(!c.signal.aborted)toast.error(e.message)});
       return () => c.abort();
     }
   }, [open,selected,refreshKey]);
@@ -74,12 +77,14 @@ export function Library({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="library-dialog">
         <DialogHeader>
-          <DialogTitle>Твои истории</DialogTitle>
+          <DialogTitle>Миры и прохождения</DialogTitle>
           <DialogDescription>
             Выбери мир и продолжи своё прохождение.
           </DialogDescription>
         </DialogHeader>
-        <div className="actions">
+        <div className="actions library-actions">
+          <span>{worlds.length} · Миры</span>
+          <Button size="icon" variant="ghost" aria-label="Обновить список" onClick={()=>setRefreshKey(n=>n+1)}><RefreshCw size={16}/></Button>
           {chat&&<Button variant="outline" onClick={()=>chat()}>RP-чат · кампании</Button>}
           <Button
             onClick={() => {
@@ -91,12 +96,16 @@ export function Library({
             Создать историю
           </Button>
         </div>
-        <RefreshRegion refresh={()=>setRefreshKey(n=>n+1)}>
+        <div className="library-layout">
+        {worlds.length>0&&<label className="library-world-select">Выбрать мир<Choice aria-label="Выбрать мир" value={String(selected??'')} onValueChange={id=>selectWorld(Number(id))}>
+          {worlds.map(w=><option key={w.id} value={String(w.id)}>{w.name}</option>)}
+        </Choice></label>}
         <div className="world-grid">
           {worlds.map((w) => (
             <article className="world-card-wrap" data-world-id={w.id} key={w.id}><button
               aria-label={`Открыть ${w.name}`}
               onClick={() => selectWorld(w.id)}
+              aria-pressed={selected===w.id}
               className={`world-card ${selected === w.id ? "selected" : ""}`}
             >
               <BookOpen size={23} />
@@ -108,7 +117,7 @@ export function Library({
             </button><button className="world-remove" aria-label={`Удалить ${w.name}`} disabled={busy} onClick={e=>{e.stopPropagation();setDeleting(w)}}><X size={18}/></button></article>
           ))}
         </div>
-        </RefreshRegion>
+
         {!worlds.length && (
           <p className="muted">
             Пока нет миров. Подготовь сценарий или загрузи готовую выжимку.
@@ -116,7 +125,10 @@ export function Library({
         )}
         {selected && (
           <section className="save-list">
-            <h3>Прохождения</h3>
+            <span className="eyebrow">Выбранный мир</span>
+            <div className="library-selected"><h3>{worlds.find(w=>w.id===selected)?.name}</h3>
+              <button className="library-remove" aria-label="Переместить мир в корзину" onClick={()=>setDeleting(worlds.find(w=>w.id===selected)||null)}><X size={18}/></button>
+            </div><h4>Прохождения</h4>
 
             {saves.map((s) => (
               <button key={s.id}
@@ -138,6 +150,7 @@ export function Library({
             >
               Посмотреть исходный мир
             </Button>
+            <details><summary>Новое прохождение</summary>
             <label>Режим нового прохождения<Choice aria-label="Режим нового прохождения" value={mode} onValueChange={selectedValue => setMode(selectedValue)}><option value="narrative">Narrative</option><option value="chat">RP-чат</option></Choice></label>
             <div className="actions">
               <Input
@@ -161,8 +174,10 @@ export function Library({
                 Создать прохождение
               </Button>
             </div>
+            </details>
           </section>
         )}
+        </div>
         <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div data-deleted-world-id={w.id} key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));selectWorld(w.id)})}>Восстановить</Button></div>)}</details>
         <details>
           <summary>

@@ -23,7 +23,9 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
  const check=async()=>{if(!baseline){await expect.poll(()=>page.locator('.choices button strong').allTextContents()).toEqual(choices);expect((await state()).physical_choice_source).toEqual(source)}};
  const capture=async(name:string)=>{const dir=process.env.PHONE133_EVIDENCE;if(!dir)return;mkdirSync(dir,{recursive:true});const prefix=`${baseline?'before':'after'}-${info.project.name}-${theme}-${name}`;await page.screenshot({path:join(dir,prefix+'.png'),animations:'disabled'});const x=await state();writeFileSync(join(dir,prefix+'.json'),JSON.stringify({clock:x.state.world_clock,source:x.physical_choice_source,events:x.state.phone.events,turns:x.turns.map((t:any)=>({id:t.id,kind:t.kind,choices:t.choices,presentation:t.presentation}))},null,2))};
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
+ await page.getByRole('button',{name:/^Телефон/}).click();
+ if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  for(let i=0;i<2;i++){
   await phone.getByLabel('Сообщение в телефоне').fill(i?'Спасибо. Напишу позже.':'Привет. Ты занята сегодня?');
   await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
@@ -32,9 +34,15 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
   await check();
  }
  if(!baseline){await expect(phone).not.toContainText(/История обработки|диагностика|Технические|решений за цикл|remote_semantics/);await expect(phone.locator('pre')).toHaveCount(0)}
- await capture('messages');await phone.getByRole('button',{name:'Свернуть телефон'}).click();await check();
+ await capture('messages');await page.getByRole('button',{name:'Свернуть телефон'}).click();await check();
  await expect(main).toHaveValue('Черновик основной сцены');await capture('choices');
- await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await page.getByRole('button',{name:/^Телефон/}).click();
+ if(baseline){
+   await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+   await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ } else {
+   await phone.getByRole('button',{name:/^Позвонить:/}).click();
+ }
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();await check();
  await call.getByLabel('Реплика в звонке').fill('Алло, слышишь меня?');await call.getByLabel('Сказать собеседнику').click();
  await expect(call).toContainText('Вера отвечает по телефону');await expect(call.getByRole('button',{name:'Завершить звонок',exact:true})).toBeEnabled();await check();
@@ -59,7 +67,9 @@ test('133 D: semantic failure and Retry preserve one response, one minute and ch
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
  const state=async()=>await(await request.get(`/api/saves/${s.save}`)).json();const before=await state();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
+ await page.getByRole('button',{name:/^Телефон/}).click();
+ if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Привет. Ты занята сегодня?');await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
  await expect(phone.getByRole('button',{name:'Повторить',exact:true})).toBeVisible();
  const failed=await state();expect(failed.state.world_clock.minute).toBe(before.state.world_clock.minute);expect(failed.physical_choice_source).toEqual(before.physical_choice_source);
@@ -81,6 +91,7 @@ test('133 canonical agency repair commits once without narrative confirmation',a
  const state=async()=>await(await request.get(`/api/saves/${s.save}`)).json();
  const before=await state();
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
  await expect.poll(async()=>(await state()).job?.status).toBe('saved');

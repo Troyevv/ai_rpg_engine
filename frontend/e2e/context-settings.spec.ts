@@ -8,7 +8,9 @@ test('large per-task contexts persist and resume a world rejected before the fir
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Настройки');
   await chooseOption(page.getByLabel('Провайдер summary'), 'deepseek');
+  await page.locator('.settings-connections:not([open]) > summary').click();
   await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
+  await page.getByRole('tab',{name:'Контекст',exact:true}).click();
   for (const stage of ['idea','summary','game']) {
     const auto=page.getByLabel('Автоматические лимиты '+stage);
     await auto.uncheck();
@@ -17,6 +19,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   await page.getByLabel('Контекст idea',{exact:true}).fill('262144');
   await page.getByLabel('Контекст summary',{exact:true}).fill('32768');
   await page.getByLabel('Контекст game',{exact:true}).fill('524288');
+  await page.getByRole('tab',{name:'Модели',exact:true}).click();
   await page.getByLabel('Контекст загрузки локальной модели',{exact:true}).fill('1048576');
   await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -30,13 +33,16 @@ test('large per-task contexts persist and resume a world rejected before the fir
   expect(failed.job.error).toContain('Контекст 32768');
   expect(await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json()).toHaveLength(0);
   await nav(page,'Настройки');
+  await page.getByRole('tab',{name:'Контекст',exact:true}).click();
   await page.getByLabel('Автоматические лимиты summary').locator('xpath=ancestor::section[1]').getByText('Расширенные настройки').click();
   await page.getByLabel('Контекст summary',{exact:true}).fill('262144');
   await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();await nav(page,'Настройки');
+  await page.getByRole('tab',{name:'Контекст',exact:true}).click();
   for(const [key,value] of [['idea','262144'],['summary','262144'],['game','524288']])
     await expect(page.getByLabel(`Контекст ${key}`,{exact:true})).toHaveValue(value);
+  await page.getByRole('tab',{name:'Модели',exact:true}).click();
   await expect(page.getByLabel('Контекст загрузки локальной модели',{exact:true})).toHaveValue('1048576');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
   await page.screenshot({path:`test-results/context-settings-${page.viewportSize()?.width}.png`,fullPage:true});

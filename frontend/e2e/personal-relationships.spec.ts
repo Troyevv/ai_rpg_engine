@@ -101,7 +101,7 @@ test('fresh API projections, unavailable IDs, unknown closure, rename and POV',a
   mode=next;await page.reload();await nav(page,'Персонажи');await expect(dossier(page).locator('.dossier-personal')).toContainText(expected);
   if(['missing','divorced'].includes(next))await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(0);
  }
- mode='original';await page.reload();await expect(page.locator('.pov-controls,.mobile-pov')).toBeVisible();await actor(page,'qa_vera','Вера Ларина');await nav(page,'Персонажи');await pickCharacter(page,'qa_kirill');
+ mode='original';await page.reload();await expect(page.getByLabel('Управляемый персонаж',{exact:true})).toBeVisible();await actor(page,'qa_vera','Вера Ларина');await nav(page,'Персонажи');await pickCharacter(page,'qa_kirill');
  await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(3);
  await expect(partner(page,'qa_vera')).toBeVisible();await expect(partner(page,'qa_elena')).toBeVisible();
 });

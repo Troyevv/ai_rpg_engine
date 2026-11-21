@@ -445,7 +445,7 @@
 /* #72: the same article owns the preview and committed narrative. */
 .pending-turn { margin:0 0 40px; }
 .story-scroll { overflow-anchor:none; scroll-behavior:auto; }
-@media(max-width:767px) { .pending-turn { margin-bottom:18px; } }
+@container app (max-width:680px) { .pending-turn { margin-bottom:18px; } }
 @media(prefers-reduced-motion:reduce) {
   .story .spin { animation:none; }
   .story .choices, .story .choices button { transition:none; animation:none; }

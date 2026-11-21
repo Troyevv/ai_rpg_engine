@@ -12,14 +12,15 @@ const sections = [
 const out = process.env.INSPECTOR_EVIDENCE_DIR || "../docs/manual_qa/narrative_v4/issue86-evidence";
 const capture=process.env.UI_EVIDENCE==='1';
 test.use({ video:capture?'on':'off' });
-for (const width of [1440, 768, 393, 360])
+for (const width of [1920, 1440, 768, 393, 360])
   test(`seven sections, skins, widths ${width}`, async ({
     page,
     request,
   }, info) => {
     test.skip(info.project.name !== "desktop");
     test.setTimeout(120000);
-    await page.setViewportSize({ width, height: 900 });
+    const height = width === 1920 ? 1080 : 900;
+    await page.setViewportSize({ width, height });
     const s = await (
       await request.post("/test/ui-completion-seed?checkpoint=ui-inspector")
     ).json();
@@ -40,6 +41,13 @@ for (const width of [1440, 768, 393, 360])
         const area = page.locator(".inspector-workspace");
         await expect(area).toBeVisible();
         await expect(area).toHaveAttribute("aria-label", section);
+        if (width >= 1440) {
+          const rail=page.getByRole("navigation", {name:"Главная навигация"});
+          await expect(rail.getByRole("button", {name:section, exact:true})).toHaveAttribute("aria-current","page");
+          expect(await rail.boundingBox()).toEqual({x:0,y:0,width:214,height});
+          expect(await area.boundingBox()).toEqual({x:214,y:0,width:width-214,height});
+          await expect(area.getByRole("navigation", {name:"Разделы инспектора"})).toHaveCount(0);
+        }
         await expect(area.getByRole("heading", { level: 1 })).toBeVisible();
         expect(
           await page.evaluate(

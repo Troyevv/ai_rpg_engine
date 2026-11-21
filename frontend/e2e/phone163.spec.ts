@@ -10,6 +10,7 @@ for (const mode of ['new_place','unknown_place']) test(`163 ${mode}: exchange, c
  const source=(await state()).physical_choice_source;
  await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
  await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');
@@ -27,7 +28,7 @@ for (const mode of ['new_place','unknown_place']) test(`163 ${mode}: exchange, c
   expect(after.job.error).toBeFalsy();
   expect(JSON.stringify(requests)).toContain('remote_semantics_repair');
  }
- await phone.getByRole('button',{name:'Свернуть телефон'}).click();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await nav(page,'Календарь');
  if(mode==='new_place') await expect(page.locator('.save-workspace')).toContainText('Встреча по договорённости');
  else await expect(page.locator('.save-workspace')).not.toContainText('Встреча по договорённости');

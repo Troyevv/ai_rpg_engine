@@ -189,6 +189,8 @@ def scripted_stream(**kwargs):
         if not kwargs.get('response_format'):
             yield 'Лада пришла и рассказала об открытой мастерской. Она обещала показать её герою. Следом вошёл Александр Константинович Волконский.'
             return
+    if any('TEST_CONTACT_FREE_WORLD' in message['content'] for message in kwargs['messages']):
+        phone_mode = 'silent'
     if phone_mode in ('group152', 'digital_style'):
         if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
             group_semantic_fail_once=False
@@ -421,10 +423,15 @@ def scripted_stream(**kwargs):
         voice=current_phone['communication'].get('focus')=='call'
         # AI-editor fixtures reset the optional phone scenario between tests.
         if (phone_mode or '').startswith('office'):
-            from call_continuity_fixture import response,BEFORE,AFTER
+            from call_continuity_fixture import response,BEFORE,AFTER,OFFER
             task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
             if voice:
                 value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+                if isinstance(value,dict) and phone_mode=='office' and task['player_input']==OFFER:
+                    value['choices'].extend([
+                        dict(action='Уточнить место встречи',speech='Где встретимся?',interaction_channel='call',grounding=dict(fact_ids=[],from_scene=True)),
+                        dict(action='Спросить кое-что лично',speech='',interaction_channel='call',grounding=dict(fact_ids=[],from_scene=True)),
+                    ])
                 if isinstance(value,dict) and phone_mode=='office-recovery':
                     value.pop('physical_projections',None)
                     value['choices']=[]
@@ -554,7 +561,6 @@ def scripted_stream(**kwargs):
         from test_draft_world import fixture
         candidate=fixture()
         if 'TEST_CONTACT_FREE_WORLD' in full:
-            phone_mode='silent'
             candidate['world'].pop('contacts',None)
             candidate['world']['communication']={'text_message':True,'voice_call':True,'presentation':'phone'}
         if 'TEST_MOTIVATION_OBJECTS' in full:
@@ -1611,6 +1617,8 @@ if __name__ == '__main__':
 
     @app.post('/test/seed')
     def seed():
+        global phone_mode
+        phone_mode = 'silent'
         repo = app.state.repository
         wid = repo.save_world('Тест вариантов и памяти',summary())
         sid = repo.create_save(wid,'Тестовое прохождение')

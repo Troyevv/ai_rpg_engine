@@ -130,15 +130,12 @@ test('control commit keeps actions locked until the refreshed revision arrives',
     await route.fulfill({response,json:value});
   });
   const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
-  if(await page.getByLabel('Управляемый персонаж').isVisible())await chooseOption(page.getByLabel('Управляемый персонаж'), 'character_2');
-  else{
-    await page.locator('.mobile-pov button').first().click();
-    await page.getByRole('dialog').last().getByRole('button',{name:before.state.characters.find((c:any)=>c.id==='character_2').name,exact:true}).click();
-  }
+  await chooseOption(page.getByLabel('Управляемый персонаж'), 'character_2');
   try{
     expect((await committed).ok()).toBe(true);
     await refreshing;
-    await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
+    await expect(page.getByLabel('Управляемый персонаж')).toBeDisabled();
+    if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();
     await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
   }finally{release();}
   await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeEnabled();

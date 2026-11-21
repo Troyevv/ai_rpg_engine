@@ -96,6 +96,7 @@ test('136 complete journey: arrival, interaction, threshold, call, agreement, re
  expect(threshold.state.scene_meta.present_ids).not.toContain('qa_marina');
  await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Катя',exact:true}).click();
  await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();

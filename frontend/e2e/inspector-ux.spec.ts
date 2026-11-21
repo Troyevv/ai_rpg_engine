@@ -21,7 +21,7 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
   await route.fulfill({response,json:body});
  });
  await page.goto('/');await page.locator('.breadcrumb').click();
- const library=page.locator('.library-dialog');await expect(library.locator('.world-card').first()).toBeVisible();
+ const library=page.locator('.library-dialog');await expect(width<=680?library.getByLabel('Выбрать мир'):library.locator('.world-card').first()).toBeVisible();
  await expect(library).not.toContainText('Invalid Date');
  expect(await library.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.screenshot({path:`test-results/library-${width}.png`});
@@ -60,16 +60,32 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
 });
 test('card deletion cancellation and restore',async({page,request})=>{
  const selected=await(await request.post('/test/seed')).json();
+ const world=await (await request.get('/api/worlds/'+selected.world)).json();
+ const other=await request.post('/api/worlds',{data:{name:'Соседний мир '+selected.save,markdown:world.source_md}});
+ expect(other.ok()).toBe(true);
+ const otherId=(await other.json()).id;
+ // Open the library while the current save is still loading and a newer world heads the list.
+ let release!: () => void;
+ const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route('**/api/saves/'+selected.save,async route=>{await gate;await route.continue()});
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');await page.locator('.breadcrumb').click();
- const card=page.locator(`.world-card-wrap[data-world-id="${selected.world}"]`);const name=await card.locator('strong').innerText();
- await card.locator('.world-remove').click();
- const confirmation=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:`Удалить «${name}»?`})});
- await expect(confirmation).toBeVisible();await expect(page.locator('.save-list')).toHaveCount(0);
- await confirmation.getByRole('button',{name:'Отмена',exact:true}).click();await expect(card).toBeVisible();
- await card.locator('.world-remove').click();await confirmation.getByRole('button',{name:'Удалить',exact:true}).click();
- await expect(confirmation).toHaveCount(0);await expect(card).toHaveCount(0);
+ const library=page.locator('.library-dialog');
+ const name=world.name;
+ try {
+   await expect(library.locator('.library-selected h3')).toHaveText(name);
+ } finally {release()}
+ const remove=library.getByRole('button',{name:'Переместить мир в корзину'});
+ await remove.click();
+ const confirmation=page.getByRole('dialog',{name:'Удалить «'+name+'»?'});
+ await expect(confirmation).toBeVisible();
+ await confirmation.getByRole('button',{name:'Отмена',exact:true}).click();
+ await expect(remove).toBeVisible();
+ await remove.click();await confirmation.getByRole('button',{name:'Удалить',exact:true}).click();
+ await expect(confirmation).toHaveCount(0);
+ await expect(page.locator('[data-world-id="'+selected.world+'"]')).toHaveCount(0);
+ await expect(library.locator('[data-world-id="'+otherId+'"]')).toHaveCount(1);
  await page.getByText('Удалённые выжимки',{exact:true}).click();
- await page.locator(`[data-deleted-world-id="${selected.world}"]`).getByRole('button',{name:'Восстановить',exact:true}).click();
- await expect(card).toBeVisible();
+ await page.locator('[data-deleted-world-id="'+selected.world+'"]').getByRole('button',{name:'Восстановить',exact:true}).click();
+ await expect(library.locator('.library-selected h3')).toHaveText(name);
 });

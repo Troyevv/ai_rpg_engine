@@ -12,6 +12,7 @@ for (const [width, skin] of [[360,'graphite'], [393,'parchment'], [1280,'cyberpu
     await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
     await page.goto('/');
     await nav(page,'Настройки');
+    await page.getByRole('tab',{name:'Контекст',exact:true}).click();
     const auto=page.getByLabel('Автоматические лимиты game');
     await expect(auto).toBeChecked();
     const budget=auto.locator('xpath=ancestor::section[1]');
@@ -30,6 +31,7 @@ for (const [width, skin] of [[360,'graphite'], [393,'parchment'], [1280,'cyberpu
       await page.setViewportSize({width,height:820});
     }
     await auto.check();
+    await page.getByRole('tab',{name:'Модели',exact:true}).click();
     const names=Array.from({length:42},(_,i)=>`Локальная модель ${i} с длинным описанием для проверки переноса и выбора в списке`);
     await page.route('**/api/models/list',route=>route.fulfill({json:{models:names,loaded:[]}}));
     await page.getByRole('button',{name:'Обновить список моделей'}).last().click();
@@ -43,6 +45,8 @@ for (const [width, skin] of [[360,'graphite'], [393,'parchment'], [1280,'cyberpu
     await page.screenshot({path:info.outputPath('long-list.png'),scale:'css',animations:'disabled'});
     await page.keyboard.press('Enter');
     await expect(model).toHaveJSProperty('value', names.at(-1)!);
+    await page.getByRole('tab',{name:'Контекст',exact:true}).click();
+    await budget.getByText('Расширенные настройки').click();
     await expect(page.getByLabel('Контекст game',{exact:true})).toBeDisabled();
     await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
     await gameAction(page,'Политика истории');

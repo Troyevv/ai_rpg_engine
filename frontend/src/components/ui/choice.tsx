@@ -41,7 +41,7 @@ export function Choice({value, children, onValueChange, disabled, required, opti
     <Select.Trigger {...props} data-choice="" value={value} className={`choice-trigger ${props.className || ""}`}>
       <Select.Value placeholder={isValidElement<{children?: ReactNode}>(placeholder) ? placeholder.props.children : undefined}/><Select.Icon><ChevronDown size={16}/></Select.Icon>
     </Select.Trigger>
-    <Select.Portal><Select.Content position="popper" sideOffset={4} collisionPadding={8} className="choice-popup">
+    <Select.Portal container={document.getElementById("root")}><Select.Content position="popper" sideOffset={4} collisionPadding={8} className="choice-popup">
       <Select.Viewport>{items(children,open ? optionPreview : undefined)}</Select.Viewport>
     </Select.Content></Select.Portal>
   </Select.Root>;

@@ -1,3 +1,4 @@
+import {appIsMobile} from './mobile';
 import {RefreshRegion} from './components/ui/refresh-region';
 import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ArrowLeft,ArrowDown,BookOpen,Send,Square,Plus,Settings2,FileText,GitBranch,Pencil,RefreshCw,Info,MoreHorizontal,Maximize2,Bookmark,BookmarkCheck,NotebookTabs} from 'lucide-react';
@@ -99,7 +100,7 @@ export function ChatMode({onBack,onConnections,source}:{onBack:()=>void;onConnec
     if(!panel)return;
     let frame=0;
     const reveal=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
-      if(innerWidth>=768)return;
+      if(!appIsMobile())return;
       const field=document.activeElement as HTMLElement|null;
       const body=dialogRef.current?.querySelector<HTMLElement>('.chat-dialog-body');
       if(!field||!body?.contains(field)||!field.matches('textarea,input:not([type=checkbox])'))return;

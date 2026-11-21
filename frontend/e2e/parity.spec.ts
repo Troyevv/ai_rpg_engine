@@ -12,6 +12,7 @@ test("scenario → summary → world → save → start → action → regenerat
   await nav(page,'Настройки');
   for (const key of ["idea", "summary", "game"])
     await chooseOption(page.getByLabel("Провайдер " + key), "deepseek");
+  await page.locator('.settings-connections:not([open]) > summary').click();
   await page.getByLabel("API-ключ DeepSeek").fill("fixture-key");
   await page.getByRole("button", { name: "Сохранить настройки" }).click();
   await nav(page,'Создать');
@@ -37,11 +38,13 @@ test("scenario → summary → world → save → start → action → regenerat
   await page
     .getByRole("button", { name: "Сохранить мир", exact: true })
     .click();
-  await page
-    .locator(".world-card")
-    .filter({ hasText: "Вечер в общем доме" })
-    .first()
-    .click();
+  await expect(page.locator('.library-dialog')).toBeVisible();
+  const picker=page.getByRole('combobox',{name:'Выбрать мир'});
+  if(await picker.isVisible()){
+    await picker.click();
+    await page.getByRole('option',{name:/Вечер в общем доме/}).first().click();
+  }else await page.locator('.world-card').filter({hasText:'Вечер в общем доме'}).first().click();
+  await page.locator('.save-list details > summary').click();
   await page.getByLabel("Название прохождения").fill("Первый вечер");
   await page
     .getByRole("button", { name: "Создать прохождение", exact: true })

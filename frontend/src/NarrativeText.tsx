@@ -1,3 +1,4 @@
+import {useAnimations} from './lib/animations';
 import {memo, useCallback, useEffect, useRef, useState} from 'react';
 import {useReducedMotion} from 'framer-motion';
 import {Markdown} from './Markdown';
@@ -9,7 +10,9 @@ export const NarrativeText = memo(function NarrativeText({text, complete, identi
   text:string; complete:boolean; identity:string; onPresented:(id:string)=>void;
   saveId:number; worldId:number; links:boolean; onCharacter:(id:string)=>void;
 }) {
-  const reduced=useReducedMotion();
+  const systemReduced=useReducedMotion();
+  const animations=useAnimations();
+  const reduced=systemReduced||!animations;
   const [shown,setShown]=useState(()=>complete?text:text.slice(0,Number(sessionStorage.getItem(`reveal-${identity}`)||0)));
   const visible=useRef(shown),target=useRef(text),frame=useRef(0);
   target.current=text;

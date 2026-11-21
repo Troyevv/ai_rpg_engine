@@ -99,13 +99,14 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   if (info.project.name === "mobile")
     await page.setViewportSize({ width: 393, height: 850 });
   await page.goto("/");
-  await expect(page.locator(".phone-led")).toBeVisible();
+  await expect(page.locator(".nr-unread")).toBeVisible();
   const device = page.getByTestId("phone-device");
   await device.evaluate(
     (el) => ((el as HTMLElement).dataset.identity = "same"),
   );
   await page.getByRole("button", { name: /^Телефон/ }).click();
   const phone = page.getByRole("region", { name: "Телефон персонажа" });
+  await phone.getByRole("button",{name:"Контакты",exact:true}).click();
   await phone.getByRole("button",{name:"Вера работа",exact:true}).click();
   await phone
     .locator(".phone-row")
@@ -120,14 +121,14 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
-  await phone.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
+  await page.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
   await expect(device).not.toHaveClass(/is-open/);
   await expect(device).toHaveAttribute("data-identity", "same");
   await page.getByRole("button", { name: /^Телефон/ }).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
-  await phone.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
+  await page.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
   await page.locator(".current-game-entry button").click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(device).not.toHaveClass(/is-open/);
@@ -291,7 +292,7 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
   await page.locator(".current-game-entry button").click();
   await page.keyboard.press("Escape");
   const sceneWeatherLabel = await page
-    .locator(".scene-bar .weather-badge, .mobile-scene-line .weather-badge")
+    .locator(".nr-context .weather-badge")
     .first()
     .getAttribute("aria-label");
   expect(sceneWeatherLabel).toBeTruthy();
@@ -332,8 +333,9 @@ test('phone leaves composer reachable with keyboard-sized viewport and enlarged 
   const bounds=await device.boundingBox();const composer=await page.locator('.composer').boundingBox();
   if(!bounds||!composer)return false;
   if(info.project.name==='mobile')return Math.abs(bounds.x)<1&&Math.abs(bounds.y)<1&&Math.abs(bounds.width-393)<1&&Math.abs(bounds.height-500)<1;
-  return bounds.y>=0&&bounds.y+bounds.height<=composer.y&&bounds.width<=400;
+  return bounds.y>=0&&Math.abs(bounds.y+bounds.height-500)<=1&&bounds.width===350;
  }).toBe(true);
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
  await phone.getByRole('button',{name:'Написать',exact:true}).click();
  const message=phone.getByLabel('Сообщение в телефоне');
@@ -344,10 +346,9 @@ test('phone leaves composer reachable with keyboard-sized viewport and enlarged 
   // Fullscreen phone intentionally covers Narrative; it must own pointer hits.
   expect(await narrative.evaluate(el=>{const r=el.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-testid="phone-device"]')})).toBe(true);
  }else{
-  await narrative.click({trial:true});
-  await page.getByRole('button',{name:'Отправить действие',exact:true}).click({trial:true});
+  await expect(page.locator('.narrative-shell')).toHaveJSProperty('inert',false);
  }
- await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+ await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
  await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();
  await expect(device).not.toHaveClass(/is-open/);
  await expect(narrative).toHaveValue('Черновик основной сцены');

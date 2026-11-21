@@ -137,7 +137,7 @@ for (const skin of ["graphite", "parchment"])
     const settings = page
       .getByRole("dialog")
       .filter({
-        has: page.getByRole("heading", { name: "Текущая игра", exact: true }),
+        has: page.getByRole("heading", { name: "Управление игрой", exact: true }),
       });
     await settings
       .getByRole("tablist", { name: "Разделы текущей игры" })

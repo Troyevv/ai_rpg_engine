@@ -11,6 +11,7 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  await expect(page.locator('.turn')).toHaveCount(1);
  await actor(page,'character_2','Персонаж 1');
  await expect(page.locator('.turn')).toHaveCount(1);
+ if(await page.getByLabel('Ещё действия').isVisible())await page.getByLabel('Ещё действия').click();
  await page.getByRole('button',{name:'Мир без ГГ',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.turn').last()).toContainText('За кулисами');
@@ -28,6 +29,7 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  await expect(page.locator('.choices button')).toHaveCount(0);
  await page.reload();
  await nav(page,'Настройки');
+ await page.locator('.settings-connections:not([open]) > summary').click();
  await page.getByText('Основные промпты и версии',{exact:true}).click();
  await page.getByRole('button',{name:'background_prompt.md',exact:true}).click();
  const versions=page.getByRole('dialog').last();

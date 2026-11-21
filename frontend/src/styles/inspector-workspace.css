@@ -1,7 +1,7 @@
 /* #86 uses the Skin System palette and the single #83 expansion preference.
    All content styles are scoped; dossier cards/portrait/editor styles stay in #83. */
+:root { --inspector-nav-width: 214px; }
 .narrative-shell {
-  --inspector-nav-width: 214px;
   --inspector-top-height: 64px;
 }
 .narrative-shell [hidden] {
@@ -183,7 +183,7 @@
   white-space: nowrap;
   margin-top: 2px;
 }
-@media (min-width: 768px) and (max-width: 900px) {
+@container app (min-width:681px) and (max-width: 900px) {
   .narrative-shell .nav-rail .brand {
     font-size: 10px;
     letter-spacing: 1px;
@@ -874,7 +874,7 @@
   }
 }
 @media (max-width: 1100px) {
-  .narrative-shell {
+  :root {
     --inspector-nav-width: 190px;
   }
   .inspector-scroll {
@@ -888,7 +888,7 @@
   }
 }
 @media (max-width: 850px) {
-  .narrative-shell {
+  :root {
     --inspector-nav-width: 175px;
   }
   .narrative-shell .nav-rail {
@@ -919,7 +919,7 @@
     flex-basis: calc(100% - 104px);
   }
 }
-@media (max-width: 767px) {
+@container app (max-width:680px) {
   .narrative-shell {
     --inspector-nav-width: 0px;
     --inspector-top-height: 56px;
@@ -1081,7 +1081,7 @@
 .inspector-timeline-time svg {
   color: var(--accent);
 }
-@media (max-width: 767px) {
+@container app (max-width:680px) {
   .inspector-timeline-event {
     padding-left: 16px;
     gap: 8px;

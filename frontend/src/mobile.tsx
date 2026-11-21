@@ -1,16 +1,25 @@
 import {inspectorSections,it,panelLabel,type Panel} from './lib/inspector';
 import {gameLocale,profileDate} from './gameDate';
 import {CharacterAvatar} from './Portrait';
-import {SceneClock} from './SceneClock';
 import {useEffect,useState,useRef} from 'react';
 import {CalendarDays,BookOpen,GitBranch,Menu,Settings2,Feather,Eye,ArrowRight,X} from 'lucide-react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogClose} from './components/ui/dialog';
 import {Button} from './components/ui/button';
-import type {Save,Scene,World} from './types';
+import type {Save,World} from './types';
 
+export function appIsMobile(){
+ return (document.getElementById('root')?.clientWidth || window.innerWidth)<=680;
+}
 export function useMobile(){
- const [mobile,set]=useState(()=>matchMedia('(max-width:767px)').matches);
- useEffect(()=>{const q=matchMedia('(max-width:767px)');const change=()=>set(q.matches);q.addEventListener('change',change);return()=>q.removeEventListener('change',change)},[]);
+ const [mobile,set]=useState(appIsMobile);
+ useEffect(()=>{
+   const root=document.getElementById('root');
+   if(!root)return;
+   const update=()=>set(appIsMobile());
+   const observer=new ResizeObserver(update);
+   observer.observe(root);update();
+   return ()=>observer.disconnect();
+ },[]);
  return mobile;
 }
 export function useMobileViewport(mobile:boolean){
@@ -24,7 +33,7 @@ export function useMobileViewport(mobile:boolean){
    document.documentElement.classList.toggle('keyboard-open',typing&&baseline-height>100);
   };
   update();vv?.addEventListener('resize',update);vv?.addEventListener('scroll',update);window.addEventListener('resize',update);document.addEventListener('focusin',update);document.addEventListener('focusout',update);
-  return()=>{vv?.removeEventListener('resize',update);vv?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);document.documentElement.classList.remove('keyboard-open')};
+  return()=>{vv?.removeEventListener('resize',update);vv?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);document.documentElement.classList.remove('keyboard-open');document.documentElement.style.removeProperty('--app-height');document.documentElement.style.removeProperty('--app-top')};
  },[mobile]);
 }
 const menuCopy = {
@@ -89,17 +98,4 @@ export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,
  <button role="switch" aria-checked={reading} onClick={toggleReading}><Eye aria-hidden="true"/><span>{copy.reading}</span><span className="mobile-menu-switch" aria-hidden="true"/></button>
  </div></section>
  </nav></div></DialogContent></Dialog></>;
-}
-export function MobileScene({save,meta,busy,switchActor,background,openCharacter,openCamera}:{openCamera:()=>void;save:Save;meta?:Scene;busy:boolean;switchActor:(id:string,source?:number)=>void;background:()=>void;openCharacter:(id:string)=>void}){
- const [sheet,setSheet]=useState<'pov'|'scene'|null>(null);
- const main=save.state.protagonist_id||save.state.characters.find(c=>c.is_player)?.id;
- const actor=save.state.controlled_actor_id===undefined?main:save.state.controlled_actor_id;
- const name=(id?:string|null)=>save.state.characters.find(c=>c.id===id)?.name.replace(' (ГГ)','')||'Персонаж';
- const nearby=meta?.present_ids.filter(id=>id!==actor)||[];
- return <div className="mobile-context">
- <div className="mobile-pov"><button disabled={busy} onClick={()=>setSheet('pov')}>{actor===null?"Наблюдение":name(actor)} ▾</button><button disabled={busy||!save.turns.length} onClick={background}>Мир без ГГ</button><button aria-label="Камера и журнал мира" onClick={openCamera}>◎</button></div>
- <button className="mobile-scene-line" onClick={()=>setSheet('scene')}><SceneClock save={save} fallback={meta?.time}/> · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
- <Dialog open={!!sheet} onOpenChange={v=>{if(!v)setSheet(null)}}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>{sheet==='pov'?'За кого играть':'Текущая сцена'}</DialogTitle><DialogDescription>{sheet==='pov'?'Переход откроет сцену персонажа и варианты действий.':`${meta?.time||''} · ${meta?.location||''}`}</DialogDescription></DialogHeader>
- {sheet==='pov'?<div className="actor-list">{actor!==main&&<Button disabled={busy} onClick={()=>{setSheet(null);switchActor(main!)}}>Вернуться к {name(main)}</Button>}{save.state.characters.map(c=><button key={c.id} disabled={busy||c.id===actor} onClick={()=>{setSheet(null);switchActor(c.id)}}>{name(c.id)}{c.id===main?' (ГГ)':''}{c.id===actor?' · сейчас':''}</button>)}</div>:<><Button onClick={()=>{setSheet(null);window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}}>Открыть календарь</Button><p>{save.state.scene}</p><div className="actor-list">{nearby.map(id=><button key={id} onClick={()=>{setSheet(null);openCharacter(id)}}>{name(id)}</button>)}</div></>}
- </DialogContent></Dialog></div>;
 }

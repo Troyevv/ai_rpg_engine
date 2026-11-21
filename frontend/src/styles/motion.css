@@ -49,7 +49,7 @@
 
 summary::before { transition:transform var(--transition-fast); }
 .inspect-reveal[open] > .inspect-detail,.workshop-detail[open] > p { animation:fade var(--transition-fast) ease-out; }
-@media(max-width:767px) {
+@container app (max-width:680px) {
  .dialog-content[data-state=open] { animation-name:sheet-in; }
  .dialog-content[data-state=closed] { animation-name:sheet-out; }
 }

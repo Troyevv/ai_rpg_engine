@@ -15,7 +15,7 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(story).toContainText('пока не стучит');await expect(page.locator('.choices')).toContainText('Посмотреть на часы');
  await input.fill('Черновик физического действия');await capture('before');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  const before=await state();const start=before.state.world_clock.minute;
  const speech=async(text:string)=>{await call.getByLabel('Реплика в звонке').fill(text);await call.getByLabel('Сказать собеседнику').click()};
@@ -27,6 +27,11 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(story).not.toContainText('Да, договорились');
  await expect(page.locator('.choices')).toContainText('ответить Виктории');
  await expect(call).not.toContainText('Виктория трижды стучит');await capture('during-call');
+ const options=call.getByRole('group',{name:'Варианты продолжения звонка'});
+ await expect(options.getByRole('button')).toHaveCount(2);
+ await options.getByRole('button',{name:/Уточнить место встречи/}).click();
+ await expect(call.getByLabel('Реплика в звонке')).toHaveValue('Уточнить место встречи: «Где встретимся?»');
+ await expect(page.locator('.choices')).not.toContainText('Уточнить место встречи');
  await call.getByLabel('Свернуть звонок').click();await expect(input).toHaveValue('Черновик физического действия');await capture('during-physical');
  await page.getByRole('button',{name:/Вернуться к звонку/}).click();await speech('Я скоро освобожусь.');
  await expect.poll(async()=>(await state()).job.status).toBe('saved');
@@ -60,7 +65,7 @@ for(const mode of ['office-recovery','office-rejected'])test(`optional call extr
  const seed=await(await request.post(`/test/phone-seed?incoming=false&decision=${mode}`)).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);await page.goto('/');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
  await call.getByLabel('Реплика в звонке').fill('Встретимся через час?');await call.getByLabel('Сказать собеседнику').click();
  await expect.poll(async()=>(await(await request.get(`/api/saves/${seed.save}`)).json()).job.status).toBe('saved');

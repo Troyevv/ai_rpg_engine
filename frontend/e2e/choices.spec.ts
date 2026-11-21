@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {scrollByTouch} from './touch';
+import repair from '../../tests/fixtures/choice_speech/repair.json' with {type: 'json'};
 
 test('choice proposals survive reload without committing action; free input remains available',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -51,7 +52,7 @@ test('touch scrolls through ten proposals and back to the story without selectin
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');
  const cards=page.locator('.choices button'), story=page.locator('.story-scroll');
- const toggle=page.locator('.action-panel-toggle').first(), panel=toggle.locator('..');
+ const panel=page.locator('.story .action-panel').first(), toggle=panel.locator('.action-panel-toggle');
  const draft=page.getByLabel('Своё действие или реплика');
  await expect(cards).toHaveCount(10);
  await cards.first().evaluate(el=>el.scrollIntoView({block:'start'}));
@@ -178,4 +179,54 @@ test('proposal types, confirmation, exact editable speech and a single pending s
   await expect(draft).toHaveValue(exact);
   await expect(spoken).toHaveAttribute('aria-pressed','true');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test('six Narrative choices form equal-height pairs and collapse to one column', async ({page, request}, info) => {
+  const selection = await (await request.post('/test/choices-seed')).json();
+  const path = '/api/saves/' + selection.save;
+  const save = await (await request.get(path)).json();
+  const choices = repair.actions.map(a => ({action: a.text, speech: a.speech || ''}));
+  save.turns.find((t: {id: number}) => t.id === save.physical_choice_source.turn_id).choices = choices;
+  await page.route('**' + path, route => route.fulfill({json: save}));
+  await page.addInitScript(s => localStorage.setItem('selection', JSON.stringify(s)), selection);
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto('/');
+  const cards = page.locator('.choices').getByRole('button');
+  await expect(cards.locator('strong')).toHaveText(choices.map(c => c.action));
+  await expect(cards.locator('.choice-speech')).toHaveText(choices.flatMap(c => c.speech ? ['«' + c.speech + '»'] : []));
+
+  for (const width of info.project.name === 'desktop' ? [1440, 1024, 850, 1440] : [390, 320]) {
+    await page.setViewportSize({width, height: 900});
+    const columns = width > 850 ? 2 : 1;
+    await expect(async () => {
+      const {boxes, gap, clipped} = await cards.evaluateAll(nodes => ({
+        boxes: nodes.map(n => n.getBoundingClientRect().toJSON()),
+        gap: parseFloat(getComputedStyle(nodes[0].parentElement!).rowGap),
+        clipped: nodes.some(n => n.scrollHeight > n.clientHeight || n.scrollWidth > n.clientWidth),
+      }));
+      expect(clipped).toBe(false);
+      for (let i = 0; i < boxes.length; i += columns) {
+        const first = boxes[i];
+        expect(first.left).toBeCloseTo(boxes[0].left, 1);
+        if (i) expect(first.top - boxes[i - columns].bottom).toBeCloseTo(gap, 1);
+        if (columns === 2) {
+          const second = boxes[i + 1];
+          expect(second.left - first.right).toBeCloseTo(gap, 1);
+          expect(second.width).toBeCloseTo(first.width, 1);
+          expect(second.top).toBeCloseTo(first.top, 1);
+          expect(second.bottom).toBeCloseTo(first.bottom, 1);
+        }
+      }
+    }).toPass({timeout: 5000});
+  }
+
+  await cards.first().focus();
+  for (let i = 1; i < choices.length; i++) {
+    await page.keyboard.press('Tab');
+    await expect(cards.nth(i)).toBeFocused();
+  }
+  await page.keyboard.press('Enter');
+  await expect(cards.last()).toHaveAttribute('aria-pressed', 'true');
+  const last = choices.at(-1)!;
+  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue(last.action + ': «' + last.speech + '»');
 });

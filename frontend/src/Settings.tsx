@@ -1,3 +1,5 @@
+import { SectionTabs } from "./components/ui/section-tabs";
+import { useAnimations, setAnimations } from "./lib/animations";
 import { ModelBudget } from "./ModelBudget";
 import { Choice } from "@/components/ui/choice";
 import {ThemeSelector} from "./ThemeProvider";
@@ -30,6 +32,8 @@ export function Settings({
   apiKey: string;
   setApiKey: (v: string) => void;
 }) {
+  const [tab, setTab] = useState('models');
+  const animations = useAnimations();
   const [draft, setDraft] = useState(value);
   const [models, setModels] = useState<Partial<Record<ModelConfig["provider"],string[]>>>({});
   const [loaded, setLoaded] = useState<string[]>([]);
@@ -76,6 +80,11 @@ export function Settings({
             Модели работают за сценой. Здесь можно настроить каждую задачу.
           </DialogDescription>
         </DialogHeader>
+        <SectionTabs tablist panelId="settings-panel" label="Разделы настроек" value={tab} onChange={setTab}
+          items={[{id:'models',label:'Модели'},{id:'context',label:'Контекст'},{id:'appearance',label:'Оформление'}]}/>
+        <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-panel-tab-${tab}`} className="settings-scroll">
+        {tab==='models'&&<>
+        <details className="settings-connections"><summary>Подключения</summary>
         <details><summary>Основные промпты и версии</summary>{promptNames.map(name=><Button key={name} size="sm" variant="ghost" onClick={()=>setPrompt(name)}>{name}</Button>)}</details>
         <Versions kind="prompt" owner={prompt} open={!!prompt} close={()=>setPrompt("")}/>
         <label>
@@ -95,6 +104,7 @@ export function Settings({
           const status = await api<{deepseek:boolean}>("/credentials/deepseek",undefined,"DELETE");
           setStored(status.deepseek); setApiKey(""); toast.success(status.deepseek ? "Сохранённый ключ удалён; ключ окружения остаётся доступен" : "Ключ удалён");
         })}>Удалить сохранённый ключ</Button>}
+        </details>
         {(["idea", "summary", "game"] as const).map((key, index) => (
           <fieldset key={key}>
             <legend>
@@ -132,10 +142,6 @@ export function Settings({
                 <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется. {key==='summary' && 'При чтении нового мира используется выбранный доступный режим.'}</span>
               </label>}
             </div>
-            <ModelBudget stage={key} value={draft[key]} change={patch=>update(key,patch)}/>
-            {key==="game" && <details><summary>Память истории</summary>
-              <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
-            </details>}
             <Button
               variant="outline"
               size="sm"
@@ -267,7 +273,17 @@ export function Settings({
               : "Статус появится после обновления списка или загрузки."}
           </p>
         </fieldset>
-        <details className="theme-disclosure"><summary>Тема мира</summary><ThemeSelector/></details>
+        </>}
+        {tab==='context'&&(['idea','summary','game'] as const).map((key,i)=><fieldset key={key}>
+          <legend>{['Сценарист','Генератор мира и выжимки','Ведущий'][i]}</legend>
+            <ModelBudget stage={key} value={draft[key]} change={patch=>update(key,patch)}/>
+            {key==="game" && <details><summary>Память истории</summary>
+              <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
+            </details>}
+        </fieldset>)}
+        {tab==='appearance'&&<>
+        <label className="check"><input type="checkbox" checked={animations} onChange={e=>setAnimations(e.target.checked)}/>Плавные анимации</label>
+        <details open className="theme-disclosure"><summary>Тема мира</summary><ThemeSelector/></details>
         <fieldset>
           <legend>Чтение</legend>
           {(["font_size", "line_height", "reading_width"] as const).map(
@@ -279,7 +295,7 @@ export function Settings({
                   type="range"
                   min={[14, 1.3, 600][i]}
                   max={[24, 2.2, 1100][i]}
-                  step={[1, 0.1, 50][i]}
+                  step={[1, 0.1, 10][i]}
                   value={draft[key]}
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, [key]: +e.target.value }))
@@ -299,6 +315,7 @@ export function Settings({
             Ссылки на персонажей в истории
           </label>
         </fieldset>
+        </>}</div>
         <div className="actions sticky-actions">
           <Button
             disabled={busy}

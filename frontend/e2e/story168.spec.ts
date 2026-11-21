@@ -102,11 +102,11 @@ test('phone reading queues a disclosure until the phone closes; first dossier vi
  await page.locator('.phone-peek').click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  const committed=page.waitForResponse(r=>r.url().endsWith(`/saves/${s.save}/phone`)&&r.request().method()==='POST');
- await phone.locator('.phone-notifications button').first().click();
+ await phone.locator('button.phone-thread').filter({has:page.getByLabel(/^Непрочитано:/)}).first().click();
  expect((await committed).ok()).toBe(true);
  await expect(phone).toContainText('Я написала роман.');
  await expect(page.locator('.story-toast')).toHaveCount(0);
- await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+ await page.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
  await expect(page.locator('.story-toast')).toContainText('Раскрыта тайна');
  if(process.env.STORY168_VISUAL)await page.screenshot({animations:'disabled',path:`/tmp/story168-${info.project.name}-toast.png`});
  await page.locator('.story-toast-body button').click();

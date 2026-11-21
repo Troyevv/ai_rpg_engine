@@ -53,10 +53,6 @@ test('diagnostic tabs use persisted turn timing and requests; old turns stay rea
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- await expect(page.locator('.turn-timing')).toContainText('Время хода:');
- await page.locator('.turn-timing summary').click();
- await expect(page.locator('.turn-timing')).toContainText('Извлечение состояния');
- await expect(page.locator('.turn-timing')).not.toContainText('Фоновая симуляция');
  await diagnostics(page);
  const dialog=page.getByRole('dialog');
  await expect(dialog.getByRole('heading',{name:'Диагностика',exact:true})).toBeVisible();
