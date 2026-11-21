@@ -51,7 +51,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   if(!baseline&&length===700&&info.project.name==='mobile'){
     await page.locator('[data-mobile-menu-trigger]').tap();
     await expect(page.locator('.mobile-game-menu')).toBeVisible();
-    await page.locator('.mobile-game-menu .dialog-close').tap();
+    await page.locator('.mobile-menu-close').tap();
     await expect(page.locator('.mobile-game-menu')).toHaveCount(0);
     await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик во время генерации');
   }

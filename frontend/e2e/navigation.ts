@@ -18,7 +18,11 @@ export async function nav(page:Page,name:string){
  if(await page.locator('[data-mobile-menu-trigger]:visible').count()){
   await expect(page.getByRole('dialog')).toHaveCount(0);
   if(name==='Режим чтения'||name==='Выйти из чтения')await page.getByLabel('Ещё действия').click();
-  else await page.getByRole('button',{name:'Меню игры'}).click();
+  else {
+   await page.getByRole('button',{name:'Меню игры'}).click();
+   if(name==='Создать')name='Создать мир';
+   if(name==='Игра'){await page.locator('.mobile-menu-resume').click();return}
+  }
 
  }
  await page.getByRole('button',{name,exact:true}).last().click();

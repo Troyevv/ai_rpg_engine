@@ -278,14 +278,6 @@ html:not([data-theme=graphite]) {
 #root .nr-jump {z-index:2}
 html[data-no-motion] *,html[data-no-motion] *::before,html[data-no-motion] *::after {transition-duration:0s!important;animation-duration:0s!important;scroll-behavior:auto!important}
 .dialog-content.reading-display {width:min(340px,100%);padding:24px;border-radius:12px}
-.dialog-content.narrative-drawer {position:fixed;top:0;left:0;bottom:0;right:auto;transform:none;width:min(250px,calc(100% - 44px));height:var(--app-height,100dvh);max-height:100%;padding:0;overflow:auto;border-radius:0;background:var(--bg-subtle)}
-.narrative-drawer .nav-rail {width:100%;height:auto;min-height:100%;padding:18px 12px;display:flex;align-items:stretch;flex-direction:column}
-.narrative-drawer .brand,.narrative-drawer .nav-links,.narrative-drawer .nav-settings {display:flex}
-.narrative-drawer .brand {width:auto;justify-content:flex-start;height:44px;gap:9px;border:0;align-items:center;margin:0 0 16px;font-size:12px}
-.narrative-drawer .nav-links {flex-direction:column}
-.narrative-drawer .nav-links button,.narrative-drawer .nav-settings {display:flex;flex-direction:row;gap:10px;text-align:left;min-height:44px;padding:8px;font-size:13px}
-.narrative-drawer .nav-rail span {display:inline}
-.narrative-drawer .nav-rail svg {width:16px;height:16px}
 @container app (max-width:680px) {#root .narrative-shell {--inspector-nav-width:0px}}
 
 #root .settings-dialog:has(.settings-scroll) {display:flex;flex-direction:column;gap:16px;overflow:hidden}
@@ -349,11 +341,6 @@ html[data-hide-turn-times] .turn-clock {display:none}
  .rp-chat-stage {padding:0}
  .rp-chat-stage .chat-mode {width:100%;border:0;border-radius:0}
 }
-@keyframes narrative-nav-in {from{transform:translateX(-102%)}to{transform:translateX(0)}}
-@media(prefers-reduced-motion:no-preference){
- .narrative-drawer[data-state=open] {animation:narrative-nav-in .28s cubic-bezier(.22,.8,.2,1)}
- .narrative-drawer[data-state=closed] {animation:narrative-nav-in .22s cubic-bezier(.22,.8,.2,1) reverse}
-}
 #root .library-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start}
 #root .library-layout .world-grid {grid-template-columns:minmax(0,1fr)}
 #root .library-dialog .world-card {min-height:146px;gap:10px}
@@ -374,7 +361,7 @@ html[data-hide-turn-times] .turn-clock {display:none}
  #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay {background:transparent;backdrop-filter:none}
  #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-overlay::before {content:"";position:absolute;inset:0 0 0 170px;background:#07090db8;backdrop-filter:blur(3px);pointer-events:none}
  #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) :is(.library-dialog,.settings-dialog,.current-game-panel) {left:calc(50% + 85px);width:min(920px,calc(100% - 218px));max-width:none}
- #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-content:not(.reading-display,.narrative-drawer) {left:calc(50% + 85px);max-width:calc(100% - 202px)}
+ #root:has(.narrative-shell:not(.reading,.workshop-open)):not(:has(.rp-chat-stage)) .dialog-content:not(.reading-display) {left:calc(50% + 85px);max-width:calc(100% - 202px)}
  #root .inspector-backdrop {left:170px;backdrop-filter:blur(3px)}
 }
 @container app (max-width:680px){

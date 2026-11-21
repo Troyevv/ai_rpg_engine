@@ -258,7 +258,11 @@ export default function App() {
           <span>{tr('Настройки','Settings')}</span>
         </button>
       </nav>);
-  const menu=<MobileNavigation open={mobileMenu} setOpen={setMobileMenu}>{navigation}</MobileNavigation>;
+  const menu=<MobileNavigation
+    activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu}
+    world={world} save={save} go={navigate} inspect={inspect} settings={()=>setSettings(true)}
+    reading={reading} toggleReading={()=>setReading(!reading)}
+  />;
   return (
     <PortraitModels.Provider value={{prefs,apiKey}}><ThemeProvider world={chatOpen?null:world} preview={chatOpen||view==='prepare'}><ThemedToaster/><div inert={chatOpen} className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
       {!mobile&&navigation(action=>action())}

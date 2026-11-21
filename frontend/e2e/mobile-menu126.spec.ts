@@ -22,13 +22,19 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await expect(page.getByRole('button',{name:'К последнему ответу'})).toBeVisible();
  const top=await page.locator('.story-scroll').evaluate(el=>el.scrollTop);
  for(const section of ['Мир','Сцена','Персонажи','Отношения','Сюжет','Память','Тайны']){
-  await nav(page,section);await expect(page.locator('.inspector-workspace')).toBeVisible();
+  const palette=await menu(page);
+  await palette.locator('.mobile-menu-card').getByText(section,{exact:true}).click();
+  await expect(page.locator('.inspector-workspace')).toBeVisible();
   await expect(page.locator('.inspector-workspace')).toHaveAttribute('aria-label',section);
  }
+ await menu(page);await page.evaluate(()=>history.back());
+ await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.inspector-workspace')).toBeVisible();
  await page.evaluate(()=>history.back());await expect(page.locator('.inspector-workspace')).toBeHidden();
  for(const section of ['Календарь','Родословная']){
-  await nav(page,section);await expect(page.locator('.save-workspace h1')).toHaveText(section);
+  const palette=await menu(page);
+  await palette.locator('.mobile-menu-card').getByText(section,{exact:true}).click();
+  await expect(page.locator('.save-workspace h1')).toHaveText(section);
   await expect(page.locator('.save-workspace')).toHaveCount(1);
   await page.keyboard.press('Escape');
   await expect(page.locator('.save-workspace')).toHaveCount(0);
@@ -62,9 +68,9 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await nav(page,'Создать');await expect(page.locator('.world-workshop')).toBeVisible();
  await nav(page,'Игра');await expect(page.locator('.game')).toBeVisible();
  await nav(page,'Настройки');await expect(page.locator('.settings-dialog')).toBeVisible();await page.keyboard.press('Escape');
- await nav(page,'Режим чтения');
- await expect(page.locator('.app-shell')).toHaveClass(/reading/);
- await nav(page,'Выйти из чтения');
+ await menu(page);const reading=page.getByRole('switch',{name:'Режим чтения'});
+ await expect(reading).toHaveAttribute('aria-checked','false');await reading.click();await expect(reading).toHaveAttribute('aria-checked','true');await reading.click();
+ await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Неотправленный черновик');
  expect(await page.locator('.story-scroll').evaluate(el=>el.scrollTop)).toBe(top);
  await menu(page);await page.keyboard.press('Escape');
@@ -75,22 +81,22 @@ test('menu: five widths, skins, low viewport and no legacy entries',async({page,
  const selected=await seed(page,request);
  for(const skin of ['graphite','parchment']){
   await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});await page.reload();
-  for(const width of [320,360,393,412,430]){
+  for(const width of [320,360,390,412,430]){
    await page.setViewportSize({width,height:720});const dialog=await menu(page);
-   await expect.poll(async()=>(await dialog.boundingBox())!.x).toBe(0);
-   const rect=await dialog.boundingBox();expect(rect!.x).toBe(0);expect(rect!.y).toBe(0);expect(rect!.width).toBe(250);expect(rect!.height).toBe(720);
+   await expect.poll(async()=>(await dialog.boundingBox())!.y).toBe(0);
+   const rect=await dialog.boundingBox();expect(rect!.x).toBe(0);expect(rect!.y).toBe(0);expect(rect!.width).toBe(width);expect(rect!.height).toBe(720);
    expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
    await expect(dialog.getByRole('button',{name:/Ветки|Tabletop|Настольная/})).toHaveCount(0);
-   await expect(dialog.locator('.inspector-nav-group button')).toHaveCount(9);
+   await expect(dialog.locator('.mobile-menu-card')).toHaveCount(9);
    for(const button of await dialog.locator('button').all()){
     const box=await button.boundingBox();if(box)expect(box.height).toBeGreaterThanOrEqual(44);
    }
-   if(process.env.MENU_QA&&width===393&&info.project.name==='mobile')await page.screenshot({path:`/tmp/menu126-${skin}.png`});
+   if(process.env.MENU_QA&&width===390&&info.project.name==='mobile')await page.screenshot({path:`/tmp/menu126-${skin}.png`});
    await page.keyboard.press('Escape');
   }
  }
  await page.setViewportSize({width:320,height:420});const dialog=await menu(page);
- await dialog.locator('.nav-settings').scrollIntoViewIfNeeded();await expect(dialog.locator('.nav-settings')).toBeInViewport();
+ await dialog.getByRole('switch').scrollIntoViewIfNeeded();await expect(dialog.getByRole('switch')).toBeInViewport();
  await page.keyboard.press('Escape');
 });
 
@@ -144,7 +150,8 @@ test('menu: empty save and English focus/keyboard controls',async({page})=>{
  await page.evaluate(()=>document.documentElement.lang='en');
  await page.getByRole('button',{name:'Game menu'}).click();
  const dialog=page.getByRole('dialog',{name:'Game menu'});
- await expect(dialog.locator('.inspector-nav-group button:disabled')).toHaveCount(9);
+ await expect(dialog).toContainText('No world selected');await expect(dialog).toContainText('No active playthrough');
+ await expect(dialog.locator('.mobile-menu-card:disabled')).toHaveCount(9);
  await expect(dialog.getByRole('button',{name:'Create world'})).toBeEnabled();
  await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Game menu'})).toBeFocused();
@@ -164,14 +171,13 @@ test('menu summary follows controlled actor rather than POV; all skin bases and 
  for(const skin of ['cyberpunk','industrial','medieval','arcane','street','noir','terminal','biotech','retro']){
   await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});
   await page.reload();const dialog=await menu(page);
-  await expect(dialog.locator('.inspector-world-label')).toContainText('Очень длинное название мира');
+  await expect(dialog.locator('.mobile-menu-resume')).toContainText('Без управляемого персонажа');
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   await page.keyboard.press('Escape');
-  await expect(page.getByLabel('Управляемый персонаж')).toContainText('Наблюдение');
  }
  actorId='controlled';await page.reload();const dialog=await menu(page);
- await page.keyboard.press('Escape');
- await expect(page.getByLabel('Управляемый персонаж')).toContainText(actorName);
+ await expect(dialog.locator('.mobile-menu-resume')).toContainText(actorName);
+ await expect(dialog.locator('.mobile-menu-resume')).not.toContainText('Без управляемого персонажа');
 });
 
 test('library refresh and nested Back preserve the selected world and the game draft', async ({page, request}) => {
