@@ -62,6 +62,13 @@
 #root .choice-count {padding:1px 6px;font-size:10px;background:var(--v3-panel, #272c32);color:var(--v3-muted, #a8b0ba);border-radius:5px;font-weight:400}
 #root .choice-level {font-size:11px;font-weight:400;color:var(--v3-muted, #89939f);margin-left:3px}
 #root .choices {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+@container app (width > 850px) {
+  #root .choices[data-packed] > .narrative-choice-card {
+    grid-row: 1;
+    grid-column: var(--choice-column);
+    margin-block-start: var(--choice-offset);
+  }
+}
 #root .choices > .narrative-choice-card {display:grid;grid-template-columns:24px minmax(0,1fr);gap:11px;align-items:start;align-self:start;min-height:60px;min-width:0;padding:14px 15px;text-align:left;background:var(--v3-panel, #1d2125);border:1px solid var(--v3-line, #353a40);border-radius:10px;box-shadow:0 1px 0 #ffffff03;transition:background-color .16s,border-color .16s,transform .12s}
 #root .choice-mark {display:grid;place-items:center;width:24px;height:24px;margin-top:1px;background:var(--v3-panel, #393226);border:1px solid var(--v3-line, #4a4030);color:var(--v3-text, #d7bd83);border-radius:7px}
 #root .choice-mark svg {width:15px;height:15px}

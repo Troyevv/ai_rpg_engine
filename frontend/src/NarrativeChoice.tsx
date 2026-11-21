@@ -1,10 +1,47 @@
 import { Check, ArrowUpRight, LoaderCircle, MessageCircle } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useLayoutEffect, type ReactElement, type RefObject } from 'react';
 import type { Choice } from './types';
 
 export function choiceText({ action, speech }: Choice) {
   if (!speech || !action) return action || speech;
   return action + (action.trimEnd().endsWith(':') ? ' ' : ': ') + '«' + speech + '»';
+}
+
+export function NarrativeChoiceList({ ref, children }: {
+  ref: RefObject<HTMLDivElement | null>;
+  children: ReactElement[];
+}) {
+  const count = children.length;
+  useLayoutEffect(() => {
+    const list = ref.current;
+    if (!list || !count) return;
+    const cards = Array.from(list.children) as HTMLButtonElement[];
+
+    const pack = () => {
+      const style = getComputedStyle(list);
+      if (style.gridTemplateColumns.split(' ').length !== 2) return;
+      const gap = parseFloat(style.rowGap);
+      const heights = cards.map(card => card.getBoundingClientRect().height);
+      const nextTop = [0, 0];
+
+      // Place in reading order. Margins in one grid row give the list its natural height.
+      cards.forEach((card, i) => {
+        const column = nextTop[0] <= nextTop[1] ? 0 : 1;
+        card.style.setProperty('--choice-column', String(column + 1));
+        card.style.setProperty('--choice-offset', nextTop[column] + 'px');
+        nextTop[column] += heights[i] + gap;
+      });
+      list.dataset.packed = '';
+    };
+
+    pack();
+    const observer = new ResizeObserver(pack);
+    observer.observe(list);
+    cards.forEach(card => observer.observe(card, { box: 'border-box' }));
+    return () => observer.disconnect();
+  }, [ref, count]);
+
+  return <div className="choices" ref={ref}>{children}</div>;
 }
 
 type CardProps = {
