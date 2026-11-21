@@ -386,7 +386,7 @@ export default function App() {
         apiKey={apiKey}
         setApiKey={setApiKey}
       />
-      <Library currentWorld={world?.id}
+      <Library currentWorld={selection.world}
         open={library}
         onOpenChange={setLibrary}
         choose={choose}

@@ -60,10 +60,21 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
 });
 test('card deletion cancellation and restore',async({page,request})=>{
  const selected=await(await request.post('/test/seed')).json();
+ const world=await (await request.get('/api/worlds/'+selected.world)).json();
+ const other=await request.post('/api/worlds',{data:{name:'Соседний мир '+selected.save,markdown:world.source_md}});
+ expect(other.ok()).toBe(true);
+ const otherId=(await other.json()).id;
+ // Open the library while the current save is still loading and a newer world heads the list.
+ let release!: () => void;
+ const gate=new Promise<void>(resolve=>{release=resolve});
+ await page.route('**/api/saves/'+selected.save,async route=>{await gate;await route.continue()});
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');await page.locator('.breadcrumb').click();
  const library=page.locator('.library-dialog');
- const name=await library.locator('.library-selected h3').innerText();
+ const name=world.name;
+ try {
+   await expect(library.locator('.library-selected h3')).toHaveText(name);
+ } finally {release()}
  const remove=library.getByRole('button',{name:'Переместить мир в корзину'});
  await remove.click();
  const confirmation=page.getByRole('dialog',{name:'Удалить «'+name+'»?'});
@@ -73,6 +84,7 @@ test('card deletion cancellation and restore',async({page,request})=>{
  await remove.click();await confirmation.getByRole('button',{name:'Удалить',exact:true}).click();
  await expect(confirmation).toHaveCount(0);
  await expect(page.locator('[data-world-id="'+selected.world+'"]')).toHaveCount(0);
+ await expect(library.locator('[data-world-id="'+otherId+'"]')).toHaveCount(1);
  await page.getByText('Удалённые выжимки',{exact:true}).click();
  await page.locator('[data-deleted-world-id="'+selected.world+'"]').getByRole('button',{name:'Восстановить',exact:true}).click();
  await expect(library.locator('.library-selected h3')).toHaveText(name);
