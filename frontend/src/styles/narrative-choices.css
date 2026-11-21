@@ -1,0 +1,86 @@
+:is(.choices, .call-suggestions) > .narrative-choice-card {
+  display: grid;
+  grid-template-columns: 1.45rem minmax(0, 1fr);
+  align-content: center;
+  align-self: start;
+  align-items: start;
+  gap: .63rem;
+  min-height: 44px;
+  min-width: 0;
+  padding: .7rem .85rem;
+  text-align: start;
+  color: var(--text);
+  background-color: var(--surface-1);
+  background-image: var(--skin-card-image);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, transform 100ms ease-out;
+  animation: proposal-arrive 170ms ease-out;
+}
+.choice-mark {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+.narrative-choice {
+  display: grid;
+  gap: .32rem;
+  min-width: 0;
+  align-self: center;
+  overflow-wrap: anywhere;
+}
+.narrative-choice .choice-action {
+  color: var(--text);
+  font: 600 .94rem/1.4 var(--ui-font);
+}
+.narrative-choice .choice-speech {
+  padding-inline-start: .66rem;
+  border-inline-start: 2px solid color-mix(in srgb, var(--accent) 43%, transparent);
+  color: var(--text-secondary);
+  font: 400 1rem/1.42 var(--story-font);
+  white-space: pre-wrap;
+}
+@media (hover:hover) {
+  .action-panel .narrative-choice-card:hover:enabled {
+    border-color: var(--border-strong);
+    background-color: var(--surface-2);
+  }
+}
+.action-panel .narrative-choice-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.action-panel .narrative-choice-card:active:enabled {
+  transform: scale(.99);
+  background-color: var(--accent-soft);
+}
+.action-panel .narrative-choice-card[aria-pressed="true"] {
+  background-color: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+  border-color: var(--accent);
+}
+.narrative-choice-card[aria-pressed="true"] .choice-mark {
+  color: var(--surface-1);
+  background: var(--accent);
+}
+.action-panel .narrative-choice-card:disabled {
+  opacity: .62;
+  cursor: default;
+}
+.action-panel .narrative-choice-card[aria-busy="true"] { opacity: 1; cursor: progress; }
+.narrative-choice-card[aria-busy="true"] svg { animation: proposal-sending .85s linear infinite; }
+@keyframes proposal-arrive {
+  from { opacity: .45; translate: 0 3px; }
+}
+@keyframes proposal-sending { to { rotate: 1turn; } }
+@media (prefers-reduced-motion: reduce) {
+  .action-panel .narrative-choice-card, .narrative-choice-card[aria-busy="true"] svg {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}

@@ -29,6 +29,9 @@ ACTIVE = ('generating', 'extracting', 'validating')
 
 
 def create_app(db_path=None, recover=True):
+    from backend.build_info import server_build
+    from backend.runtime_v3.narrative_frame import SPEECH_CONTRACT_ID
+    running_build = server_build()
     repo = Repository(db_path)
     preparation = Preparation(repo)
     credentials = Credentials(repo)
@@ -104,7 +107,8 @@ def create_app(db_path=None, recover=True):
 
     @app.get('/api/health')
     def health():
-        return {'service': 'ai-rpg-engine', 'version': '2.0.0', 'status': 'ready'}
+        return {'service': 'ai-rpg-engine', 'version': '2.0.0', 'status': 'ready',
+                'backend_build': running_build, 'choice_contract': SPEECH_CONTRACT_ID}
 
     @app.post('/api/_shutdown')
     def shutdown(request: Request):
@@ -216,6 +220,15 @@ def create_app(db_path=None, recover=True):
         latest = repo.latest_job(sid, value['revision'])
         value['job'] = job(latest['id']) if latest else None
         return value
+
+    @app.get('/api/saves/{sid}/turns/{tid}/choice-diagnostics')
+    def choice_diagnostics(sid: int, tid: int, variant: str):
+        from backend.services.choice_diagnostics import inspect_choices
+        with repo.connect() as db:
+            result = inspect_choices(db, sid, tid, variant)
+        if result is None:
+            raise HTTPException(409, 'Источник вариантов изменился. Обнови историю.')
+        return JSONResponse(result, headers={'Cache-Control': 'no-store'})
 
     @app.patch('/api/saves/{sid}/scene')
     def scene(sid: int, body: Scene):

@@ -29,7 +29,7 @@ export function WorldCamera({save,open,onOpenChange,busy,observe,control}:{save:
   try{setPlayback(await api<Playback>(event.source_record_id?`/saves/${save.id}/scene-records/${event.source_record_id}`:`/saves/${save.id}/playback/${turn!.id}`))}catch(e){toast.error((e as Error).message)}finally{setPlaybackLoading(false)};
  };
  const choose=(fn:()=>void)=>{onOpenChange(false);fn()};
- return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="world-camera mobile-sheet"><DialogHeader>
+ return <Dialog open={open} onOpenChange={v=>{if(!v&&playback)setPlayback(null);else onOpenChange(v)}}><DialogContent className="world-camera mobile-sheet"><DialogHeader>
  <DialogTitle>{playback?'Записанная сцена':'Камера мира'}</DialogTitle><DialogDescription>{playback?'Просмотр прошлого. Состояние игры и время не меняются.':'Наблюдение и управление — разные действия.'}</DialogDescription></DialogHeader>
  {playback?<><Button variant="ghost" onClick={()=>setPlayback(null)}>← К журналу</Button><p className="muted small">{playback.scene.time} · {playback.scene.location}</p>{playback.user_text&&<div className="player-action"><Markdown text={playback.user_text}/></div>}<Markdown text={playback.narrative}/></>:<>
  <SectionTabs className="camera-tabs" label="Камера мира" value={tab} onChange={setTab} items={[{id:'camera',label:'Персонажи и сцены'},{id:'timeline',label:'Журнал событий'}]}/>

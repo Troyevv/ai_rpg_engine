@@ -1,3 +1,4 @@
+import {SheetHeight} from './sheet-height';
 // shadcn/ui Dialog composition (MIT), backed by Radix focus trap and semantics.
 import * as React from "react";
 import * as Primitive from "@radix-ui/react-dialog";
@@ -17,6 +18,7 @@ export const DialogContent = React.forwardRef<
       className={cn("dialog-content", className)}
       {...props}
     >
+      {className?.split(' ').some(name=>['mobile-sheet','time-skip-sheet','current-game-panel'].includes(name))&&<SheetHeight/>}
       {children}
       <Primitive.Close className="dialog-close" aria-label="Закрыть">
         <X size={20} />

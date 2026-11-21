@@ -173,3 +173,43 @@ test('menu summary follows controlled actor rather than POV; all skin bases and 
  await expect(dialog.locator('.mobile-menu-resume')).toContainText(actorName);
  await expect(dialog.locator('.mobile-menu-resume')).not.toContainText('Без управляемого персонажа');
 });
+
+test('library refresh and nested Back preserve the selected world and the game draft', async ({page, request}) => {
+ const selection = await seed(page, request);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.addStyleTag({content:'html {font-size:150% !important}'});
+ const draft = page.getByLabel('Своё действие или реплика');
+ await draft.fill('Вернуться к разговору');
+ await page.locator('.breadcrumb').click();
+ const library = page.locator('.library-dialog');
+ const card = library.locator('[data-world-id="'+selection.world+'"]');
+ await card.locator('.world-card').click();
+ await expect(library.locator('.save-list')).toContainText('Продолжить');
+ const refreshed = page.waitForResponse(r => new URL(r.url()).pathname === '/api/worlds/'+selection.world+'/saves' && r.ok());
+ await library.getByRole('button',{name:'Обновить список'}).click();
+ await refreshed;
+ await card.getByRole('button',{name:/Удалить/}).click();
+ await expect(page.getByRole('heading',{name:/Удалить «/})).toBeVisible();
+ await page.goBack();
+ await expect(page.getByRole('heading',{name:/Удалить «/})).toHaveCount(0);
+ await expect(library.locator('.save-list')).toContainText('Продолжить');
+ await page.goBack();
+ await expect(library).toHaveCount(0);
+ await expect(draft).toHaveValue('Вернуться к разговору');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
+});
+
+test('closing the phone returns to the same available story choices', async ({page, request}) => {
+ const selection = await seed(page, request);
+ const choices = page.locator('.choices button');
+ await expect(choices.first()).toBeEnabled();
+ const original = await choices.allTextContents();
+ const revision = async () => (await (await request.get('/api/saves/'+selection.save)).json()).revision;
+ const before = await revision();
+ await page.getByRole('button',{name:/^Телефон/}).click();
+ await expect(page.locator('.phone-device')).toHaveClass(/is-open/);
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
+ await expect(choices.first()).toBeEnabled();
+ expect(await choices.allTextContents()).toEqual(original);
+ expect(await revision()).toBe(before);
+});

@@ -1,3 +1,4 @@
+import {RefreshRegion} from './components/ui/refresh-region';
 import { Choice } from "@/components/ui/choice";
 import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,Bookmark,Search,Users,History,Pencil,ArrowUpRight,RefreshCw} from 'lucide-react';
@@ -26,7 +27,7 @@ const revision=(c:ChatCampaign)=>({revision:c.revision,token:crypto.randomUUID()
 const sourceName=(source:string)=>({initial:'Первоначальная выжимка',author:'Авторская правка',summary:'Утверждённое обновление'}[source]||source);
 
 function useBack(ref:BackRef,back:()=>boolean){useEffect(()=>{ref.current=back;return()=>{if(ref.current===back)ref.current=null}},[ref,back])}
-function useSearch(){const [query,setQuery]=useState('');const [search,setSearch]=useState('');useEffect(()=>{const t=setTimeout(()=>setSearch(query),180);return()=>clearTimeout(t)},[query]);return {query,setQuery,search}}
+function useSearch(key:string){const [query,update]=useState(()=>local(key,''));const setQuery=(value:string)=>{update(value);save(key,value)};const [search,setSearch]=useState('');useEffect(()=>{const t=setTimeout(()=>setSearch(query),180);return()=>clearTimeout(t)},[query]);return {query,setQuery,search}}
 function useList<T>(url:string){
   const [page,setPage]=useState<{items:T[];more:boolean;sources?:CardBrief[];total?:number}|null>(null);
   const [loading,setLoading]=useState(false),[error,setError]=useState(''),[nonce,setNonce]=useState(0);
@@ -55,7 +56,7 @@ export function ChatJournal(props:Common&{initial:JournalStart;onBookmark:(item:
 }
 
 function BookmarksPanel({campaign,disabled,backRef,onRefresh,initial,onBookmark,onJump}:Common&{initial?:ChatMessage;onBookmark:(item:BookmarkItem,enabled:boolean,note:string,priority:number)=>Promise<void>;onJump:(id:string)=>Promise<void>}){
-  const {query,setQuery,search}=useSearch();const path=base(campaign);const url=`${path}/bookmarks?branch=${campaign.active_branch}&q=${encodeURIComponent(search)}`;
+  const {query,setQuery,search}=useSearch(`chat-bookmark-search:${campaign.id}:${campaign.active_branch}`);const path=base(campaign);const url=`${path}/bookmarks?branch=${campaign.active_branch}&q=${encodeURIComponent(search)}`;
   const list=useList<BookmarkItem>(url);
   const [editing,setEditing]=useState<BookmarkItem|null>(()=>initial?{message_id:initial.id,seq:initial.seq,chapter_id:initial.chapter_id,chapter_name:campaign.chapters.find(c=>c.id===initial.chapter_id)?.name||'Глава',role:initial.role,note:initial.bookmark?.note||'',priority:initial.bookmark?.priority??1,excerpt:initial.content.slice(0,400)}:null);
   const [existing,setExisting]=useState(!!initial?.bookmark);const [note,setNote]=useState(''),[priority,setPriority]=useState(1),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -78,13 +79,13 @@ function BookmarksPanel({campaign,disabled,backRef,onRefresh,initial,onBookmark,
     <SearchField label="Поиск по закладкам и заметкам" value={query} onChange={setQuery}/>
     <p className="chat-journal-budget">В следующее обновление памяти: {campaign.budgets.summary.bookmarks_included||0}. Только для навигации: {campaign.budgets.summary.bookmarks_excluded||0}. {campaign.budgets.summary.fits?'Контекст обновления помещается.':'Контекст обновления не помещается. Измените приоритет на «Только навигация» у отдельных закладок или увеличьте доступное окно. Ничего не исключено автоматически.'}</p>
     <Feedback {...list} retry={list.reload}/>{list.page&&!list.page.items.length&&<div className="chat-journal-empty"><Bookmark size={24}/><h3>{search?'Совпадений нет':'Сохраните важный момент'}</h3><p>Кнопка закладки есть у каждого сохранённого сообщения. Отсюда можно вернуться к нему даже через много глав.</p></div>}
-    <div className="chat-journal-list">{list.page?.items.map(item=><article className="chat-bookmark-card" key={item.message_id}><span className="muted small">{item.chapter_name} · № {item.seq} · {item.priority===2?'Высокий приоритет':item.priority===1?'В обновлении памяти':'Только навигация'}</span><p>{item.note||item.excerpt.slice(0,180)}</p>{item.note&&<p className="muted small">{item.excerpt.slice(0,160)}…</p>}<div className="actions"><Button variant="outline" onClick={()=>void onJump(item.message_id).catch(e=>setError(e.message))}>К сообщению<ArrowUpRight size={16}/></Button><Button variant="ghost" onClick={()=>{setExisting(true);setEditing(item)}}><Pencil size={16}/>Заметка и приоритет</Button></div></article>)}</div>
+    <RefreshRegion refresh={list.reload}><div className="chat-journal-list">{list.page?.items.map(item=><article className="chat-bookmark-card" key={item.message_id}><span className="muted small">{item.chapter_name} · № {item.seq} · {item.priority===2?'Высокий приоритет':item.priority===1?'В обновлении памяти':'Только навигация'}</span><p>{item.note||item.excerpt.slice(0,180)}</p>{item.note&&<p className="muted small">{item.excerpt.slice(0,160)}…</p>}<div className="actions"><Button variant="outline" onClick={()=>void onJump(item.message_id).catch(e=>setError(e.message))}>К сообщению<ArrowUpRight size={16}/></Button><Button variant="ghost" onClick={()=>{setExisting(true);setEditing(item)}}><Pencil size={16}/>Заметка и приоритет</Button></div></article>)}</div></RefreshRegion>
     {error&&<p role="alert">{error}</p>}{list.page?.more&&<Button disabled={list.loading} variant="outline" onClick={()=>void list.more(`${url}&before=${list.page!.items.at(-1)!.seq}`)}>Ещё закладки</Button>}
   </>;
 }
 
 function CharactersPanel({campaign,disabled,backRef,onRefresh,onReview}:Common&{onReview:(id:string)=>Promise<void>}){
-  const {query,setQuery,search}=useSearch();const path=base(campaign);const url=`${path}/characters?branch=${campaign.active_branch}&memory=${campaign.memory.id}&q=${encodeURIComponent(search)}`;
+  const {query,setQuery,search}=useSearch(`chat-character-search:${campaign.id}:${campaign.active_branch}`);const path=base(campaign);const url=`${path}/characters?branch=${campaign.active_branch}&memory=${campaign.memory.id}&q=${encodeURIComponent(search)}`;
   const list=useList<CardBrief>(url);const [card,setCard]=useState<Card|null>(null),[editing,setEditing]=useState(false),[preview,setPreview]=useState(false),[text,setText]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [latest,setLatest]=useState<string|null>(null),[conflictCard,setConflictCard]=useState<Card|null>(null);const request=useRef(0);useEffect(()=>()=>{request.current++},[]);
   const draftKey=card?`chat-character:${campaign.id}:${card.memory_id}:${card.key}`:'';
@@ -103,7 +104,7 @@ function CharactersPanel({campaign,disabled,backRef,onRefresh,onReview}:Common&{
   return <>
     {!card&&<><p className="muted small">Персонажи — представление утверждённой выжимки. Это авторский справочник со спойлерами: просмотр тайны не сообщает её ГГ или NPC.</p><SearchField label="Поиск персонажей и сведений" value={query} onChange={setQuery}/><Feedback loading={list.loading||busy} error={list.error||error} retry={list.reload}/>
       {list.page&&!list.page.items.length&&<div className="chat-journal-empty"><Users size={24}/><h3>{search?'Совпадений нет':'Карточки пока не распознаны'}</h3><p>Откройте исходный раздел ниже. Неизвестные структуры остаются текстом; сведения не угадываются.</p></div>}
-      <div className="chat-character-grid">{list.page?.items.map(item=><button className="chat-character-card" key={item.key} disabled={busy} onClick={()=>void open(item)}><span className="chat-character-avatar" aria-hidden="true">{Array.from(item.name)[0]}</span><span><strong>{item.name}</strong><small>{item.kind==='hero'?'Главный герой':'Персонаж'}</small></span><ArrowUpRight size={16}/></button>)}</div>
+      <RefreshRegion refresh={list.reload}><div className="chat-character-grid">{list.page?.items.map(item=><button className="chat-character-card" key={item.key} disabled={busy} onClick={()=>void open(item)}><span className="chat-character-avatar" aria-hidden="true">{Array.from(item.name)[0]}</span><span><strong>{item.name}</strong><small>{item.kind==='hero'?'Главный герой':'Персонаж'}</small></span><ArrowUpRight size={16}/></button>)}</div></RefreshRegion>
       {list.page?.more&&<Button disabled={list.loading} variant="outline" onClick={()=>void list.more(`${url}&offset=${list.page!.items.length}`)}>Ещё персонажи</Button>}
       <section className="chat-journal-sources"><h3>Исходные разделы</h3><p className="muted small">Полный текст, включая нераспознанные сведения, направленные отношения и авторские тайны.</p>{list.page?.sources?.map(item=><Button key={item.key} disabled={busy} variant="outline" onClick={()=>void open(item)}>{item.name}</Button>)}</section>
     </>}
@@ -128,7 +129,7 @@ function HistoryPanel({campaign,backRef,onRestore,initial}:Common&{onRestore:(te
   return <>
     <p className="muted small">История утверждённых версий этой ветки. Здесь сравнивается текст, а не делаются выводы о событиях: слух не становится фактом, новая формулировка не доказывает новое действие.</p>
     <Feedback loading={loading||list.loading} error={error||list.error} retry={()=>error&&retryVersion.current?void open(retryVersion.current):list.reload()}/>
-    {!detail&&<div className="chat-journal-list">{list.page?.items.map(item=><button className="chat-version-card" key={item.id} onClick={()=>void open(item.id)}><span className="chat-version-dot" aria-hidden="true"/><span><strong>{sourceName(item.source)}</strong><small>{item.created_at} · до сообщения № {item.cutoff}</small><small>{item.branch_name}{item.id===campaign.memory.id?' · текущая версия':''}</small></span><ArrowUpRight size={16}/></button>)}</div>}
+    {!detail&&<RefreshRegion refresh={list.reload}><div className="chat-journal-list">{list.page?.items.map(item=><button className="chat-version-card" key={item.id} onClick={()=>void open(item.id)}><span className="chat-version-dot" aria-hidden="true"/><span><strong>{sourceName(item.source)}</strong><small>{item.created_at} · до сообщения № {item.cutoff}</small><small>{item.branch_name}{item.id===campaign.memory.id?' · текущая версия':''}</small></span><ArrowUpRight size={16}/></button>)}</div></RefreshRegion>}
     {!detail&&list.page?.more&&<Button disabled={list.loading} variant="outline" onClick={()=>void list.more(`${url}&before=${list.page!.items.at(-1)!.cursor}`)}>Более ранние изменения</Button>}
     {detail&&<div className="chat-journal-detail"><Button variant="ghost" onClick={()=>setDetail(null)}><ArrowLeft size={16}/>К истории версий</Button><h3>{sourceName(detail.memory.source)}</h3><p className="muted small">{detail.memory.created_at} · покрытие до № {detail.memory.cutoff} · применение после № {detail.memory.applies_after||0}</p>
       <p className="chat-notice">{detail.changes.changed?'Изменения текста требуют проверки содержания.':'Текст совпадает с предыдущей версией; сохранена новая точка применения.'} {detail.previous?'Сравнение с непосредственной родительской версией.':'Первоначальная версия: предыдущего документа нет.'}</p>

@@ -1,3 +1,5 @@
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
+import {ActionPanel} from './components/ui/action-panel';
 import { Choice } from "@/components/ui/choice";
 import {StoryNotifications} from './StoryNotifications';
 import type {StoryNotice} from './types';
@@ -14,13 +16,11 @@ import {Phone} from './Phone';
 import {CallScene} from './CallScene';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
-import {useMotionPreset} from "./motion";
 import {NarrativeTurn} from "./NarrativeTurn";
 import {useStableEvent} from "./hooks";
 import {useStoryScroll} from "./useStoryScroll";
 import {presentationEntries,surfaceEntries,physicalChoiceTurn} from "./presentationEntries";
-import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BookOpen,
   Clock,
@@ -100,7 +100,7 @@ export function Game({
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
-  const {scroll,away,jumpToLatest,onScroll}=useStoryScroll(viewScope);
+  const {scroll,away,jumpToLatest,onScroll,revealMenu,liveText}=useStoryScroll(viewScope);
   const [selectedCall,setSelectedCall]=useState<string|null>(null);
   const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
   useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
@@ -111,17 +111,14 @@ export function Game({
     sessionStorage.removeItem(`call-min:${save.id}:${save.state.phone.actor_id}:${save.state.camera?.pov_actor_id}:${id}`);
     setSelectedCall(id);
   };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
-  const reduced = useReducedMotion();
-  const choicesMotion=useMotionPreset('staggerContainer');
-  const choiceMotion=useMotionPreset('staggerItem');
-  // The loaded journal is already visible. Animate only records added in this session.
   const choiceTurn=physicalChoiceTurn(save);
   const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
-  const initialChoice=useRef(choiceKey);
-  const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
+  const [selectedChoice,setSelectedChoice]=useState<string|null>(null);
+  const [sendingChoice,setSendingChoice]=useState<string|null>(null);
   const [pendingChoice,setPendingChoice]=useState<string|null>(null);
   useEffect(()=>{setSelectedChoice(null);setPendingChoice(null)},[choiceKey]);
-  const writeChoice=(text:string)=>{
+  const writeChoice=(text:string, choice=text)=>{
+    setSelectedChoice(choice);
     setDraft(text);
     sessionStorage.setItem(draftKey,text);
     input.current?.focus({preventScroll:true});
@@ -150,6 +147,14 @@ export function Game({
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const generating = running || !!revealingCommit;
+  const physicalStream = generating && (job?.presentation?.surface ?? (job?.kind === "communication" ? "phone" : "physical")) === "physical";
+  const choicesElement = useRef<HTMLDivElement>(null);
+  const wasStreaming = useRef(false);
+  useLayoutEffect(() => {
+    if (wasStreaming.current && !physicalStream && choicesElement.current)
+      revealMenu(choicesElement.current);
+    wasStreaming.current = physicalStream;
+  }, [physicalStream, revealMenu]);
   const turnLocked = generating || (rejected && !!job.narrative_complete);
   const observer = save?.state.camera?.mode==='observer';
   const canAct = !!save && !save.state.protagonist_required && (observer || (!!actorId && save.state.actor_capabilities?.can_act!==false));
@@ -191,6 +196,7 @@ export function Game({
       setSubmitted(j);
       if (kind === "turn" && channel === "physical" && text === draftRef.current) {
         setDraft("");
+        setSelectedChoice(null);
         sessionStorage.removeItem(draftKey);
       }
     });
@@ -199,14 +205,27 @@ export function Game({
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
     refreshControl(after);jumpToLatest();
   });
-  const observe=(actor?:string,scene?:string,direction?:string)=>void run(async()=>{
+  const observe=(actor?:string,scene?:string,direction?:string)=>run(async()=>{
     if(!save)return;
     if(actor&&!direction){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,direction,revision:save.revision,config:prefs.game,api_key:apiKey});
-    if(direction && direction===draftRef.current){setDraft("");sessionStorage.removeItem(draftKey)}
+    if(direction && direction===draftRef.current){setDraft("");setSelectedChoice(null);sessionStorage.removeItem(draftKey)}
     setSubmitted(j);jumpToLatest();
   });
-  const submitDraft=()=>observeInstead&&actorId ? observe(actorId,undefined,draft) : turn("turn");
+  const chooseProposal=useStableEvent((text:string)=>{
+    if(draftRef.current.trim() && draftRef.current!==text){
+      history.pushState({...history.state,choiceDraft:true},'');
+      setPendingChoice(text);
+    } else writeChoice(text);
+  });
+  const submitDraft=async()=>{
+    if(requestLock.current || !canSubmit || !draft.trim())return;
+    setSendingChoice(selectedChoice);
+    try {
+      if(observeInstead && actorId) await observe(actorId,undefined,draft);
+      else await turn("turn");
+    } finally { setSendingChoice(null); }
+  };
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
 
   const stableRun=useStableEvent(run);
@@ -220,7 +239,7 @@ export function Game({
   const entries=surfaceEntries(allEntries,'physical');
   const callEntries=surfaceEntries(allEntries,'call',actorId,selectedCall);
   const latestCall=callEntries.at(-1);
-  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn liveTextRef={!toolsOnly && physicalStream && entry.identity===job?.id ? liveText : undefined} toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const recovery = (physical: boolean) => rejected && job && save && (
     <div id={physical ? "turn-recovery" : undefined} className="flex flex-wrap gap-2" aria-busy={busy}>
       {!!job.narrative_complete && ['start','turn','background','pov'].includes(job.kind) && <Button disabled={busy || running} onClick={()=>void run(async()=>{
@@ -310,7 +329,7 @@ export function Game({
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||turnLocked} observe={observe} control={switchActor}/>}
       {save&&<NpcReview key={save.id} save={save} locked={busy||turnLocked} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
-      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{recovery(false)}</>}</>}/>}
+      {save&&<Diagnostics saveId={save.id} choiceView={{turn:choiceTurn,list:choicesElement,revision:save.revision}} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{recovery(false)}</>}</>}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||turnLocked} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
         <label>Управляемый персонаж<Choice aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</Choice></label>
         {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
@@ -416,31 +435,13 @@ export function Game({
                     <label>Продолжить за персонажа…<Choice aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onValueChange={selectedValue => switchActor(selectedValue,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
+                  <ActionPanel label="Варианты действий" hidden={physicalStream}><div className="choices" ref={choicesElement} key={choiceKey}>
                     {(observer||(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
-                      <motion.button
-                        variants={choiceMotion}
-                        className={selectedChoice===i?"choice-selected":""}
-                        key={i}
-                        disabled={!canSubmit}
-                        onClick={() => {
-                          setSelectedChoice(i);
-                          const text=c.action + (c.speech ? `: «${c.speech}»` : "");
-                          if(draftRef.current.trim()&&draftRef.current!==text){
-                            history.pushState({...history.state,choiceDraft:true},'');
-                            setPendingChoice(text);
-                          }
-                          else writeChoice(text);}
-                        }
-                      >
-                        <span className="choice-index">0{i + 1}</span>
-                        <span>
-                          <strong>{c.action}</strong>
-                          {c.speech && <>: «{c.speech}»</>}
-                        </span>
-                      </motion.button>
+                      <NarrativeChoiceCard key={i} choice={c} disabled={!canSubmit}
+                        selected={selectedChoice===choiceText(c)} sending={sendingChoice===choiceText(c)}
+                        choose={chooseProposal}/>
                     ))}
-                  </motion.div>
+                  </div></ActionPanel>
                   {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"
@@ -487,7 +488,7 @@ export function Game({
               <DialogTitle>В поле уже есть черновик</DialogTitle>
               <DialogDescription>Предложение: {pendingChoice}</DialogDescription>
               <div className="actions">
-                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice);closeChoice()}}>Добавить к черновику</Button>
+                <Button onClick={()=>{writeChoice(draftRef.current+'\n'+pendingChoice,pendingChoice!);closeChoice()}}>Добавить к черновику</Button>
                 <Button variant="outline" onClick={()=>{writeChoice(pendingChoice!);closeChoice()}}>Заменить черновик</Button>
                 <Button variant="ghost" onClick={closeChoice}>Отмена</Button>
               </div>
@@ -501,6 +502,7 @@ export function Game({
               aria-label={directionInput ? "Направление истории" : "Своё действие или реплика"}
               value={draft}
               onChange={(e) => {
+                setSelectedChoice(null);
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
@@ -508,7 +510,7 @@ export function Game({
               placeholder={directionInput?"Что показать дальше?":activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"В каком направлении продолжить историю?":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
-                  e.key === "Enter" &&
+                  e.key === "Enter" && !e.nativeEvent.isComposing &&
                   (e.ctrlKey || e.metaKey) &&
                   canSubmit &&
                   draft.trim()

@@ -1,3 +1,5 @@
+import {dismissTransient} from './lib/transientBack';
+import {useRootDialogBack} from './lib/useRootDialogBack';
 import {PortraitModels} from './workshop/PortraitCommission';
 import {requestId} from './lib/requestId';
 import "./styles/current-game.css";
@@ -36,6 +38,7 @@ function restoreModel(initial: Preferences["game"], saved?: Preferences["game"])
 }
 
 export default function App() {
+  useRootDialogBack();
   const [chatOpen,setChatOpen]=useState(()=>localStorage.getItem("active-mode")==="chat");
   const [chatSource,setChatSource]=useState<ChatSource|undefined>();
   const openChat=(source?:ChatSource)=>{setChatSource(source);setChatOpen(true);localStorage.setItem("active-mode","chat")};
@@ -61,6 +64,7 @@ export default function App() {
     target?.focus({preventScroll:true});
   });
   const closeWorkspace=(restoreFocus=true,done=()=>{})=>{
+    if(restoreFocus&&dismissTransient())return;
     const wasOpen=!!workspaceVisible.current;
     workspaceVisible.current=null;setWorkspace(null);
     popLayer('saveWorkspace',()=>{if(wasOpen&&restoreFocus)restoreWorkspaceFocus();done()});
@@ -87,16 +91,19 @@ export default function App() {
   const inspectorVisible=useRef(inspector);inspectorVisible.current=inspector;
   useEffect(()=>{const back=()=>{
     if(mobileMenuVisible.current||historyTransition.current)return;
+    if((inspectorVisible.current||workspaceVisible.current)&&dismissTransient()){
+      history.pushState({...history.state,[inspectorVisible.current?'inspectorOpen':'saveWorkspace']:true},'');return;
+    }
     if(!inspectorVisible.current){
       if(!workspaceVisible.current)return;
-      const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) .dialog-close');
+      const dialog=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) > .dialog-close')).at(-1);
       if(dialog){history.pushState({...history.state,saveWorkspace:true},'');dialog.click()}
       else {workspaceVisible.current=null;setWorkspace(null);restoreWorkspaceFocus()}
       return;
     }
     // Keep one same-document entry while a nested dialog/source owns Back.
     history.pushState({...history.state,inspectorOpen:true},'');
-    const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) .dialog-close');
+    const dialog=Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) > .dialog-close')).at(-1);
     if(dialog)dialog.click();else window.dispatchEvent(new Event('inspector-back'));
   };window.addEventListener('popstate',back);return()=>window.removeEventListener('popstate',back)},[]);
   const closeInspector=(restoreFocus=true,done=()=>{})=>{
@@ -382,4 +389,4 @@ export default function App() {
   );
 }
 
-function ThemedToaster(){const {presentation}=useTheme();return <Toaster theme={presentation.theme_id==='parchment'?'light':'dark'} position="top-center" toastOptions={{className:"story-toast"}}/>}
+function ThemedToaster(){const {presentation}=useTheme();return <Toaster closeButton swipeDirections={[]} theme={presentation.theme_id==='parchment'?'light':'dark'} position="top-center" toastOptions={{className:"story-toast",style:{touchAction:"auto"}}}/>}

@@ -126,6 +126,25 @@ describe('single scroll owner',()=>{
  let resize:()=>void;
  beforeEach(()=>{vi.stubGlobal('ResizeObserver',class {constructor(cb:()=>void){resize=cb}observe(){}disconnect(){}})});
  function Reader(){const {scroll,onScroll,jumpToLatest,away}=useStoryScroll(72);return <><div ref={scroll} onScroll={onScroll}><article data-reading-id="one">Scene</article></div><button onClick={jumpToLatest}>{away?'away':'bottom'}</button></>}
+ it('follows the last line in a short viewport and lets the reader scroll down to the status',async()=>{
+   function ShortReader(){
+     const {scroll,liveText,onScroll,away}=useStoryScroll('landscape');
+     return <><div ref={scroll} onScroll={onScroll}><article data-reading-id="live"><div ref={liveText}>Text</div></article></div><output>{away?'away':'following'}</output></>;
+   }
+   await render(<ShortReader/>);
+   const el=host.querySelector('div')!,text=el.querySelector('article div')!;
+   let end=1100;
+   Object.defineProperties(el,{scrollHeight:{get:()=>end+280},clientHeight:{get:()=>150}});
+   Object.defineProperty(text,'clientHeight',{value:900});
+   vi.spyOn(text,'getBoundingClientRect').mockImplementation(()=>({bottom:end-el.scrollTop} as DOMRect));
+   await act(()=>resize());await advance(20);
+   expect(end-el.scrollTop).toBe(90);
+   end+=80;await act(()=>resize());await advance(20);expect(end-el.scrollTop).toBe(90);
+   await act(()=>{el.scrollTop+=45;el.dispatchEvent(new Event('scroll'))});
+   expect(host.querySelector('output')!.textContent).toBe('away');
+   const manual=el.scrollTop;end+=80;await act(()=>resize());await advance(20);
+   expect(el.scrollTop).toBe(manual);
+ });
  it('follows resize, preserves manual scroll, and jump-to-latest re-enables following without smooth animations',async()=>{
  await render(<Reader/>);const el=host.firstElementChild as HTMLElement;
  let height=1000;Object.defineProperties(el,{scrollHeight:{get:()=>height},clientHeight:{get:()=>200}});
@@ -246,4 +265,21 @@ it('a late queued refresh cannot erase an observed review phase within the same 
  // A genuinely new attempt is allowed to start queued again.
  await render(<Reader initial={{...queued,attempt_epoch:2}}/>);
  expect(host.textContent).toBe('queued');
+});
+
+it('retains completed streaming paragraphs while resolving later Markdown references',async()=>{
+ const lead='За окном темнело.\n\n';
+ const body='[Альбом][album]\n\n- **Письмо**\n- Чашка\n\n';
+ await render(<Markdown text={lead+body+'Она взяла'} streaming/>);
+ const first=host.querySelector('p')!;
+ const leaf=host.querySelector('li strong');
+ const tail=Array.from(host.querySelectorAll('p')).at(-1)!.firstChild;
+ await render(<Markdown text={lead+body+'Она взяла книгу. 🕯️'} streaming/>);
+ expect(host.querySelector('p')).toBe(first);
+ expect(host.querySelector('li strong')).toBe(leaf);
+ expect(tail?.textContent).toBe('Она взяла книгу. 🕯️');
+ await render(<Markdown text={lead+body+'Она взяла книгу. 🕯️\n\n[album]: /album'} streaming/>);
+ expect(host.querySelector('p')).toBe(first);
+ expect(host.querySelector('a')?.getAttribute('href')).toBe('/album');
+ expect(fetch).not.toHaveBeenCalled();
 });

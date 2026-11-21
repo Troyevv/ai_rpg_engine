@@ -1,3 +1,4 @@
+import {scrollByTouch} from './touch';
 import {test,expect,type Page} from '@playwright/test';
 import {mkdir,writeFile,copyFile} from 'node:fs/promises';
 import {nav} from './navigation';
@@ -29,7 +30,11 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
  await page.getByLabel('Своё действие или реплика').fill(job.user_text!);await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!(window as any).testStream)).toBe(true);
- if(!baseline){await expect(page.locator('.choices button')).toHaveCount(1);await expect(page.locator('.choices button')).toBeDisabled()}
+ if(!baseline){
+   await expect(page.locator('.choices button')).toHaveCount(1);
+   await expect(page.locator('.choices button')).toBeDisabled();
+   await expect(page.locator('.choices')).toBeHidden();
+ }
  const emit=async(patch:Partial<Job>)=>{job={...job,...patch};await page.evaluate(j=>(window as any).testStream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify(j)})),job)};
  await page.evaluate(()=>{
  const w=window as any;w.samples=[];w.oldNode=document.querySelector('.turn .prose');w.oldMutations=0;
@@ -41,8 +46,33 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  for(const length of [35,90,700,710,narrative.length]){
   await emit({narrative:narrative.slice(0,length)});
   if(length===90)await page.getByLabel('Своё действие или реплика').fill('Черновик во время генерации');
+  if(!baseline&&length===700&&info.project.name==='mobile'){
+    await page.locator('[data-mobile-menu-trigger]').tap();
+    await expect(page.locator('.mobile-game-menu')).toBeVisible();
+    await page.locator('.mobile-menu-close').tap();
+    await expect(page.locator('.mobile-game-menu')).toHaveCount(0);
+    await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик во время генерации');
+  }
   await frames(page,25);
   if(!baseline)await expect.poll(()=>page.locator('.story-scroll').evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
+ }
+ if(!baseline){
+   const reader=page.locator('.story-scroll');
+   const lastLine=page.locator('[data-stream-id] .narrative-text').last();
+   const box=await reader.boundingBox(), textBox=await lastLine.boundingBox();
+   expect(textBox!.y+textBox!.height).toBeGreaterThan(box!.y);
+   expect(textBox!.y+textBox!.height).toBeLessThanOrEqual(box!.y+box!.height+1);
+   if(info.project.name==='mobile'&&!reduced){
+     const portrait=page.viewportSize()!;
+     await page.setViewportSize({width:740,height:412});
+     await expect.poll(()=>lastLine.evaluate(el=>{
+       const r=el.closest('.story-scroll')!.getBoundingClientRect();
+       const bottom=el.getBoundingClientRect().bottom;
+       return bottom>r.top+12&&bottom<=r.bottom+1;
+     })).toBe(true);
+     await page.setViewportSize(portrait);
+     await frames(page,10);
+   }
  }
  await emit({status:'extracting',narrative_complete:true});await frames(page,100);
  await page.evaluate(()=>(window as any).testStream.onerror?.(new Event('error')));
@@ -59,6 +89,15 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
   await page.getByRole('button',{name:'Свернуть телефон'}).click();
  }
  const scroller=page.locator('.story-scroll');await scroller.evaluate(el=>el.scrollTop=el.scrollHeight/2);await frames(page);
+ if(info.project.name==='mobile'){
+  const before=await scroller.evaluate(el=>el.scrollTop);
+  await scrollByTouch(page,scroller,135);
+  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeLessThan(before);
+  await scroller.evaluate(el=>new Promise<void>(resolve=>{
+   let last=el.scrollTop,stable=0;
+   const frame=()=>{stable=el.scrollTop===last?stable+1:0;last=el.scrollTop;if(stable>=5)resolve();else requestAnimationFrame(frame)};frame();
+  }));
+ }
  const up=await scroller.evaluate(el=>el.scrollTop);
  await emit({status:'validating'});await frames(page);
  await page.evaluate(()=>{(window as any).streamNode=document.querySelector('[data-stream-id] .narrative-text')||document.querySelector('.job details > .prose')});
@@ -87,8 +126,10 @@ test('real Start Game → ordinary turn → persisted reload → next ordinary t
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await page.locator('.choices button').first().click();
- if(!baseline) await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
-  await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(6);
+ // Both revisions use the current two-step composer: choosing fills the draft.
+ await expect(page.getByLabel('Своё действие или реплика')).not.toHaveValue('');
+ await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(6);
  const stored=await(await request.get(`/api/saves/${s.save}`)).json();expect(stored.turns).toHaveLength(2);
  await page.getByLabel('Своё действие или реплика').fill('Черновик следующего хода');await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик следующего хода');
  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(3);await expect(page.locator('.choices button')).toHaveCount(6);

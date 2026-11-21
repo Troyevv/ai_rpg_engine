@@ -1,3 +1,4 @@
+import {dismissTransient} from './lib/transientBack';
 import {phoneText as t} from "./lib/phone";
 import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
@@ -147,6 +148,7 @@ export function Phone({
     return () => onBusyChange(false);
   }, [busy, onBusyChange]);
   const [editContact, setEditContact] = useState<string | null>(null);
+  const contactLabels=useRef(new Map<string,string>());
   const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false),
     [grouping, setGrouping] = useState(false);
@@ -168,8 +170,9 @@ export function Phone({
     else if (content.top < bounds.top) viewport.scrollTop -= bounds.top - content.top;
   };
   const back = () => {
+    if(dismissTransient())return;
     if (membersOpen) { setMembersOpen(false); requestAnimationFrame(()=>screen.current?.querySelector<HTMLElement>('[aria-label="Управление участниками"]')?.focus({preventScroll:true})); return; }
-    if (adding) { setAdding(false); return; }
+    if (adding) { setAdding(false); setEditContact(null); return; }
     if (grouping) { setGrouping(false); return; }
     if (tab === 'messages' && (conversation || contact || recipient)) {
       setConversation(null); setContact(null); setRecipient(null);
@@ -235,7 +238,7 @@ export function Phone({
     setEditContact(null);
     setAdding(false);
     setTab("contacts");
-    setLabel("");
+    contactLabels.current.clear();setLabel("");
     setGrouping(false);
     setGroupMembers([]);
     setGroupName("");
@@ -387,7 +390,7 @@ export function Phone({
     }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
   const inChat = tab==='messages' && !!(conversation || contact || recipient);
-  const nested = inChat || (tab==='contacts' && !!detail) || grouping;
+  const nested = adding || editContact!==null || inChat || (tab==='contacts' && !!detail) || grouping;
   const title = membersOpen ? 'Участники группы' : grouping && tab==='messages' ? 'Новая группа' : inChat ? selected?.title || target?.label || recipientTarget?.subject.name : tab==='contacts' ? detail ? currentContact?.label : 'Контакты' : tab==='calls' ? 'Звонки' : 'Переписки';
   const jobHere=job?.kind==='communication'&&(job.presentation?.call_id?tab==='calls':tab==='messages'&&!!conversation&&job.presentation?.conversation_id===conversation);
   return (
@@ -400,8 +403,7 @@ export function Phone({
         className={`phone-device ${open ? "is-open" : ""} ${call?.status === "ringing" ? "is-ringing" : ""}`}
         data-testid="phone-device"
       >
-        <button
-          ref={trigger}
+        <button ref={trigger}
           className="phone-peek"
           aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
           aria-expanded={open}
@@ -526,7 +528,8 @@ export function Phone({
                             ?.blocked || false,
                       }).then((next) => {
                         if (next) {
-                          setAdding(false);
+                          if(editContact)contactLabels.current.delete(editContact);
+                          setEditContact(null);setAdding(false);
                           setLabel("");
                         }
                       });
@@ -536,7 +539,7 @@ export function Phone({
                       Сохранённое имя
                       <input
                         value={label}
-                        onChange={(e) => setLabel(e.target.value)}
+                        onChange={e=>{setLabel(e.target.value);if(editContact)contactLabels.current.set(editContact,e.target.value)}}
                         maxLength={160}
                         required
                       />
@@ -601,7 +604,7 @@ export function Phone({
                         disabled={locked}
                         onClick={() => {
                           setEditContact(c.id);
-                          setLabel(c.label);
+                          setLabel(contactLabels.current.get(c.id)??c.label);
                           setAdding(true);
                         }}
                       >

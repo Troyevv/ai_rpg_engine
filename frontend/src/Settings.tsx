@@ -39,9 +39,9 @@ export function Settings({
   const [capabilities, setCapabilities] = useState<Record<string,{thinking_models:string[]}>>({});
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  useEffect(()=>setDraft(value),[value]);
   useEffect(() => {
     if (open) {
-      setDraft(value);
       api<Record<string,unknown>>("/prompts").then(v=>setPromptNames(Object.keys(v))).catch(e=>toast.error(e.message));
       api<{deepseek:boolean}>("/credentials").then(v=>setStored(v.deepseek)).catch(e=>toast.error(e.message));
       api<Record<string,{thinking_models:string[]}>>("/capabilities").then(setCapabilities).catch(e=>toast.error(e.message));
@@ -66,7 +66,6 @@ export function Settings({
       open={open}
       onOpenChange={(v) => {
         if (saving) return;
-        if (v) setDraft(value);
         onOpenChange(v);
       }}
     >

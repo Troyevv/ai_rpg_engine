@@ -1,4 +1,5 @@
-import { Children, Fragment, isValidElement, useState, type ReactNode } from "react";
+import {useTransientBack} from '../../lib/transientBack';
+import { Children, Fragment, isValidElement, useState, useCallback, type ReactNode } from "react";
 import * as Select from "@radix-ui/react-select";
 import { Check, ChevronDown } from "lucide-react";
 
@@ -31,16 +32,17 @@ function items(children: ReactNode, preview?: ChoiceProps['optionPreview']): Rea
 }
 
 export function Choice({value, children, onValueChange, disabled, required, optionPreview, ...props}: ChoiceProps) {
-  const [showPreviews, setShowPreviews] = useState(false);
+  const [open,setOpen]=useState(false);
+  useTransientBack(open,useCallback(()=>setOpen(false),[]));
   const emptyRequired = required && value === "";
   const placeholder = emptyRequired && Children.toArray(children).find(child =>
     isValidElement<{value?: string}>(child) && child.props.value === "");
-  return <Select.Root onOpenChange={optionPreview ? setShowPreviews : undefined} value={emptyRequired ? "" : optionId(value)} onValueChange={v => onValueChange(v.slice(2))} disabled={disabled} required={required}>
+  return <Select.Root open={open} onOpenChange={setOpen} value={emptyRequired ? "" : optionId(value)} onValueChange={v => onValueChange(v.slice(2))} disabled={disabled} required={required}>
     <Select.Trigger {...props} data-choice="" value={value} className={`choice-trigger ${props.className || ""}`}>
       <Select.Value placeholder={isValidElement<{children?: ReactNode}>(placeholder) ? placeholder.props.children : undefined}/><Select.Icon><ChevronDown size={16}/></Select.Icon>
     </Select.Trigger>
     <Select.Portal><Select.Content position="popper" sideOffset={4} collisionPadding={8} className="choice-popup">
-      <Select.Viewport>{items(children,showPreviews ? optionPreview : undefined)}</Select.Viewport>
+      <Select.Viewport>{items(children,open ? optionPreview : undefined)}</Select.Viewport>
     </Select.Content></Select.Portal>
   </Select.Root>;
 }

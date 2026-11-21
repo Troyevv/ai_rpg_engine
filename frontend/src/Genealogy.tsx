@@ -1,8 +1,11 @@
+import {PanControls} from './components/ui/pan-controls';
 import { Choice } from "@/components/ui/choice";
+import {foreground, useTransientBack} from './lib/transientBack';
 import { useEffect, useMemo, useState, useRef, memo } from "react";
 import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import {
   ReactFlow,
+  Panel as FlowPanel,
   ViewportPortal,
   EdgeLabelRenderer,
   BaseEdge,
@@ -77,7 +80,11 @@ function Fit({ version, arcMargin, cache, reset, focusX, focusY }: { version: st
     );
     return () => cancelAnimationFrame(id);
   }, [version, flow.viewportInitialized, arcMargin, reset]);
-  return <Controls showInteractive={false} showFitView={false}><ControlButton title="Вся семья" aria-label="Вся семья" onClick={()=>void fit()}><Maximize/></ControlButton></Controls>;
+  return <><Controls showInteractive={false} showFitView={false}><ControlButton title="Вся семья" aria-label="Вся семья" onClick={()=>void fit()}><Maximize/></ControlButton></Controls>
+    <FlowPanel position="bottom-right"><PanControls move={(x,y)=>{
+      const current=flow.getViewport();
+      void flow.setViewport({...current,x:current.x-100*x,y:current.y-100*y});
+    }}/></FlowPanel></>;
 }
 export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save; rootId?: string; onCharacter?:(id:string)=>void; viewState?: WorkspaceView }) {
   const [retry,setRetry]=useState(0);
@@ -128,6 +135,11 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
   }, [root, depth, save.id, save.revision, save.state.controlled_actor_id,retry]);
   const geometry = useMemo(() => graph ? genealogyLayout(graph) : null, [graph]);
   const [edgeDetail,setEdgeDetail]=useState<string|null>(null);
+  const detailPanel=useRef<HTMLDivElement>(null);
+  useTransientBack(!!edgeDetail,()=>{
+    if(!detailPanel.current||!foreground(detailPanel.current))return false;
+    setEdgeDetail(null);
+  });
   const center = (id:string) => {setRoot(id);setSelected(null);setEdgeDetail(null)};
   const layout = useMemo(() => {
     if (!graph || !geometry) return {nodes:[],edges:[]};
@@ -148,7 +160,7 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
   const personLink=(id:string)=>{const n=graph?.nodes.find(n=>n.id===id);return n&&<button className="family-relative" onClick={()=>{setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}} key={id}><CharacterAvatar subject={n} saveId={save.id} size={32}/><span>{n.name}</span></button>};
   return (
     <section className="genealogy" aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<Choice value={matchingRoots.some(c=>c.id===root)?root:""} onValueChange={selectedValue => {setGraph(null);setSelected(null);setRoot(selectedValue)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Choice></label></div>
-      <p className="family-touch-hint">Перемещай дерево пальцем. Кнопка «Вся семья» покажет общий обзор.</p>
+      <p className="family-touch-hint">Кнопка «Вся семья» покажет общий обзор.</p>
       <p className="family-reading-hint">Родители сверху, дети снизу. Общая ветвь объединяет только подтверждённых биологических родителей. Остальные связи подписаны отдельно.</p>
       <div className="family-view-tools"><div className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>
         Глубина ветвей{" "}
@@ -173,6 +185,9 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
           <div className={`family-tree-layout ${view==='graph'&&geometry?.cards.length?'has-relations':''}`}>
           {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}{view==='graph'&&<div className="family-graph" onKeyDownCapture={e=>{const edge=(e.target as Element).closest('.react-flow__edge')?.getAttribute('data-id');if(edge&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setEdgeDetail(edge);return}const id=(e.target as Element).closest('.react-flow__node')?.getAttribute('data-id');if(id&&!(e.target as HTMLElement).closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}}}>
             <ReactFlow
+              panOnDrag={!matchMedia("(any-pointer:coarse)").matches}
+              zoomOnPinch={false}
+              zoomOnDoubleClick={false}
               nodes={layout.nodes}
               edges={layout.edges}
               nodeTypes={nodeTypes}
@@ -212,7 +227,7 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
           })}</section>}
           </div>
           {!!geometry?.redundantSiblings.length&&<details className="family-sibling-summary"><summary>Братья и сёстры · общая родительская ветвь</summary>{graph.edges.filter(e=>geometry.redundantSiblings.includes(e.id)).map(e=><p key={e.id}>{graph.nodes.find(n=>n.id===e.source_id)?.name} — {relationLabel(e)} — {graph.nodes.find(n=>n.id===e.target_id)?.name}</p>)}</details>}
-          {!!activeEdges.length && <div className="family-relationship-detail" role="status"><div>{activeEdges.map(e=><p key={e.id}>{graph.nodes.find(n=>n.id===e.source_id)?.name} — {relationLabel(e)} — {graph.nodes.find(n=>n.id===e.target_id)?.name}</p>)}</div><button aria-label="Закрыть сведения о связи" onClick={()=>setEdgeDetail(null)}>×</button></div>}
+          {!!activeEdges.length && <div ref={detailPanel} className="family-relationship-detail" role="status"><div>{activeEdges.map(e=><p key={e.id}>{graph.nodes.find(n=>n.id===e.source_id)?.name} — {relationLabel(e)} — {graph.nodes.find(n=>n.id===e.target_id)?.name}</p>)}</div><button aria-label="Закрыть сведения о связи" onClick={()=>setEdgeDetail(null)}>×</button></div>}
           {selected && graph.nodes.find((n) => n.id === selected) && (
             <div className="family-preview">
               <CharacterAvatar

@@ -1,6 +1,7 @@
+import {DraftDialog} from '../components/ui/draft-dialog';
 import { Choice } from "@/components/ui/choice";
 import {useEffect,useRef,useState} from 'react';
-import {Dialog,DialogContent,DialogTitle,DialogDescription} from '../components/ui/dialog';
+import {DialogContent,DialogTitle,DialogDescription} from '../components/ui/dialog';
 import {Button} from '../components/ui/button';
 import {api} from '../api';
 
@@ -24,10 +25,10 @@ export function CreateRecordDialog({wid,target,characters,facts,onClose,onCreate
   try {const result=await api<{entity_id:string}>(`/workspaces/${wid}/draft`,{revision,operation:'add',kind,value},'PATCH');if(alive.current){await onCreated(kind,result.entity_id);if(alive.current)onClose()}}
   catch(e){setError((e as Error).message)}finally{guard.current=false;setBusy(false)}
  }
- return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose()}}><DialogContent className="ww-create-dialog"><DialogTitle>Добавить {names[kind]||'запись'}</DialogTitle><DialogDescription>Запись появится в мире только после создания. Все введённые поля сохраняются одной версией.</DialogDescription><fieldset disabled={busy}>
+ return <DraftDialog dirty={!!(title||description||destination||fact||source!==(target.source||''))} open onOpenChange={open=>{if(!open&&!busy)onClose()}}><DialogContent className="ww-create-dialog"><DialogTitle>Добавить {names[kind]||'запись'}</DialogTitle><DialogDescription>Запись появится в мире только после создания. Все введённые поля сохраняются одной версией.</DialogDescription><fieldset disabled={busy}>
  {pair||belief?personSelect(pair?'От кого':'Кто знает',source,setSource):<label>{kind==='character'?'Имя':'Название или краткое описание'}<input autoFocus value={title} onChange={e=>setTitle(e.target.value)}/></label>}
  {pair&&personSelect('К кому',destination,setDestination)}
  {belief&&<label>Факт<Choice value={fact} onValueChange={selectedValue => setFact(selectedValue)}><option value="">Выберите факт</option>{facts.map(([id,f])=><option key={id} value={id}>{String(f.text)}</option>)}</Choice></label>}
  {!belief&&<label>{pair?'Контекст отношения':'Описание'}<textarea rows={5} value={description} onChange={e=>setDescription(e.target.value)}/></label>}
- </fieldset>{error&&<p role="alert">{error}</p>}<footer className="workshop-dialog-actions"><Button variant="ghost" disabled={busy} onClick={onClose}>Отмена</Button><Button disabled={busy||!valid} onClick={()=>void save()}>{busy?'Создаём…':'Создать запись'}</Button></footer></DialogContent></Dialog>;
+ </fieldset>{error&&<p role="alert">{error}</p>}<footer className="workshop-dialog-actions"><Button variant="ghost" disabled={busy} onClick={onClose}>Отмена</Button><Button disabled={busy||!valid} onClick={()=>void save()}>{busy?'Создаём…':'Создать запись'}</Button></footer></DialogContent></DraftDialog>;
 }

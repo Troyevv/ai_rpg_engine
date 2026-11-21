@@ -290,3 +290,12 @@ test('late author GET cannot replace a newer player view or workspace identity',
  await expect(workshop).not.toContainText('AUTHOR_ONLY_IDENTITY_RACE');
  expect(await page.evaluate(()=>localStorage.getItem('draftWorkspace'))).toBe(created.id);
 });
+
+test('Back from the import editor preserves its text and keeps it out of the idea prompt',async({page})=>{
+ await page.goto('/');await nav(page,'Создать');await creationMethod(page,'Импортировать');
+ const input=page.getByLabel('Описание мира или текст импорта');
+ await input.fill('{"campaign":"Черновик импорта"}');
+ await page.goBack();await expect(input).toHaveValue('');
+ await creationMethod(page,'Импортировать');
+ await expect(input).toHaveValue('{"campaign":"Черновик импорта"}');
+});

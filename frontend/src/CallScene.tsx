@@ -1,3 +1,5 @@
+import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
+import {ActionPanel} from './components/ui/action-panel';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {PhoneOff,Minimize2,Phone,Send,ArrowDown} from 'lucide-react';
@@ -47,7 +49,24 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
  useEffect(()=>{if(obscured)collapse()},[obscured]);
  const wasActive=useRef(active);
  useEffect(()=>{if(wasActive.current&&!active){collapse();onSelect(null)}wasActive.current=active},[active]);
- const send=async()=>{if(disabled||!active||!draft.trim())return;const text=draft;try{await submit(text)}catch{return}setDraft(current=>current===text?'':current);if(sessionStorage.getItem(key)===text)sessionStorage.removeItem(key)};
+ const sendingRef=useRef(false);
+ const [sending,setSending]=useState(false);
+ const send=async()=>{
+   if(sendingRef.current||disabled||!active||!draft.trim())return;
+   const text=draft;
+   sendingRef.current=true;
+   setSending(true);
+   try {
+     await submit(text);
+     setDraft(current=>current===text?'':current);
+     if(sessionStorage.getItem(key)===text)sessionStorage.removeItem(key);
+   } catch {
+     // The parent reports the failure; the editable draft stays available.
+   } finally {
+     sendingRef.current=false;
+     setSending(false);
+   }
+ };
  if(!call)return null;
  return createPortal(<>
    {minimized&&<button className="call-chip" onClick={expand}><Phone size={18}/><span>{call.label}</span><strong>{t(active?'restore':'history')}</strong></button>}
@@ -63,19 +82,23 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
      }}>
        <header className="call-scene-header"><CharacterAvatar subject={call.subject} saveId={save.id} size={76}/><div><p>{t(active?'connected':'ended')}</p><h2>{call.label}</h2><small>{call.time_label}</small></div><button aria-label={t('minimize')} onClick={collapse}><Minimize2 size={22}/></button></header>
        <div className="call-scene-scroll" ref={scroll} onScroll={onScroll}><div className="call-scene-text">{children}{recovery}
-         {active&&choices.length>0&&<div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
-           {choices.map(c=><button key={JSON.stringify([c.action,c.speech])} type="button" disabled={disabled} onClick={()=>{
-             const text=[c.action,c.speech].filter(Boolean).join(' ');
-             const next=draft.trim() ? draft+'\n'+text : text;
-             setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
-           }}>{[c.action,c.speech].filter(Boolean).join(' ')}</button>)}
-         </div>}
+         {active&&choices.length>0&&<ActionPanel label="Варианты продолжения" hidden={working}><div className="call-suggestions" role="group" aria-label="Варианты продолжения звонка">
+           {choices.map(c=>{
+             const text=choiceText(c);
+             const selected=draft===text || draft.endsWith('\n'+text);
+             return <NarrativeChoiceCard key={JSON.stringify([c.action,c.speech])} choice={c}
+               disabled={disabled||sending} selected={selected} sending={selected&&sending} choose={value=>{
+                 const next=draft.trim() ? draft+'\n'+value : value;
+                 setDraft(next);sessionStorage.setItem(key,next);input.current?.focus();
+               }}/>;
+           })}
+         </div></ActionPanel>}
        </div></div>
        <footer>
          {active&&<div className="call-activity" data-state={activity}><p role="status" aria-live="polite" aria-atomic="true">{working&&<span className="call-activity-dots" aria-hidden="true"><i/><i/><i/></span>}{t(activity)}</p>{stop&&canStopCall(job)&&<button disabled={stopping} onClick={stop}>{t('callStop')}</button>}</div>}
          {active&&restoreSpeech&&!draft&&<button disabled={disabled} onClick={()=>{const text=job!.user_text!;setDraft(text);sessionStorage.setItem(key,text);input.current?.focus()}}>{t('restoreSpeech')}</button>}
          {away&&<button onClick={jumpToLatest}><ArrowDown size={15}/>{t('latest')}</button>}
-         {active?<><form onSubmit={e=>{e.preventDefault();void send()}}><textarea ref={input} aria-label={t('input')} value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem(key,e.target.value)}} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.stopPropagation();void send()}}}/><button disabled={disabled||!draft.trim()} aria-label={t('send')}><Send size={21}/></button></form><div className="call-scene-actions"><button onClick={collapse}>{t('physical')}</button><button className="call-end" disabled={disabled} onClick={()=>void end()}><PhoneOff size={18}/>{t('end')}</button></div></>:<button onClick={()=>onSelect(null)}>{t('close')}</button>}
+         {active?<><form onSubmit={e=>{e.preventDefault();void send()}}><textarea ref={input} aria-label={t('input')} value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem(key,e.target.value)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.stopPropagation();void send()}}}/><button disabled={disabled||!draft.trim()} aria-label={t('send')}><Send size={21}/></button></form><div className="call-scene-actions"><button onClick={collapse}>{t('physical')}</button><button className="call-end" disabled={disabled} onClick={()=>void end()}><PhoneOff size={18}/>{t('end')}</button></div></>:<button onClick={()=>onSelect(null)}>{t('close')}</button>}
        </footer>
      </section>
    </div>

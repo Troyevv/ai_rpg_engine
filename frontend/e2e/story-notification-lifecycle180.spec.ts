@@ -18,7 +18,11 @@ async function dossier(page:Page){await nav(page,'Персонажи');await pic
 async function acknowledged(page:Page,s:any,id:string,kind='toast'){
  return page.evaluate(({s,id,kind})=>localStorage.getItem(`story-presentation-v1:${s.save}:qa_kirill:${kind}:${id}`)==='1',{s,id,kind});
 }
-async function dismiss(page:Page,id:string){await expect(toast(page)).toHaveAttribute('data-notice-id',id);await toast(page).getByRole('button',{name:'Скрыть уведомление'}).click()}
+async function dismiss(page:Page,id:string){
+ await expect(toast(page)).toHaveAttribute('data-notice-id',id);
+ await toast(page).getByRole('button',{name:'Скрыть уведомление'}).click();
+ await expect(page.locator('.story-toast[data-notice-id='+JSON.stringify(id)+']')).toHaveCount(0);
+}
 for(const theme of ['graphite','parchment']){
  test(`visible deliveries survive phone, inactive workspace and reload, then settle once: ${theme}`,async({page,request})=>{
   test.setTimeout(90000);const s=await setup(page,request,theme);

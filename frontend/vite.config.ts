@@ -3,8 +3,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 import fs from "node:fs";
+import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
+let revision: string | null = null;
+try {
+  revision = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {cwd:__dirname, encoding:'utf8', stdio:['ignore','pipe','ignore']}).trim();
+} catch { /* ZIP installations are identified by their compiled asset. */ }
 export default defineConfig({
+  define: {'import.meta.env.VITE_CLIENT_REVISION': JSON.stringify(revision)},
   plugins: [react(), tailwindcss(), {name:'version-service-worker',closeBundle(){
  const root=path.resolve(__dirname,'dist');if(!fs.existsSync(root+'/sw.js'))return;
  const digest=createHash('sha256').update(fs.readFileSync(root+'/index.html'));

@@ -368,8 +368,8 @@ class EngineStorage:
                     return
                 from backend.runtime_v3.suggestions import split_suggestions
                 from backend.runtime_v3 import narrative_frame
-                decoded = (narrative_frame.read(row[0], complete=True)
-                           if narrative_frame.requested(json.loads(job.get('context_json') or '[]')) else None)
+                recorded = json.loads(job.get('context_json') or '[]')
+                decoded = narrative_frame.recorded_reply(row[0], recorded)
                 frame = None
                 if decoded:
                     prose, frame = decoded
@@ -593,7 +593,9 @@ class EngineStorage:
                         warnings.append(warning)
                 db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(warnings,ensure_ascii=False),job_id))
             if publish:
-                marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1)
+                from backend.services.choice_diagnostics import shape
+                marker = dict(turn_id=tid,variant_id=variant,sequence=sequence,revision=save['revision']+1,
+                              choices=shape(choices))
                 db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._published_scene',json(?)) WHERE id=?",
                            (json.dumps(marker), job_id))
             self._archive_memory(db, job['save_id'], state)

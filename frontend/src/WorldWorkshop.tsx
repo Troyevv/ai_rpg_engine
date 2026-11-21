@@ -1,3 +1,5 @@
+import {useImportBuffer} from './workshop/useImportBuffer';
+import {RefreshRegion} from './components/ui/refresh-region';
 import {PortraitCommission} from './workshop/PortraitCommission';
 import { Choice } from "@/components/ui/choice";
 import {ReviewDecisions,type ReviewDecision} from './workshop/ReviewDecisions';
@@ -155,7 +157,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     onWorld: (id: number) => void;
     onGame: (world: number, save: number) => void;
 }) {
-    useWorkshopBack(onBack);
+
     const initialBuffer=useRef(readIdeaBuffer(localStorage.getItem('draftWorkspace')||'')).current;
     const restoredCreation=useRef(!!initialBuffer);
     const [inputSaved,setInputSaved]=useState(true);
@@ -166,6 +168,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [residenceGrouping,setResidenceGrouping] = useState('actor');
     const [structuredEdit, setStructuredEdit] = useState('');
     const [mode, setMode] = useState('quick');
+    useWorkshopBack(onBack,()=>{if(mode==='quick')return false;setMode('quick');return true});
     const initialView=useRef(storedView(localStorage.getItem('draftWorkspace')||'')).current;
     const [section, setSection] = useState<WorkshopSection>(initialView.section||'overview');
     const [figurePreview,setFigurePreview]=useState<{workspace:string;revision:number;layer:'eyes'|'body'}|null>(null);
@@ -204,9 +207,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [authorAsk, setAuthorAsk] = useState(false);
     const [authorAcknowledged, setAuthorAcknowledged] = useState(false);
     const [text, setText] = useState(()=>initialBuffer?.text??sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))??'');
-    const [importFormat, setImportFormat] = useState<'text'|'json'>('text');
-    const [importFile, setImportFile] = useState('');
-    const detectedImport = useMemo(() => detectWorldImport(text, importFile ? importFormat : undefined), [text, importFile, importFormat]);
+    const [{text:importText,file:importFile,format:importFormat},setImport]=useImportBuffer(id,author);
+    const detectedImport=useMemo(()=>detectWorldImport(importText,importFile?importFormat:undefined),[importText,importFile,importFormat]);
     const [name, setName] = useState(initialBuffer?.name||'');
     const [useIdea, setUseIdea] = useState(initialBuffer?.useIdea||false);
     const [busy, setBusy] = useState(false);
@@ -278,10 +280,6 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
             dispatchWorkspace({type: 'failed', id, request});
         }
     };
-    useEffect(() => { setImportFormat('text'); setImportFile(''); }, [id]);
-    useEffect(() => { if (mode !== 'import' && importFormat === 'json') {
-        setText(''); setImportFormat('text'); setImportFile('');
-    } }, [mode, importFormat]);
     useEffect(() => {
         const controller=new AbortController(), initialId=id;
         void api<typeof list>('/workspaces',undefined,'GET',controller.signal).then(items=>{
@@ -297,7 +295,14 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         void refresh();
         return () => loadController.current?.abort();
     }, [id, author]);
-    const openDrafts=()=>{setDraftsOpen(true);void api<WorkspacePick[]>('/workspaces').then(setList).catch(e=>toast.error(e.message))};
+    const listRead=useRef<AbortController|null>(null);
+    const reloadDrafts=()=>{
+        listRead.current?.abort();const request=new AbortController();listRead.current=request;
+        void api<WorkspacePick[]>('/workspaces',undefined,'GET',request.signal).then(setList)
+          .catch(e=>{if(!request.signal.aborted)toast.error(e.message)});
+    };
+    useEffect(()=>{if(!draftsOpen)return;return ()=>listRead.current?.abort()},[draftsOpen]);
+    const openDrafts=()=>{setDraftsOpen(true);reloadDrafts()};
     const savedCreation=JSON.stringify(draft?.creation_settings||{});
     useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&(draft.author||!draft.version_id)){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id,draft?.author,draft?.version_id]);
     useEffect(()=>{if(!id||restoredCreation.current)setInputSaved(writeIdeaBuffer(id,{text,name,useIdea,creation}));},[id,text,name,useIdea,creation]);
@@ -573,7 +578,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const characterGroups=[...(familyIds.length?[{id:'family',label:'Семья',ids:familyIds}]:[]),...Object.entries(state?.world.organizations||{}).map(([oid,o])=>({id:'org:'+oid,label:String(o.name),ids:Object.values(state?.world.roles||{}).filter(role=>role.organization_id===oid&&role.status!=='closed').map(role=>String(role.actor_id)).filter(cid=>characters.some(c=>c.id===cid))})).filter(g=>g.ids.length)];
     const searchResults=workshopSearch(state,search);
     const selectedCard=characters.find(c=>c.id===selectedCharacter) as WorkshopCharacter|undefined;
-    const navigate=(next:WorkshopSection)=>{setMode('quick');setRecordTarget(null);setSection(next);if(next==='idea')setEditingIdea(job?.kind!=='draft_world'||job.status==='saved'&&!draft?.has_creative_recovery)};
+    const navigate=(next:WorkshopSection)=>{if(mode==='scenario')setMode('quick');setRecordTarget(null);setSection(next);if(next==='idea')setEditingIdea(job?.kind!=='draft_world'||job.status==='saved'&&!draft?.has_creative_recovery)};
     const pageHeader=(title:string,description:string)=><header className="ww-page-head"><div><p className="ww-eyebrow">Мастерская миров</p><h1>{title}</h1><p>{description}</p></div></header>;
     const tab=(key:string,items:[string,string][])=>{const value=subsection[key]||items[0][0];return <SectionTabs label={key} value={value} onChange={value=>setSubsection({...subsection,[key]:value})} items={items.map(([id,label])=>({id,label}))}/>};
     const currentSub=(key:string,fallback:string)=>subsection[key]||fallback;
@@ -631,14 +636,14 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       </>}
       <Dialog open={draftsOpen} onOpenChange={setDraftsOpen}><DialogContent><DialogHeader><DialogTitle>Мои черновики</DialogTitle><DialogDescription>Выберите мир, создайте новый или восстановите удалённый.</DialogDescription></DialogHeader>
       <details className="workshop-continue" open><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
-        <div className="workshop-draft-list">
+        <RefreshRegion refresh={reloadDrafts}><div className="workshop-draft-list">
           <button disabled={locked} className={!id ? 'selected' : ''} onClick={() => { selectWorkspace('',null,false);  setDraftsOpen(false); }}>+ Новая история</button>
           {list.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}>
             <button aria-label={w.name} aria-describedby={`draft-meta-${w.id}`} disabled={locked} className={id === w.id ? 'selected' : ''} onClick={() => { selectWorkspace(w.id,null,false); setDraftsOpen(false); }}>{w.name}<small id={`draft-meta-${w.id}`}>Ревизия {w.id===id?draft?.revision??w.revision:w.revision}{w.id===id?' · Открыт':''}</small></button>
             <Button variant="ghost" size="sm" aria-label={`Удалить черновик «${w.name}»`} disabled={locked} onClick={() => {setDeleteError('');setDeleteDraft({...w,revision:w.id===id?draft?.revision??w.revision:w.revision})}}><Trash2 size={16}/></Button>
           </div>)}
         </div>
-        <details className="workshop-trash" onToggle={e => { if (e.currentTarget.open) void api<WorkspacePick[]>('/workspaces?deleted=true').then(setRemoved).catch(err => toast.error(err.message)); }}><summary>Удалённые черновики</summary>
+        </RefreshRegion><details className="workshop-trash" onToggle={e => { if (e.currentTarget.open) void api<WorkspacePick[]>('/workspaces?deleted=true').then(setRemoved).catch(err => toast.error(err.message)); }}><summary>Удалённые черновики</summary>
           {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); selectWorkspace(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
         </details>
       </details>
@@ -683,14 +688,14 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
         <p>{mode === 'import' ? 'Подойдёт .md, .txt или готовый .json мира. Можно вставить текст выжимки ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
 
-        {mode === 'import' && <Input type="file" accept=".md,.txt,.json" disabled={locked} aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void run(async () => {const content = await f.text(); setText(content); setImportFormat(f.name.toLowerCase().endsWith('.json') ? 'json' : 'text'); setImportFile(f.name);}); }}/ >}
-        {mode === 'import' && <p role="status">Распознано: {detectedImport.format === 'json' ? detectedImport.error ? 'JSON (ошибка)' : 'JSON World State' : 'текстовая выжимка'}{importFile && ` · ${importFile}`}{importFile && importFormat === 'json' && <> · Будет импортирован готовый World State. <Button variant="ghost" disabled={locked} onClick={() => {setImportFormat('text'); setImportFile('');}}>Вставить текст выжимки</Button></>}</p>}
+        {mode === 'import' && <Input type="file" accept=".md,.txt,.json" disabled={locked} aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void run(async () => {const content = await f.text(); setImport({text:content,format:f.name.toLowerCase().endsWith('.json')?'json':'text',file:f.name});}); }}/ >}
+        {mode === 'import' && <p role="status">Распознано: {detectedImport.format === 'json' ? detectedImport.error ? 'JSON (ошибка)' : 'JSON World State' : 'текстовая выжимка'}{importFile && ` · ${importFile}`}{importFile && importFormat === 'json' && <> · Будет импортирован готовый World State. <Button variant="ghost" disabled={locked} onClick={() => {setImport({text:importText,format:'text',file:''});}}>Вставить текст выжимки</Button></>}</p>}
         {mode === 'import' && detectedImport.error && <p className="workshop-error" role="alert">{detectedImport.error}</p>}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
-                {<label>Содержимое файла или текст выжимки<Textarea className="workshop-idea-input" value={text} onChange={e => {setText(e.target.value); setImportFile(''); setImportFormat('text');}} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} /></label>}
+                {<label>Содержимое файла или текст выжимки<Textarea className="workshop-idea-input" value={importText} onChange={e=>setImport({text:e.target.value,format:'text',file:''})} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} /></label>}
         {draft && mode!=='import' && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
         <div className="workshop-create-actions">
-          <Button disabled={locked || (!text.trim() && (mode==='import'||!useIdea)) || (mode === 'import' && !!detectedImport.error)} onClick={() => void run(async () => {
+          <Button disabled={locked || (mode==='import'?!importText.trim():!text.trim()&&!useIdea) || (mode === 'import' && !!detectedImport.error)} onClick={() => void run(async () => {
             if (mode === 'import' && detectedImport.error) throw new Error(detectedImport.error);
             let current = draft; let wid = id;
             if (!current) {
@@ -700,7 +705,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
               setList(items => [w, ...items]);selectWorkspace(wid,current);
             }
             if (mode === 'import') {
-              const imported = await api<Draft>(`/workspaces/${wid}/draft/import`, {text, format: detectedImport.format, revision: current.revision});
+              const imported = await api<Draft>(`/workspaces/${wid}/draft/import`, {text:importText, format: detectedImport.format, revision: current.revision});
               const opened = author ? await api<Draft>(`/workspaces/${wid}/draft?author=true`) : imported;
               selectWorkspace(wid, opened);
             }
@@ -711,7 +716,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
             }
             if(!id)sessionStorage.removeItem('workshop-idea:');
             setEditingIdea(false);setSection('overview');
-            if (mode === 'import' && detectedImport.format === 'json') {setText(''); setImportFormat('text'); setImportFile('');}
+            if(mode==='import')setImport();
           })}>{mode === 'import' ? 'Открыть в редакторе' : state ? 'Создать новую версию мира' : 'Развить идею и создать мир'}</Button>
           {state && <Button variant="ghost" onClick={() => {setEditingIdea(false);setSection('overview')}}>Вернуться к миру</Button>}
         </div>
@@ -801,7 +806,12 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
 
  <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); switchView(true); }}>Показать всё</Button></DialogContent></Dialog>
  <Dialog open={!!edit} onOpenChange={o => { if (!o)
-        setEdit(null); }}><DialogContent className="ww-field-dialog" onCloseAutoFocus={e=>{if(fieldTrigger.current?.isConnected){e.preventDefault();fieldTrigger.current.focus()}}}><DialogHeader><DialogTitle>{edit?.label}</DialogTitle><DialogDescription>{editContext()} · Меняется только выбранное поле.{edit?.field==='fields.Внешность'&&' Сохранённая иллюстрация настраивается отдельно — карандашом на портрете.'}</DialogDescription></DialogHeader>{editError&&<div><p role="alert">{editError}</p>{fieldJob&&<Button variant="outline" onClick={()=>void run(async()=>download(JSON.stringify(await api(`/workspaces/${id}/draft/raw?job_id=${fieldJob}`),null,2),'generation-response.json'))}>Скачать исходный ответ и диагностику</Button>}</div>}{fieldJob&&job?.id===fieldJob&&active(job)&&<div><p role="status">ИИ изменяет выбранное поле. Прежнее значение сохранено.</p><Button variant="outline" disabled={busy} onClick={()=>void run(async()=>{await api(`/jobs/${fieldJob}/stop`,{});await refresh()})}>Остановить изменение</Button></div>}{edit&&edit.field!=='__character'&&<p className="ww-field-status" role="status">{busy?'Сохраняем…':fieldDirty?'Есть несохранённые изменения. При закрытии ввод сохранится в этом браузере.':'Поле соответствует сохранённой версии.'}</p>}{edit?.field==='secret_keeper_ids'&&<p className="workshop-hint">Персонажи, которые сознательно хранят эту личную тайну. На старте они будут знать её содержание.</p>}{edit?.field==='secret_biography_ids'&&<p className="workshop-hint">Чью скрытую биографию описывает факт. Эта связь сама по себе не даёт персонажу знания тайны.</p>}{edit&&editRevision!==draft?.revision&&<Button variant="outline" onClick={()=>{setEditRevision(draft?.revision||0);setEditError('')}}>Использовать ввод для текущей версии</Button>}{edit && edit.field !== '__character' && <fieldset className="ww-field-input" disabled={locked}>{['minute','start_minute','end_minute'].includes(edit.field)?<WorldTimeEditor onValidity={setTimeValid} wid={id} value={value} label={edit.label} onChange={setValue}/>:edit.field==='dimensions'?<FeelingEditor value={(value||{}) as Item} onChange={setValue}/>:options(edit.field) ? Array.isArray(value) ? <ReferenceChecklist key={`${edit.kind}:${edit.id}:${edit.field}`} label={edit.label} options={options(edit.field)!} value={value} onChange={setValue}/> : <Choice aria-label={edit.label} value={String(value ?? '')} onValueChange={selectedValue => setValue(selectedValue || null)}><option value="">Не указано</option>{options(edit.field)!.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</Choice> : editTypes.includes('boolean') && nullableEdit ? <Choice aria-label={edit.label} value={value==null?'unknown':String(value)} onValueChange={selectedValue => setValue(selectedValue==='unknown'?null:selectedValue==='true')}><option value="unknown">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></Choice> : typeof value === 'boolean' ? <label><input type="checkbox" checked={value} onChange={e => setValue(e.target.checked)}/>Да</label> : typeof value === 'number' || editTypes.includes('integer') || editTypes.includes('number') ? <Input type="number" aria-label={edit.label} value={value==null?'':String(value)} onChange={e => setValue(e.target.value==='' && nullableEdit?null:Number(e.target.value))}/> : structuredField(edit.field,value,editSchema) ? <StructuredValueEditor label={edit.label} field={edit.field} value={value} schema={editSchema} definitions={draft?.editor?.definitions} references={options} onChange={v=>{setValue(v);setStructuredEdit(JSON.stringify(v,null,2))}}/> : value && typeof value === 'object' && !Array.isArray(value) ? <div>{['trust', 'affection', 'attraction', 'irritation', 'fear', 'jealousy', 'respect', ...Object.keys(value)].filter((v, i, a) => a.indexOf(v) === i).map(k => <label key={k}>{runtimeLabels[k]||k}<Input type="number" min={-100} max={100} value={String((value as Item)[k] ?? '')} onChange={e => { const next = { ...value } as Item; if (e.target.value === '')
+        setEdit(null); }}><DialogContent className="ww-field-dialog" onOpenAutoFocus={e=>{
+            if(matchMedia('(any-pointer: coarse)').matches){
+                const title=(e.target as HTMLElement).querySelector<HTMLElement>('.dialog-title');
+                if(title){e.preventDefault();title.tabIndex=-1;title.focus({preventScroll:true})}
+            }
+        }} onCloseAutoFocus={e=>{if(fieldTrigger.current?.isConnected){e.preventDefault();fieldTrigger.current.focus()}}}><DialogHeader><DialogTitle>{edit?.label}</DialogTitle><DialogDescription>{editContext()} · Меняется только выбранное поле.{edit?.field==='fields.Внешность'&&' Сохранённая иллюстрация настраивается отдельно — карандашом на портрете.'}</DialogDescription></DialogHeader>{editError&&<div><p role="alert">{editError}</p>{fieldJob&&<Button variant="outline" onClick={()=>void run(async()=>download(JSON.stringify(await api(`/workspaces/${id}/draft/raw?job_id=${fieldJob}`),null,2),'generation-response.json'))}>Скачать исходный ответ и диагностику</Button>}</div>}{fieldJob&&job?.id===fieldJob&&active(job)&&<div><p role="status">ИИ изменяет выбранное поле. Прежнее значение сохранено.</p><Button variant="outline" disabled={busy} onClick={()=>void run(async()=>{await api(`/jobs/${fieldJob}/stop`,{});await refresh()})}>Остановить изменение</Button></div>}{edit&&edit.field!=='__character'&&<p className="ww-field-status" role="status">{busy?'Сохраняем…':fieldDirty?'Есть несохранённые изменения. При закрытии ввод сохранится в этом браузере.':'Поле соответствует сохранённой версии.'}</p>}{edit?.field==='secret_keeper_ids'&&<p className="workshop-hint">Персонажи, которые сознательно хранят эту личную тайну. На старте они будут знать её содержание.</p>}{edit?.field==='secret_biography_ids'&&<p className="workshop-hint">Чью скрытую биографию описывает факт. Эта связь сама по себе не даёт персонажу знания тайны.</p>}{edit&&editRevision!==draft?.revision&&<Button variant="outline" onClick={()=>{setEditRevision(draft?.revision||0);setEditError('')}}>Использовать ввод для текущей версии</Button>}{edit && edit.field !== '__character' && <fieldset className="ww-field-input" disabled={locked}>{['minute','start_minute','end_minute'].includes(edit.field)?<WorldTimeEditor onValidity={setTimeValid} wid={id} value={value} label={edit.label} onChange={setValue}/>:edit.field==='dimensions'?<FeelingEditor value={(value||{}) as Item} onChange={setValue}/>:options(edit.field) ? Array.isArray(value) ? <ReferenceChecklist key={`${edit.kind}:${edit.id}:${edit.field}`} label={edit.label} options={options(edit.field)!} value={value} onChange={setValue}/> : <Choice aria-label={edit.label} value={String(value ?? '')} onValueChange={selectedValue => setValue(selectedValue || null)}><option value="">Не указано</option>{options(edit.field)!.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</Choice> : editTypes.includes('boolean') && nullableEdit ? <Choice aria-label={edit.label} value={value==null?'unknown':String(value)} onValueChange={selectedValue => setValue(selectedValue==='unknown'?null:selectedValue==='true')}><option value="unknown">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></Choice> : typeof value === 'boolean' ? <label><input type="checkbox" checked={value} onChange={e => setValue(e.target.checked)}/>Да</label> : typeof value === 'number' || editTypes.includes('integer') || editTypes.includes('number') ? <Input type="number" aria-label={edit.label} value={value==null?'':String(value)} onChange={e => setValue(e.target.value==='' && nullableEdit?null:Number(e.target.value))}/> : structuredField(edit.field,value,editSchema) ? <StructuredValueEditor label={edit.label} field={edit.field} value={value} schema={editSchema} definitions={draft?.editor?.definitions} references={options} onChange={v=>{setValue(v);setStructuredEdit(JSON.stringify(v,null,2))}}/> : value && typeof value === 'object' && !Array.isArray(value) ? <div>{['trust', 'affection', 'attraction', 'irritation', 'fear', 'jealousy', 'respect', ...Object.keys(value)].filter((v, i, a) => a.indexOf(v) === i).map(k => <label key={k}>{runtimeLabels[k]||k}<Input type="number" min={-100} max={100} value={String((value as Item)[k] ?? '')} onChange={e => { const next = { ...value } as Item; if (e.target.value === '')
         delete next[k];
     else
         next[k] = Number(e.target.value); setValue(next); }}/></label>)}</div> : ['name','title'].includes(edit.field) ? <Input aria-label={edit.label} value={String(value??'')} onChange={e=>setValue(e.target.value)}/> : <Textarea aria-label={edit.label} value={Array.isArray(value) ? value.join('\n') : String(value ?? '')} onChange={e => setValue(Array.isArray(value) ? e.target.value.split('\n') : e.target.value)}/>}{nullableEdit && <Button variant="outline" onClick={()=>{setValue(null);setStructuredEdit('null');}}>Оставить неизвестным</Button>}{canDeclareVisibility&&<FieldVisibility policy={fieldVisibility} onChange={setPendingVisibility} facts={visibilityFacts}/>}<Button disabled={locked||!fieldDirty||invalidVisibility||['minute','start_minute','end_minute'].includes(edit.field)&&!timeValid||editRevision!==draft?.revision} onClick={() => {setBusy(true);setEditError('');void (async () => { await api(`/workspaces/${id}/draft`, { revision: editRevision, operation: 'patch', kind: edit.kind, entity_id: edit.id, field: edit.field, value: structuredField(edit.field,value,editSchema) ? JSON.parse(structuredEdit) : value, warnings_ack: ack, ...(visibilityDirty?{field_visibility:wirePolicy(fieldVisibility)}:{}) }, 'PATCH'); sessionStorage.removeItem(editBufferKey(edit));await refresh();setBusy(false);setEdit(null);toast.success(`Поле «${edit.label}» сохранено`); })().catch(e=>setEditError((e as Error).message)).finally(()=>setBusy(false))}}>Сохранить поле</Button></fieldset>}

@@ -25,6 +25,7 @@ import { type World, type Save, type State, type Scene, active } from "./types";
 import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
 import type {StoryNotice} from './types';
+import {foreground, useTransientBack} from './lib/transientBack';
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
 import { dossierText, type DossierTab } from "./lib/dossier";
@@ -75,6 +76,7 @@ export function CharacterPicker({
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  useTransientBack(open,()=>{if(!root.current||!foreground(root.current))return false;setOpen(false);button.current?.focus({preventScroll:true})});
   const button = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const cards = state.characters.filter(
@@ -109,8 +111,7 @@ export function CharacterPicker({
     button.current?.focus({ preventScroll: true });
   };
   return (
-    <div
-      className="inspector-character-toolbar"
+    <div className="inspector-character-toolbar"
       ref={root}
       onKeyDown={(e) => {
         if (e.key === "Escape" && open) {

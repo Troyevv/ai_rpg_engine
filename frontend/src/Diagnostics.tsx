@@ -1,3 +1,4 @@
+import {ChoiceDiagnostics, type ChoiceView} from './ChoiceDiagnostics';
 import { Choice } from "@/components/ui/choice";
 import type {ReactNode} from 'react';
 import {SectionTabs} from "./components/ui/section-tabs";
@@ -25,7 +26,7 @@ function RequestTotals({rows}:{rows:RequestRecord[]}){
  const sum=(key:'input_tokens'|'output_tokens'|'cached_input_tokens')=>`${rows.reduce((s,r)=>s+(r[key]??0),0).toLocaleString()}${rows.some(r=>r[key]==null)?' + неизвестно':''}`;
  return <div className="usage-grid">{[['Input',sum('input_tokens')],['Output',sum('output_tokens')],['Cache',sum('cached_input_tokens')],['LLM-вызовов',rows.length],['Стоимость',money(String(rows.reduce((s,r)=>s+Number(r.cost_usd??0),0)))+(rows.some(r=>r.cost_usd==null)?' + неизвестно':'')]].map(([k,v])=><section key={k}><span>{k}</span><strong>{v}</strong></section>)}</div>;
 }
-export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyTools}:{historyTools?:ReactNode;saveId?:number;workspaceId?:string;jobId?:string;open:boolean;onOpenChange:(v:boolean)=>void}) {
+export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyTools,choiceView}:{choiceView?:ChoiceView;historyTools?:ReactNode;saveId?:number;workspaceId?:string;jobId?:string;open:boolean;onOpenChange:(v:boolean)=>void}) {
  const [data,setData]=useState<Accounting|null>(null);
  const [rows,setRows]=useState<RequestRecord[]>([]);
  const [selected,setSelected]=useState('');
@@ -34,11 +35,12 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
  const [tab,setTab]=useState('context');
  const [archive,setArchive]=useState<{id:number;reason:string;payload:string}[]>([]);
  const [busy,setBusy]=useState(false);
+ const [readVersion,setReadVersion]=useState(0);
  const [communication,setCommunication]=useState<unknown>(null);
  const load=async()=>{
   setBusy(true);
   try {
-   if(saveId){const a=await api<Accounting>(`/saves/${saveId}/accounting`);setData(a);setRows(a.requests);if(jobId)setJobDetails(await api(`/jobs/${jobId}`))}
+   if(saveId){const a=await api<Accounting>(`/saves/${saveId}/accounting`);setData(a);setRows(a.requests);setReadVersion(v=>v+1);if(jobId)setJobDetails(await api(`/jobs/${jobId}`))}
    else if(workspaceId){setRows(await api<RequestRecord[]>(`/workspaces/${workspaceId}/requests`));setData(null)}
   }catch(e){toast.error((e as Error).message)}finally{setBusy(false)}
  };
@@ -57,11 +59,12 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
  },[open,saveId,request?.job_id,request?.stage]);
  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="settings-dialog diagnostics">
   <DialogHeader><DialogTitle>Диагностика</DialogTitle><DialogDescription>Снимки фактически отправленных запросов. Здесь есть GM-only данные и тайны мира.</DialogDescription></DialogHeader>
-  <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'},...(historyTools?[{id:'history',label:'История и восстановление'}]:[])]}/>
+  <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'},...(choiceView?[{id:'choices',label:'Варианты'}]:[]),...(historyTools?[{id:'history',label:'История и восстановление'}]:[])]}/>
   <Button variant="outline" disabled={busy} onClick={()=>void load()}>Обновить</Button>
   {!!data?.history_audit?.length&&<details className="delta-warnings"><summary>Аудит истории · ⚠ {data.history_audit.length}</summary><p>Исторические сведения неполны. Текущее состояние и сохранённые знания не отменены.</p>{data.history_audit.map((w,i)=><p key={i}><code>{w.section} · {w.code}</code><br/>{w.reason}</p>)}</details>}
-  {turns.length>0&&<label>Ход<Choice aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onValueChange={selectedValue => {setTurnId(selectedValue);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</Choice></label>}
+  {tab!=='choices'&&turns.length>0&&<label>Ход<Choice aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onValueChange={selectedValue => {setTurnId(selectedValue);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</Choice></label>}
   <div role="tabpanel" id="diagnostic-panel" aria-labelledby={`diagnostic-panel-tab-${tab}`}>
+  {tab==='choices'&&saveId&&choiceView&&<ChoiceDiagnostics saveId={saveId} view={choiceView} refresh={readVersion}/>}
   {tab==='history'&&historyTools}
   {tab==='performance'&&<>
    <h3>{turn?`Ход #${turn.sequence}`:'Выбранный вариант'}</h3><Timing timing={timing}/>

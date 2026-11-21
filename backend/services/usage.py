@@ -68,6 +68,10 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
             elif selected!='chat_json_object':
                 raise ValueError('Неизвестный записанный transport Extraction.')
     diagnostics = dict(diagnostics or {'estimated_tokens':estimate(messages), 'parts':[]})
+    if stage == 'narrative':
+        from backend.build_info import server_build
+        from backend.runtime_v3.narrative_frame import contract_id
+        diagnostics.update(choice_contract=contract_id(messages), backend_build=server_build())
     # Chat owns its own reply/summary context contract and has already run preflight.
     if '_budget_caps' in config:
         from backend.services.token_budget import plan_request

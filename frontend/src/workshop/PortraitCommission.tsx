@@ -17,7 +17,7 @@ import { defaults, type Preferences } from '../types';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import { type ProceduralPortrait } from './proceduralPortrait';
-import { CharacterAvatar, type PortraitSubject } from '../Portrait';
+import { ViewablePortrait, CharacterAvatar, type PortraitSubject } from '../Portrait';
 import '../styles/portrait-commission.css';
 
 export const PortraitModels = createContext({ prefs: defaults as Preferences, apiKey: '' });
@@ -452,9 +452,9 @@ export function PortraitCommission({
                     return (
                       <div className="commission-result" key={id} data-selected={chosen.includes(id)}>
                         <div className="result-pair">
-                          {avatar(c, 76,'plate')}
+                          <ViewablePortrait subject={c} workspaceId={workspaceId} saveId={saveId} author size={76} framing="plate"/>
                           <ArrowRight size={15} />
-                          {avatar({ id, name: c.name, procedural_portrait: row.descriptor }, 76,'plate')}
+                          <ViewablePortrait subject={{id,name:c.name,procedural_portrait:row.descriptor}} size={76} framing="plate"/>
                         </div>
                         <strong>{c.name}</strong>
                         {row.warnings.length > 0 && <small>{row.warnings.join(' ')}</small>}

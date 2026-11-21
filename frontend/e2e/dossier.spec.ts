@@ -98,27 +98,23 @@ test('start, ordinary turn, dossier name link, persistent reload, next turn',asy
  if(capture)await page.screenshot({path:`${evidence}/smoke-${info.project.name}.png`,animations:'disabled'});
 });
 
-test('family gestures, two skins, reduced motion and unchanged game state',async({page,request},info)=>{
+test('family viewport controls, two skins, reduced motion and unchanged game state',async({page,request},info)=>{
  const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-family')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
  if(info.project.name==='mobile')await page.setViewportSize({width:393,height:852});
  const saved=await(await request.get(`/api/saves/${s.save}`)).json();
- const touchSession=info.project.name==='mobile'?await page.context().newCDPSession(page):null;
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Родословная');
  const area=page.locator('.save-workspace');await chooseOption(area.getByLabel('Семья персонажа'), 'qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(5);
  await expect(area).toContainText('Зоя');
  const pane=area.locator('.react-flow__pane');const viewport=area.locator('.react-flow__viewport');
- // Wait for the intentional fit transition to settle before measuring gestures.
+ // Wait for the intentional fit transition to settle before checking pan controls.
  await page.emulateMedia({reducedMotion:'reduce'});await area.getByRole('button',{name:'Вся семья',exact:true}).click();
  await expectFitted(page);const box=(await pane.boundingBox())!;
  const before=await viewport.getAttribute('style');
  if(info.project.name==='mobile'){
- const cdp=touchSession!;
- const x=box.x+box.width/2,y=box.y+40;
- await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:x-35,y,id:1},{x:x+35,y,id:2}]});
- for(let i=1;i<=5;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x-35-i*9,y,id:1},{x:x+35+i*9,y,id:2}]});
- await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ await area.locator('.viewer-pan-controls summary').tap();
+ await area.getByRole('button',{name:'Вправо',exact:true}).tap();
  }else{
  await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();await page.mouse.move(box.x+85,box.y+65,{steps:6});await page.mouse.up();
  }
@@ -128,7 +124,6 @@ test('family gestures, two skins, reduced motion and unchanged game state',async
  await area.getByRole('button',{name:'Список',exact:true}).click();await expect(area).toContainText('Усыновление');await expect(area).toContainText('Развод');
  if(capture)await page.screenshot({path:`${evidence}/after-family-list-${info.project.name}-${skin}.png`,animations:'disabled'});
  }
- await touchSession?.detach();
  const last=await(await request.get(`/api/saves/${s.save}`)).json();expect(last.revision).toBe(saved.revision);expect(last.state.world_clock).toEqual(saved.state.world_clock);
 });
 

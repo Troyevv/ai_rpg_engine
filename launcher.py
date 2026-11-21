@@ -14,6 +14,8 @@ import urllib.error
 import urllib.request
 import webbrowser
 
+from backend.build_info import server_build
+
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / '.runtime'
 FRONTEND = ROOT / 'frontend'
@@ -79,7 +81,12 @@ def start(open_browser=True):
         if STATE.exists():
             old = json.loads(STATE.read_text())
             try:
-                if request(old['url'] + '/api/health').get('service') == 'ai-rpg-engine':
+                health = request(old['url'] + '/api/health')
+                if health.get('service') == 'ai-rpg-engine':
+                    if ((health.get('backend_build') or {}).get('id') != server_build()['id']
+                            or old.get('frontend_digest') != frontend_digest()):
+                        raise RuntimeError('Обнаружено обновление. Сейчас работает предыдущая сборка. '
+                                           'Дождитесь завершения игрового хода, запустите stop.bat, затем start.bat.')
                     if open_browser:
                         webbrowser.open(old['url'])
                     print('Already running: ' + old['url'])
@@ -109,7 +116,7 @@ def start(open_browser=True):
                                        env=env, stdout=log, stderr=log,
                                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0,
                                        start_new_session=os.name != 'nt')
-        STATE.write_text(json.dumps({'url': url, 'token': token}), encoding='utf-8')
+        STATE.write_text(json.dumps({'url': url, 'token': token, 'frontend_digest': frontend_digest()}), encoding='utf-8')
         if os.name != 'nt':
             STATE.chmod(0o600)
         tls_context=ssl.create_default_context(cafile=str(RUNTIME/'tls'/'rootCA.pem')) if https else None

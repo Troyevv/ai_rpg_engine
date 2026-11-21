@@ -67,7 +67,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,ana
    change(next);
  };
  if(!open)return <Button variant="outline" disabled={disabled} onClick={()=>{reset();onOpen(true)}}>Настроить иллюстрацию</Button>;
- return <section className="portrait-studio" aria-label="Настроить иллюстрацию">
+ return <section data-portrait-dirty={dirty} className="portrait-studio" aria-label="Настроить иллюстрацию">
  <div className="studio-main"><div className="studio-reference"><div className="portrait-comparison">
  <figure><figcaption>Сохранённый вариант</figcaption>{savedPreview||renderPreview(descriptor)}</figure>
  <figure><figcaption>{source||'Предпросмотр'}</figcaption>{renderPreview(value)}</figure></div>

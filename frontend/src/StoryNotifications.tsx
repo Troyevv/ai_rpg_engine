@@ -9,24 +9,26 @@ const icons={thread_new:BookOpen,secret_new:Sparkles,secret_revealed:KeyRound};
 export function StoryNotifications({save,enabled,active=true,onOpen}:{save:Save;enabled:boolean;active?:boolean;onOpen:(notice:StoryNotice)=>void}){
  const events=save.state.notification_history||[];
  const scope=`${save.id}:${save.state.controlled_actor_id}`;
+ const queue=pendingStoryNotices(save),current=queue[0];
+ const needsDelivery=!!current&&active&&enabled;
  const navigating=useRef(false),trigger=useRef<HTMLButtonElement>(null);
  const [,refreshDelivery]=useState(0);
  const [history,setHistory]=useState(false),[filter,setFilter]=useState('all');
  const [paused,setPaused]=useState(false),[blocked,setBlocked]=useState(true);
  useEffect(()=>{
+  if(!needsDelivery)return;
   // Presentation is suspended when its workspace is hidden/inert, including
   // calendar/workshop navigation. A DOM overlay never consumes a delivery.
   const check=()=>setBlocked(!!trigger.current?.closest('[inert],[hidden],[aria-hidden="true"]')||!!document.querySelector('.phone-device.is-open,.inspector-open,[role="dialog"]:not([data-state="closed"])')||document.hidden);
   const observer=new MutationObserver(check);observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class','hidden','inert','aria-hidden','data-state'],childList:true});
   document.addEventListener('visibilitychange',check);check();
   return()=>{observer.disconnect();document.removeEventListener('visibilitychange',check)};
- },[]);
+ },[needsDelivery]);
  useEffect(()=>{
   // Also supports isolated consumers; App normally admits the snapshot first.
   observeStorySnapshot(save);refreshDelivery(n=>n+1);
  },[scope,save.revision]);
  useEffect(()=>{const changed=(event:StorageEvent)=>{invalidateStoryDelivery(event.key);refreshDelivery(n=>n+1)};window.addEventListener('storage',changed);return()=>window.removeEventListener('storage',changed)},[]);
- const queue=pendingStoryNotices(save),current=queue[0];
  const suspended=blocked||!active||!enabled;
  const acknowledge=(id:string)=>{acknowledgeStoryNotice(save,id);setPaused(false);refreshDelivery(n=>n+1)};
  useEffect(()=>{

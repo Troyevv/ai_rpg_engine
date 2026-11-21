@@ -57,7 +57,12 @@ test('portrait catalogue, local edits and quoted batch commissions',async({page,
  await button('Подтвердить запрос').click();await button('В предпросмотр').click();
  await expect(page.locator('.portrait-comparison')).toContainText('Предложение модели');
  const generated=await preview.getAttribute('src');await button('Сохранить иллюстрацию').click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
- await open();await expect(preview).toHaveAttribute('src',generated!);await page.keyboard.press('Escape');
+ await open();await expect(preview).toHaveAttribute('src',generated!);
+ if(mobile){
+  await page.goBack();await expect(page.locator('.studio-open')).toHaveCount(0);
+  await button('Настроить иллюстрацию').click();await expect(preview).toHaveAttribute('src',generated!);
+ }
+ await page.keyboard.press('Escape');
  await button('Готово').click();await button('Портреты').click();
  await page.getByRole('checkbox',{name:'Анна',exact:true}).check();await page.getByRole('checkbox',{name:'Борис',exact:true}).check();
  await button('Рассчитать расход').click();await expect(page.locator('.portrait-commission')).toContainText('Запросов: 1');

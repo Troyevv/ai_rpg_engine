@@ -899,7 +899,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if not builder.extraction and (kind != 'background' or public_observation) and extraction_contract >= 9:
         if extraction_contract >= 10:
             from backend.runtime_v3.context_contract import PROSE_ONLY_OUTPUT
-            from backend.runtime_v3.narrative_frame import FORMAT, RECORDED_FORMAT, AUTHOR_FORMAT
+            from backend.runtime_v3.narrative_frame import EXPLICIT_FORMAT, RECORDED_FORMAT, AUTHOR_FORMAT
             rules = rules.replace(PROSE_ONLY_OUTPUT, '')
             from backend.runtime_v3.life import capabilities
             directs = camera['mode']=='observer' or (scope.controlled_actor_id and
@@ -907,9 +907,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if extraction_contract >= 11:
                 rules = rules.replace('Не выводи варианты действий.', '')
                 rules += '\n' + AUTHOR_FORMAT
-            reply_format = (FORMAT if extraction_contract >= 11 else RECORDED_FORMAT) + (' Варианты задают направление истории в режиме наблюдателя.'
+            reply_format = (EXPLICIT_FORMAT if extraction_contract >= 11 else RECORDED_FORMAT) + (' Варианты задают направление истории в режиме наблюдателя.'
                                      if directs else ' Варианты от лица героя.')
             if extraction_contract >= 11:
+                reply_format += ' Каждый элемент actions содержит text и speech (точные слова героя либо null для действия без слов).'
                 reply_format += ' Включи массив actions после scene также в первой сцене.' if kind == 'start' else ' После scene включи actions.'
             if state['meta'].get('interaction_focus')=='call':
                 reply_format += ' Предложи продолжения этого звонка.'
