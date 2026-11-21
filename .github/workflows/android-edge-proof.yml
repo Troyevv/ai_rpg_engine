@@ -22,7 +22,7 @@ jobs:
           node-version: '22'
       - name: Build both revisions and start offline fixture servers
         run: |
-          pip install -r requirements.txt -r requirements-dev.txt selenium
+          pip install -r requirements.txt -r requirements-dev.txt selenium pillow
           npm ci --prefix frontend
           npm run build --prefix frontend
           git worktree add --detach /tmp/pre-edge b5a2dd6
@@ -70,7 +70,11 @@ jobs:
               curl -fsSL --retry 3 https://github.com/mozilla/geckodriver/releases/download/v0.36.0/geckodriver-v0.36.0-linux64.tar.gz | tar -xz -C /tmp
               export PATH="/tmp:$PATH"
             fi
-            python ../.github/qa/android-edge-proof.py
+            geckodriver --port 4445 >/tmp/geckodriver.log 2>&1 &
+            timeout 15 bash -c 'until curl -fsS http://127.0.0.1:4445/status; do sleep 1; done'
+            if ! timeout 190 python ../.github/qa/android-edge-proof.py; then
+              (cd .. && python .github/qa/android-edge-native.py)
+            fi
             echo Firefox > /tmp/android-proof/browser
           fi
       - name: Diagnose device failures

@@ -13,7 +13,7 @@ opts.set_capability('moz:firefoxOptions',{'androidPackage':'org.mozilla.firefox'
 opts.enable_mobile(android_package='org.mozilla.firefox')
 opts.set_preference('browser.aboutwelcome.enabled',False)
 opts.set_preference('browser.shell.checkDefaultBrowser',False)
-driver=webdriver.Firefox(options=opts,service=Service(log_output='/tmp/geckodriver.log'))
+driver=webdriver.Remote(command_executor='http://127.0.0.1:4445',options=opts)
 try:
  wait=WebDriverWait(driver,40)
  for label,port in [('before',8216),('after',8217)]:
