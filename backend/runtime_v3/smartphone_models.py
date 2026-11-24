@@ -195,7 +195,9 @@ class SmartphoneState(Record):
 class PublicAction(Record):
     kind: Literal["post", "comment", "like", "repost"]
     author: Short
-    target: str | None = None
+    ref: str | None = Field(default=None, pattern=r"^new:[\w-]+$", max_length=80,
+                            description="Уникальное тематическое имя нового поста или комментария в этом ответе.")
+    target: str | None = Field(default=None, description="ID показанной записи или ref ранее созданного текста.")
     text: Text | None = None
 
 

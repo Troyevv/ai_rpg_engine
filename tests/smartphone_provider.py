@@ -68,33 +68,34 @@ def response(messages):
                     kind="post", author=authors[0], text=f"На набережной расцвела сирень. Зарисовка №{batch}."
                 ),
                 dict(
-                    kind="post", author=authors[-1], text=f"Собираем квартет для репетиции. Афиша №{batch}."
+                    kind="post", author=authors[-1], ref="new:quartet", text=f"Собираем квартет для репетиции. Афиша №{batch}."
                 ),
-                dict(kind="comment", author=authors[0], target="@2", text="Присоединюсь со скрипкой."),
+                dict(kind="comment", author=authors[0], target="new:quartet", text="Присоединюсь со скрипкой."),
             ]
         )
     first = dict(
         kind="comment" if data["source"] else "post",
         author=authors[0],
         target=data["source"],
+        ref="new:gallery",
         text="Буду у галереи вечером. Кто ещё идёт?",
     )
     return dict(
-        actions=[first, dict(kind="comment", author=authors[-1], target="@1", text="Я приду после работы.")]
+        actions=[first, dict(kind="comment", author=authors[-1], target="new:gallery", text="Я приду после работы.")]
     )
 
 
 def author_batch(messages, *, mixed):
-    """Deliberately imperfect model reply; @N refers to the original action ordinal."""
+    """Deliberately imperfect model reply with dependencies on rejected publications."""
     roster = json.loads(messages[1]["content"])["authors"]
-    rows = [dict(kind="post", author="outside-the-roster", text="Отклонённая запись.")]
+    rows = [dict(kind="post", author="outside-the-roster", ref="new:dropped", text="Отклонённая запись.")]
     if mixed:
         rows.extend(
             [
-                dict(kind="post", author=roster[0]["name"], text="Сегодня открыли летнюю читальню."),
-                dict(kind="comment", author=roster[1]["id"], target="@1", text="Ответ отклонённой записи."),
-                dict(kind="comment", author=roster[1]["id"], target="@2", text="Зайду за книгой вечером."),
-                dict(kind="like", author=roster[0]["id"], target="@3"),
+                dict(kind="post", author=roster[0]["name"], ref="new:reading", text="Сегодня открыли летнюю читальню."),
+                dict(kind="comment", author=roster[1]["id"], ref="new:lost-reply", target="new:dropped", text="Ответ отклонённой записи."),
+                dict(kind="comment", author=roster[1]["id"], target="new:reading", text="Зайду за книгой вечером."),
+                dict(kind="like", author=roster[0]["id"], target="new:lost-reply"),
                 dict(kind="post", author=roster[1]["id"], text="Сыграем во дворе после обеда?"),
             ]
         )

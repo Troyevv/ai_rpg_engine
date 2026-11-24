@@ -678,7 +678,7 @@ def scripted_stream(**kwargs):
 
 def stream(**kwargs):
     global phone_mode
-    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/1','Phone catalog/1','Phone questions/1','Phone employer/1')):
+    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/2','Phone catalog/1','Phone questions/1','Phone employer/1')):
         from smartphone_provider import response
         if phone_mode in ('app_error_once', 'app_refresh_error_once'):
             time.sleep(2)

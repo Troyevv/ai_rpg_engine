@@ -1,6 +1,7 @@
 """Provider-authored public activity, short discovery batches and selected-character expansion."""
 
 import json
+from collections import Counter
 from copy import deepcopy
 
 from pydantic import ValidationError
@@ -148,7 +149,7 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
             )
         )
     return messages(
-        "Public social activity/1. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
+        "Public social activity/2. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
         + NETWORK_VOICE
         + " У каждого автора есть жизнь за пределами сцены: смена или учёба, увлечения, игры, книги, "
         "музыка и местная культура. Дай людям самим начать разговор, кинуть мем, позвать соседей, "
@@ -160,9 +161,13 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
         "Пост не подтверждает истинность текста. Не разглашай чужие сведения, не играй за героя. "
         "Для каждого действия скопируй в author точный id из authors. Имена, номера, адресаты отношений "
         "и авторы прежних постов не являются допустимыми идентификаторами, если их нет в этом списке. "
-        "Для нового поста target=null. Для реакции укажи id публикации из public_posts или ссылку на "
-        "более раннюю запись этого ответа. "
-        'Для ответа на действие в этом же пакете target="@1" обозначает первую запись. '
+        "У поста target=null. Для комментария, лайка или репоста выбери конкретную запись по автору и теме. "
+        "Если она в public_posts, скопируй её id в target. Если создаёшь её в этом же ответе, дай ей "
+        "уникальный тематический ref, например new:concert, и скопируй это имя в target реакции. "
+        "Пример связей: пост о концерте ref=new:concert, пост о походе ref=new:hike, вопрос о билетах "
+        "target=new:concert ref=new:tickets, ответ на вопрос target=new:tickets. "
+        "Порядок соседних постов ничего не обозначает. Имя можно дать только посту или комментарию. "
+        "Лайк адресуется конкретному тексту, репост — только исходному посту. "
         "Возвращай JSON по схеме. Для like/repost текст не нужен."
         + (
             " Игрок обновил ленту. Напиши 2–4 новых самостоятельных поста. Дай авторам разные голоса и темы: "
@@ -170,7 +175,7 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
             "на друга. Учитывай предыдущие записи, не повторяй их. Герой не обязан быть темой. "
             "Время остаётся прежним."
             if refresh
-            else " Ответь на source по существу. Ветка в public_posts даёт контекст для короткого комментария или ответа."
+            else " Ответь на source по существу. Для реакции на это сообщение скопируй source в target. Остальная ветка в public_posts даёт контекст."
             if source
             else " Фоновая активность. NPC сами выбирают повод для поста или разговора между собой."
         ),
@@ -195,23 +200,29 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
     ), authors
 
 
-def social_result(snapshot, raw, authors, seed, *, refresh=False):
+def social_result(snapshot, raw, prompt, seed, *, refresh=False, archived_ordinals=False):
+    payload = json.loads(prompt[1]["content"]) if prompt else {}
+    authors = {a["id"] for a in payload.get("authors", [])}
     state = snapshot["world_state"]
     names = social_names(snapshot)
     by_name = {}
     for cid, name in names.items():
         by_name.setdefault(name.casefold(), []).append(cid)
     existing = domain(state)["publications"]
-    # Use original wire positions. @2 must not slide onto @1 if an action is dropped.
+    offered = existing.keys() if archived_ordinals else {p["id"] for p in payload.get("public_posts", [])}
+    is_reply = {rid: bool(existing[rid]["post_id"]) for rid in offered if rid in existing}
+    actions = Batch[object].model_validate_json(raw).actions
+    # A repeated label has no unique referent, even if one declaration later fails validation.
+    labels = Counter(row["ref"] for row in actions if isinstance(row, dict) and isinstance(row.get("ref"), str))
+    ambiguous = {label for label, count in labels.items() if count > 1 or label in offered}
     references = {}
-    is_reply = {rid: bool(p["post_id"]) for rid, p in existing.items()}
     prior_posts = (
         {(p["author"], p["text"]) for p in existing.values() if not p["post_id"]} if refresh else set()
     )
     plan = []
     warnings = []
     new_posts = set()
-    for i, record in enumerate(Batch[object].model_validate_json(raw).actions):
+    for i, record in enumerate(actions):
         try:
             action = PublicAction.model_validate(record)
             author = action.author
@@ -227,10 +238,20 @@ def social_result(snapshot, raw, authors, seed, *, refresh=False):
             ):
                 raise ValueError("Автор не входит в список доступных NPC.")
             target = action.target
-            if target and target.startswith("@"):
-                if target not in references:
-                    raise ValueError("Ссылка не указывает на сохранённую предыдущую запись.")
-                target = references[target]
+            if archived_ordinals:
+                if "ref" in action.model_fields_set:
+                    raise ValueError("Неверный формат действия.")
+                if target and target.startswith("@"):
+                    target = references.get(target)
+            else:
+                if action.ref and action.kind not in ("post", "comment"):
+                    raise ValueError("Имя ссылки может принадлежать только посту или комментарию.")
+                if target in ambiguous:
+                    raise ValueError("Имя цели неоднозначно.")
+                if target in references:
+                    target = references[target]
+                elif target is not None and target not in offered:
+                    raise ValueError("Цель не совпадает с показанной публикацией или уникальной предыдущей записью.")
             if action.kind != "post" and target not in is_reply:
                 raise ValueError("Исходная публикация отсутствует.")
             if action.kind == "repost" and is_reply[target]:
@@ -252,9 +273,11 @@ def social_result(snapshot, raw, authors, seed, *, refresh=False):
         rid = identity("social", seed, i)
         if action.kind in ("post", "comment"):
             is_reply[rid] = action.kind == "comment"
-            references[f"@{i + 1}"] = rid
-        else:
-            references[f"@{i + 1}"] = target
+            if action.ref and action.ref not in ambiguous:
+                references[action.ref] = rid
+        if archived_ordinals:
+            # Reapply an already validated v1 response using its original wire positions.
+            references[f"@{i + 1}"] = rid if action.kind in ("post", "comment") else target
         plan.append((author, action, rid, target))
 
     if (refresh and not new_posts) or (warnings and not plan):
@@ -437,17 +460,21 @@ def execute(repo, job, handle, stream, config):
         elif cmd.action == "accept":
             expand(after, cmd, raw, job["id"])
         else:
-            return social_result(after, raw, authors, cmd.operation_id, refresh=cmd.action == "refresh")
+            return social_result(after, raw, prompt, cmd.operation_id, refresh=cmd.action == "refresh",
+                                 archived_ordinals=cached is not None and config.get("_social_contract", 1) == 1)
 
     # Journal a validated provider response before the canonical SQLite transaction.
     # A failed projection can then retry without buying or changing the same result.
     if cached is None:
         apply(deepcopy(snap))
+        journal = {"_smartphone_result": raw}
+        if cmd.action in ("refresh", "post", "comment"):
+            journal["_social_contract"] = 2
         with repo.connect() as db:
             written = db.execute(
-                """UPDATE game_jobs SET config_json=json_set(config_json,'$._smartphone_result',?)
+                """UPDATE game_jobs SET config_json=json_patch(config_json,?)
                 WHERE id=? AND attempt_epoch=? AND status IN ('generating','extracting')""",
-                (raw, job["id"], job["attempt_epoch"]),
+                (json.dumps(journal, ensure_ascii=False), job["id"], job["attempt_epoch"]),
             ).rowcount
             if not written:
                 return

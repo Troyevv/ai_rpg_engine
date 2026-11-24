@@ -594,5 +594,5 @@ def background_activity(snapshot, history, index, seed):
                     merge_history(batch, delta)
 
             return prompt, apply
-    prompt, cast = social_prompt(snapshot, events=history.get("events", []))
-    return prompt, lambda after, raw, batch: social_result(after, raw, cast, seed)
+    prompt, _ = social_prompt(snapshot, events=history.get("events", []))
+    return prompt, lambda after, raw, batch: social_result(after, raw, prompt, seed)
