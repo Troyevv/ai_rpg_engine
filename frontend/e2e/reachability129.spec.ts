@@ -86,6 +86,8 @@ test('directory search, localization and two skins at large text size', async ({
   await expect(phone.getByRole('region',{name:'Recipients'})).toBeVisible();
   await expect(phone.getByRole('status')).toHaveText('No recipients found.');
   await page.keyboard.press('Escape');
+  await expect(phone.getByRole('navigation',{name:'Приложения'})).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(phone).toHaveCount(0);
 });
 
