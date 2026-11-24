@@ -13,7 +13,7 @@ from backend.runtime_v3.models import identity
 from backend.runtime_v3.smartphone import badges, publish, social_view
 from backend.runtime_v3.smartphone_models import SearchFilters
 from backend.services.smartphone import consider, social_prompt
-from smartphone_provider import response
+from smartphone_provider import author_batch, response
 from test_phone122 import CONFIG, setup
 from test_narrative_test_world import ordinary_job
 
@@ -479,16 +479,94 @@ def test_manual_refresh_rejects_empty_or_duplicate_batch_atomically(app):
     assert run(app, jid, lambda _: {"actions": []}, expect="error") == 1
     assert "не вернул новых публикаций" in repo.get_job(jid)["error"]
     repo.retry_job(jid)
-    assert run(app, jid) == 1
+
+    def one_post(messages):
+        # The next refresh rotates the roster by one. Keep this author in both batches.
+        author = json.loads(messages[1]["content"])["authors"][1]["id"]
+        return {"actions": [dict(kind="post", author=author, text="Начало ярмарки.")]}
+
+    assert run(app, jid, one_post) == 1
     entries = client.get(f"/api/saves/{sid}/apps/social").json()["entries"]
     source = entries[0]["post"]
 
     def repeated(messages):
-        batch = response(messages)
-        batch["actions"].append(dict(kind="post", author=source["author"], text=source["text"]))
-        return batch
+        return {"actions": [dict(kind="post", author=source["author"], text=source["text"])]}
 
     jid = dispatch(app, "refresh", "refresh-duplicate")
     assert run(app, jid, repeated, expect="error") == 1
     assert "повторил публикацию" in repo.get_job(jid)["error"]
     assert client.get(f"/api/saves/{sid}/apps/social").json()["entries"] == entries
+
+
+def test_social_author_contract_filters_each_action_and_keeps_ordinal_links_on_retry(app):
+    repo, client, sid = app
+    jid = dispatch(app, "refresh", "author-replay")
+    original = repo.get_snapshot(sid)
+    assert run(app, jid, lambda m: author_batch(m, mixed=False), expect="error") == 1
+    assert repo.get_snapshot(sid) == original
+    repo.retry_job(jid)
+    with patch("backend.repositories.smartphone.project", side_effect=sqlite3.OperationalError("disk full")):
+        assert run(app, jid, lambda m: author_batch(m, mixed=True), expect="error") == 1
+    assert repo.get_snapshot(sid) == original
+    repo.retry_job(jid)
+    assert run(app, jid) == 0
+    calls = repo.request_log(job_id=jid)
+    assert len(calls) == 2
+    prompt = json.loads(calls[0]["messages"][1]["content"])
+    cast = prompt["authors"]
+    allowed = [a["id"] for a in cast]
+    assert prompt["schema"]["$defs"]["PublicAction"]["properties"]["author"]["enum"] == allowed
+    assert json.loads(calls[0]["response_text"])["actions"][1]["author"] == cast[0]["name"]
+    assert json.loads(calls[1]["response_text"])["actions"][0]["author"] not in allowed
+    state = repo.get_snapshot(sid)["world_state"]
+    posts = state["smartphone"]["publications"]
+    assert len(posts) == 3 and not state["smartphone"]["reactions"]
+    first = identity("social", "author-replay", 1)
+    assert posts[first]["author"] == allowed[0]
+    assert posts[identity("social", "author-replay", 3)]["reply_to"] == first
+    assert posts[identity("social", "author-replay", 5)]["author"] == allowed[1]
+    assert [w["index"] for w in json.loads(repo.get_job(jid)["warnings_json"])] == [0, 2, 4]
+    assert dispatch(app, "refresh", "author-replay") == jid
+    assert run(app, dispatch(app, "refresh", "next-refresh")) == 1
+    assert len(client.get(f"/api/saves/{sid}/apps/social").json()["entries"]) == 4
+
+
+def test_social_author_name_is_unique_across_world_and_checks_current_capabilities(app):
+    repo, _, sid = app
+    snap = repo.get_snapshot(sid)
+    state = snap["world_state"]
+    _, allowed = social_prompt(snap)
+    first, second, third = allowed
+    # A same-name outsider must not be confused with the allowed NPC.
+    owner = state["camera"]["controlled_actor_id"]
+    state["characters"][owner]["display_name"] = state["characters"][first]["display_name"] = "Однофамилец"
+    state["characters"][second]["display_name"] = None
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+
+    def batch(messages):
+        cast = json.loads(messages[1]["content"])["authors"]
+        card = next(c for c in snap["character_cards"] if c["id"] == second)
+        assert next(a for a in cast if a["id"] == second)["name"] == card["name"]
+        return dict(
+            actions=[
+                dict(kind="post", author="Однофамилец", text="Двусмысленно"),
+                dict(kind="post", author=owner, text="За игрока"),
+                dict(kind="post", author=card["name"], text="Однозначный автор из карточки"),
+                dict(kind="post", author=first, text="Точный ID"),
+                dict(kind="post", author=None, text="Неверный тип"),
+            ]
+        )
+
+    assert run(app, dispatch(app, "refresh", "collision"), batch) == 1
+    after = repo.get_snapshot(sid)
+    assert {r["author"] for r in after["world_state"]["smartphone"]["publications"].values()} == {
+        first,
+        second,
+    }
+    from backend.services.smartphone import social_result
+
+    after["world_state"]["characters"][third]["capabilities"]["can_act"] = False
+    raw = dict(actions=[dict(kind="post", author=third, text="Недоступный автор")])
+    with pytest.raises(ValueError, match="список доступных NPC"):
+        social_result(after, json.dumps(raw), allowed, "offline", refresh=True)

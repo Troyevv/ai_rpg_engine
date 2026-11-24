@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { themes } from '../src/lib/skins';
+import { diagnostics } from './navigation';
 
 test('276 shared feed, NPC discussion, dating batch and direct chat survive reload', async ({
   page,
@@ -456,4 +457,50 @@ test('manual feed refresh control remains visible and usable in every skin', asy
     expect(fits, theme.name).toBe(true);
   }
   expect(dispatches).toBe(0);
+});
+
+test('archived save keeps independent NPC posts when a model supplies an invalid author', async ({
+  page,
+  request,
+}, info) => {
+  test.setTimeout(90000);
+  const seed = await (
+    await request.post('/test/social-author-replay?case=' + (info.project.name === 'mobile' ? '006' : '001'))
+  ).json();
+  await page.addInitScript((s) => localStorage.setItem('selection', JSON.stringify(s)), seed);
+  await page.goto('/');
+  const phone = page.getByRole('region', { name: 'Телефон персонажа' });
+  const btn = (name: string) => phone.getByRole('button', { name, exact: true });
+  const enter = async () => {
+    await page.getByRole('button', { name: /^Телефон/ }).click();
+    await btn('Соцсеть').click();
+  };
+  await enter();
+  await btn('Обновить ленту').click();
+  await expect(phone.getByRole('alert')).toContainText('список доступных NPC');
+  await expect(phone.locator('.smart-post')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
+  await diagnostics(page);
+  const dialog = page.getByRole('dialog', { name: 'Диагностика' });
+  await expect(dialog.getByLabel('Ход диагностики')).toContainText('Обновления соцсети');
+  await dialog.getByText('Фактический ответ модели', { exact: true }).click();
+  await expect(dialog.locator('details[open] pre')).toContainText('outside-the-roster');
+  await expect(dialog.locator('pre').filter({ hasText: '"authors"' }).first()).toContainText('char_');
+  await page.keyboard.press('Escape');
+  await enter();
+  await btn('Повторить генерацию').click();
+  await expect(phone.locator('.smart-post')).toHaveCount(2);
+  await phone
+    .locator('.smart-post')
+    .filter({ hasText: 'Сегодня открыли летнюю читальню.' })
+    .getByLabel('Открыть обсуждение')
+    .click();
+  await expect(phone.getByText('Зайду за книгой вечером.', { exact: true })).toBeVisible();
+  await expect(phone.getByText('Ответ отклонённой записи.', { exact: true })).toHaveCount(0);
+  await page.reload();
+  await enter();
+  await expect(phone.locator('.smart-post')).toHaveCount(2);
+  await btn('Обновить ленту').click();
+  await expect(phone.locator('.smart-post')).toHaveCount(4);
+  await page.screenshot({ path: info.outputPath('archived-feed.png') });
 });

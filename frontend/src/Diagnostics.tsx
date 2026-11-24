@@ -46,8 +46,15 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
  };
  useEffect(()=>{if(open){setData(null);setRows([]);setSelected('');setTurnId('');setJobDetails(null);setTab('context');setArchive([]);void load()}},[open,saveId,workspaceId,jobId]);
  const turns=data?.turns||[];
- const turn=turnId==='all'?undefined:turns.find(t=>t.active_variant_id===turnId)||(jobId?turns.find(t=>t.job_id===jobId):turns[0]);
- const filtered=turnId==='all'?rows:turnId?turn?.requests||[]:jobId?rows.filter(r=>r.job_id===jobId):turn?.requests||rows;
+ const refreshes = rows.filter(r => r.stage === 'smartphone_refresh');
+ const jobRows = jobId ? rows.filter(r => r.job_id === jobId) : rows;
+ const group = turnId || (jobRows[0]?.stage === 'smartphone_refresh' ? 'social' : '');
+ const turn = group === 'all' || group === 'social' ? undefined :
+   turns.find(t => t.active_variant_id === turnId) || (jobId ? turns.find(t => t.job_id === jobId) : turns[0]);
+ let filtered = turn?.requests || rows;
+ if (group === 'all') filtered = rows;
+ else if (group === 'social') filtered = turnId || !jobId ? refreshes : jobRows;
+ else if (jobId && !turnId) filtered = jobRows;
  const timing=turn?.timing||(!turnId&&jobDetails?.timing_json?JSON.parse(jobDetails.timing_json):null);
  const warnings=turn?.warnings||(!turnId?jobDetails?.warnings:[])||[];
  const repairs=turn?.repairs||(!turnId?jobDetails?.repairs:[])||[];
@@ -62,7 +69,7 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
   <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'},...(choiceView?[{id:'choices',label:'Варианты'}]:[]),...(historyTools?[{id:'history',label:'История и восстановление'}]:[])]}/>
   <Button variant="outline" disabled={busy} onClick={()=>void load()}>Обновить</Button>
   {!!data?.history_audit?.length&&<details className="delta-warnings"><summary>Аудит истории · ⚠ {data.history_audit.length}</summary><p>Исторические сведения неполны. Текущее состояние и сохранённые знания не отменены.</p>{data.history_audit.map((w,i)=><p key={i}><code>{w.section} · {w.code}</code><br/>{w.reason}</p>)}</details>}
-  {tab!=='choices'&&turns.length>0&&<label>Ход<Choice aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onValueChange={selectedValue => {setTurnId(selectedValue);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</Choice></label>}
+  {tab!=='choices'&&turns.length>0&&<label>Ход<Choice aria-label="Ход диагностики" value={group || turn?.active_variant_id || ''} onValueChange={selectedValue => {setTurnId(selectedValue);setSelected('')}}><option value="all">Все запросы прохождения</option>{refreshes.length>0&&<option value="social">Обновления соцсети</option>}{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</Choice></label>}
   <div role="tabpanel" id="diagnostic-panel" aria-labelledby={`diagnostic-panel-tab-${tab}`}>
   {tab==='choices'&&saveId&&choiceView&&<ChoiceDiagnostics saveId={saveId} view={choiceView} refresh={readVersion}/>}
   {tab==='history'&&historyTools}

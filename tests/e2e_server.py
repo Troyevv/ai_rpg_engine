@@ -680,6 +680,12 @@ def stream(**kwargs):
             time.sleep(2)
             phone_mode = 'app_refresh_slow' if phone_mode == 'app_refresh_error_once' else 'silent'
             raise RuntimeError('Тестовый провайдер прервал ответ.')
+        if phone_mode in ('app_authors_invalid', 'app_authors_mixed'):
+            from smartphone_provider import author_batch
+            mixed = phone_mode == 'app_authors_mixed'
+            phone_mode = 'silent' if mixed else 'app_authors_mixed'
+            yield json.dumps(author_batch(kwargs['messages'], mixed=mixed), ensure_ascii=False)
+            return
         time.sleep(2 if phone_mode == 'app_refresh_slow' else .2)
         yield json.dumps(response(kwargs['messages']),ensure_ascii=False)
         return
@@ -1363,6 +1369,20 @@ if __name__ == '__main__':
             correction_original='Неверный день.' if calendar else 'Вчера Вера встретилась с Тимуром.',
             correction_replacement='Верный день.' if calendar else 'Пять дней назад Вера встретилась с Тимуром.')
         return policy252_selection
+
+    @app.post('/test/social-author-replay')
+    def social_author_replay(case: str):
+        global phone_mode
+        from test_playability251 import seed
+        if case not in ('001', '006'):
+            raise ValueError('Unknown replay')
+        repo = app.state.repository
+        result = seed(repo, case)
+        # This saved game predates the social app. Enable the capability on the imported copy.
+        with repo.connect() as db:
+            db.execute("UPDATE saves SET state_json=json_set(state_json,'$.world_state.meta.communication.social',json('true')) WHERE id=?", (result['save'],))
+        phone_mode = 'app_authors_invalid'
+        return result
 
     @app.post('/test/playability251-seed')
     def playability251_seed(case: str = '002'):

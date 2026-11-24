@@ -3,12 +3,14 @@
 import json
 from copy import deepcopy
 
+from pydantic import ValidationError
+
 from backend.runtime_v3.calendar import age_on, current_time, date_parts, profile_of
 from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.models import identity
 from backend.runtime_v3.remote_authoring import speaker_context
 from backend.runtime_v3.smartphone import candidate, domain, publish, shelf
-from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, SearchResult
+from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, PublicAction, SearchResult
 from backend.services.world import CARD_FIELDS
 
 
@@ -29,6 +31,14 @@ def setting(snapshot):
         },
         calendar=current_time(snapshot["world_state"]),
     )
+
+
+def social_names(snapshot):
+    cards = {c["id"]: c["name"] for c in snapshot.get("character_cards", [])}
+    return {
+        cid: actor.get("display_name") or cards.get(cid) or cid
+        for cid, actor in snapshot["world_state"]["characters"].items()
+    }
 
 
 def social_prompt(snapshot, source=None, *, refresh=False, events=()):
@@ -64,13 +74,16 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
         and isinstance(e.get("fact_ids", []), list)
         and all(isinstance(fid, str) and fid in common for fid in e.get("fact_ids", []))
     ][-6:]
+    names = social_names(snapshot)
+    schema = Batch[PublicAction].model_json_schema()
+    schema["$defs"]["PublicAction"]["properties"]["author"]["enum"] = authors
     cast = []
     for cid in authors:
         voice = speaker_context(snapshot, cid, authors + [owner])
         cast.append(
             dict(
                 id=cid,
-                name=state["characters"][cid].get("display_name"),
+                name=names[cid],
                 public_bio=data["profiles"].get(cid, "")[:350],
                 voice=voice["legacy_voice"] or str(voice["personality"])[:600],
                 relationships=[
@@ -82,6 +95,10 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
         "Public social activity/1. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
         "Выбери уместные публикации NPC и реакции друг на друга или на повод. "
         "Пост не подтверждает истинность текста. Не разглашай чужие сведения, не играй за героя. "
+        "Для каждого действия скопируй в author точный id из authors. Имена, номера, адресаты отношений "
+        "и авторы прежних постов не являются допустимыми идентификаторами, если их нет в этом списке. "
+        "Для нового поста target=null. Для реакции укажи id публикации из public_posts или ссылку на "
+        "более раннюю запись этого ответа. "
         'Для ответа на действие в этом же пакете target="@1" обозначает первую запись. '
         "Возвращай JSON по схеме. Для like/repost текст не нужен."
         + (
@@ -99,42 +116,79 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
             recent_events=witnessed,
             source=source,
             public_posts=[{**r, "text": r["text"][:700]} for r in recent],
-            schema=Batch.model_json_schema(),
+            schema=schema,
         ),
     ), authors
 
 
-def social_result(state, raw, authors, seed, *, refresh=False):
-    actions = Batch.model_validate_json(raw).actions
-    if refresh:
-        posts = [(a.author, a.text) for a in actions if a.kind == "post"]
-        if not posts:
-            raise ValueError("Провайдер не вернул новых публикаций.")
-        existing = domain(state)["publications"].values()
-        if len(set(posts)) != len(posts) or any(
-            (p["author"], p["text"]) in posts for p in existing if not p["post_id"]
-        ):
-            raise ValueError("Провайдер повторил публикацию.")
-    references = []
-    for i, action in enumerate(actions):
-        if action.author not in authors or not capabilities(state, action.author)["can_act"]:
-            raise ValueError("Неизвестный или недоступный автор публикации.")
-        target = action.target
-        if target and target.startswith("@"):
-            index = target[1:]
-            if not index.isdecimal() or not 1 <= int(index) <= len(references):
-                raise ValueError("Неизвестная ссылка в обсуждении.")
-            target = references[int(index) - 1]
-        references.append(
-            publish(
-                state,
-                action.author,
-                action.kind,
-                identity("social", seed, i),
-                text=action.text,
-                target=target,
-            )
-        )
+def social_result(snapshot, raw, authors, seed, *, refresh=False):
+    state = snapshot["world_state"]
+    names = social_names(snapshot)
+    by_name = {}
+    for cid, name in names.items():
+        by_name.setdefault(name.casefold(), []).append(cid)
+    existing = domain(state)["publications"]
+    # Use original wire positions. @2 must not slide onto @1 if an action is dropped.
+    references = {}
+    is_reply = {rid: bool(p["post_id"]) for rid, p in existing.items()}
+    prior_posts = (
+        {(p["author"], p["text"]) for p in existing.values() if not p["post_id"]} if refresh else set()
+    )
+    plan = []
+    warnings = []
+    new_posts = set()
+    for i, record in enumerate(Batch[object].model_validate_json(raw).actions):
+        try:
+            action = PublicAction.model_validate(record)
+            author = action.author
+            if author not in names:
+                matches = by_name.get(author.casefold(), [])
+                if len(matches) == 1:
+                    author = matches[0]
+            if (
+                author not in state["characters"]
+                or author not in authors
+                or author == state["camera"]["controlled_actor_id"]
+                or not capabilities(state, author)["can_act"]
+            ):
+                raise ValueError("Автор не входит в список доступных NPC.")
+            target = action.target
+            if target and target.startswith("@"):
+                if target not in references:
+                    raise ValueError("Ссылка не указывает на сохранённую предыдущую запись.")
+                target = references[target]
+            if action.kind != "post" and target not in is_reply:
+                raise ValueError("Исходная публикация отсутствует.")
+            if action.kind == "repost" and is_reply[target]:
+                raise ValueError("Репост доступен для исходной публикации.")
+            if action.kind in ("post", "comment") and not action.text:
+                raise ValueError("Провайдер не вернул текст публикации.")
+            if action.kind == "post":
+                if action.target:
+                    raise ValueError("Новый пост не может ссылаться на другую запись.")
+                key = (author, action.text)
+                if refresh and (key in new_posts or key in prior_posts):
+                    raise ValueError("Провайдер повторил публикацию.")
+                new_posts.add(key)
+        except ValueError as exc:
+            reason = "Неверный формат действия." if isinstance(exc, ValidationError) else str(exc)
+            warnings.append(dict(section="social_activity", index=i, action="drop_record", reason=reason))
+            continue
+
+        rid = identity("social", seed, i)
+        if action.kind in ("post", "comment"):
+            is_reply[rid] = action.kind == "comment"
+            references[f"@{i + 1}"] = rid
+        else:
+            references[f"@{i + 1}"] = target
+        plan.append((author, action, rid, target))
+
+    if (refresh and not new_posts) or (warnings and not plan):
+        reason = warnings[0]["reason"] if warnings else ""
+        raise ValueError(("Провайдер не вернул новых публикаций. " + reason).strip())
+    for author, action, rid, target in plan:
+        publish(state, author, action.kind, rid, text=action.text, target=target)
+    return warnings
 
 
 def search_result(snapshot, cmd, raw):
@@ -283,9 +337,7 @@ def execute(repo, job, handle, stream, config):
         elif cmd.action == "accept":
             expand(after, cmd, raw, job["id"])
         else:
-            social_result(
-                after["world_state"], raw, authors, cmd.operation_id, refresh=cmd.action == "refresh"
-            )
+            return social_result(after, raw, authors, cmd.operation_id, refresh=cmd.action == "refresh")
 
     # Journal a validated provider response before the canonical SQLite transaction.
     # A failed projection can then retry without buying or changing the same result.
@@ -336,11 +388,17 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
             )
         )
         staged = deepcopy(state)
-        social_result(staged, raw, authors, identity("background_social", now, state["meta"]["turn_id"]))
+        skipped = social_result(
+            dict(snapshot, world_state=staged),
+            raw,
+            authors,
+            identity("background_social", now, state["meta"]["turn_id"]),
+        )
     except (ValueError, BackgroundGenerationError) as exc:
         warnings.append(dict(section="social_activity", reason=str(exc), action="discard_background"))
         return
     if not cancelled.is_set():
+        warnings.extend(skipped)
         snapshot["world_state"] = staged
         history["state_changes"].append(
             dict(kind="social_activity", minute=now, sequence=domain(staged)["sequence"])

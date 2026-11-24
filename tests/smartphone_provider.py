@@ -55,3 +55,20 @@ def response(messages):
     return dict(
         actions=[first, dict(kind="comment", author=authors[-1], target="@1", text="Я приду после работы.")]
     )
+
+
+def author_batch(messages, *, mixed):
+    """Deliberately imperfect model reply; @N refers to the original action ordinal."""
+    roster = json.loads(messages[1]["content"])["authors"]
+    rows = [dict(kind="post", author="outside-the-roster", text="Отклонённая запись.")]
+    if mixed:
+        rows.extend(
+            [
+                dict(kind="post", author=roster[0]["name"], text="Сегодня открыли летнюю читальню."),
+                dict(kind="comment", author=roster[1]["id"], target="@1", text="Ответ отклонённой записи."),
+                dict(kind="comment", author=roster[1]["id"], target="@2", text="Зайду за книгой вечером."),
+                dict(kind="like", author=roster[0]["id"], target="@3"),
+                dict(kind="post", author=roster[1]["id"], text="Сыграем во дворе после обеда?"),
+            ]
+        )
+    return dict(actions=rows)

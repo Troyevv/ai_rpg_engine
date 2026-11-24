@@ -193,6 +193,9 @@ def finish_job(repo, job, command, apply):
         before = json.loads(row["state_json"])
         after = deepcopy(before)
         check(after, command)
-        apply(after)
+        warnings = apply(after) or []
         save_snapshot(db, row, before, after, command, job_id=job["id"])
-        db.execute("UPDATE game_jobs SET status='saved',error='' WHERE id=?", (job["id"],))
+        db.execute(
+            "UPDATE game_jobs SET status='saved',error='',warnings_json=? WHERE id=?",
+            (json.dumps(warnings, ensure_ascii=False), job["id"]),
+        )

@@ -1,6 +1,6 @@
 """Records embedded in a branch's WorldState. Public cards never contain private NPC fields."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -97,8 +97,11 @@ class PublicAction(Record):
     text: Text | None = None
 
 
-class Batch(Record):
-    actions: list[PublicAction] = Field(max_length=6)
+Action = TypeVar("Action")
+
+
+class Batch(Record, Generic[Action]):
+    actions: list[Action] = Field(max_length=6)
 
 
 class SearchResult(Record):
