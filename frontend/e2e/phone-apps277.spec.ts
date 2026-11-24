@@ -15,10 +15,19 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
   await page.goto('/');
   const phone = page.getByRole('region', { name: 'Телефон персонажа' });
   const b = (name: string) => phone.getByRole('button', { name, exact: true });
-  const saved = () =>
-    expect
-      .poll(async () => (await (await request.get('/api/saves/' + seed.save)).json()).job?.status)
+  const submit = async (button: string) => {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === 'POST' && /\/(apps|phone)\/dispatch$/.test(r.url()),
+      ),
+      b(button).click(),
+    ]);
+    expect(response.ok(), await response.text()).toBe(true);
+    const { job } = await response.json();
+    await expect
+      .poll(async () => (await (await request.get('/api/jobs/' + job.id)).json()).status)
       .toBe('saved');
+  };
   const open = () => page.getByRole('button', { name: /^Телефон/ }).click();
   const list = (s: string) => phone.locator('.listing-preview').filter({ hasText: s }).first();
   const overflow = async () =>
@@ -30,13 +39,11 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
   await page.getByLabel('Своё действие или реплика').fill('Сохраняю основной черновик.');
   await open();
   await b('Новости').click();
-  await b('Новые статьи').click();
-  await saved();
+  await submit('Новые статьи');
   await list('Хроника набережной').click();
   await expect(phone.getByText('Издание сообщает о поиске утраченной коллекции.')).toBeVisible();
   await phone.getByLabel('Ваш комментарий').fill('Сохраним коллекцию вместе!');
-  await b('Отправить комментарий').click();
-  await saved();
+  await submit('Отправить комментарий');
   await expect(phone.getByText('Сохраним коллекцию вместе!', { exact: true })).toBeVisible();
   await overflow();
   await b('Домой').click();
@@ -47,15 +54,13 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
   await b(npc.name).click();
   await b('Задать вопрос').click();
   await phone.getByLabel('Ваш вопрос').fill('Что сыграешь на бис?');
-  await b('Отправить вопрос').click();
-  await saved();
+  await submit('Отправить вопрос');
   await list('Что сыграешь').click();
   await expect(phone.getByText('Аноним', { exact: true })).toBeVisible();
   await overflow();
   await b('Домой').click();
   await b('Афиша').click();
-  await b('Найти мероприятия').click();
-  await saved();
+  await submit('Найти мероприятия');
   await list('Вечер музыки').click();
   await b('Запланировать').click();
   await expect(phone.getByText('В вашем календаре')).toBeVisible();
@@ -68,8 +73,7 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
       exact: true,
     })
     .check();
-  await b('Отправить приглашение').click();
-  await saved();
+  await submit('Отправить приглашение');
   await expect(b('Пригласить')).toBeVisible();
   await overflow();
   await b('Отправиться').click();
@@ -87,23 +91,20 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
   await expect(composer).toBeEnabled();
   await open();
   await b('Работа и вакансии').click();
-  await b('Найти ещё вакансии').click();
-  await saved();
+  await submit('Найти ещё вакансии');
   await phone.getByLabel('Поиск вакансий').fill('переплёт');
   await list('Мастер переплёта').click();
   await b('В избранное').click();
   await expect(b('Убрать из избранного')).toBeVisible();
   await b('Откликнуться').click();
   await phone.getByLabel('Текст отклика').fill('Расскажите об условиях работы.');
-  await b('Отправить отклик').click();
+  await submit('Отправить отклик');
   await expect(b('Переписка с работодателем')).toBeVisible();
-  await saved();
   await b('Переписка с работодателем').click();
   await expect(phone.locator('.phone-message.outgoing')).toContainText('Расскажите об условиях работы.');
   await expect(phone.locator('.phone-message.incoming').last()).toContainText('Предлагаю начать сегодня');
   await phone.getByLabel('Сообщение в телефоне').fill('Условия подходят. Принимаю работу и начинаю сегодня.');
-  await b('Отправить сообщение').click();
-  await saved();
+  await submit('Отправить сообщение');
   await overflow();
   await page.reload();
   await open();
