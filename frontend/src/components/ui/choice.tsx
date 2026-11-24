@@ -1,5 +1,6 @@
 import {useTransientBack} from '../../lib/transientBack';
-import { Children, Fragment, isValidElement, useState, useCallback, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useState, useRef, useCallback, type ReactNode } from "react";
+import { useMenuDismiss } from '../../lib/useMenuDismiss';
 import * as Select from "@radix-ui/react-select";
 import { Check, ChevronDown } from "lucide-react";
 
@@ -33,7 +34,10 @@ function items(children: ReactNode, preview?: ChoiceProps['optionPreview']): Rea
 
 export function Choice({value, children, onValueChange, disabled, required, optionPreview, ...props}: ChoiceProps) {
   const [open,setOpen]=useState(false);
-  useTransientBack(open,useCallback(()=>setOpen(false),[]));
+  const popup = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useTransientBack(open, close);
+  useMenuDismiss(open, popup, close);
   const emptyRequired = required && value === "";
   const placeholder = emptyRequired && Children.toArray(children).find(child =>
     isValidElement<{value?: string}>(child) && child.props.value === "");
@@ -41,7 +45,7 @@ export function Choice({value, children, onValueChange, disabled, required, opti
     <Select.Trigger {...props} data-choice="" value={value} className={`choice-trigger ${props.className || ""}`}>
       <Select.Value placeholder={isValidElement<{children?: ReactNode}>(placeholder) ? placeholder.props.children : undefined}/><Select.Icon><ChevronDown size={16}/></Select.Icon>
     </Select.Trigger>
-    <Select.Portal container={document.getElementById("root")}><Select.Content position="popper" sideOffset={4} collisionPadding={8} className="choice-popup">
+    <Select.Portal container={document.getElementById("root")}><Select.Content ref={popup} position="popper" sideOffset={4} collisionPadding={8} className="choice-popup">
       <Select.Viewport>{items(children,open ? optionPreview : undefined)}</Select.Viewport>
     </Select.Content></Select.Portal>
   </Select.Root>;

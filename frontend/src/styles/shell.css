@@ -81,6 +81,20 @@
   min-width: 0;
 }
 
+/* The workspace and the mounted reader share the row below the actual header. */
+.app-main:has(> .save-workspace) {
+  display: grid;
+  grid-template: auto minmax(0, 1fr) / minmax(0, 1fr);
+}
+.app-main > .save-workspace,
+.app-main:has(> .save-workspace) > .game-preserved {
+  grid-area: 2 / 1;
+}
+.app-main:has(> .save-workspace) > .game-preserved {
+  display: flex;
+  flex-direction: column;
+}
+
 .topbar {
   height: 68px;
   flex-shrink: 0;

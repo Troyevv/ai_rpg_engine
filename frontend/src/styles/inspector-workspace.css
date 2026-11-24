@@ -96,9 +96,6 @@
 .narrative-shell .nav-settings {
   margin-top: 20px;
 }
-.narrative-shell .save-workspace {
-  left: var(--inspector-nav-width);
-}
 .inspector-workspace {
   position: fixed;
   inset: 0 0 0 var(--inspector-nav-width);
@@ -928,11 +925,9 @@
     inset: 0;
     height: var(--app-height, 100dvh);
   }
-  .narrative-shell .save-workspace {
-    left: 0;
-  }
   .inspector-topbar {
-    padding: 6px 10px;
+    height: calc(var(--inspector-top-height) + env(safe-area-inset-top));
+    padding: calc(6px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
     gap: 4px;
   }
   .inspector-topbar > .inspector-width {

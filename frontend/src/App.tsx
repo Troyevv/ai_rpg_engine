@@ -375,8 +375,8 @@ export default function App() {
             apiKey={apiKey}
           /></div>
         )}
+        {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
       </div>
-      {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
       <ReadingDisplay open={display} close={()=>setDisplay(false)} prefs={prefs} save={async next=>{await api(`/settings/${profile}`,next,"PUT");setPrefs(next)}}/>
       <Settings
         open={settings}
