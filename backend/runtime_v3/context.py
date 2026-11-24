@@ -235,6 +235,13 @@ def canonical_slice(state, scope, extraction=False, query=""):
         and words(query) & words(' '.join(str(r.get(k,'')) for k in ('title','context','outcome','id')))]
     if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
     from backend.runtime_v3.reproduction import context_projection, private_fact_ids, known_birth
+    if state['meta']['communication'].get('social'):
+        observer = scope.pov_actor_id or scope.controlled_actor_id
+        known = [r for r in state.get('smartphone',{}).get('publications',{}).values()
+                 if state['knowledge'].get(str(observer)+':'+identity('public_statement',r['id']),{}).get('status')=='known']
+        if known:
+            current['public_statements'] = [dict(id=r['id'],author=r['author'],text=r['text'][:600],minute=r['minute'])
+                for r in sorted(known,key=lambda r:(r['author'] in relevant,r['sequence']),reverse=True)[:4]]
     current.update(context_projection(state, relevant, scope.pov_actor_id or scope.controlled_actor_id, extraction))
     if not extraction:
         from backend.runtime_v3.kinship import knowledge_status
@@ -616,7 +623,7 @@ class ExtractionContextBuilder:
         return rules, [block('Текущее состояние / GM-only', extraction_state(current, self.contract_version)),
                        *([block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind))] if self.contract_version < 9 else []),
                        block('Entity IDs', entities),
-                       block('JSON Schema', prompt_schema(spatial_version=self.contract_version, camera_mode=snapshot['world_state']['camera']['mode'], scene_sequence=self.contract_version >= 6, semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(social=snapshot['world_state']['meta']['communication'].get('social',False), spatial_version=self.contract_version, camera_mode=snapshot['world_state']['camera']['mode'], scene_sequence=self.contract_version >= 6, semantic_slice=self.contract_version >= 5, explicit_departures=explicit_departures, grounded_choices=self.contract_version >= 4, consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=self.contract_version >= 5 or bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def extraction_state(current, version):
@@ -749,6 +756,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     observer = scope.pov_actor_id or scope.controlled_actor_id
     remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
                       if e['channel']!='VOICE_CALL' and observer not in e['read_by'] and observer != e['sender_id']}
+    # A compact knowledge-bound projection supplies visible public statements above.
+    # Never put the entire set of publication Facts into the general prompt.
+    remote_private.update(identity('public_statement',rid) for rid in state.get('smartphone',{}).get('publications',{}))
     private_context_facts = set()
     if camera['mode'] == 'actor':
         # Relevance of a mentioned off-scene NPC does not authorize exposing
@@ -806,6 +816,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     remote = remote_context(state)
     cfg = state['meta']['communication']
     current['communication_capabilities'] = {key: cfg[key] for key in ('text_message', 'voice_call')}
+    if cfg.get('social'):
+        current['communication_capabilities']['social'] = True
     # Preserve the legacy context budget: absent/disabled future channels and
     # empty optional metadata do not consume tokens on every ordinary turn.
     current['communication_capabilities'].update({key: True for key in

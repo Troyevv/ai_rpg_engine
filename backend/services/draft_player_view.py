@@ -106,7 +106,7 @@ def player_view(state):
     camp=pick(state['campaign'],'title','setting','era','genre','tone','public_description')
     camp.update(description=camp.get('public_description',''),rules='')
     out={group:{} for group in (*KINDS,*SOCIAL)};out['version']=2
-    if 'communication' in world:out['communication']=pick(world['communication'],'profile_version','preset','text_message','voice_call','presentation','region','ring_timeout_minutes','emergency_numbers','letter','courier','telegram','landline','magic','delivery_policy','delivery_minutes')
+    if 'communication' in world:out['communication']=pick(world['communication'],'profile_version','preset','text_message','voice_call','social','dating','presentation','region','ring_timeout_minutes','emergency_numbers','letter','courier','telegram','landline','magic','delivery_policy','delivery_minutes')
     public.update(campaign=camp,locations=list(locations.values()),characters=[],world=out,sections={},story_notes='')
     for fid in world['facts']:
         if fid in facts:

@@ -25,7 +25,7 @@ for (const theme of ['graphite','parchment']) {
   await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
   const openGroup=async()=>{
-   await phone.getByRole('button',{name:/^Переписки/}).click();
+   await phone.getByRole('button',{name:/^Чаты/}).click();
    await phone.locator('.phone-thread').filter({hasText:'Общая переписка'}).click();
   };
   await openGroup();
@@ -42,6 +42,7 @@ for (const theme of ['graphite','parchment']) {
   expect(Object.keys((await view()).state.world.scheduled_events)).toHaveLength(0);
   await expect(page.locator('.story-scroll')).not.toContainText('Покажу завтра');
   await page.getByRole('button',{name:/^Телефон/}).click();
+  await phone.getByRole('button',{name:'Чаты',exact:true}).click();
   // Phone preserves the open conversation across folding.
   await expect(phone.getByText('Ждут твоего ответа',{exact:true})).toBeVisible();
   await expect(phone.getByText('Покажу завтра. Кирилл, ты придёшь?',{exact:true})).toBeVisible();

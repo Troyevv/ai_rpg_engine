@@ -88,6 +88,10 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
     private_facts = {identity('communicated_text', e['id']) for e in state['remote_events'].values()
                      if e['channel'] in HISTORICAL_CHANNELS and camera['controlled_actor_id'] != e['sender_id'] and camera['controlled_actor_id'] not in e['read_by']}
+    # The dedicated paginated feed owns public texts, including the corresponding
+    # testimony facts. Ordinary save refreshes must not download the feed archive.
+    public_statements = {identity('public_statement',rid) for rid in state['smartphone']['publications']}
+    private_facts.update(public_statements)
     for fid,f in state['facts'].items():
         if fid not in private_facts: world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
     world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in private_facts}
@@ -138,7 +142,7 @@ def ui_view(snapshot, history=None):
         world_clock=dict(minute=now,last_event_time=label(now),calendar=calendar_state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(calendar_state,None)),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],
-        facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],
+        facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values() if f['id'] not in public_statements],
         plans=[dict(t,text=t['state'] or t['description'],status='done' if t['status']=='resolved' else 'open') for t in state['threads'].values()],
         events=[dict(e,text=e['text'],character_ids=e['participants'],turn=e['source_sequence']) for e in world['events'].values() if e['player_observed']],
         locations=[dict(l,text=l['description'] or l['name']) for l in locations.values()])

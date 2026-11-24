@@ -16,7 +16,7 @@ async function start(page:Page,request:APIRequestContext,failSemantic=false) {
  await page.getByRole('button',{name:/^Телефон/}).click();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  const openGroup=async()=>{
-  await phone.getByRole('button',{name:/^Переписки/}).click();
+  await phone.getByRole('button',{name:/^Чаты/}).click();
   await phone.locator('.phone-thread').filter({hasText:'Общая переписка'}).click();
  };
  await openGroup();
@@ -79,7 +79,7 @@ for(const leave of ['Свернуть телефон','К перепискам']
   const {phone,view,send}=await start(page,request);await watch(page,leave);await send();
   await expect.poll(async()=>(await page.evaluate(()=>(window as any).arrivalLog)).length).toBeGreaterThan(0);
   if(leave==='Свернуть телефон') {
-   await expect(phone).toBeHidden();await page.getByRole('button',{name:/^Телефон/}).click();
+   await expect(phone).toBeHidden();await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Чаты',exact:true}).click();
   } else {
    await expect(phone.locator('.phone-conversations')).toBeVisible();
    // Actually visit another chat, then return to the group.

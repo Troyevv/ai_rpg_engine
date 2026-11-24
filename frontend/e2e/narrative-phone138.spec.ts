@@ -1,3 +1,4 @@
+import {openDeviceApp} from './navigation';
 import {test,expect} from '@playwright/test';
 
 for (const theme of ['graphite','parchment']) {
@@ -28,7 +29,7 @@ for (const theme of ['graphite','parchment']) {
   await expect(page.locator('.story-scroll')).toContainText('Ты завтра свободен?');
   await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
-  await phone.getByRole('button',{name:'Контакты',exact:true}).click();await phone.getByRole('button',{name:'Катя',exact:true}).click();
+  await openDeviceApp(phone,'Контакты');await phone.getByRole('button',{name:'Катя',exact:true}).click();
   await phone.getByRole('button',{name:'Написать',exact:true}).click();
   await expect(phone.getByText('Ты завтра свободен?',{exact:true})).toBeVisible();
   await expect.poll(async()=>(await view()).state.phone.events[0].unread).toBe(false);
@@ -44,7 +45,7 @@ for (const theme of ['graphite','parchment']) {
   expect(ringing.state.world.characters.qa_vera.location_id).toBe(initial.state.world.characters.qa_vera.location_id);
   expect(ringing.state.scene_meta.present_ids).toEqual(initial.state.scene_meta.present_ids);
   await page.getByRole('button',{name:/^Телефон/}).click();
-  await phone.getByRole('button',{name:'К перепискам'}).click();await phone.getByRole('button',{name:'Звонки',exact:true}).click();
+  await openDeviceApp(phone,'Звонки');
   await expect(phone.getByRole('button',{name:'Отклонить',exact:true})).toBeVisible();
   await expect(phone.getByRole('button',{name:'Игнорировать',exact:true})).toBeVisible();
   await page.screenshot({path:`test-results/phone138-${theme}-${info.project.name}-ringing.png`,animations:'disabled'});

@@ -137,6 +137,11 @@ def calendar_label(state, minute=None):
     return f"День {p['day']} · " + (f"{p['date']} · " if p['date'] else '') + f"{weekday} · {p['time']}"
 
 
+def exact_age(card):
+    match = re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?', str(card['fields'].get('Возраст','')).strip())
+    return int(match[1]) if match else None
+
+
 def age_on(birth_date, today, profile=None):
     if not birth_date or not today: return None
     try:

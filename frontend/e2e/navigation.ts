@@ -1,5 +1,5 @@
 import {chooseOption} from './choice-navigation';
-import {expect,type Page} from '@playwright/test';
+import {expect,type Locator,type Page} from '@playwright/test';
 export async function nav(page:Page,name:string){
  if(await page.locator('.ww-shell').isVisible()){
   if(name==='Создать')return;
@@ -63,4 +63,10 @@ export async function searchCharacter(page:Page,query:string){
  await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();
  await page.getByLabel('Найти персонажа').fill(query);
  await page.getByLabel('Найти персонажа').press('Enter');
+}
+
+export async function openDeviceApp(phone:Locator, name:string){
+ const home=phone.getByRole('button',{name:'Домой',exact:true});
+ if(await home.isVisible())await home.click();
+ await phone.getByRole('navigation',{name:'Приложения'}).getByRole('button',{name,exact:true}).click();
 }

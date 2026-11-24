@@ -58,7 +58,7 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication'):
+        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication','smartphone'):
             raise ValueError('Неизвестный тип хода.')
         from backend.runtime_v3.player_actions import EXTRACTION_VERSION
         from backend.services.structured_extraction import transport
@@ -89,6 +89,10 @@ class EngineStorage:
                     config.pop(key, None)
                     if key in source_config: config[key] = source_config[key]
                 user_text = recovery['user_text']
+            job_id = uuid.uuid4().hex
+            if kind == 'smartphone':
+                from backend.repositories.smartphone import register_job
+                save = register_job(self,db,save,config,job_id)
             if kind == 'communication':
                 from backend.runtime_v3.communication import Continuation
                 config = dict(config)
@@ -235,7 +239,6 @@ class EngineStorage:
                 from backend.repositories.documents import ROOT
                 template = 'state_update_prompt.md' if config['_extraction_contract'] >= 11 else 'state_update_v10.md' if config['_extraction_contract'] == 10 else 'state_update_v9.md'
                 config['_prompts']['_scene_rules'] = {'content':(ROOT/template).read_text(encoding='utf-8')}
-            job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
                           VALUES(?,?,?,?,?,?,?,'generating',?)''',
                        (job_id, save_id, save['revision'], before, user_text, kind, replaces, json.dumps(config)))
@@ -317,7 +320,7 @@ class EngineStorage:
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
-            if job is None or not job['narrative_complete'] or job['status'] not in ('error', 'stopped'):
+            if job is None or (not job['narrative_complete'] and job['kind'] != 'smartphone') or job['status'] not in ('error', 'stopped'):
                 raise ValueError('Нет завершённого текста для повторной обработки.')
             if ((revision is not None and revision != job['revision']) or
                     (attempt_epoch is not None and attempt_epoch != job['attempt_epoch'])):

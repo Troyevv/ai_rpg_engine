@@ -38,7 +38,9 @@ export function useJob(initial: Job | null | undefined, completed: () => void) {
       if (!active(next)&&(next.status==="saved"||!next.live)) {
         stream.close();
         callback.current();
-        if (next.error) toast.error(['phone','call'].includes(next.presentation?.surface||'')?phoneText('responseFailed'):next.error);
+        if (next.error && next.kind==='smartphone') {
+          toast.error(next.presentation?.app==='dating'?'Знакомства: генерация не завершена. Можно повторить в приложении.':'Запись сохранена. Ответы можно повторить в соцсети.');
+        } else if (next.error) toast.error(['phone','call'].includes(next.presentation?.surface||'')?phoneText('responseFailed'):next.error);
       }
     });
     return () => stream.close();

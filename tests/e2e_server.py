@@ -673,6 +673,22 @@ def scripted_stream(**kwargs):
 
 
 def stream(**kwargs):
+    global phone_mode
+    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/1')):
+        from smartphone_provider import response
+        if phone_mode in ('app_error_once', 'app_refresh_error_once'):
+            time.sleep(2)
+            phone_mode = 'app_refresh_slow' if phone_mode == 'app_refresh_error_once' else 'silent'
+            raise RuntimeError('Тестовый провайдер прервал ответ.')
+        if phone_mode in ('app_authors_invalid', 'app_authors_mixed'):
+            from smartphone_provider import author_batch
+            mixed = phone_mode == 'app_authors_mixed'
+            phone_mode = 'silent' if mixed else 'app_authors_mixed'
+            yield json.dumps(author_batch(kwargs['messages'], mixed=mixed), ensure_ascii=False)
+            return
+        time.sleep(2 if phone_mode == 'app_refresh_slow' else .2)
+        yield json.dumps(response(kwargs['messages']),ensure_ascii=False)
+        return
     global scene255_attempts
     if kwargs.get('model') == 'blank263-test':
         from backend.services.provider_attempt import identity
@@ -1166,7 +1182,7 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
+    def phone_seed(smartphone: bool = False, unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
@@ -1181,6 +1197,8 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if smartphone:
+            snap['world_state']['meta']['communication'].update(social=True,dating=True)
         if legacy_portraits:
             # Explicit pre-175 save fixture: preserve coverage of the old fallback.
             for actor in snap['world_state']['characters'].values():
@@ -1351,6 +1369,20 @@ if __name__ == '__main__':
             correction_original='Неверный день.' if calendar else 'Вчера Вера встретилась с Тимуром.',
             correction_replacement='Верный день.' if calendar else 'Пять дней назад Вера встретилась с Тимуром.')
         return policy252_selection
+
+    @app.post('/test/social-author-replay')
+    def social_author_replay(case: str):
+        global phone_mode
+        from test_playability251 import seed
+        if case not in ('001', '006'):
+            raise ValueError('Unknown replay')
+        repo = app.state.repository
+        result = seed(repo, case)
+        # This saved game predates the social app. Enable the capability on the imported copy.
+        with repo.connect() as db:
+            db.execute("UPDATE saves SET state_json=json_set(state_json,'$.world_state.meta.communication.social',json('true')) WHERE id=?", (result['save'],))
+        phone_mode = 'app_authors_invalid'
+        return result
 
     @app.post('/test/playability251-seed')
     def playability251_seed(case: str = '002'):

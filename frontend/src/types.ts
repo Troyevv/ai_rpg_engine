@@ -84,7 +84,7 @@ export interface State {
   world_summary?:string;
   summary?:string;
   communication_profile?: import('./CommunicationSettings').CommunicationProfile;
-  phone?: import('./Phone').PhoneState|null;
+  phone?: import('./phone/types').PhoneState|null;
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
   genealogy?:Genealogy;
@@ -140,7 +140,7 @@ export interface Choice {
   action: string;
   speech: string;
 }
-export interface PresentationRoute {physical_reconciliation?:boolean;surface:"physical"|"phone"|"call";actor_id?:string|null;call_id?:string|null;conversation_id?:string|null;physical_text?:string;physical_events?:{id:string;source_record_id:string;turn_id:number;order:number;minute:number;physical_text:string}[];call_text?:string}
+export interface PresentationRoute {app?:string;action?:string;target?:string|null;physical_reconciliation?:boolean;surface:"physical"|"phone"|"call";actor_id?:string|null;call_id?:string|null;conversation_id?:string|null;physical_text?:string;physical_events?:{id:string;source_record_id:string;turn_id:number;order:number;minute:number;physical_text:string}[];call_text?:string}
 export interface Turn {
   read_only_projection?: boolean;
   presentation?: PresentationRoute;

@@ -1,5 +1,5 @@
 import {useEffect, useState, useSyncExternalStore} from 'react';
-import type {PhoneEvent} from '../Phone';
+import type {PhoneEvent} from '../phone/types';
 
 const motionQuery = '(prefers-reduced-motion: reduce)';
 const subscribeMotion = (notify:()=>void) => {

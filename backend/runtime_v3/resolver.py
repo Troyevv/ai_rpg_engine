@@ -838,6 +838,11 @@ class StateResolver:
             getattr(self.history, section).extend(values)
         from backend.runtime_v3.group_planning import resolve_responses
         resolve_responses(self, raw)
+        from backend.runtime_v3.smartphone import narrative_publications, publication_patch
+        try:
+            narrative_publications(self,raw.records.get('publications',[]))
+        except ValueError as exc:
+            fatal(str(exc),'social_publication_invalid',repairable=True,section='publications')
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
@@ -846,6 +851,9 @@ class StateResolver:
             validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
+        social_delta = publication_patch(self.before['smartphone'],s['smartphone'])
+        if social_delta:
+            upserts['smartphone'] = social_delta
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)

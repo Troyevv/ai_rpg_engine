@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 import { MessageCircle, Users, Check, CheckCheck } from 'lucide-react';
 import { CharacterAvatar } from './Portrait';
 import { formatDateLabel } from './gameDate';
-import type { PhoneState, PhoneEvent, Conversation } from './Phone';
+import type { PhoneState, PhoneEvent, Conversation } from './phone/types';
 
 // These are read-only views of the authorized API projection, never a chat store.
 export function messageStatus(event: PhoneEvent) {

@@ -228,8 +228,14 @@ class RuntimeStorage:
             for key in ('user_text','assistant_text','before_json','after_json','kind','choices_json','changes_json','pov_actor_id','audience_json','timing_json'):
                 db.execute(f'UPDATE turns SET {key}=? WHERE id=?', (p.get(key,'[]' if key=='audience_json' else None),turn_id))
             db.execute('UPDATE turns SET active_variant_id=? WHERE id=?', (variant_id,turn_id))
-            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (p['after_json'],save_id))
-            self._archive_memory(db, save_id, json.loads(p['after_json']))
+            selected = p['after_json']
+            if p.get('smartphone_checkpoint'):
+                checkpoint = db.execute('SELECT after_json FROM actor_switches WHERE id=? AND save_id=? AND parent_variant_id=?',
+                                        (p['smartphone_checkpoint'],save_id,variant_id)).fetchone()
+                if checkpoint:
+                    selected = checkpoint['after_json']
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (selected,save_id))
+            self._archive_memory(db, save_id, json.loads(selected))
 
     def _rollback_after(self, db, save_id, sequence, confirmed):
         later = db.execute('SELECT * FROM turns WHERE save_id=? AND sequence>? ORDER BY sequence', (save_id,sequence)).fetchall()

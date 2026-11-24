@@ -146,6 +146,10 @@ def run_job(path, job_id, handle):
                         db.execute("UPDATE game_jobs SET config_json=json_set(config_json,'$._budget_snapshot',json(?)) WHERE id=? AND attempt_epoch=?",
                                    (json.dumps(snapshot(resolved)), job_id, job['attempt_epoch']))
                 return resolved
+            if job['kind'] == 'smartphone':
+                from backend.services.smartphone import execute
+                execute(storage,job,handle,chat_stream,prepare_job())
+                return
             if job['kind'] in ('communication','long_term'):
                 if job['kind'] == 'communication':
                     from backend.services.communication import execute
@@ -263,7 +267,7 @@ def run_job(path, job_id, handle):
                     if len(matches)!=1:
                         raise RuntimeError('Не найден однозначный исходный background Narrative для recovery.')
                     return iter([matches[0]['response_text']])
-                if stage in ('remote_initiative', 'remote_group_semantics') or (version >= 10 and stage == 'extraction' and job['attempt_epoch']):
+                if stage in ('remote_initiative', 'remote_group_semantics', 'social_activity') or (version >= 10 and stage == 'extraction' and job['attempt_epoch']):
                     # Reuse a completed source-identical request after a later
                     # provider failure; the existing usage journal owns the text.
                     for attempt in storage.request_log(job_id=job_id):
@@ -598,6 +602,9 @@ def run_job(path, job_id, handle):
                 warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail),
                 on_candidate=lambda messages,audit: storage.record_extraction_candidate(getattr(messages,'request_id',None),audit),
                 world_history={'events':world_history.get('events',[]),'_relationship_query':world_history['_relationship_query'],'_milestone_query':world_history['_milestone_query'],'_development_query':world_history['_development_query']})
+            if version >= 11:
+                from backend.services.smartphone import consider
+                consider(before,state,history_batch,config,generate,handle.cancelled,background_warnings)
             if version >= 10 and background_warnings:
                 changes['interpretation'] = 'partial'
                 changes['interpretation_warnings'].extend(background_warnings)
@@ -611,7 +618,11 @@ def run_job(path, job_id, handle):
             assert_world_state_v3_invariants(state['world_state'],before['world_state'])
             from backend.runtime_v3.models import StatePatch
             final=state['world_state'];prior=before['world_state']
-            combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in resolved.patch.upserts}
+            combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in resolved.patch.upserts if section != 'smartphone'}
+            from backend.runtime_v3.smartphone import publication_patch
+            social_delta = publication_patch(prior['smartphone'],final['smartphone'])
+            if social_delta:
+                combined['smartphone'] = social_delta
             if skip_result:
                 skip_result.update(state.get('last_time_skip', {}))
                 skip_result['living_world_llm_calls']=sum(r['stage'].startswith('world_simulation') for r in storage.request_log(job_id=job_id))

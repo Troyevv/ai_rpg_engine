@@ -1,3 +1,4 @@
+import {openDeviceApp} from './navigation';
 import {test,expect} from '@playwright/test';
 const screen=(page:any)=>page.getByRole('region',{name:'Телефон персонажа'});
 async function seed(page:any,request:any,query='incoming=false&decision=answer'){
@@ -9,7 +10,7 @@ async function seed(page:any,request:any,query='incoming=false&decision=answer')
 }
 async function openContact(page:any){
  await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'Контакты',exact:true}).click();
+ await openDeviceApp(screen(page),'Контакты');
  await screen(page).getByRole('button',{name:'Вера работа',exact:true}).click();
 }
 test('T15 T18 outgoing call and automatic read reply through real jobs',async({page,request},info)=>{
@@ -32,8 +33,7 @@ test('T15 T18 outgoing call and automatic read reply through real jobs',async({p
  await call.getByRole('button',{name:'Завершить звонок',exact:true}).click();
  await expect(call).toHaveCount(0);
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Алло, Вера, ты меня слышишь?');
- await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'Контакты',exact:true}).click();
+ await expect(screen(page)).toBeVisible();
  await screen(page).getByRole('button',{name:'Написать',exact:true}).click();
  await screen(page).getByLabel('Сообщение в телефоне').fill('Встретимся завтра?');
  await screen(page).getByRole('button',{name:'Отправить сообщение',exact:true}).click();
@@ -44,7 +44,7 @@ test('T15 T18 outgoing call and automatic read reply through real jobs',async({p
  await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await page.reload();
  await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
+ await openDeviceApp(screen(page),'Чаты');
  await screen(page).getByRole('button').filter({hasText:'Вера работа'}).click();
  await expect(screen(page).getByLabel('Сообщение в телефоне')).toHaveValue('Ещё один черновик');
  const after=await(await request.get(`/api/saves/${selected.save}`)).json();
@@ -91,7 +91,7 @@ test('T22 provider failure retains send, retry/reload does not resend',async({pa
  const duplicate=await request.post(`/api/saves/${s.save}/phone/dispatch`,{data:body});expect(duplicate.ok()).toBe(true);
  await expect(screen(page).getByRole('button',{name:'Повторить',exact:true})).toBeVisible();
  await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
+ await openDeviceApp(screen(page),'Чаты');
  await screen(page).getByRole('button').filter({hasText:'Вера работа'}).click();
  await screen(page).getByRole('button',{name:'Повторить',exact:true}).click();
  await expect(screen(page).getByText('Да, увидимся завтра. Напиши, когда освободишься.',{exact:true})).toBeVisible();
@@ -108,7 +108,7 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
   await page.getByRole('button',{name:/^Телефон/}).click();
   await expect(screen(page).getByRole('button',{name:'Ответить',exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath(`phone-incoming-${skin}-after.png`),animations:'disabled'});
-  await screen(page).getByRole('button',{name:'Контакты',exact:true}).click();
+  await openDeviceApp(screen(page),'Контакты');
   await page.screenshot({path:info.outputPath(`phone-contacts-${skin}-after.png`),animations:'disabled'});
   await screen(page).getByRole('button',{name:'Вера работа',exact:true}).click();
   await screen(page).getByRole('button',{name:'Написать',exact:true}).click();
@@ -116,8 +116,8 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
   await screen(page).getByLabel('Сообщение в телефоне').fill('Черновик на время входящего вызова');
   await page.screenshot({path:info.outputPath(`phone-chat-${skin}-after.png`),animations:'disabled'});
   await screen(page).getByRole('button',{name:'К перепискам',exact:true}).click();
-  await screen(page).getByRole('button',{name:'Звонки',exact:true}).click();
-  await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
+  await openDeviceApp(screen(page),'Звонки');
+  await openDeviceApp(screen(page),'Чаты');
   await screen(page).locator('.phone-thread').filter({hasText:'Вера работа'}).click();
   await expect(screen(page).getByLabel('Сообщение в телефоне')).toHaveValue('Черновик на время входящего вызова');
   await page.getByRole('button',{name:'Свернуть телефон'}).click();
@@ -126,8 +126,7 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
  await page.getByLabel('Своё действие или реплика').press('Control+Enter');
  await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
  await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'К перепискам',exact:true}).click();
- await screen(page).getByRole('button',{name:'Звонки',exact:true}).click();
+ await openDeviceApp(screen(page),'Звонки');
  await expect(screen(page).getByRole('button',{name:'Ответить',exact:true})).toBeVisible();
  await screen(page).getByRole('button',{name:'Ответить',exact:true}).click();
  const call=page.getByRole('dialog',{name:'Сцена звонка'});
@@ -136,9 +135,8 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
  await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
  await page.getByRole('button',{name:/Вернуться к звонку/}).click();
  await call.getByRole('button',{name:'Завершить звонок',exact:true}).click();
- await page.getByRole('button',{name:/^Телефон/}).click();
- await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
- await screen(page).locator('.phone-thread').filter({hasText:'Вера работа'}).click();
+ await expect(screen(page)).toBeVisible();
+ await openDeviceApp(screen(page),'Чаты');
  await expect(screen(page).getByLabel('Сообщение в телефоне')).toBeVisible();
  await page.setViewportSize({width:393,height:500});await page.emulateMedia({reducedMotion:'reduce'});
  await screen(page).getByLabel('Сообщение в телефоне').focus();
@@ -176,7 +174,7 @@ test('206 Kirill and Vera exchange messages without saved contacts', async ({pag
   const selected = await seed(page, request, 'incoming=false&decision=answer&strangers=true');
   await page.getByRole('button', {name: /^Телефон/}).click();
   const phone = screen(page);
-  await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+  await openDeviceApp(phone,'Контакты');
   await phone.getByLabel('Поиск адресата').fill('Вера');
   await phone.getByRole('button', {name: /Написать: Вера/}).click();
   await phone.getByLabel('Сообщение в телефоне').fill('Вера, когда тебе удобно созвониться?');

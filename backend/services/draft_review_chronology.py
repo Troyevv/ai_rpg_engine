@@ -1,12 +1,11 @@
 """Compile one cited family chronology into the existing review proposal and diff."""
 from bisect import bisect_left, bisect_right
 import calendar as gregorian
-import re
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.runtime_v3.birth_identity import dob_metadata, is_game_birth
-from backend.runtime_v3.calendar import age_on, current_time, date_parts
+from backend.runtime_v3.calendar import age_on, current_time, date_parts, exact_age
 from backend.services.draft_calendar import age_reference_date
 from backend.services.draft_initial import escape
 
@@ -56,11 +55,6 @@ def year_days(year, profile):
     months = profile.get('month_lengths') if profile.get('system') == 'custom' else [
         gregorian.monthrange(year, m)[1] for m in range(1,13)]
     return [f'{year:04d}-{m:02d}-{d:02d}' for m,length in enumerate(months,1) for d in range(1,length+1)]
-
-
-def exact_age(card):
-    match = re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?', str(card['fields'].get('Возраст','')).strip())
-    return int(match[1]) if match else None
 
 
 def protected(state, path):

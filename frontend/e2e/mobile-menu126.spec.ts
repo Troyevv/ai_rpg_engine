@@ -171,6 +171,7 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await expect(phone.getByRole('button',{name:'Отправить сообщение',exact:true})).toBeInViewport({ratio:1});
  await expect.poll(async()=>{const device=await page.locator('.phone-device').boundingBox();return device!.y===12&&device!.height===440}).toBe(true);
  await page.keyboard.press('Escape');await expect(phone.locator('.phone-conversations')).toBeVisible();
+ await page.keyboard.press('Escape');await expect(phone.getByRole('navigation',{name:'Приложения'})).toBeVisible();
  await page.keyboard.press('Escape');await expect(page.locator('.phone-peek')).toBeFocused();
 });
 

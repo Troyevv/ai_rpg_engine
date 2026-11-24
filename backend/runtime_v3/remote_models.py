@@ -26,6 +26,8 @@ class CommunicationCapabilities(RemoteModel):
     text_message: bool = False
     voice_call: bool = False
     presentation: Literal["none", "phone"] = "none"
+    social: bool = Field(default_factory=lambda fields: fields.get('preset') == 'modern')
+    dating: bool = Field(default_factory=lambda fields: fields.get('preset') == 'modern')
     region: str = ""
     ring_timeout_minutes: int = Field(default=2, ge=1, le=60)
     emergency_numbers: dict[Literal["medical", "police", "fire"], str] = Field(

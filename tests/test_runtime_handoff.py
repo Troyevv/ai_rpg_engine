@@ -244,6 +244,8 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     old['world_state']['meta']['communication'].update(profile_version=1,preset='unspecified',
         letter=False,courier=False,telegram=False,landline=False,magic=False,
         delivery_policy={},delivery_minutes={},author_note='')
+    old['world_state']['meta']['communication'].update(social=False,dating=False)
+    old['world_state']['smartphone'] = dict(publications={}, reactions={}, profiles={}, dating={}, opened={}, sequence=0, last_considered=None)
     old['world_state']['meta']['genre'] = dict(primary_genre='slice_of_life',
         secondary_genres=['family_saga','romance','drama'], custom_genre='') if genres else None
     old['world_state']['camera'].setdefault('observed_character_ids',[])
