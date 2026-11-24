@@ -96,7 +96,17 @@ export function Game({
   const [controlCommit,setControlCommit]=useState<{saveId:number;revision:number}|null>(null);
   // A committed control command is not ready for another action until its
   // revision has reached the parent projection. refresh() itself is asynchronous.
-  const busy=requestBusy||phoneBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
+  const [receiptCommit, setReceiptCommit] = useState<{saveId: number; revision: number} | null>(null);
+  const controlBusy = requestBusy || phoneBusy ||
+    !!(controlCommit && save?.id === controlCommit.saveId && save.revision < controlCommit.revision);
+  const busy = controlBusy ||
+    !!(receiptCommit && save?.id === receiptCommit.saveId && save.revision < receiptCommit.revision);
+  // Narrative commands need the refreshed save. The phone already serializes
+  // submissions behind its own acknowledgement and owns the new revision.
+  const refreshPhoneReceipt = (after: Save) => {
+    setReceiptCommit({saveId: after.id, revision: after.revision});
+    refresh();
+  };
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, updateSubmitted] = useState<Job | null>(null);
   const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
@@ -499,7 +509,7 @@ export function Game({
           </Dialog>
           <div className="nr-writingstatus"><span className="nr-writeidentity"><i className="nr-smallstatus"/>{actorName || 'Наблюдение'}</span><span data-draft-status>{physicalStream?'Идёт ответ':draft?'Черновик':'Твой ход'}</span>{draft&&<button className="nr-clear" aria-label="Очистить черновик" onClick={()=>{writeChoice('');setSelectedChoice(null)}}><X/></button>}</div>
           <div className="composer-inner nr-composer">
-            <Phone openCharacter={openCharacter} recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
+            <Phone chooseAction={chooseProposal} openCharacter={openCharacter} recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={controlBusy||turnLocked} onCommit={refreshControl} onReceipt={refreshPhoneReceipt} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
             <Textarea
               ref={input}
               rows={1}

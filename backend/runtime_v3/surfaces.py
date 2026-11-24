@@ -12,7 +12,7 @@ def route(snapshot, kind, config=None):
         return dict(base,surface='phone',app=cmd.get('app'),action=cmd.get('action'),target=cmd.get('target'))
     if kind == 'communication':
         source = state.get('remote_events', {}).get((config or {}).get('communication', {}).get('source_event_id'), {})
-        return dict(base, surface='phone', conversation_id=source.get('conversation_id'),
+        return dict(base, surface='phone', **(dict(app=config['smartphone']['app'],action=config['smartphone']['action']) if (config or {}).get('smartphone') else {}), conversation_id=source.get('conversation_id'),
                     call_id=source.get('id') if source.get('channel') == 'VOICE_CALL' else None)
     if kind != 'turn' or not state: return base
     from backend.runtime_v3.remote import active_call

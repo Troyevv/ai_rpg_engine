@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="jade" x2=".7" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#26d991"/><stop offset="1" stop-color="#008770"/></linearGradient>
+    <linearGradient id="indigo" x2=".4" y2="1"><stop stop-color="#5271ff"/><stop offset="1" stop-color="#312383"/></linearGradient>
+    <linearGradient id="amber" x2="1" y2=".9"><stop stop-color="#ffd36c"/><stop offset="1" stop-color="#ea8f4d"/></linearGradient>
+    <linearGradient id="night" x2="1" y2="1"><stop stop-color="#16336b"/><stop offset="1" stop-color="#251454"/></linearGradient>
+    <linearGradient id="pink" x2=".3" y2="1"><stop stop-color="#ffb49a"/><stop offset="1" stop-color="#f36183"/></linearGradient>
+    <linearGradient id="paper" x2=".6" y2="1"><stop stop-color="#fff1d3"/><stop offset="1" stop-color="#dfc49e"/></linearGradient>
+    <linearGradient id="violet" x2=".5" y2="1"><stop stop-color="#e5caff"/><stop offset="1" stop-color="#9177e5"/></linearGradient>
+    <linearGradient id="plum" x2=".8" y2="1"><stop stop-color="#822844"/><stop offset="1" stop-color="#321b48"/></linearGradient>
+    <linearGradient id="petrol" x2="1" y2="1"><stop stop-color="#287879"/><stop offset="1" stop-color="#0e424e"/></linearGradient>
+  </defs>
+  <symbol id="calls" viewBox="0 0 64 64">
+    <path fill="url(#jade)" d="M0 0h64v64H0z"/>
+    <g fill="none" stroke="#c2ffe6" opacity=".55" stroke-width="2.8" stroke-linecap="round">
+      <path d="M36 12a19 19 0 0 1 16 16M35 19a12 12 0 0 1 10 10"/>
+    </g>
+    <path fill="#006c59" opacity=".45" transform="translate(0 2)" d="M18 14q3-2 5 1l6 10q1 2-2 5l-3 3q4 7 12 11l4-5q2-2 4-1l9 5q3 2 1 5-4 9-12 7-17-4-29-23-7-12 5-18z"/>
+    <path fill="#f4fff3" d="M17 13q3-2 5 1l6 10q1 2-2 5l-3 3q4 7 12 11l4-5q2-2 4-1l9 5q3 2 1 5-4 9-12 7-17-4-29-23-7-12 5-18z"/>
+  </symbol>
+  <symbol id="messages" viewBox="0 0 64 64">
+    <path fill="url(#indigo)" d="M0 0h64v64H0z"/>
+    <path fill="#18145f" opacity=".48" d="M21 36q0-11 13-11h8q13 0 13 12v4q0 5-4 9l2 8-10-5h-8q-14 0-14-12z"/>
+    <path fill="#79dedc" d="M22 33q0-11 13-11h7q13 0 13 12v4q0 5-4 9l2 8-10-5h-8q-13 0-13-12z"/>
+    <path fill="#fffaf0" d="M9 25q0-13 15-13h8q15 0 15 13v3q0 13-15 13h-9l-12 7 2-11q-4-4-4-9z"/>
+    <g fill="#454697"><circle cx="19" cy="26.5" r="2.5"/><circle cx="28" cy="26.5" r="2.5"/><circle cx="37" cy="26.5" r="2.5"/></g>
+  </symbol>
+  <symbol id="contacts" viewBox="0 0 64 64">
+    <path fill="url(#amber)" d="M0 0h64v64H0z"/>
+    <g transform="rotate(-7 32 32)">
+      <rect x="13" y="10" width="39" height="47" rx="5" fill="#984b37"/>
+      <path d="M48 16h6v10h-6z" fill="#c94e40"/><path d="M48 28h6v10h-6z" fill="#358e83"/><path d="M48 40h6v10h-6z" fill="#72587e"/>
+      <rect x="12" y="8" width="37" height="46" rx="5" fill="#fff1c5"/>
+      <path d="M18 9v44" stroke="#d8b984" stroke-width="2"/>
+      <circle cx="33" cy="25" r="7" fill="#ac5836"/><path fill="#ac5836" d="M22 43q0-10 11-10t11 10z"/>
+      <g stroke="#784c44" stroke-width="3" stroke-linecap="round"><path d="M10 18h7m-7 13h7m-7 13h7"/></g>
+    </g>
+  </symbol>
+  <symbol id="social" viewBox="0 0 64 64">
+    <path fill="url(#night)" d="M0 0h64v64H0z"/>
+    <g fill="#fff8e5"><circle cx="12" cy="17" r="1.4"/><circle cx="49" cy="50" r="1.4"/><path d="m48 8 1.5 3.5L53 13l-3.5 1.5L48 18l-1.5-3.5L43 13l3.5-1.5z"/></g>
+    <g transform="rotate(-24 32 33)">
+      <circle cx="32" cy="33" r="17" fill="#78dfe2"/>
+      <g stroke="#267b9c" stroke-width="1.8" fill="none"><ellipse cx="32" cy="33" rx="8" ry="17"/><path d="M16 28q16 7 32 0m-32 9q15 6 32 0"/></g>
+      <path d="M16 26c-15 1-20 14 16 15s40-12 18-15" fill="none" stroke="#ff9976" stroke-width="4" stroke-linecap="round"/>
+    </g>
+  </symbol>
+  <symbol id="dating" viewBox="0 0 64 64">
+    <path fill="url(#pink)" d="M0 0h64v64H0z"/>
+    <path fill="#a53263" opacity=".3" d="m10 26 10-10 12 5 11-6 13 12-4 12-18 17-19-17z"/>
+    <path fill="#d53061" d="m9 24 8-10 10-1 5 7 7-7 10 1 7 10-4 12-20 18-19-19z"/>
+    <path fill="#ff5878" d="m9 24 8-10 6 12z"/><path fill="#f97893" d="m17 14 10-1 5 7-9 6z"/>
+    <path fill="#aa174c" d="m23 26 9-6 9 6-9 28z"/><path fill="#e93969" d="m23 26 9 28-19-19-4-11z"/>
+    <path fill="#fb456d" d="m32 20 7-7 10 1-8 12z"/><path fill="#ff8e9c" d="m41 26 8-12 7 10z"/>
+  </symbol>
+  <symbol id="news" viewBox="0 0 64 64">
+    <path fill="url(#paper)" d="M0 0h64v64H0z"/>
+    <g transform="rotate(5 32 32)">
+      <path d="M15 10h37v43q0 3-4 3H16z" fill="#ad9378"/>
+      <path d="M12 8h36v43q0 4 4 4H16q-4 0-4-5z" fill="#fff9e9"/>
+      <path d="M17 14h26v8H17z" fill="#253d46"/>
+      <path d="M18 25h24" stroke="#c66645" stroke-width="2.5"/>
+      <path d="M17 30h12v12H17z" fill="#d97148"/><path d="m17 42 5-7 3 3 4-6v10z" fill="#874451"/>
+      <g stroke="#52666a" stroke-width="2"><path d="M32 31h10m-10 5h10m-10 5h10m-25 5h25m-25 4h16"/></g>
+    </g>
+  </symbol>
+  <symbol id="questions" viewBox="0 0 64 64">
+    <path fill="url(#violet)" d="M0 0h64v64H0z"/>
+    <path fill="#654696" d="M11 17q2-5 9-5l28 2q7 1 7 9l-2 19q-1 7-9 7l-10-1-13 9 1-11-6-1q-7-1-7-8z"/>
+    <path fill="#382952" d="M10 16q1-5 8-6l28 1q8 0 8 8l-2 20q-1 7-9 7l-10-1-13 9 1-11-6-1q-7-1-7-8z"/>
+    <path fill="none" stroke="#f4ff86" stroke-width="5.2" stroke-linecap="round" d="M23 23q1-6 9-6 9 0 9 6 0 4-6 7-4 2-4 4"/><circle cx="30.5" cy="40" r="2.8" fill="#f4ff86"/>
+  </symbol>
+  <symbol id="events" viewBox="0 0 64 64">
+    <path fill="url(#plum)" d="M0 0h64v64H0z"/>
+    <g stroke="#d37085" opacity=".65" stroke-width="2"><path d="m12 6 3 5m-12 1 6 2m44 36 5 3m-9 0 1 6"/></g>
+    <g transform="rotate(-22 32 32)">
+      <path fill="#d95755" d="M8 22h49v26H8v-9a4 4 0 0 0 0-8z"/>
+      <path fill="#ffc47c" d="M7 17h49v9a4 4 0 0 0 0 8v9H7v-9a4 4 0 0 0 0-8z"/>
+      <path d="M42 18v24" stroke="#ac4c42" stroke-width="1.8" stroke-dasharray="3 2.5"/>
+      <path fill="#942e50" d="m25 20 2.8 6 6.5.8-4.8 4.6 1.3 6.5-5.8-3.2-5.8 3.2 1.2-6.5-4.8-4.6 6.7-.8z"/>
+      <path d="M47 22v16m3-16v16" stroke="#ae5a49" stroke-width="1.6"/>
+    </g>
+  </symbol>
+  <symbol id="work" viewBox="0 0 64 64">
+    <path fill="url(#petrol)" d="M0 0h64v64H0z"/>
+    <path d="M23 24v-5q0-4 4-4h10q4 0 4 4v5" stroke="#ffdda7" fill="none" stroke-width="4"/>
+    <rect x="10" y="24" width="45" height="29" rx="5" fill="#073e49"/>
+    <rect x="9" y="22" width="45" height="28" rx="5" fill="#bd7443"/>
+    <path d="M9 26q0-5 5-5h35q5 0 5 5v6q-6 5-22 5T9 32z" fill="#f1b977"/>
+    <path d="M11 32q21 9 41 0" stroke="#975d3d" stroke-width="1.5" fill="none"/>
+    <rect x="28" y="32" width="8" height="9" rx="2" fill="#344c4b"/><path d="M30 35h4" stroke="#ffe1a8" stroke-width="2"/>
+  </symbol>
+</svg>

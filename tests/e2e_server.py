@@ -299,6 +299,10 @@ def scripted_stream(**kwargs):
             yield controlled;return
         yield '{"issues":[]}'
         return
+    if phone_mode=="phone277" and kwargs["messages"][0]["content"].startswith(("Remote semantic extraction/","Select at most ONE")):
+        from phone277_provider import reply
+        yield json.dumps(reply(kwargs["messages"]),ensure_ascii=False)
+        return
     if kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
         if phone_mode=='semantic_error_once':
             phone_mode='answer'
@@ -674,7 +678,7 @@ def scripted_stream(**kwargs):
 
 def stream(**kwargs):
     global phone_mode
-    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/1')):
+    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/2','Phone catalog/1','Phone questions/1','Phone employer/1')):
         from smartphone_provider import response
         if phone_mode in ('app_error_once', 'app_refresh_error_once'):
             time.sleep(2)

@@ -93,6 +93,8 @@ class EngineStorage:
             if kind == 'smartphone':
                 from backend.repositories.smartphone import register_job
                 save = register_job(self,db,save,config,job_id)
+                if config["smartphone"]["action"]=="invite":
+                    kind="communication"
             if kind == 'communication':
                 from backend.runtime_v3.communication import Continuation
                 config = dict(config)

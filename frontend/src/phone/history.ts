@@ -5,6 +5,17 @@ type Entry = { key: string; back: () => boolean };
 const surfaces = new Map<Surface, Entry>();
 const current = () => (surfaces.has('phoneCall') ? 'phoneCall' : surfaces.has('phoneUI') ? 'phoneUI' : null);
 let removing = false;
+let handoff: (() => void) | null = null;
+export function afterDeviceClosed(action: () => void) {
+  handoff = action;
+}
+function finishHandoff() {
+  if (!current() && !removing && handoff) {
+    const run = handoff;
+    handoff = null;
+    run();
+  }
+}
 
 function sync() {
   const surface = current();
@@ -19,7 +30,7 @@ function sync() {
   } else if ((state.phoneUI || state.phoneCall) && !removing) {
     removing = true;
     history.back();
-  }
+  } else finishHandoff();
 }
 
 function onPop(event: PopStateEvent) {
@@ -27,6 +38,7 @@ function onPop(event: PopStateEvent) {
     removing = false;
     event.stopImmediatePropagation();
     sync();
+    if (!current() && !removing) window.removeEventListener('popstate', onPop, true);
     return;
   }
   const surface = current();

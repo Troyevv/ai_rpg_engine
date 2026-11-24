@@ -30,7 +30,7 @@ def check(snapshot, command):
     return actor
 
 
-def save_snapshot(db, row, before, after, command, *, job_id=None):
+def save_snapshot(db, row, before, after, command, *, job_id=None, history=None):
     after["world_state"] = assert_world_state_v3_invariants(after["world_state"])
     change = dict(
         kind="smartphone",
@@ -40,10 +40,14 @@ def save_snapshot(db, row, before, after, command, *, job_id=None):
         digest=stable_id("app", command.model_dump()),
         job_id=job_id,
     )
+    if command.action == "ask" and command.desired:
+        change.pop("actor_id")
+    history = history or {}
+    history.setdefault("state_changes", []).append(change)
     after["history_head"] = append_history(
         db,
         before.get("history_head"),
-        {"state_changes": [change]},
+        history,
         before=before["world_state"],
         after=after["world_state"],
     )
@@ -81,7 +85,7 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
         raise ValueError("Прохождение не найдено.")
     before = json.loads(row["state_json"])
     after = deepcopy(before)
-    state = after["world_state"]
+    state = after["world_state"] = assert_world_state_v3_invariants(after["world_state"])
     actor = check(after, cmd)
     if check_receipt(db, before, cmd):
         return
@@ -89,6 +93,7 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
     if row["revision"] != revision:
         raise ValueError("Сейв изменился. Обнови телефон.")
     data = domain(state)
+    history = {}
     if cmd.action == "open":
         latest = markers(state, actor).get(cmd.app, 0)
         mark = min(latest, cmd.marker if cmd.marker is not None else latest)
@@ -105,7 +110,11 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
         item["skipped"] = True
     elif cmd.action == "read":
         for rid in cmd.ids:
-            perceive(state, actor, publication(state, rid))
+            if cmd.app=="questions" and rid in data["questions"]:
+                from backend.runtime_v3.phone_listings import perceive_question
+                perceive_question(state,actor,data["questions"][rid])
+            else:
+                perceive(state, actor, publication(state, rid))
         if state["knowledge"] == before["world_state"]["knowledge"]:
             return
     elif cmd.action in ("post", "comment", "like", "repost"):
@@ -118,9 +127,12 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
             text=cmd.text,
             desired=cmd.desired,
         )
+    elif cmd.action in ("ask", "answer", "hide", "plan", "invite", "favorite", "apply"):
+        from backend.runtime_v3.phone_listings import command
+        command(after, cmd, job_id, history)
     else:
         raise ValueError("Это действие требует генерации.")
-    save_snapshot(db, row, before, after, cmd, job_id=job_id)
+    save_snapshot(db, row, before, after, cmd, job_id=job_id, history=history)
     if cmd.action in ("open", "read"):
         # These controls change only the owner's reading state. The original
         # prompt, target and provider checkpoint of a failed app job stay valid.
@@ -136,11 +148,25 @@ def register_job(repo, db, save, config, jid):
 
     cmd = AppCommand.model_validate(config["smartphone"])
     snap = json.loads(save["state_json"])
-    state = snap["world_state"]
+    state = snap["world_state"] = assert_world_state_v3_invariants(snap["world_state"])
     actor = check(snap, cmd)
     previous = check_receipt(db, snap, cmd)
+    if cmd.action == "apply":
+        a = domain(state)["applications"].get(identity("application", actor, cmd.target))
+        if a:
+            prior_job = db.execute(
+                "SELECT revision,status FROM game_jobs WHERE id=? AND save_id=?", (a["job_id"], save["id"])
+            ).fetchone()
+            if a["event_id"] and not prior_job:
+                raise ValueError("Отклик уже отправлен. Переписка доступна в этой вакансии.")
+            if prior_job and (a["event_id"] or prior_job["revision"] == save["revision"]
+                              or prior_job["status"] not in ("error", "stopped")):
+                raise ExistingJob(a["job_id"])
     if previous and previous.get("job_id"):
-        raise ExistingJob(previous["job_id"])
+        if db.execute("SELECT 1 FROM game_jobs WHERE id=? AND save_id=?",
+                      (previous["job_id"], save["id"])).fetchone():
+            raise ExistingJob(previous["job_id"])
+        raise ValueError("Эта операция уже сохранена в истории прохождения.")
     if cmd.action == "accept":
         item = candidate(state, actor, cmd.target)
         if item["character_id"]:
@@ -157,7 +183,7 @@ def register_job(repo, db, save, config, jid):
                 raise ValueError("ID операции уже использован с другими данными.")
             raise ExistingJob(row["id"])
         if (
-            cmd.action == old["action"] == "refresh"
+            cmd.action in ("refresh", "generate") and cmd.action == old["action"] and cmd.app == old["app"]
             and row["status"] in ACTIVE
             and config["expected_revision"] == save["revision"]
         ):
@@ -169,11 +195,17 @@ def register_job(repo, db, save, config, jid):
             and old["target"] == cmd.target
         ):
             raise ExistingJob(row["id"])
-    if cmd.action in ("post", "comment"):
+    if cmd.action in ("post", "comment", "ask", "apply", "invite"):
         apply_command(repo, db, save["id"], config["expected_revision"], cmd, job_id=jid)
         save = db.execute("SELECT * FROM saves WHERE id=?", (save["id"],)).fetchone()
         config["expected_revision"] = save["revision"]
-    elif cmd.action not in ("search", "accept", "refresh"):
+        if cmd.action=="invite":
+            sources = []
+            for recipient in dict.fromkeys(cmd.ids):
+                operation = identity("invite",cmd.operation_id,recipient)
+                sources.append(dict(source_event_id=identity("remote",actor,operation),owner_id=actor,request_id=operation))
+            config["communication"], config["_additional_invitations"] = sources[0],sources[1:]
+    elif cmd.action not in ("search", "accept", "refresh", "generate"):
         raise ValueError("Для этого действия генерация не требуется.")
     return save
 
@@ -192,9 +224,20 @@ def finish_job(repo, job, command, apply):
             raise ValueError("Сейв изменился во время генерации.")
         before = json.loads(row["state_json"])
         after = deepcopy(before)
+        after["world_state"] = assert_world_state_v3_invariants(after["world_state"])
         check(after, command)
-        warnings = apply(after) or []
-        save_snapshot(db, row, before, after, command, job_id=job["id"])
+        history = {}
+        warnings = (apply(after, history) if command.action=="apply" else apply(after)) or []
+        save_snapshot(db, row, before, after, command, job_id=job["id"], history=history)
+        if command.action=="apply":
+            aid = identity("application",command.actor_id,command.target)
+            event = domain(after["world_state"])["applications"][aid]["event_id"]
+            continuation = dict(source_event_id=event,owner_id=command.actor_id,request_id=aid)
+            # Durable handoff: retry after delivery resumes the ordinary communication worker.
+            db.execute("""UPDATE game_jobs SET kind='communication', revision=?, before_json=?, memory_before_json=NULL,
+                    context_json=NULL, config_json=json_set(config_json,'$.communication',json(?)) WHERE id=?""",
+                (row["revision"]+1,json.dumps(after,ensure_ascii=False),json.dumps(continuation),job["id"]))
+            return continuation
         db.execute(
             "UPDATE game_jobs SET status='saved',error='',warnings_json=? WHERE id=?",
             (json.dumps(warnings, ensure_ascii=False), job["id"]),

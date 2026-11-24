@@ -3,6 +3,7 @@ import { Choice } from "@/components/ui/choice";
 import {SocialCorrection,type SocialEdit} from './SocialCorrection';
 import {
   useEffect,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
@@ -26,6 +27,7 @@ import { type World, type Save, type State, type Scene, active } from "./types";
 import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
 import type {StoryNotice} from './types';
+import {useMenuDismiss} from './lib/useMenuDismiss';
 import {foreground, useTransientBack} from './lib/transientBack';
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
@@ -99,13 +101,10 @@ export function CharacterPicker({
   useEffect(() => {
     setCursor(0);
   }, [query, near]);
-  useEffect(() => {
-    const click = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", click);
-    return () => document.removeEventListener("pointerdown", click);
-  }, []);
+  useMenuDismiss(open, root, useCallback(() => {
+    setOpen(false);
+    button.current?.focus({preventScroll: true});
+  }, []));
   const choose = (id: string) => {
     setCharacter(id);
     setOpen(false);
@@ -113,7 +112,6 @@ export function CharacterPicker({
   };
   return (
     <div className="inspector-character-toolbar"
-      ref={root}
       onKeyDown={(e) => {
         if (e.key === "Escape" && open) {
           e.preventDefault();
@@ -134,7 +132,7 @@ export function CharacterPicker({
       >
         <ChevronLeft />
       </Button>
-      <div className="inspector-combo-wrap">
+      <div className="inspector-combo-wrap" ref={root}>
         <button
           ref={button}
           className="inspector-combo"

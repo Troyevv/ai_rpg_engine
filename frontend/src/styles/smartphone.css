@@ -93,10 +93,16 @@
   height: 49%;
   stroke-width: 1.75;
 }
-.app-messages .smart-tile,
-.app-dating .smart-tile {
-  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 76%, var(--surface-2)), var(--accent));
-  color: var(--accent-contrast);
+.smart-home-notice .smart-artwork {
+  border-radius: 25%;
+  flex: none;
+}
+/* Clip only the art. Unread counts sit above the tile in every skin. */
+.smart-tile .smart-artwork {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
 }
 .smart-tile small {
   position: absolute;
@@ -389,3 +395,17 @@
   flex-shrink: 0;
   color: var(--accent);
 }
+
+.phone-catalog label, .phone-catalog .listing-preview, .smart-compose fieldset {
+  display: grid;
+  gap: .35rem;
+}
+.phone-catalog .listing-preview {
+  text-align: start;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.phone-catalog .smart-toolbar { flex-wrap: wrap; }
+.phone-catalog input, .phone-catalog select, .smart-compose select { min-width: 0; max-width: 100%; }
+.smart-app dd { margin-inline-start: 0; }
+.smart-app dt { font-weight: 600; }

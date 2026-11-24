@@ -1,4 +1,5 @@
-import { useDeviceHistory } from './history';
+import { afterDeviceClosed, useDeviceHistory } from './history';
+import { useReadQueue } from './readQueue';
 import { usePhoneNavigation } from './navigation';
 import { useMobile } from '../mobile';
 import { dismissTransient } from '../lib/transientBack';
@@ -37,12 +38,14 @@ export interface PhoneProps {
   save: Save;
   disabled: boolean;
   onCommit: (save: Save) => void;
+  onReceipt?: (save: Save) => void;
   onBusyChange: (busy: boolean) => void;
   config: ModelConfig;
   apiKey: string;
   onJob: (job: Job) => void;
   job: Job | null;
   recovery?: ReactNode;
+  chooseAction?: (text: string) => void;
   openCharacter: (id: string) => void;
 }
 export function usePhone(
@@ -50,6 +53,7 @@ export function usePhone(
     save,
     disabled,
     onCommit,
+    onReceipt = onCommit,
     onBusyChange,
     config,
     apiKey,
@@ -57,6 +61,7 @@ export function usePhone(
     job: receivedJob,
     recovery,
     openCharacter,
+    chooseAction,
   }: PhoneProps,
   scope: string,
 ) {
@@ -66,6 +71,7 @@ export function usePhone(
       ? null
       : receivedJob;
   const ownerKey = scope;
+  const perceptions = useReadQueue(scope, save, phone.actor_id);
 
   const trigger = useRef<HTMLButtonElement>(null);
   const mobile = useMobile();
@@ -73,6 +79,9 @@ export function usePhone(
   const drafts = useRef<Record<string, string>>({});
   const requestLock = useRef(false);
   const autoReadAttempt = useRef<string | null>(null);
+  const currentRevision = useRef(save.revision);
+  currentRevision.current = Math.max(currentRevision.current, save.revision);
+  const receiptTail = useRef(Promise.resolve());
   const currentOwner = useRef(ownerKey);
   currentOwner.current = ownerKey;
   useLayoutEffect(() => {
@@ -81,6 +90,28 @@ export function usePhone(
       currentOwner.current = '';
     };
   }, [ownerKey]);
+  const commitReceipt = (next: Save) => {
+    if (currentOwner.current === ownerKey && next.revision >= currentRevision.current) {
+      currentRevision.current = next.revision;
+      onReceipt(next);
+    }
+  };
+  // Passive receipts share one revision chain without disabling the button under
+  // the player's pointer. Foreground commands wait for earlier receipts.
+  const flushReceipts = (afterRead?: (revision: number) => Promise<void>) => {
+    const task = receiptTail.current.then(async () => {
+      if (currentOwner.current !== ownerKey) throw new Error('Владелец телефона изменился.');
+      const revision = await perceptions.flush(currentRevision.current, commitReceipt);
+      if (currentOwner.current !== ownerKey) throw new Error('Владелец телефона изменился.');
+      if (afterRead) await afterRead(revision);
+      return currentRevision.current;
+    });
+    receiptTail.current = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
+  };
   const [membersOpen, setMembersOpen] = useState(false);
   const [away, setAway] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -188,8 +219,24 @@ export function usePhone(
     restore();
     return () => observer.disconnect();
   }, [open, phone.events]);
+  const chatOrigin = useRef<string | null>(null);
+  const externalOrigin = useRef<{ from: string; to: string } | null>(null);
+  const visit = (id: string, path: { screen: string; id?: string }) => {
+    if (tab === id) push(path.screen, path.id);
+    else {
+      externalOrigin.current = { from: tab, to: id };
+      navigate(id, path);
+    }
+  };
   const back = () => {
     if (dismissTransient()) return;
+    if (routes.length === 1 && externalOrigin.current?.to === tab) {
+      const from = externalOrigin.current.from;
+      externalOrigin.current = null;
+      pop();
+      navigate(from);
+      return;
+    }
     if (routes.length) {
       pop();
       return;
@@ -220,6 +267,10 @@ export function usePhone(
       setConversation(null);
       setContact(null);
       setRecipient(null);
+      if (chatOrigin.current) {
+        setTab(chatOrigin.current);
+        chatOrigin.current = null;
+      }
     } else if (tab === 'contacts' && detail) {
       setDetail(null);
     } else {
@@ -304,10 +355,13 @@ export function usePhone(
     const owner = ownerKey;
     requestLock.current = true;
     setBusy(true);
-    api<Save>(`/saves/${save.id}/phone`, {
-      revision: save.revision,
-      command: { action: 'read', conversation_id: conversation, operation_id: crypto.randomUUID() },
-    })
+    flushReceipts()
+      .then((revision) =>
+        api<Save>(`/saves/${save.id}/phone`, {
+          revision,
+          command: { action: 'read', conversation_id: conversation, operation_id: crypto.randomUUID() },
+        }),
+      )
       .then((next) => {
         if (currentOwner.current === owner) onCommit(next);
       })
@@ -370,13 +424,14 @@ export function usePhone(
     const owner = ownerKey;
     const key = `phone-request:${owner}`;
     try {
+      const revision = await flushReceipts();
       const request = phoneOperation(key, command);
       const payload = request.payload;
       const automatic = ['send', 'call'].includes(String(command.action));
       const response = await api<Save | { save: Save; job: Job }>(
         `/saves/${save.id}/phone${automatic ? '/dispatch' : ''}`,
         {
-          revision: save.revision,
+          revision,
           command: payload,
           ...(automatic ? { config, api_key: apiKey } : {}),
         },
@@ -446,16 +501,28 @@ export function usePhone(
     setConversation(null);
     setTab('messages');
   };
-  const openChat = async (c: Conversation) => {
+  const openChat = async (conversation: Conversation | string, returnToApp = false) => {
+    const id = typeof conversation === 'string' ? conversation : conversation.id;
+    chatOrigin.current = returnToApp ? tab : null;
     returnFocus.current = document.activeElement as HTMLElement;
     focusKey.current = returnFocus.current?.dataset.phoneFocus || null;
     setMembersOpen(false);
     setRecipient(null);
-    setConversation(c.id);
+    setConversation(id);
     setContact(null);
     setTab('messages');
-    if (phone.events.some((e) => e.conversation_id === c.id && e.unread))
-      await perform({ action: 'read', conversation_id: c.id });
+    // An app's detail can already reference a delivered message while the shell
+    // still has the snapshot from dispatch. Open the canonical thread by ID.
+    if (!phone.conversations.some((c) => c.id === id)) {
+      try {
+        const next = await api<Save>(`/saves/${save.id}`);
+        if (currentOwner.current === ownerKey && next.revision >= currentRevision.current) onCommit(next);
+      } catch (e) {
+        if (currentOwner.current === ownerKey) setError(e instanceof Error ? e.message : t('failed'));
+      }
+    } else if (phone.events.some((e) => e.conversation_id === id && e.unread)) {
+      await perform({ action: 'read', conversation_id: id });
+    }
   };
   const send = async () => {
     const next = await perform({
@@ -500,7 +567,7 @@ export function usePhone(
     sessionStorage.setItem(key, requestId);
     try {
       const result = await api<{ job: Job; save: Save }>(`/saves/${save.id}/phone/dispatch`, {
-        revision: save.revision,
+        revision: await flushReceipts(),
         config,
         api_key: apiKey,
         continuation: { source_event_id: event.id, owner_id: phone.actor_id, request_id: requestId },
@@ -538,7 +605,7 @@ export function usePhone(
       if (active(job)) await api(`/jobs/${job.id}/stop`, {});
       const request = phoneOperation(`phone-request:${ownerKey}`, { action: 'end', event_id: call.id });
       const next = await api<Save>(`/saves/${save.id}/phone`, {
-        revision: save.revision,
+        revision: await flushReceipts(),
         command: request.payload,
       });
       request.complete();
@@ -607,10 +674,11 @@ export function usePhone(
     setBusy(true);
     setError('');
     try {
+      const revision = await flushReceipts();
       const value = await api<Save | { save: Save; job: Job }>(
         `/saves/${save.id}/apps/${generate ? 'dispatch' : 'command'}`,
         {
-          revision: save.revision,
+          revision,
           command: pending.payload,
           ...(generate ? { config, api_key: apiKey } : {}),
         },
@@ -630,6 +698,25 @@ export function usePhone(
       setBusy(false);
     }
   };
+  useEffect(() => {
+    if (
+      !Object.keys(perceptions.queue).length ||
+      locked ||
+      error ||
+      requestLock.current ||
+      (job?.kind === 'communication' &&
+        job.revision === save.revision &&
+        ['error', 'stopped'].includes(job.status))
+    )
+      return;
+    const timer = setTimeout(() => {
+      if (!requestLock.current)
+        void flushReceipts().catch((e) => {
+          if (currentOwner.current === ownerKey) setError(String(e));
+        });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [perceptions.queue, locked, error, save.revision, job?.status]);
   const lastMarkerAttempt = useRef('');
   const markerKey = 'phone-open-pending:' + scope;
   const [pendingMarkers, setPendingMarkers] = useState<Record<string, number>>(() => {
@@ -677,7 +764,22 @@ export function usePhone(
     const attempt = id + ':' + marker + ':' + save.revision;
     if (lastMarkerAttempt.current === attempt) return;
     lastMarkerAttempt.current = attempt;
-    void command(id, 'open', { marker });
+    void flushReceipts(async (revision) => {
+      const operation = phoneOperation('app-open:' + ownerKey, {
+        app: id,
+        action: 'open',
+        actor_id: phone.actor_id,
+        marker,
+      });
+      const next = await api<Save>(`/saves/${save.id}/apps/command`, {
+        revision,
+        command: operation.payload,
+      });
+      operation.complete();
+      commitReceipt(next);
+    }).catch((e) => {
+      if (currentOwner.current === ownerKey) setError(String(e));
+    });
   }, [pendingMarkers, locked, save.revision, job?.status]);
   const displayBadge = (id: string) => {
     const count = phone.badges?.[id] || 0;
@@ -706,6 +808,7 @@ export function usePhone(
     busy,
     call,
     canSend,
+    chatOrigin: chatOrigin.current,
     chatRecipient,
     chooseRecipient,
     close,
@@ -721,6 +824,14 @@ export function usePhone(
     disabled,
     displayBadge,
     dossier,
+    visit,
+    propose: (value: string) => {
+      restoreAfterCall.current = false;
+      afterDeviceClosed(() => {
+        if (currentOwner.current === ownerKey) chooseAction?.(value);
+      });
+      setOpen(false);
+    },
     drafts,
     editContact,
     endCall,
@@ -754,6 +865,7 @@ export function usePhone(
     openChat,
     ownerKey,
     perform,
+    observe: perceptions.observe,
     phone,
     push,
     reading,

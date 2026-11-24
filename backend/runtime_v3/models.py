@@ -781,7 +781,7 @@ class SignificantPossession(StrictModel):
     applied: dict[str, str] = Field(default_factory=dict)
 
 
-from backend.runtime_v3.smartphone_models import SmartphoneState
+from backend.runtime_v3.smartphone_models import CATALOG_FIELDS, SmartphoneState
 
 
 class WorldStateV3(StrictModel):
@@ -975,17 +975,28 @@ class StatePatch:
     def apply(self, before):
         import json
         before = assert_world_state_v3_invariants(before)
-        digest = sha256(json.dumps(before, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        if digest != self.before_hash:
-            fatal('patch создан для другого состояния', 'stale_patch')
+        def matches(snapshot):
+            encoded = json.dumps(snapshot, sort_keys=True, ensure_ascii=False).encode()
+            return sha256(encoded).hexdigest() == self.before_hash
+
+        if not matches(before):
+            # Recorded patches used either the #276 shape or the initial #277
+            # normalizer, which filled every absent catalog field before hashing.
+            phone = before["smartphone"]
+            expanded = {key: {} for key in CATALOG_FIELDS}
+            expanded.update(activity_index=0)
+            expanded.update(phone)
+            sparse = {key: value for key, value in phone.items() if key not in CATALOG_FIELDS or value}
+            if not any(matches(dict(before, smartphone=variant)) for variant in (expanded, sparse)):
+                fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
             if section == 'smartphone':
                 for key,value in records.items():
-                    if key in ('sequence','last_considered'):
+                    if key in ('sequence','last_considered','activity_index'):
                         result[section][key] = value
-                    elif key in ('publications','reactions'):
-                        result[section][key].update(deepcopy(value))
+                    elif key in ('publications','reactions','articles','questions','listings','vacancies','invitations','attendance_plans'):
+                        result[section].setdefault(key, {}).update(deepcopy(value))
                     else:
                         fatal('неизвестное изменение приложения')
                 continue

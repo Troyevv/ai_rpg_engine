@@ -135,10 +135,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [world, setWorld] = useState<World | null>(null);
   const [save, setLoadedSave] = useState<Save | null>(null);
-  const setSave=useCallback((next:Save|null)=>{
-    if(next)observeStorySnapshot(next);
-    setLoadedSave(next);
-  },[]);
+  const loadedSave = useRef<Save | null>(null);
   const workspaceViews=useMemo(()=>({calendar:new Map<string,unknown>(),family:new Map<string,unknown>()}),[save?.id,save?.state.controlled_actor_id]);
   useEffect(()=>{setFamilyRoot(undefined);setWorkspace(null)},[save?.id,save?.state.controlled_actor_id]);
   const [selection, setSelection] = useState<{ world?: number; save?: number }>(
@@ -167,6 +164,15 @@ export default function App() {
   }, [profile]);
   const selectedRef = useRef(selection);
   selectedRef.current = selection;
+  const setSave = useCallback((next: Save | null) => {
+    // Phone receipts and foreground actions may refresh the same save concurrently.
+    const current = loadedSave.current;
+    if (next && (next.id !== selectedRef.current.save ||
+        (current?.id === next.id && current.revision > next.revision))) return;
+    loadedSave.current = next;
+    if (next) observeStorySnapshot(next);
+    setLoadedSave(next);
+  }, []);
   const refresh = useCallback(() => {
     if (!selection.world) return;
     return Promise.all([
@@ -182,7 +188,7 @@ export default function App() {
         }
       })
       .catch((e) => { toast.error(e.message); return false; });
-  }, [selection]);
+  }, [selection, setSave]);
   useEffect(() => {
     localStorage.setItem("selection", JSON.stringify(selection));
     setWorld(null);
@@ -375,8 +381,8 @@ export default function App() {
             apiKey={apiKey}
           /></div>
         )}
+        {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
       </div>
-      {save&&workspace&&<section key={`${save.id}:${save.state.controlled_actor_id}:${workspace}`} className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={()=>closeWorkspace()}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar save={save} viewState={workspaceViews.calendar}/>:<Genealogy save={save} rootId={familyRoot} viewState={workspaceViews.family} onCharacter={openCharacter}/>}</Suspense></section>}
       <ReadingDisplay open={display} close={()=>setDisplay(false)} prefs={prefs} save={async next=>{await api(`/settings/${profile}`,next,"PUT");setPrefs(next)}}/>
       <Settings
         open={settings}

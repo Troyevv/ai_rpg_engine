@@ -330,7 +330,7 @@ def test_closed_phone_background_publishes_through_normal_turn_job(app, monkeypa
         db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
 
     def stream(**args):
-        if args["messages"][0]["content"].startswith("Public social activity/1"):
+        if args["messages"][0]["content"].startswith("Public social activity/2"):
             yield json.dumps(response(args["messages"]))
         else:
             yield (
@@ -498,7 +498,7 @@ def test_manual_refresh_rejects_empty_or_duplicate_batch_atomically(app):
     assert client.get(f"/api/saves/{sid}/apps/social").json()["entries"] == entries
 
 
-def test_social_author_contract_filters_each_action_and_keeps_ordinal_links_on_retry(app):
+def test_social_author_contract_filters_each_action_and_keeps_named_links_on_retry(app):
     repo, client, sid = app
     jid = dispatch(app, "refresh", "author-replay")
     original = repo.get_snapshot(sid)
@@ -535,7 +535,7 @@ def test_social_author_name_is_unique_across_world_and_checks_current_capabiliti
     repo, _, sid = app
     snap = repo.get_snapshot(sid)
     state = snap["world_state"]
-    _, allowed = social_prompt(snap)
+    prompt, allowed = social_prompt(snap)
     first, second, third = allowed
     # A same-name outsider must not be confused with the allowed NPC.
     owner = state["camera"]["controlled_actor_id"]
@@ -569,4 +569,139 @@ def test_social_author_name_is_unique_across_world_and_checks_current_capabiliti
     after["world_state"]["characters"][third]["capabilities"]["can_act"] = False
     raw = dict(actions=[dict(kind="post", author=third, text="Недоступный автор")])
     with pytest.raises(ValueError, match="список доступных NPC"):
-        social_result(after, json.dumps(raw), allowed, "offline", refresh=True)
+        social_result(after, json.dumps(raw), prompt, "offline", refresh=True)
+
+
+@pytest.mark.parametrize("sky_first", [False, True])
+def test_named_social_targets_survive_sibling_order_and_reload(app, sky_first):
+    from backend.repositories.preparation import Repository
+
+    repo, client, sid = app
+    snap = repo.get_snapshot(sid)
+    state = snap["world_state"]
+    publish(state, "qa_vera", "post", "old-garden", text="Когда цветёт сирень?")
+    publish(state, "qa_oleg", "post", "old-map", text="Нашёл карту.")
+    publish(state, "qa_vera", "comment", "old-map-question", target="old-map", text="Какого года?")
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+    op = "different-threads"
+
+    def model(messages):
+        payload = json.loads(messages[1]["content"])
+        assert set(p["id"] for p in payload["public_posts"]) == {"old-garden", "old-map", "old-map-question"}
+        assert "new:concert" in messages[0]["content"] and "@1" not in messages[0]["content"]
+        murphy, sonya, guest = [a["id"] for a in payload["authors"]]
+        sky = dict(kind="post", author=murphy, ref="new:ocean", text="Над океаном что-то мигало.")
+        friends = dict(kind="post", author=sonya, ref="new:friends", text="Посидели с друзьями.")
+        return dict(actions=[
+            *([sky, friends] if sky_first else [friends, sky]),
+            dict(kind="comment", author=sonya, target="new:ocean", ref="new:satellite", text="Мёрфи, может, спутник?"),
+            dict(kind="comment", author=murphy, target="new:satellite", text="Проверю по карте"),
+            dict(kind="like", author=guest, target="new:satellite" if sky_first else "old-map-question"),
+            dict(kind="repost", author=guest, target="old-garden" if sky_first else "new:friends"),
+        ])
+
+    jid = dispatch(app, "refresh", op)
+    assert run(app, jid, model) == 1
+    log, = repo.request_log(job_id=jid)
+    assert json.loads(log["response_text"])["actions"][2]["target"] == "new:ocean"
+    data = Repository(repo.path).get_snapshot(sid)["world_state"]["smartphone"]
+    sky_id = identity("social", op, 0 if sky_first else 1)
+    friends_id = identity("social", op, 1 if sky_first else 0)
+    reply_id, nested_id = (identity("social", op, i) for i in (2, 3))
+    rows = data["publications"]
+    assert rows[reply_id]["reply_to"] == rows[reply_id]["post_id"] == sky_id
+    assert rows[nested_id]["reply_to"] == reply_id and rows[nested_id]["post_id"] == sky_id
+    liked_id = reply_id if sky_first else "old-map-question"
+    reposted_id = "old-garden" if sky_first else friends_id
+    assert {(r["kind"], r["target"]) for r in data["reactions"].values()} == {("like", liked_id), ("repost", reposted_id)}
+    url = f"/api/saves/{sid}/apps/social"
+    for target, count in ((sky_id, 2), (friends_id, 0), ("old-map", 1), ("old-garden", 0)):
+        detail = client.get(url, params={"post": target}).json()
+        assert detail["post"]["comments"] == len(detail["comments"]) == count
+        assert detail["post"]["reposts"] == int(target == reposted_id)
+        assert all(c["post_id"] == target and c["likes"] == int(c["id"] == liked_id) for c in detail["comments"])
+    assert client.get(url, params={"post": nested_id}).json()["post"]["id"] == sky_id
+    counts = {e["post"]["id"]: e["post"]["comments"] for e in client.get(url).json()["entries"]}
+    assert counts == {sky_id: 2, friends_id: 0, "old-map": 1, "old-garden": 0}
+
+
+def test_invalid_social_targets_never_fall_back_to_another_post(app):
+    repo, client, sid = app
+    snap = repo.get_snapshot(sid)
+    for n in range(8):
+        publish(snap["world_state"], "qa_vera", "post", f"old-{n}", text=f"Старая запись {n}")
+    # An imported public ID can resemble a new label. Neither meaning gets priority.
+    publish(snap["world_state"], "qa_vera", "post", "new:collision", text="Старая запись с таким ID")
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+
+    def submit(op, make_batch, skipped):
+        def model(messages):
+            data = json.loads(messages[1]["content"])
+            assert "old-0" not in {p["id"] for p in data["public_posts"]}
+            return dict(actions=make_batch(data["authors"][0]["id"]))
+        jid = dispatch(app, "refresh", op)
+        assert run(app, jid, model) == 1
+        assert [w["index"] for w in json.loads(repo.get_job(jid)["warnings_json"])] == skipped
+
+    submit("wrong-kind", lambda a: [
+        dict(kind="post", author=a, ref="new:first", text="Первый"),
+        dict(kind="like", author=a, target="new:first"),
+        dict(kind="comment", author=a, target="@2", text="Ссылка на лайк"),
+        dict(kind="comment", author=a, target="@1", text="Старая позиционная ссылка"),
+        dict(kind="repost", author=a, target="old-0"),
+        dict(kind="like", author=a, target="new:missing"),
+    ], [2, 3, 4, 5])
+    submit("ambiguous", lambda a: [
+        dict(kind="post", author=a, ref="new:same", text="Раз"),
+        dict(kind="post", author=a, ref="new:same", text="Два"),
+        dict(kind="comment", author=a, target="new:same", text="Куда?"),
+        dict(kind="comment", author=a, target="new:later", text="Ещё нет"),
+        dict(kind="post", author=a, ref="new:later", text="Три"),
+        dict(kind="repost", author=a, ref="new:invalid", target="new:later"),
+    ], [2, 3, 5])
+    # Supply the collision in the visible history again so both old and new labels exist.
+    jid = dispatch(app, "comment", "external-collision", target="new:collision", text="Вопрос")
+    def collision(messages):
+        payload = json.loads(messages[1]["content"])
+        assert "new:collision" in {p["id"] for p in payload["public_posts"]}
+        actor = payload["authors"][0]["id"]
+        return dict(actions=[
+            dict(kind="post", author=actor, ref="new:collision", text="Новая запись"),
+            dict(kind="comment", author=actor, target="new:collision", text="Двусмысленная цель"),
+        ])
+    assert run(app, jid, collision) == 1
+    assert [w["index"] for w in json.loads(repo.get_job(jid)["warnings_json"])] == [1]
+    state = repo.get_snapshot(sid)["world_state"]["smartphone"]
+    assert [p["text"] for p in state["publications"].values() if p["post_id"]] == ["Вопрос"]
+    assert [(r["kind"], r["target"]) for r in state["reactions"].values()] == [("like", identity("social", "wrong-kind", 0))]
+
+
+def test_archived_validated_social_response_retries_with_original_ordinals(app):
+    repo, _, sid = app
+    jid = dispatch(app, "refresh", "pre-upgrade")
+    with patch("backend.repositories.smartphone.project", side_effect=sqlite3.OperationalError("disk full")):
+        assert run(app, jid, expect="error") == 1
+    config = json.loads(repo.get_job(jid)["config_json"])
+    assert config.pop("_social_contract") == 2
+    rows = json.loads(config["_smartphone_result"])["actions"]
+    rows[1].pop("ref")
+    rows[2]["target"] = "@2"
+    rows.extend([
+        dict(kind="like", author=rows[0]["author"], target="@2"),
+        dict(kind="comment", author=rows[0]["author"], target="@4", text="Архивная реакция"),
+        dict(kind="post", author=rows[0]["author"], ref="new:unused", text="Лишнее поле в старом формате"),
+    ])
+    config["_smartphone_result"] = json.dumps(dict(actions=rows))
+    with repo.connect() as db:
+        db.execute("UPDATE game_jobs SET config_json=? WHERE id=?", (json.dumps(config), jid))
+    repo.retry_job(jid)
+    assert run(app, jid) == 0
+    saved = repo.get_snapshot(sid)["world_state"]["smartphone"]["publications"]
+    reply = saved[identity("social", "pre-upgrade", 2)]
+    root = identity("social", "pre-upgrade", 1)
+    assert reply["post_id"] == reply["reply_to"] == root
+    assert identity("social", "pre-upgrade", 4) not in saved
+    assert identity("social", "pre-upgrade", 5) not in saved
+    assert [w["index"] for w in json.loads(repo.get_job(jid)["warnings_json"])] == [4, 5]

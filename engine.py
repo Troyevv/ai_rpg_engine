@@ -618,7 +618,7 @@ def run_job(path, job_id, handle):
             assert_world_state_v3_invariants(state['world_state'],before['world_state'])
             from backend.runtime_v3.models import StatePatch
             final=state['world_state'];prior=before['world_state']
-            combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in resolved.patch.upserts if section != 'smartphone'}
+            combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in (set(resolved.patch.upserts) | {'remote_events','conversations','scheduled_events','facts','knowledge'}) if section != 'smartphone'}
             from backend.runtime_v3.smartphone import publication_patch
             social_delta = publication_patch(prior['smartphone'],final['smartphone'])
             if social_delta:

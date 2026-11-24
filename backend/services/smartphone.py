@@ -1,15 +1,16 @@
 """Provider-authored public activity, short discovery batches and selected-character expansion."""
 
 import json
+from collections import Counter
 from copy import deepcopy
 
 from pydantic import ValidationError
 
-from backend.runtime_v3.calendar import age_on, current_time, date_parts, profile_of
+from backend.runtime_v3.calendar import age_on, current_time, date_parts, exact_age, profile_of
 from backend.runtime_v3.life import capabilities
-from backend.runtime_v3.models import identity
-from backend.runtime_v3.remote_authoring import speaker_context
-from backend.runtime_v3.smartphone import candidate, domain, publish, shelf
+from backend.runtime_v3.models import assert_world_state_v3_invariants, identity
+from backend.runtime_v3.reproduction import known_birth
+from backend.runtime_v3.smartphone import candidate, domain, external_posts, publish, read_domain, shelf
 from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, PublicAction, SearchResult
 from backend.services.world import CARD_FIELDS
 
@@ -41,27 +42,80 @@ def social_names(snapshot):
     }
 
 
+NETWORK_VOICE = """Это экран смартфона. Каждый NPC здесь обычный пользователь: покажи только то, что он набрал и отправил. Художественная сцена уже происходит в Narrative. В поле text не веди повествование, не описывай жесты, настроение со стороны или скрытый смысл реплики.
+Обычный пост — бытовая мысль по конкретному поводу. Часто человеку хватает пары слов: он жмёт «отправить» и ничего не поясняет. Разворачивай текст, если самому автору есть что рассказать, например подробности объявления или отзыв. Комментарий цепляется за конкретные слова собеседника; ответ может быть шуткой, возражением, уточнением или одной реакцией.
+Примеры манеры письма (ситуация → отправленный текст):
+• Флористка показывает поставку → «Сегодня привезли шикарные пионы 😍 Кому букет на выходные — пишите!»
+• Нужна рекомендация от местных → «Кто-нибудь знает нормальную пиццерию в центре?»
+• Человек опоздал на работу → «Ну всё, я официально ненавижу понедельники 😂»
+• Вернулся с дороги → «Наконец-то дома»
+• Друг опять предложил идти пешком через весь город → «Тимур, ты серьёзно? 🤣»
+• В ветке про маршрут друг отвечает на подкол → «да там две остановки всего»
+Антипримеры. «Пионы раскрывались, будто утро училось дышать» превращает объявление в литературную метафору. «В конце концов, дорога домой — это всегда путь к себе» навязывает философский итог. «Она замерла у двери, вслушиваясь в тишину квартиры» звучит как абзац рассказчика. «Возвращаюсь в знакомые стены, снимаю пальто и позволяю этому вечеру начаться» превращает простое «я дома» в выверенную сцену. Пропусти такие обороты, мораль и психологический разбор.
+Примеры показывают регистр, а не события мира. Не копируй и не перефразируй их для ленты. Возьми другой повод из жизни именно этого автора. Даже если прежние посты написаны литературно, учитывай их тему и связи, не подражай их прозе. Выбирай сленг, мемы, юмор, сокращения, эмодзи и пунктуацию по привычкам, возрасту, отношениям и культуре персонажа. Для одного эмодзи привычны, другой обойдётся без них. Не переноси в сеттинг чужие технологии, имена и реалии.
+"""
+
+
+def network_profile(snapshot, cid, audience):
+    from backend.runtime_v3.personality import CARD_FIELDS as labels, visible_item
+
+    state = snapshot["world_state"]
+    actor = state["characters"][cid]
+    card = next((c for c in snapshot.get("character_cards", []) if c["id"] == cid), {"fields": {}})
+    fields = card["fields"]
+    profile = actor.get("personality")
+    voice = {}
+    for field in ("communication", "preferences", "habits", "traits", "temperament"):
+        if profile is None:
+            value = fields.get(labels[field], "")
+        else:
+            value = " ".join(
+                item["text"] for item in profile["items"].values()
+                if item["field"] == field and all(visible_item(state, cid, item, observer) for observer in audience)
+            )
+        if value:
+            voice[field] = value[:180]
+    age = age_on(actor.get("birth_date"), current_time(state)["date"], profile_of(state))
+    return dict(
+        age=age if age is not None else exact_age(card),
+        voice=voice,
+        role=fields.get("Роль", "")[:160],
+        interests=[fields[k][:160] for k in ("Интересы", "Увлечения") if fields.get(k)],
+        public_bio=read_domain(state)["profiles"].get(cid, "")[:220],
+    )
+
+
 def social_prompt(snapshot, source=None, *, refresh=False, events=()):
     state = snapshot["world_state"]
-    data = domain(state)
+    data = read_domain(state)
     owner = state["camera"]["controlled_actor_id"]
-    authors = [cid for cid in state["characters"] if cid != owner and capabilities(state, cid)["can_act"]]
+    from backend.runtime_v3.birth_identity import is_game_birth
+
+    audience = state["characters"]
+    authors = [
+        cid for cid in audience
+        if cid != owner and capabilities(state, cid)["can_act"]
+        and (not is_game_birth(state, cid) or all(known_birth(state, cid, observer) for observer in audience))
+    ]
     if not authors:
         return None, []
     offset = (data["sequence"] + state["meta"]["world_time"] // 120) % len(authors)
     authors = (authors[offset:] + authors[:offset])[:3]
-    recent = sorted(data["publications"].values(), key=lambda r: r["sequence"], reverse=True)[:6]
-    if source and source not in {r["id"] for r in recent}:
-        recent.append(data["publications"][source])
-    # Only facts shared by the selected authors enter a multi-speaker request.
-    common = {
-        fid: f["text"][:400]
-        for fid, f in state["facts"].items()
-        if f["visibility"] == "public"
-        and not f.get("story_secret")
-        and not f.get("origin_remote_event_id")
-        and all(state["knowledge"].get(cid + ":" + fid, {}).get("status") == "known" for cid in authors)
-    }
+    external = external_posts(data)
+    feed = (row for row in data["publications"].values() if (row["post_id"] or row["id"]) not in external)
+    recent = sorted(feed, key=lambda r: r["sequence"], reverse=True)[:6]
+    # Preserve the conversation a reply belongs to even when its root is an
+    # older post, a news article or a published Q&A outside the home feed.
+    reply_context = set()
+    if source:
+        message = data["publications"][source]
+        reply_context = {rid for rid in (source, message["reply_to"], message["post_id"]) if rid}
+        shown = {r["id"] for r in recent}
+        recent.extend(data["publications"][rid] for rid in sorted(reply_context - shown))
+    from backend.services.phone_catalog import public_context, public_facts
+
+    community = public_context(snapshot, [])
+    common = public_facts(state, authors, require_known=True)
     # Only shared, witnessed physical events belong in this multi-author public context.
     witnessed = [
         dict(text=e["text"][:400], minute=e.get("minute"), turn=e.get("turn_id"))
@@ -69,37 +123,51 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
         if isinstance(e, dict)
         and isinstance(e.get("text"), str)
         and e.get("medium") in ("action", "observation")
+        and e.get("interaction_channel") not in ("phone", "call")
         and isinstance(e.get("witnesses"), list)
         and all(cid in e["witnesses"] for cid in authors)
-        and isinstance(e.get("fact_ids", []), list)
+        and isinstance(e.get("fact_ids"), list) and e["fact_ids"]
         and all(isinstance(fid, str) and fid in common for fid in e.get("fact_ids", []))
-    ][-6:]
+    ][-2:]
     names = social_names(snapshot)
     schema = Batch[PublicAction].model_json_schema()
     schema["$defs"]["PublicAction"]["properties"]["author"]["enum"] = authors
     cast = []
+    interlocutors = {*authors, owner}
     for cid in authors:
-        voice = speaker_context(snapshot, cid, authors + [owner])
         cast.append(
             dict(
                 id=cid,
                 name=names[cid],
-                public_bio=data["profiles"].get(cid, "")[:350],
-                voice=voice["legacy_voice"] or str(voice["personality"])[:600],
+                **network_profile(snapshot, cid, authors),
+                work=[role for role in community["public_roles"] if role["actor_id"] == cid][:2],
                 relationships=[
-                    dict(target=r["target_id"], dimensions=r["dimensions"]) for r in voice["relationships"]
-                ],
+                    dict(target=r["target_id"], dimensions=r["dimensions"])
+                    for r in state["relationships"].values()
+                    if r["source_id"] == cid and r["target_id"] in interlocutors
+                ][:8],
             )
         )
     return messages(
-        "Public social activity/1. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
-        "Выбери уместные публикации NPC и реакции друг на друга или на повод. "
+        "Public social activity/2. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
+        + NETWORK_VOICE
+        + " У каждого автора есть жизнь за пределами сцены: смена или учёба, увлечения, игры, книги, "
+        "музыка и местная культура. Дай людям самим начать разговор, кинуть мем, позвать соседей, "
+        "попросить рекомендацию, пошутить или поспорить под чужим постом. Придумывай бытовые поводы "
+        "в рамках известного мира. Лента не обязана обсуждать героя или пересказывать Narrative. "
+        "Новости, афиша и недавнее событие — возможные поводы, история постов помогает продолжить "
+        "публичный разговор и избежать повторов. Личные особенности и отношения направляют только "
+        "соответствующего автора. Комментарии и ответы адресуй конкретной реплике. "
         "Пост не подтверждает истинность текста. Не разглашай чужие сведения, не играй за героя. "
         "Для каждого действия скопируй в author точный id из authors. Имена, номера, адресаты отношений "
         "и авторы прежних постов не являются допустимыми идентификаторами, если их нет в этом списке. "
-        "Для нового поста target=null. Для реакции укажи id публикации из public_posts или ссылку на "
-        "более раннюю запись этого ответа. "
-        'Для ответа на действие в этом же пакете target="@1" обозначает первую запись. '
+        "У поста target=null. Для комментария, лайка или репоста выбери конкретную запись по автору и теме. "
+        "Если она в public_posts, скопируй её id в target. Если создаёшь её в этом же ответе, дай ей "
+        "уникальный тематический ref, например new:concert, и скопируй это имя в target реакции. "
+        "Пример связей: пост о концерте ref=new:concert, пост о походе ref=new:hike, вопрос о билетах "
+        "target=new:concert ref=new:tickets, ответ на вопрос target=new:tickets. "
+        "Порядок соседних постов ничего не обозначает. Имя можно дать только посту или комментарию. "
+        "Лайк адресуется конкретному тексту, репост — только исходному посту. "
         "Возвращай JSON по схеме. Для like/repost текст не нужен."
         + (
             " Игрок обновил ленту. Напиши 2–4 новых самостоятельных поста. Дай авторам разные голоса и темы: "
@@ -107,37 +175,54 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
             "на друга. Учитывай предыдущие записи, не повторяй их. Герой не обязан быть темой. "
             "Время остаётся прежним."
             if refresh
-            else ""
+            else " Ответь на source по существу. Для реакции на это сообщение скопируй source в target. Остальная ветка в public_posts даёт контекст."
+            if source
+            else " Фоновая активность. NPC сами выбирают повод для поста или разговора между собой."
         ),
         dict(
-            **setting(snapshot),
+            world=community["world"],
+            calendar=community["calendar"],
+            technology=community["technology"],
+            community={
+                "places": community["places"][:6],
+                "organizations": community["organizations"][:4],
+                "observances": community["upcoming_observances"][:3],
+                "news": [{k: row[k] for k in ("id", "title", "summary")} for row in community["news"][:3]],
+                "events": community["events"][:3],
+            },
             authors=cast,
             shared_knowledge=list(common.values())[-6:],
             recent_events=witnessed,
             source=source,
-            public_posts=[{**r, "text": r["text"][:700]} for r in recent],
+            public_posts=[{**r, "text": r["text"][:700 if r["id"] in reply_context else 320]} for r in recent],
             schema=schema,
         ),
     ), authors
 
 
-def social_result(snapshot, raw, authors, seed, *, refresh=False):
+def social_result(snapshot, raw, prompt, seed, *, refresh=False, archived_ordinals=False):
+    payload = json.loads(prompt[1]["content"]) if prompt else {}
+    authors = {a["id"] for a in payload.get("authors", [])}
     state = snapshot["world_state"]
     names = social_names(snapshot)
     by_name = {}
     for cid, name in names.items():
         by_name.setdefault(name.casefold(), []).append(cid)
     existing = domain(state)["publications"]
-    # Use original wire positions. @2 must not slide onto @1 if an action is dropped.
+    offered = existing.keys() if archived_ordinals else {p["id"] for p in payload.get("public_posts", [])}
+    is_reply = {rid: bool(existing[rid]["post_id"]) for rid in offered if rid in existing}
+    actions = Batch[object].model_validate_json(raw).actions
+    # A repeated label has no unique referent, even if one declaration later fails validation.
+    labels = Counter(row["ref"] for row in actions if isinstance(row, dict) and isinstance(row.get("ref"), str))
+    ambiguous = {label for label, count in labels.items() if count > 1 or label in offered}
     references = {}
-    is_reply = {rid: bool(p["post_id"]) for rid, p in existing.items()}
     prior_posts = (
         {(p["author"], p["text"]) for p in existing.values() if not p["post_id"]} if refresh else set()
     )
     plan = []
     warnings = []
     new_posts = set()
-    for i, record in enumerate(Batch[object].model_validate_json(raw).actions):
+    for i, record in enumerate(actions):
         try:
             action = PublicAction.model_validate(record)
             author = action.author
@@ -153,10 +238,20 @@ def social_result(snapshot, raw, authors, seed, *, refresh=False):
             ):
                 raise ValueError("Автор не входит в список доступных NPC.")
             target = action.target
-            if target and target.startswith("@"):
-                if target not in references:
-                    raise ValueError("Ссылка не указывает на сохранённую предыдущую запись.")
-                target = references[target]
+            if archived_ordinals:
+                if "ref" in action.model_fields_set:
+                    raise ValueError("Неверный формат действия.")
+                if target and target.startswith("@"):
+                    target = references.get(target)
+            else:
+                if action.ref and action.kind not in ("post", "comment"):
+                    raise ValueError("Имя ссылки может принадлежать только посту или комментарию.")
+                if target in ambiguous:
+                    raise ValueError("Имя цели неоднозначно.")
+                if target in references:
+                    target = references[target]
+                elif target is not None and target not in offered:
+                    raise ValueError("Цель не совпадает с показанной публикацией или уникальной предыдущей записью.")
             if action.kind != "post" and target not in is_reply:
                 raise ValueError("Исходная публикация отсутствует.")
             if action.kind == "repost" and is_reply[target]:
@@ -178,9 +273,11 @@ def social_result(snapshot, raw, authors, seed, *, refresh=False):
         rid = identity("social", seed, i)
         if action.kind in ("post", "comment"):
             is_reply[rid] = action.kind == "comment"
-            references[f"@{i + 1}"] = rid
-        else:
-            references[f"@{i + 1}"] = target
+            if action.ref and action.ref not in ambiguous:
+                references[action.ref] = rid
+            if archived_ordinals:
+                # Keep the original slot, but a reaction never creates a publication to reply to.
+                references[f"@{i + 1}"] = rid
         plan.append((author, action, rid, target))
 
     if (refresh and not new_posts) or (warnings and not plan):
@@ -219,9 +316,7 @@ def search_result(snapshot, cmd, raw):
 
 
 def expand(snapshot, cmd, raw, jid):
-    from backend.runtime_v3.npc_identity import initial_character
-    from backend.services.npc_review import card_fields, assign_new_portrait
-    from backend.runtime_v3.personality import initialize_profiles
+    from backend.services.npc_review import card_fields
 
     state = snapshot["world_state"]
     item = candidate(state, cmd.actor_id, cmd.target)
@@ -240,22 +335,24 @@ def expand(snapshot, cmd, raw, jid):
             # Keep the public description if the expansion replaced its identity anchor.
             fields[key] = item[brief]
     cid = identity("dating_npc", cmd.actor_id, item["id"])
-    if cid in state["characters"]:
-        raise ValueError("Идентификатор NPC уже занят.")
-    state["characters"][cid] = initial_character(
-        cid,
-        item["name"],
-        dict(
-            birth_date=birth, biological_sex=item["gender"], life_status="alive", developmental_stage="adult"
-        ),
-    )
-    card = dict(id=cid, name=item["name"], fields=fields, aliases=[], is_player=False)
-    snapshot["character_cards"].append(card)
-    partial = dict(world_state=state, character_cards=[card])
-    initialize_profiles(partial)
-    assign_new_portrait(state, cid)
+    add_character(snapshot, cid, item["name"], fields, dict(
+        birth_date=birth, biological_sex=item["gender"], life_status="alive", developmental_stage="adult"))
     domain(state)["profiles"][cid] = item["bio"]
     item.update(character_id=cid, job_id=jid)
+
+
+def add_character(snapshot, cid, name, fields, attributes):
+    from backend.runtime_v3.npc_identity import initial_character
+    from backend.runtime_v3.personality import initialize_profiles
+    from backend.services.npc_review import assign_new_portrait
+    state = snapshot["world_state"]
+    if cid in state["characters"]:
+        raise ValueError("Идентификатор NPC уже занят.")
+    state["characters"][cid] = initial_character(cid, name, attributes)
+    card = dict(id=cid, name=name, fields=fields, aliases=[], is_player=False)
+    snapshot["character_cards"].append(card)
+    initialize_profiles(dict(world_state=state, character_cards=[card]))
+    assign_new_portrait(state, cid)
 
 
 def execute(repo, job, handle, stream, config):
@@ -265,9 +362,20 @@ def execute(repo, job, handle, stream, config):
 
     cmd = AppCommand.model_validate(config["smartphone"])
     snap = json.loads(job["before_json"])
-    state = snap["world_state"]
+    state = snap["world_state"] = assert_world_state_v3_invariants(snap["world_state"])
     authors = []
-    if cmd.action == "search":
+    from backend.services import phone_catalog as catalog
+    if cmd.action == "generate":
+        from backend.runtime_v3.repository import read_history
+        with repo.connect() as db:
+            history, _ = read_history(db, snap.get("history_head"))
+        prompt, ctx = catalog.catalog_prompt(snap, cmd.app, history["events"])
+    elif cmd.action == "apply":
+        prompt = catalog.employer_prompt(snap,cmd)
+    elif cmd.action == "ask":
+        qid = identity("question", cmd.operation_id)
+        prompt = catalog.question_prompt(snap,cmd.target,domain(state)["questions"][qid])
+    elif cmd.action == "search":
         prompt = messages(
             "Dating search/1. Напиши по-русски около пяти разных кратких анкет взрослых. "
             "Строго соблюдай возраст, пол и точное название места. Учитывай мягкие пожелания и сеттинг. "
@@ -302,6 +410,12 @@ def execute(repo, job, handle, stream, config):
             connection.close()
 
     cached = config.get("_smartphone_result")
+    if prompt and cached is None:
+        from context_builder import estimate
+        output = min(4200,config["update_tokens"])
+        limit = min(config["context_length"]-output,config.get("_budget_caps",{}).get("max_input") or config["context_length"])
+        if estimate(prompt)>limit:
+            raise ValueError("Контекст приложения не помещается в выбранное окно модели.")
     raw = (
         cached
         if cached is not None
@@ -331,27 +445,44 @@ def execute(repo, job, handle, stream, config):
     if handle.cancelled.is_set():
         return
 
-    def apply(after):
-        if cmd.action == "search":
+    def apply(after, history=None):
+        if cmd.action == "generate":
+            catalog.apply_catalog(after,cmd.app,raw,ctx,cmd.operation_id)
+        elif cmd.action == "apply":
+            batch = catalog.deliver_application(after,cmd,raw)
+            if history is not None:
+                history.update(batch)
+        elif cmd.action == "ask":
+            if prompt:
+                catalog.apply_question(after,cmd.target,qid,raw,cmd.operation_id)
+        elif cmd.action == "search":
             search_result(after, cmd, raw)
         elif cmd.action == "accept":
             expand(after, cmd, raw, job["id"])
         else:
-            return social_result(after, raw, authors, cmd.operation_id, refresh=cmd.action == "refresh")
+            return social_result(after, raw, prompt, cmd.operation_id, refresh=cmd.action == "refresh",
+                                 archived_ordinals=cached is not None and config.get("_social_contract", 1) == 1)
 
     # Journal a validated provider response before the canonical SQLite transaction.
     # A failed projection can then retry without buying or changing the same result.
     if cached is None:
         apply(deepcopy(snap))
+        journal = {"_smartphone_result": raw}
+        if cmd.action in ("refresh", "post", "comment"):
+            journal["_social_contract"] = 2
         with repo.connect() as db:
             written = db.execute(
-                """UPDATE game_jobs SET config_json=json_set(config_json,'$._smartphone_result',?)
+                """UPDATE game_jobs SET config_json=json_patch(config_json,?)
                 WHERE id=? AND attempt_epoch=? AND status IN ('generating','extracting')""",
-                (raw, job["id"], job["attempt_epoch"]),
+                (json.dumps(journal, ensure_ascii=False), job["id"], job["attempt_epoch"]),
             ).rowcount
             if not written:
                 return
-    finish_job(repo, job, cmd, apply)
+    continuation = finish_job(repo, job, cmd, apply)
+    if continuation and not handle.cancelled.is_set():
+        from backend.services.communication import execute as communicate
+        next_job = repo.get_job(job["id"])
+        communicate(repo,next_job,handle,stream,dict(config,communication=continuation))
 
 
 def consider(before, snapshot, history, config, generate, cancelled, warnings):
@@ -374,7 +505,11 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
     if now - last < 180 and (now - last < 45 or not history.get("events")):
         return
     data["last_considered"] = now
-    prompt, authors = social_prompt(snapshot, events=history.get("events", []))
+    from backend.services.phone_catalog import background_activity
+    from backend.runtime_v3.phone_listings import merge_history
+    index = data["activity_index"]
+    data["activity_index"] += 1
+    prompt, apply = background_activity(snapshot,history,index,identity("background_social",now,state["meta"]["turn_id"]))
     if not prompt:
         return
     try:
@@ -387,19 +522,16 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
                 response_format={"type": "json_object"},
             )
         )
-        staged = deepcopy(state)
-        skipped = social_result(
-            dict(snapshot, world_state=staged),
-            raw,
-            authors,
-            identity("background_social", now, state["meta"]["turn_id"]),
-        )
+        staged = dict(snapshot,world_state=deepcopy(state))
+        batch = {}
+        skipped = apply(staged,raw,batch) or []
     except (ValueError, BackgroundGenerationError) as exc:
         warnings.append(dict(section="social_activity", reason=str(exc), action="discard_background"))
         return
     if not cancelled.is_set():
         warnings.extend(skipped)
-        snapshot["world_state"] = staged
+        merge_history(history,batch)
+        snapshot["world_state"] = staged["world_state"]
         history["state_changes"].append(
-            dict(kind="social_activity", minute=now, sequence=domain(staged)["sequence"])
+            dict(kind="social_activity", minute=now, sequence=domain(staged["world_state"])["sequence"])
         )

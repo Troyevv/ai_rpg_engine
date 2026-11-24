@@ -143,7 +143,7 @@
   #root .nr-contextbottom {flex-wrap:wrap}
 }
 @container app (max-width:680px) {
-  #root .nr-topbar {height:64px;gap:6px;padding:0 10px}
+  #root .nr-topbar {height:calc(64px + env(safe-area-inset-top));gap:6px;padding:env(safe-area-inset-top) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left))}
   #root .nr-topstart {gap:3px}
   #root .nr-worldpicker {padding:5px 3px;gap:5px;flex:1}
   #root .nr-world-symbol {display:none!important}
@@ -206,7 +206,7 @@
 @container app (max-width:360px) {
   #root .nr-actorvalue .nr-miniav {display:none}
   #root .nr-managemententry {padding:8px;font-size:11px}
-  #root .nr-topbar {padding-left:6px;padding-right:8px;gap:2px}
+  #root .nr-topbar {padding-left:max(6px, env(safe-area-inset-left));padding-right:max(8px, env(safe-area-inset-right));gap:2px}
   #root .nr-rpentry {padding:8px;font-size:11px}
   #root .nr-people {gap:4px}
   #root .nr-person {padding-right:7px;font-size:11px}
