@@ -60,14 +60,7 @@ function Detail({ id }: { id: string }) {
           {i.plans.map((p) => (
             <p key={p}>{p}</p>
           ))}
-          <button
-            onClick={() => {
-              const c = d.phone.conversations.find((c) => c.id === i.conversation_id);
-              if (c) void d.openChat(c);
-            }}
-          >
-            Открыть чат
-          </button>
+          <button onClick={() => void d.openChat(i.conversation_id)}>Открыть чат</button>
         </article>
       ))}
       {r.planned && <p>В вашем календаре</p>}

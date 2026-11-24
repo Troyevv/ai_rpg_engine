@@ -44,7 +44,7 @@ it('opens a test-only app through the registry and shares its navigation and cap
         conversations: [],
         events: [],
         emergency: [],
-        badges: { "test-news": 105 },
+        badges: { 'test-news': 105 },
       },
     },
   } as unknown as Save;
@@ -97,6 +97,65 @@ it('opens a test-only app through the registry and shares its navigation and cap
   } finally {
     await act(() => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('opens a canonical conversation referenced by a detail ahead of the launcher snapshot', async () => {
+  const { usePhone } = await import('../src/phone/usePhone');
+  const initial = {
+    id: 277,
+    revision: 4,
+    turns: [],
+    state: {
+      characters: [],
+      phone: {
+        actor_id: 'owner',
+        capabilities: { social: true, text_message: true },
+        contacts: [],
+        recipients: [],
+        conversations: [],
+        events: [],
+        emergency: [],
+        badges: {},
+      },
+    },
+  } as unknown as Save;
+  const next = { ...initial, revision: 5 };
+  const commit = vi.fn();
+  const fetcher = vi.fn(async () => new Response(JSON.stringify(next)));
+  vi.stubGlobal('fetch', fetcher);
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  function Harness() {
+    const d = usePhone(
+      {
+        save: initial,
+        config: {} as ModelConfig,
+        apiKey: '',
+        job: null,
+        disabled: false,
+        onJob: () => {},
+        onCommit: commit,
+        onBusyChange: () => {},
+        openCharacter: () => {},
+      },
+      '277:owner',
+    );
+    return (
+      <button onClick={() => void d.openChat('employer-thread')}>
+        {d.tab}/{d.conversation}
+      </button>
+    );
+  }
+  try {
+    await act(() => root.render(<Harness />));
+    await act(() => host.querySelector('button')!.click());
+    expect(host.textContent).toBe('messages/employer-thread');
+    expect(fetcher).toHaveBeenCalledWith('/api/saves/277', expect.objectContaining({ method: 'GET' }));
+    expect(commit).toHaveBeenCalledWith(next);
+  } finally {
+    await act(() => root.unmount());
     vi.unstubAllGlobals();
   }
 });

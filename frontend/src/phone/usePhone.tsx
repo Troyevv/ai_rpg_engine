@@ -77,6 +77,8 @@ export function usePhone(
   const drafts = useRef<Record<string, string>>({});
   const requestLock = useRef(false);
   const autoReadAttempt = useRef<string | null>(null);
+  const currentRevision = useRef(save.revision);
+  currentRevision.current = save.revision;
   const currentOwner = useRef(ownerKey);
   currentOwner.current = ownerKey;
   useLayoutEffect(() => {
@@ -473,17 +475,28 @@ export function usePhone(
     setConversation(null);
     setTab('messages');
   };
-  const openChat = async (c: Conversation) => {
+  const openChat = async (conversation: Conversation | string) => {
+    const id = typeof conversation === 'string' ? conversation : conversation.id;
     chatOrigin.current = tab !== 'messages' && tab !== 'home' ? tab : null;
     returnFocus.current = document.activeElement as HTMLElement;
     focusKey.current = returnFocus.current?.dataset.phoneFocus || null;
     setMembersOpen(false);
     setRecipient(null);
-    setConversation(c.id);
+    setConversation(id);
     setContact(null);
     setTab('messages');
-    if (phone.events.some((e) => e.conversation_id === c.id && e.unread))
-      await perform({ action: 'read', conversation_id: c.id });
+    // An app's detail can already reference a delivered message while the shell
+    // still has the snapshot from dispatch. Open the canonical thread by ID.
+    if (!phone.conversations.some((c) => c.id === id)) {
+      try {
+        const next = await api<Save>(`/saves/${save.id}`);
+        if (currentOwner.current === ownerKey && next.revision >= currentRevision.current) onCommit(next);
+      } catch (e) {
+        if (currentOwner.current === ownerKey) setError(e instanceof Error ? e.message : t('failed'));
+      }
+    } else if (phone.events.some((e) => e.conversation_id === id && e.unread)) {
+      await perform({ action: 'read', conversation_id: id });
+    }
   };
   const send = async () => {
     const next = await perform({

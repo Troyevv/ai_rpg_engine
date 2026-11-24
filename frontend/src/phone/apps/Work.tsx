@@ -56,14 +56,7 @@ function Vacancy({ id }: { id: string }) {
       )}
       {r.reply && <p>{r.reply}</p>}
       {r.conversation_id ? (
-        <button
-          onClick={() => {
-            const c = d.phone.conversations.find((c) => c.id === r.conversation_id);
-            if (c) void d.openChat(c);
-          }}
-        >
-          Переписка с работодателем
-        </button>
+        <button onClick={() => void d.openChat(r.conversation_id!)}>Переписка с работодателем</button>
       ) : r.applied ? (
         <>
           <p>Отклик сохранён. Подготовка отправки.</p>
