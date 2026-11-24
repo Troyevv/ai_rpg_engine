@@ -282,3 +282,28 @@ test('277 incoming call restores the question draft, main draft and physical cho
   await expect(main).toHaveValue('Читаю программу концерта.');
   expect(await choices.allTextContents()).toEqual(before);
 });
+
+test('nine distinct launcher artworks keep unread counts visible in the active skin', async ({
+  page,
+  request,
+}, info) => {
+  const seed = await (await request.post('/test/phone-seed?smartphone=true&unread=true&incoming=false')).json();
+  const theme = info.project.name === 'mobile' ? 'parchment' : 'graphite';
+  const changed = await request.put('/api/worlds/' + seed.world + '/presentation', {
+    data: { theme_id: theme },
+  });
+  expect(changed.ok()).toBe(true);
+  await page.addInitScript((s) => localStorage.setItem('selection', JSON.stringify(s)), seed);
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+  await page.getByRole('button', { name: /^Телефон/ }).click();
+  const device = page.getByTestId('phone-device');
+  const artworks = device.locator('.smart-icon .smart-artwork use');
+  await expect(artworks).toHaveCount(9);
+  await expect.poll(() => artworks.evaluateAll((uses) => uses.every((el) => (el as SVGUseElement).getBBox().width > 0))).toBe(true);
+  const targets = await artworks.evaluateAll((uses) => uses.map((el) => el.getAttribute('href')));
+  expect(new Set(targets).size).toBe(9);
+  await expect(device.locator('.app-messages small')).toHaveText(/^[1-9]/);
+  await expect(device.getByRole('button', { name: 'Работа и вакансии' })).toBeInViewport();
+  await device.screenshot({ path: info.outputPath('launcher-' + theme + '.png'), animations: 'disabled' });
+});

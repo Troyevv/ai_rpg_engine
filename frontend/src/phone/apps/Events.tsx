@@ -60,7 +60,7 @@ function Detail({ id }: { id: string }) {
           {i.plans.map((p) => (
             <p key={p}>{p}</p>
           ))}
-          <button onClick={() => void d.openChat(i.conversation_id)}>Открыть чат</button>
+          <button onClick={() => void d.openChat(i.conversation_id, true)}>Открыть чат</button>
         </article>
       ))}
       {r.planned && <p>В вашем календаре</p>}

@@ -2,7 +2,7 @@
 
 from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_serializer, model_validator
 
 Short = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=5000)]
@@ -157,6 +157,13 @@ class Application(Record):
     event_id: str | None = None
 
 
+# Optional additions to the #276 wire format. Historical snapshots and their
+# patch digests distinguish absent fields from explicitly stored empty values.
+CATALOG_COLLECTIONS = ("articles", "questions", "listings", "vacancies", "favorites", "applications",
+                       "representatives", "invitations", "attendance_plans")
+CATALOG_FIELDS = (*CATALOG_COLLECTIONS, "activity_index")
+
+
 class SmartphoneState(Record):
     articles: dict[str, Article] = Field(default_factory=dict)
     questions: dict[str, Question] = Field(default_factory=dict)
@@ -175,6 +182,14 @@ class SmartphoneState(Record):
     sequence: int = Field(default=0, ge=0)
     last_considered: int | None = None
     activity_index: int = Field(default=0, ge=0)
+
+    @model_serializer(mode="wrap")
+    def preserve_archived_shape(self, serialize):
+        result = serialize(self)
+        for key in CATALOG_FIELDS:
+            if key not in self.model_fields_set:
+                result.pop(key, None)
+        return result
 
 
 class PublicAction(Record):

@@ -7,6 +7,7 @@ from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.models import Fact, Knowledge, identity
 from backend.runtime_v3.portraits import projection as portrait
 from backend.runtime_v3.smartphone_models import (
+    CATALOG_COLLECTIONS,
     DatingShelf,
     Publication,
     Reaction,
@@ -57,7 +58,7 @@ def domain(state):
         state["smartphone"] = SmartphoneState().model_dump()
     data = state["smartphone"]
     # Raw historical snapshots precede these optional collections.
-    for key in ("articles", "questions", "listings", "vacancies", "favorites", "applications", "representatives", "invitations", "attendance_plans"):
+    for key in CATALOG_COLLECTIONS:
         data.setdefault(key, {})
     data.setdefault("activity_index", 0)
     return data
@@ -333,7 +334,7 @@ def validate_links(state):
     from backend.runtime_v3.phone_listings import validate_links as validate_listings
     validate_listings(state)
     for key, row in rows.items():
-        if (row["author"] not in actors and not (row["author"] is None and key in data["articles"])) or row["id"] != key or row["sequence"] > data["sequence"]:
+        if (row["author"] not in actors and not (row["author"] is None and key in data.get("articles", {}))) or row["id"] != key or row["sequence"] > data["sequence"]:
             raise ValueError("Некорректная ссылка на публикацию.")
         if row["post_id"]:
             post, parent = rows.get(row["post_id"]), rows.get(row["reply_to"])

@@ -5,11 +5,11 @@ from copy import deepcopy
 
 from pydantic import ValidationError
 
-from backend.runtime_v3.calendar import age_on, current_time, date_parts, profile_of
+from backend.runtime_v3.calendar import age_on, current_time, date_parts, exact_age, profile_of
 from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.models import assert_world_state_v3_invariants, identity
-from backend.runtime_v3.remote_authoring import speaker_context
-from backend.runtime_v3.smartphone import candidate, domain, publish, shelf
+from backend.runtime_v3.reproduction import known_birth
+from backend.runtime_v3.smartphone import candidate, domain, external_posts, publish, shelf
 from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, PublicAction, SearchResult
 from backend.services.world import CARD_FIELDS
 
@@ -41,27 +41,69 @@ def social_names(snapshot):
     }
 
 
+NETWORK_VOICE = (
+    "Пиши от первого лица так, как конкретный человек набрал бы текст для своей аудитории. "
+    "Учитывай возраст, привычки, манеру речи, отношения и культуру мира. Кому-то идут эмодзи и мемы, "
+    "кто-то пишет сухо и без них. Сленг, сокращения, юмор, неровная пунктуация и длина зависят от "
+    "говорящего, эпохи и повода. Пара слов бывает целой репликой. Длинной истории тоже есть место. "
+    "Обходись без авторского описания жестов, обязательного вывода, психологического разбора и морали."
+)
+
+
+def network_profile(snapshot, cid, audience):
+    from backend.runtime_v3.personality import CARD_FIELDS as labels, visible_item
+
+    state = snapshot["world_state"]
+    actor = state["characters"][cid]
+    card = next((c for c in snapshot.get("character_cards", []) if c["id"] == cid), {"fields": {}})
+    fields = card["fields"]
+    profile = actor.get("personality")
+    voice = {}
+    for field in ("communication", "preferences", "habits", "traits", "temperament"):
+        if profile is None:
+            value = fields.get(labels[field], "")
+        else:
+            value = " ".join(
+                item["text"] for item in profile["items"].values()
+                if item["field"] == field and all(visible_item(state, cid, item, observer) for observer in audience)
+            )
+        if value:
+            voice[field] = value[:180]
+    age = age_on(actor.get("birth_date"), current_time(state)["date"], profile_of(state))
+    return dict(
+        age=age if age is not None else exact_age(card),
+        voice=voice,
+        role=fields.get("Роль", "")[:160],
+        interests=[fields[k][:160] for k in ("Интересы", "Увлечения") if fields.get(k)],
+        public_bio=domain(state)["profiles"].get(cid, "")[:220],
+    )
+
+
 def social_prompt(snapshot, source=None, *, refresh=False, events=()):
     state = snapshot["world_state"]
     data = domain(state)
     owner = state["camera"]["controlled_actor_id"]
-    authors = [cid for cid in state["characters"] if cid != owner and capabilities(state, cid)["can_act"]]
+    from backend.runtime_v3.birth_identity import is_game_birth
+
+    audience = state["characters"]
+    authors = [
+        cid for cid in audience
+        if cid != owner and capabilities(state, cid)["can_act"]
+        and (not is_game_birth(state, cid) or all(known_birth(state, cid, observer) for observer in audience))
+    ]
     if not authors:
         return None, []
     offset = (data["sequence"] + state["meta"]["world_time"] // 120) % len(authors)
     authors = (authors[offset:] + authors[:offset])[:3]
-    recent = sorted(data["publications"].values(), key=lambda r: r["sequence"], reverse=True)[:6]
+    external = external_posts(data)
+    feed = (row for row in data["publications"].values() if (row["post_id"] or row["id"]) not in external)
+    recent = sorted(feed, key=lambda r: r["sequence"], reverse=True)[:6]
     if source and source not in {r["id"] for r in recent}:
         recent.append(data["publications"][source])
-    # Only facts shared by the selected authors enter a multi-speaker request.
-    common = {
-        fid: f["text"][:400]
-        for fid, f in state["facts"].items()
-        if f["visibility"] == "public"
-        and not f.get("story_secret")
-        and not f.get("origin_remote_event_id")
-        and all(state["knowledge"].get(cid + ":" + fid, {}).get("status") == "known" for cid in authors)
-    }
+    from backend.services.phone_catalog import public_context, public_facts
+
+    community = public_context(snapshot, [])
+    common = public_facts(state, authors, require_known=True)
     # Only shared, witnessed physical events belong in this multi-author public context.
     witnessed = [
         dict(text=e["text"][:400], minute=e.get("minute"), turn=e.get("turn_id"))
@@ -69,31 +111,41 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
         if isinstance(e, dict)
         and isinstance(e.get("text"), str)
         and e.get("medium") in ("action", "observation")
+        and e.get("interaction_channel") not in ("phone", "call")
         and isinstance(e.get("witnesses"), list)
         and all(cid in e["witnesses"] for cid in authors)
-        and isinstance(e.get("fact_ids", []), list)
+        and isinstance(e.get("fact_ids"), list) and e["fact_ids"]
         and all(isinstance(fid, str) and fid in common for fid in e.get("fact_ids", []))
-    ][-6:]
+    ][-2:]
     names = social_names(snapshot)
     schema = Batch[PublicAction].model_json_schema()
     schema["$defs"]["PublicAction"]["properties"]["author"]["enum"] = authors
     cast = []
+    interlocutors = {*authors, owner}
     for cid in authors:
-        voice = speaker_context(snapshot, cid, authors + [owner])
         cast.append(
             dict(
                 id=cid,
                 name=names[cid],
-                public_bio=data["profiles"].get(cid, "")[:350],
-                voice=voice["legacy_voice"] or str(voice["personality"])[:600],
+                **network_profile(snapshot, cid, authors),
+                work=[role for role in community["public_roles"] if role["actor_id"] == cid][:2],
                 relationships=[
-                    dict(target=r["target_id"], dimensions=r["dimensions"]) for r in voice["relationships"]
-                ],
+                    dict(target=r["target_id"], dimensions=r["dimensions"])
+                    for r in state["relationships"].values()
+                    if r["source_id"] == cid and r["target_id"] in interlocutors
+                ][:8],
             )
         )
     return messages(
         "Public social activity/1. Ты ведёшь живую публичную соцсеть мира. Пиши по-русски. "
-        "Выбери уместные публикации NPC и реакции друг на друга или на повод. "
+        + NETWORK_VOICE
+        + " У каждого автора есть жизнь за пределами сцены: смена или учёба, увлечения, игры, книги, "
+        "музыка и местная культура. Дай людям самим начать разговор, кинуть мем, позвать соседей, "
+        "попросить рекомендацию, пошутить или поспорить под чужим постом. Придумывай бытовые поводы "
+        "в рамках известного мира. Лента не обязана обсуждать героя или пересказывать Narrative. "
+        "Новости, афиша и недавнее событие — возможные поводы, история постов помогает продолжить "
+        "публичный разговор и избежать повторов. Личные особенности и отношения направляют только "
+        "соответствующего автора. Комментарии и ответы адресуй конкретной реплике. "
         "Пост не подтверждает истинность текста. Не разглашай чужие сведения, не играй за героя. "
         "Для каждого действия скопируй в author точный id из authors. Имена, номера, адресаты отношений "
         "и авторы прежних постов не являются допустимыми идентификаторами, если их нет в этом списке. "
@@ -110,7 +162,16 @@ def social_prompt(snapshot, source=None, *, refresh=False, events=()):
             else ""
         ),
         dict(
-            **setting(snapshot),
+            world=community["world"],
+            calendar=community["calendar"],
+            technology=community["technology"],
+            community={
+                "places": community["places"][:6],
+                "organizations": community["organizations"][:4],
+                "observances": community["upcoming_observances"][:3],
+                "news": [{k: row[k] for k in ("id", "title", "summary")} for row in community["news"][:3]],
+                "events": community["events"][:3],
+            },
             authors=cast,
             shared_knowledge=list(common.values())[-6:],
             recent_events=witnessed,

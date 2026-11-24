@@ -499,9 +499,9 @@ export function usePhone(
     setConversation(null);
     setTab('messages');
   };
-  const openChat = async (conversation: Conversation | string) => {
+  const openChat = async (conversation: Conversation | string, returnToApp = false) => {
     const id = typeof conversation === 'string' ? conversation : conversation.id;
-    chatOrigin.current = tab !== 'messages' && tab !== 'home' ? tab : null;
+    chatOrigin.current = returnToApp ? tab : null;
     returnFocus.current = document.activeElement as HTMLElement;
     focusKey.current = returnFocus.current?.dataset.phoneFocus || null;
     setMembersOpen(false);
@@ -806,6 +806,7 @@ export function usePhone(
     busy,
     call,
     canSend,
+    chatOrigin: chatOrigin.current,
     chatRecipient,
     chooseRecipient,
     close,

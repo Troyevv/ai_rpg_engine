@@ -12,6 +12,7 @@ export function Chrome({ label }: { label: string }) {
     back,
     busy,
     call,
+    chatOrigin,
     chatRecipient,
     contact,
     conversation,
@@ -56,7 +57,7 @@ export function Chrome({ label }: { label: string }) {
           <Button
             variant="ghost"
             size="icon"
-            aria-label={membersOpen ? 'К диалогу' : inChat ? 'К перепискам' : 'Назад'}
+            aria-label={membersOpen ? 'К диалогу' : inChat && !chatOrigin ? 'К перепискам' : 'Назад'}
             onClick={back}
           >
             <ChevronLeft size={20} />

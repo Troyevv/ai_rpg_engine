@@ -617,7 +617,7 @@ def validate_links(state):
     data = state["smartphone"]
     actors = state["characters"]
     pubs = data["publications"]
-    for rid, article in data["articles"].items():
+    for rid, article in data.get("articles", {}).items():
         post = pubs.get(rid)
         previous = article["previous_id"]
         if (
@@ -625,10 +625,10 @@ def validate_links(state):
             or post["author"] is not None
             or post["post_id"]
             or previous
-            and (previous not in data["articles"] or pubs[previous]["sequence"] >= post["sequence"])
+            and (previous not in data.get("articles", {}) or pubs[previous]["sequence"] >= post["sequence"])
         ):
             raise ValueError("Некорректная связь новостной статьи.")
-    for qid, q in data["questions"].items():
+    for qid, q in data.get("questions", {}).items():
         pid = q["publication_id"]
         if (
             q["id"] != qid
@@ -638,31 +638,31 @@ def validate_links(state):
         ):
             raise ValueError("Некорректная связь вопроса.")
     for section in ("listings", "vacancies"):
-        for rid, row in data[section].items():
+        for rid, row in data.get(section, {}).items():
             if (
                 rid != row["id"]
                 or (row["location_id"] and row["location_id"] not in state["locations"])
                 or (row.get("organization_id") and row["organization_id"] not in state["organizations"])
             ):
                 raise ValueError("Некорректная ссылка объявления.")
-    for cid, ids in data["favorites"].items():
-        if cid not in actors or set(ids) - data["vacancies"].keys():
+    for cid, ids in data.get("favorites", {}).items():
+        if cid not in actors or set(ids) - data.get("vacancies", {}).keys():
             raise ValueError("Неизвестная избранная вакансия.")
-    if set(data["representatives"].values()) - actors.keys():
+    if set(data.get("representatives", {}).values()) - actors.keys():
         raise ValueError("Неизвестный представитель работодателя.")
-    for aid, a in data["applications"].items():
+    for aid, a in data.get("applications", {}).items():
         event = state["remote_events"].get(a["event_id"])
         if (
             aid != identity("application", a["actor"], a["vacancy"])
             or a["actor"] not in actors
-            or a["vacancy"] not in data["vacancies"]
+            or a["vacancy"] not in data.get("vacancies", {})
             or a["event_id"]
             and (not event or event["sender_id"] != a["actor"] or event["operation_id"] != aid)
         ):
             raise ValueError("Некорректная ссылка отклика.")
     for refs, targets in (
-        (data["invitations"], state["remote_events"]),
-        (data["attendance_plans"], state["scheduled_events"]),
+        (data.get("invitations", {}), state["remote_events"]),
+        (data.get("attendance_plans", {}), state["scheduled_events"]),
     ):
-        if refs.keys() - targets.keys() or set(refs.values()) - data["listings"].keys():
+        if refs.keys() - targets.keys() or set(refs.values()) - data.get("listings", {}).keys():
             raise ValueError("Некорректная ссылка мероприятия.")

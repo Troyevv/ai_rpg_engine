@@ -91,6 +91,8 @@ def test_anonymous_routes_and_prompt(app):
     def reply(ms):
         payload = json.loads(ms[1]["content"])
         assert payload["question"] == dict(text=q["text"], sender=None) and not payload["people"]
+        assert "эмодзи" in ms[0]["content"] and "публичного ответа" in ms[0]["content"]
+        assert payload["actor"] == "qa_vera" and "voice" in payload["profile"]
         assert "my-anonymous-question" not in str(payload)
         return response(ms)
 
@@ -723,3 +725,91 @@ def test_retry_second_invitation_reuses_first_recipient_decision(app):
     state = repo.get_snapshot(sid)["world_state"]
     assert len(state["smartphone"]["invitations"]) == 2
     assert sum(p["description"] == listing["title"] for p in state["scheduled_events"].values()) == 1
+
+
+def test_recorded_phone_patch_accepts_archived_shapes_but_rejects_changed_content(app):
+    from hashlib import sha256
+    import pytest
+    from backend.runtime_v3.models import StatePatch, StructuralDeltaError, assert_world_state_v3_invariants
+    from backend.runtime_v3.smartphone import domain
+    from backend.runtime_v3.smartphone_models import CATALOG_FIELDS
+
+    repo, _, sid = app
+    sparse = repo.get_snapshot(sid)["world_state"]
+    for key in CATALOG_FIELDS:
+        sparse["smartphone"].pop(key, None)
+    sparse = assert_world_state_v3_invariants(sparse)
+    expanded = deepcopy(sparse)
+    domain(expanded)
+    for recorded in (sparse, expanded):
+        assert assert_world_state_v3_invariants(recorded) == recorded
+        digest = sha256(json.dumps(recorded, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        patch = StatePatch(digest, recorded["meta"], recorded["camera"], {"smartphone": {"activity_index": 1}})
+        for before in (sparse, expanded):
+            assert patch.apply(before)["smartphone"]["activity_index"] == 1
+        changed = deepcopy(recorded)
+        changed["smartphone"]["activity_index"] = 2
+        with pytest.raises(StructuralDeltaError, match="другого состояния"):
+            patch.apply(changed)
+
+
+def test_public_network_offstage_voice_and_topics_reach_both_generation_paths(app):
+    import threading
+    from backend.runtime_v3.models import PersonalityItem, PersonalityProfile
+    from backend.runtime_v3.smartphone import domain, publish
+    from backend.services.smartphone import consider
+    from test_phone122 import CONFIG
+
+    repo, _, sid = app
+    fill(app, "events", "music-listing")
+    snap = repo.get_snapshot(sid)
+    state = snap["world_state"]
+    owner = state["camera"]["controlled_actor_id"]
+    state["camera"]["present_character_ids"] = [owner]
+    snap["campaign"]["campaign"]["culture"] = "Портовый город со своими группами"
+    for cid, actor in state["characters"].items():
+        if cid == owner:
+            continue
+        actor["personality"] = PersonalityProfile(items={
+            "hobby": PersonalityItem(field="preferences", text="Пластинки " + cid),
+            "style": PersonalityItem(field="communication", text="Манера " + cid),
+            "private": PersonalityItem(field="fears", text="Закрытый дневник"),
+        }).model_dump()
+    publish(state, owner, "post", "record-shop", text="Куда переехал магазин пластинок?")
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+
+    def inspect(messages):
+        instruction, content = (m["content"] for m in messages)
+        payload = json.loads(content)
+        assert "эмодзи" in instruction and "мем" in instruction
+        assert payload["world"]["culture"] == "Портовый город со своими группами"
+        assert payload["community"]["places"] and payload["community"]["events"][0]["category"] == "Музыка"
+        assert any(p["id"] == "record-shop" for p in payload["public_posts"])
+        assert "Закрытый дневник" not in content and "Тайное действие в сцене" not in content
+        assert all(a["id"] not in state["camera"]["present_character_ids"] for a in payload["authors"])
+        for actor in payload["authors"]:
+            assert actor["voice"]["preferences"] == "Пластинки " + actor["id"]
+            assert actor["voice"]["communication"] == "Манера " + actor["id"]
+        batch = response(messages)
+        batch["actions"][0]["text"] = "кто на винил? 🎧"
+        return batch
+
+    assert run(app, dispatch(app, "refresh", "offstage-refresh"), inspect) == 1
+    assert any(p["post"]["text"] == "кто на винил? 🎧" for p in get(app, "social")["entries"])
+
+    before = deepcopy(snap)
+    state["meta"]["world_time"] += 360
+    domain(state)["activity_index"] = 0
+    calls = []
+
+    def generate(stage, messages, *args, **kwargs):
+        calls.append(stage)
+        yield json.dumps(inspect(messages), ensure_ascii=False)
+
+    history = dict(state_changes=[], events=[dict(text="Тайное действие в сцене", medium="action",
+                                                  witnesses=list(state["characters"]), fact_ids=[])])
+    warnings = []
+    consider(before, snap, history, CONFIG, generate, threading.Event(), warnings)
+    assert calls == ["social_activity"] and not warnings
+    assert any(p["text"] == "кто на винил? 🎧" for p in domain(snap["world_state"])["publications"].values())

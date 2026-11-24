@@ -63,24 +63,7 @@ class WorkBatch(Record):
 SCHEMAS = {"news": NewsBatch, "events": EventsBatch, "work": WorkBatch}
 
 
-def public_context(snapshot, history):
-    from backend.services.smartphone import setting
-    from backend.runtime_v3.birth_identity import is_game_birth
-
-    state = snapshot["world_state"]
-    data = domain(state)
-    world = setting(snapshot)
-    campaign = snapshot.get("campaign", {})
-    campaign = campaign.get("campaign", campaign)
-    for key in ("title", "setting", "era", "genre", "tone", "technology", "culture", "public_description"):
-        if isinstance(campaign.get(key), str):
-            world["world"][key] = campaign[key][:900]
-    # Surface labels only. Never include location descriptions, sheets, private correspondence or intentions.
-    people = {
-        cid: c.get("display_name") or cid
-        for cid, c in state["characters"].items()
-        if not is_game_birth(state, cid)
-    }
+def public_facts(state, audience, *, require_known=False):
     from backend.runtime_v3.reproduction import private_fact_ids
     from backend.runtime_v3.possessions import private_fact_ids as possession_facts
 
@@ -102,15 +85,36 @@ def public_context(snapshot, history):
             and not f.get("secret_subject_ids")
         )
 
-    facts = {
+    return {
         fid: f["text"][:350]
         for fid, f in state["facts"].items()
         if public(fid)
         and (
-            not f.get("character_ids")
-            or all(state["knowledge"].get(cid + ":" + fid, {}).get("status") == "known" for cid in people)
+            not require_known and not f.get("character_ids")
+            or all(state["knowledge"].get(cid + ":" + fid, {}).get("status") == "known" for cid in audience)
         )
     }
+
+
+def public_context(snapshot, history):
+    from backend.services.smartphone import setting
+    from backend.runtime_v3.birth_identity import is_game_birth
+
+    state = snapshot["world_state"]
+    data = domain(state)
+    world = setting(snapshot)
+    campaign = snapshot.get("campaign", {})
+    campaign = campaign.get("campaign", campaign)
+    for key in ("title", "setting", "era", "genre", "tone", "technology", "culture", "public_description"):
+        if isinstance(campaign.get(key), str):
+            world["world"][key] = campaign[key][:900]
+    # Surface labels only. Never include location descriptions, sheets, private correspondence or intentions.
+    people = {
+        cid: c.get("display_name") or cid
+        for cid, c in state["characters"].items()
+        if not is_game_birth(state, cid)
+    }
+    facts = public_facts(state, people)
     recent = []
     for e in history:
         if e.get("medium") not in ("action", "observation") or e.get("interaction_channel") in (
@@ -374,7 +378,7 @@ class InitiativeResult(Record):
 
 
 def question_prompt(snapshot, recipient, question=None):
-    from backend.services.smartphone import messages
+    from backend.services.smartphone import NETWORK_VOICE, messages, network_profile, setting
     from backend.runtime_v3.remote_authoring import speaker_context
     from backend.runtime_v3.reproduction import known_birth
 
@@ -392,7 +396,9 @@ def question_prompt(snapshot, recipient, question=None):
         ][:16]
     voice = speaker_context(snapshot, recipient, audience)
     return messages(
-        "Phone questions/1. Пиши по-русски за одного адресата. "
+        "Phone questions/1. Пиши по-русски за одного адресата. " + NETWORK_VOICE
+        + " Вопрос или ответ — это реплика в сети. Можно попросить совет, позвать куда-то, подколоть знакомого "
+        "или поспорить о любимой музыке. Уважай границы адресата и приватность публичного ответа. "
         + (
             "Можно публично ответить, отказаться или промолчать (answer=null). Не угадывай анонима."
             if question
@@ -401,6 +407,8 @@ def question_prompt(snapshot, recipient, question=None):
         dict(
             actor=recipient,
             voice=voice,
+            profile=network_profile(snapshot, recipient, [recipient]),
+            **setting(snapshot),
             question=visible,
             people=audience,
             knowledge=[

@@ -92,7 +92,7 @@ def ui_view(snapshot, history=None):
     # testimony facts. Ordinary save refreshes must not download the feed archive.
     public_statements = {identity('public_statement',rid) for rid in state['smartphone']['publications']}
     private_facts.update(public_statements)
-    private_facts.update(identity("question_statement",qid) for qid in state["smartphone"]["questions"])
+    private_facts.update(identity("question_statement",qid) for qid in state["smartphone"].get("questions", {}))
     for fid,f in state['facts'].items():
         if fid not in private_facts: world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
     world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in private_facts}
