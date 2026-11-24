@@ -686,3 +686,40 @@ def test_unanswered_question_pov_history_and_narrative(app):
     assert phrase not in client.get(f"/api/saves/{sid}").text
     assert not get(app, "questions", tab="inbox")["items"]
     assert not client.get(f"/api/saves/{sid}/apps/questions", params={"item": qid}).is_success
+
+
+def test_retry_second_invitation_reuses_first_recipient_decision(app):
+    from phone277_provider import reply
+
+    repo, _, sid = app
+    listing = fill(app, "events", "retry-two-invites")[0]
+    jid = dispatch(
+        app,
+        "invite",
+        "invite-two",
+        app_id="events",
+        target=listing["id"],
+        text="Пойдём на концерт вместе?",
+        ids=["qa_vera", "qa_oleg"],
+    )
+
+    def interrupt_second(messages):
+        data = json.loads(messages[1]["content"])
+        if any(c["id"] == "qa_oleg" for c in data.get("actors", [])):
+            raise ValueError("Ответ второго адресата временно недоступен.")
+        return reply(messages)
+
+    run(app, jid, interrupt_second, expect="error")
+    state = repo.get_snapshot(sid)["world_state"]
+    assert len(state["smartphone"]["invitations"]) == 2
+    repo.retry_job(jid)
+
+    def resume(messages):
+        data = json.loads(messages[1]["content"])
+        assert not any(c["id"] == "qa_vera" for c in data.get("actors", []))
+        return reply(messages)
+
+    assert run(app, jid, resume) == 3
+    state = repo.get_snapshot(sid)["world_state"]
+    assert len(state["smartphone"]["invitations"]) == 2
+    assert sum(p["description"] == listing["title"] for p in state["scheduled_events"].values()) == 1
