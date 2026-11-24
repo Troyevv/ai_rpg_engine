@@ -30,7 +30,7 @@ test('276 shared feed, NPC discussion, dating batch and direct chat survive relo
   await open();
   for (const width of info.project.name === 'mobile' ? [320, 360, 393] : [1440]) {
     await page.setViewportSize({ width, height: info.project.name === 'mobile' ? 820 : 1000 });
-    await expect(phone.getByRole('navigation', { name: 'Приложения' }).getByRole('button')).toHaveCount(5);
+    await expect(phone.getByRole('navigation', { name: 'Приложения' }).getByRole('button')).toHaveCount(9);
     await noOverflow();
     await page.screenshot({ path: info.outputPath(`home-${width}.png`) });
   }

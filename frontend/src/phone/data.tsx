@@ -50,7 +50,7 @@ export function useDraft(key: string, fallback = '') {
 
 export function useGeneration(app: string) {
   const { job, save } = useDevice();
-  return job?.kind === 'smartphone' &&
+  return (job?.kind === 'smartphone' || job?.kind === 'communication') &&
     job.presentation?.app === app &&
     job.revision === save.revision &&
     (active(job) || job.status === 'stopped' || job.status === 'error')
@@ -70,6 +70,9 @@ export function Generation({ app }: { app: string }) {
   const status = {
     search: ['Поиск анкет', 'Не удалось подготовить выдачу. Параметры поиска сохранены.'],
     accept: ['Создание карточки', 'Не удалось завершить карточку. Выбранная анкета сохранена.'],
+    generate: ['Подготовка публикаций', 'Не удалось обновить каталог.'],
+    invite: ['Ответы на приглашения', 'Приглашения сохранены. Не удалось обработать ответы.'],
+    apply: ['Обработка отклика', 'Отклик сохранён. Не удалось завершить отправку или обработать ответ.'],
     refresh: ['Новые публикации', 'Не удалось обновить ленту.'],
   };
   const [label, failure] = status[action as keyof typeof status] ?? [

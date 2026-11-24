@@ -499,7 +499,7 @@ export function Game({
           </Dialog>
           <div className="nr-writingstatus"><span className="nr-writeidentity"><i className="nr-smallstatus"/>{actorName || 'Наблюдение'}</span><span data-draft-status>{physicalStream?'Идёт ответ':draft?'Черновик':'Твой ход'}</span>{draft&&<button className="nr-clear" aria-label="Очистить черновик" onClick={()=>{writeChoice('');setSelectedChoice(null)}}><X/></button>}</div>
           <div className="composer-inner nr-composer">
-            <Phone openCharacter={openCharacter} recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
+            <Phone chooseAction={chooseProposal} openCharacter={openCharacter} recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
             <Textarea
               ref={input}
               rows={1}

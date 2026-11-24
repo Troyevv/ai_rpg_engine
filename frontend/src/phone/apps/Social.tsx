@@ -16,7 +16,7 @@ import { useRecords, useDraft, Generation, useGeneration } from '../data';
 
 type Post = {
   id: string;
-  author: string;
+  author: string | null;
   subject: PortraitSubject;
   text: string;
   minute: number;
@@ -36,9 +36,14 @@ type Feed = {
 type Notice = { subject: PortraitSubject; kind: string; post_id: string; sequence: number };
 
 function Author({ subject }: { subject: PortraitSubject }) {
-  const { save, push } = useDevice();
+  const { save, visit } = useDevice();
+  if (!subject.id) return <strong className="smart-author">{subject.name}</strong>;
   return (
-    <button className="smart-author" disabled={!subject.id} onClick={() => push('profile', subject.id)}>
+    <button
+      className="smart-author"
+      disabled={!subject.id}
+      onClick={() => visit('social', { screen: 'profile', id: subject.id })}
+    >
       <CharacterAvatar subject={subject} saveId={save.id} size={34} />
       <strong>{subject.name}</strong>
     </button>
@@ -54,7 +59,7 @@ function PostCard({
   reply?: (id: string) => void;
   full?: boolean;
 }) {
-  const { push, command, locked } = useDevice();
+  const { push, command, locked, tab } = useDevice();
   return (
     <article className="smart-post" data-publication={post.id}>
       <Author subject={post.subject} />
@@ -64,12 +69,12 @@ function PostCard({
           aria-pressed={post.liked}
           aria-label="Нравится"
           disabled={locked}
-          onClick={() => void command('social', 'like', { target: post.id, desired: !post.liked })}
+          onClick={() => void command(tab, 'like', { target: post.id, desired: !post.liked })}
         >
           <Heart />
           {post.likes}
         </button>
-        {!post.post_id && (
+        {!post.post_id && tab === 'social' && (
           <button
             aria-pressed={post.reposted}
             aria-label="Репост"
@@ -192,7 +197,7 @@ function Compose({
   initial?: string;
   mode: 'post' | 'comment' | 'profile';
 }) {
-  const { command, locked, back } = useDevice();
+  const { command, locked, back, tab } = useDevice();
   const [text, setText] = useDraft(mode + ':' + (target || ''), initial);
   const label = { comment: 'Ваш комментарий', post: 'Текст публикации', profile: 'Публичное описание' }[mode];
   return (
@@ -200,7 +205,7 @@ function Compose({
       className="smart-compose"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (await command('social', mode, { text, ...(target ? { target } : {}) }, mode !== 'profile')) {
+        if (await command(tab, mode, { text, ...(target ? { target } : {}) }, mode !== 'profile')) {
           setText('');
           if (mode !== 'comment') back();
         }
@@ -235,7 +240,7 @@ function EditProfile() {
   );
 }
 
-function Discussion({ id }: { id: string }) {
+export function Discussion({ id }: { id: string }) {
   const { data, status } = useRecords<{ post: Post; comments: Post[] }>(
     'social?post=' + encodeURIComponent(id),
   );
@@ -289,35 +294,21 @@ function Notifications() {
   );
 }
 
-function useVisiblePublications() {
+export function useVisiblePublications() {
   const device = useDevice();
   const latest = useRef(device);
   latest.current = device;
-  const read = useRef(new Set<string>());
   useEffect(() => {
     const root = device.list.current;
-    if (
-      !root ||
-      device.locked ||
-      device.error ||
-      (device.job?.kind === 'smartphone' && ['error', 'stopped'].includes(device.job.status))
-    )
-      return;
-    const pending = new Set<string>();
-    let timer: ReturnType<typeof setTimeout>;
+    if (!root) return;
+    const app = device.tab;
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) {
-          const id = (e.target as HTMLElement).dataset.publication;
-          if (e.isIntersecting && id && !read.current.has(id)) pending.add(id);
-        }
-        if (!pending.size) return;
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-          const ids = [...pending].slice(0, 80);
-          if (ids.length && (await latest.current.command('social', 'read', { ids })))
-            ids.forEach((id) => read.current.add(id));
-        }, 600);
+        const ids = entries
+          .filter((e) => e.isIntersecting)
+          .map((e) => (e.target as HTMLElement).dataset.publication)
+          .filter((id): id is string => !!id);
+        if (ids.length) latest.current.observe(app, ids);
       },
       { root },
     );
@@ -326,11 +317,10 @@ function useVisiblePublications() {
     changes.observe(root, { childList: true, subtree: true });
     attach();
     return () => {
-      clearTimeout(timer);
       observer.disconnect();
       changes.disconnect();
     };
-  }, [device.locked, device.error, device.job?.status, device.route, device.save.revision]);
+  }, [device.tab, device.route, device.scope]);
 }
 
 export function Social() {

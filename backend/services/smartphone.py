@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from backend.runtime_v3.calendar import age_on, current_time, date_parts, profile_of
 from backend.runtime_v3.life import capabilities
-from backend.runtime_v3.models import identity
+from backend.runtime_v3.models import assert_world_state_v3_invariants, identity
 from backend.runtime_v3.remote_authoring import speaker_context
 from backend.runtime_v3.smartphone import candidate, domain, publish, shelf
 from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, PublicAction, SearchResult
@@ -219,9 +219,7 @@ def search_result(snapshot, cmd, raw):
 
 
 def expand(snapshot, cmd, raw, jid):
-    from backend.runtime_v3.npc_identity import initial_character
-    from backend.services.npc_review import card_fields, assign_new_portrait
-    from backend.runtime_v3.personality import initialize_profiles
+    from backend.services.npc_review import card_fields
 
     state = snapshot["world_state"]
     item = candidate(state, cmd.actor_id, cmd.target)
@@ -240,22 +238,24 @@ def expand(snapshot, cmd, raw, jid):
             # Keep the public description if the expansion replaced its identity anchor.
             fields[key] = item[brief]
     cid = identity("dating_npc", cmd.actor_id, item["id"])
-    if cid in state["characters"]:
-        raise ValueError("Идентификатор NPC уже занят.")
-    state["characters"][cid] = initial_character(
-        cid,
-        item["name"],
-        dict(
-            birth_date=birth, biological_sex=item["gender"], life_status="alive", developmental_stage="adult"
-        ),
-    )
-    card = dict(id=cid, name=item["name"], fields=fields, aliases=[], is_player=False)
-    snapshot["character_cards"].append(card)
-    partial = dict(world_state=state, character_cards=[card])
-    initialize_profiles(partial)
-    assign_new_portrait(state, cid)
+    add_character(snapshot, cid, item["name"], fields, dict(
+        birth_date=birth, biological_sex=item["gender"], life_status="alive", developmental_stage="adult"))
     domain(state)["profiles"][cid] = item["bio"]
     item.update(character_id=cid, job_id=jid)
+
+
+def add_character(snapshot, cid, name, fields, attributes):
+    from backend.runtime_v3.npc_identity import initial_character
+    from backend.runtime_v3.personality import initialize_profiles
+    from backend.services.npc_review import assign_new_portrait
+    state = snapshot["world_state"]
+    if cid in state["characters"]:
+        raise ValueError("Идентификатор NPC уже занят.")
+    state["characters"][cid] = initial_character(cid, name, attributes)
+    card = dict(id=cid, name=name, fields=fields, aliases=[], is_player=False)
+    snapshot["character_cards"].append(card)
+    initialize_profiles(dict(world_state=state, character_cards=[card]))
+    assign_new_portrait(state, cid)
 
 
 def execute(repo, job, handle, stream, config):
@@ -265,9 +265,20 @@ def execute(repo, job, handle, stream, config):
 
     cmd = AppCommand.model_validate(config["smartphone"])
     snap = json.loads(job["before_json"])
-    state = snap["world_state"]
+    state = snap["world_state"] = assert_world_state_v3_invariants(snap["world_state"])
     authors = []
-    if cmd.action == "search":
+    from backend.services import phone_catalog as catalog
+    if cmd.action == "generate":
+        from backend.runtime_v3.repository import read_history
+        with repo.connect() as db:
+            history, _ = read_history(db, snap.get("history_head"))
+        prompt, ctx = catalog.catalog_prompt(snap, cmd.app, history["events"])
+    elif cmd.action == "apply":
+        prompt = catalog.employer_prompt(snap,cmd)
+    elif cmd.action == "ask":
+        qid = identity("question", cmd.operation_id)
+        prompt = catalog.question_prompt(snap,cmd.target,domain(state)["questions"][qid])
+    elif cmd.action == "search":
         prompt = messages(
             "Dating search/1. Напиши по-русски около пяти разных кратких анкет взрослых. "
             "Строго соблюдай возраст, пол и точное название места. Учитывай мягкие пожелания и сеттинг. "
@@ -302,6 +313,12 @@ def execute(repo, job, handle, stream, config):
             connection.close()
 
     cached = config.get("_smartphone_result")
+    if prompt and cached is None:
+        from context_builder import estimate
+        output = min(4200,config["update_tokens"])
+        limit = min(config["context_length"]-output,config.get("_budget_caps",{}).get("max_input") or config["context_length"])
+        if estimate(prompt)>limit:
+            raise ValueError("Контекст приложения не помещается в выбранное окно модели.")
     raw = (
         cached
         if cached is not None
@@ -331,8 +348,17 @@ def execute(repo, job, handle, stream, config):
     if handle.cancelled.is_set():
         return
 
-    def apply(after):
-        if cmd.action == "search":
+    def apply(after, history=None):
+        if cmd.action == "generate":
+            catalog.apply_catalog(after,cmd.app,raw,ctx,cmd.operation_id)
+        elif cmd.action == "apply":
+            batch = catalog.deliver_application(after,cmd,raw)
+            if history is not None:
+                history.update(batch)
+        elif cmd.action == "ask":
+            if prompt:
+                catalog.apply_question(after,cmd.target,qid,raw,cmd.operation_id)
+        elif cmd.action == "search":
             search_result(after, cmd, raw)
         elif cmd.action == "accept":
             expand(after, cmd, raw, job["id"])
@@ -351,7 +377,11 @@ def execute(repo, job, handle, stream, config):
             ).rowcount
             if not written:
                 return
-    finish_job(repo, job, cmd, apply)
+    continuation = finish_job(repo, job, cmd, apply)
+    if continuation and not handle.cancelled.is_set():
+        from backend.services.communication import execute as communicate
+        next_job = repo.get_job(job["id"])
+        communicate(repo,next_job,handle,stream,dict(config,communication=continuation))
 
 
 def consider(before, snapshot, history, config, generate, cancelled, warnings):
@@ -374,7 +404,11 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
     if now - last < 180 and (now - last < 45 or not history.get("events")):
         return
     data["last_considered"] = now
-    prompt, authors = social_prompt(snapshot, events=history.get("events", []))
+    from backend.services.phone_catalog import background_activity
+    from backend.runtime_v3.phone_listings import merge_history
+    index = data["activity_index"]
+    data["activity_index"] += 1
+    prompt, apply = background_activity(snapshot,history,index,identity("background_social",now,state["meta"]["turn_id"]))
     if not prompt:
         return
     try:
@@ -387,19 +421,16 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
                 response_format={"type": "json_object"},
             )
         )
-        staged = deepcopy(state)
-        skipped = social_result(
-            dict(snapshot, world_state=staged),
-            raw,
-            authors,
-            identity("background_social", now, state["meta"]["turn_id"]),
-        )
+        staged = dict(snapshot,world_state=deepcopy(state))
+        batch = {}
+        skipped = apply(staged,raw,batch) or []
     except (ValueError, BackgroundGenerationError) as exc:
         warnings.append(dict(section="social_activity", reason=str(exc), action="discard_background"))
         return
     if not cancelled.is_set():
         warnings.extend(skipped)
-        snapshot["world_state"] = staged
+        merge_history(history,batch)
+        snapshot["world_state"] = staged["world_state"]
         history["state_changes"].append(
-            dict(kind="social_activity", minute=now, sequence=domain(staged)["sequence"])
+            dict(kind="social_activity", minute=now, sequence=domain(staged["world_state"])["sequence"])
         )

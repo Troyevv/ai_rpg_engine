@@ -52,6 +52,20 @@ def install(app, repo, credentials, job):
     def dating(sid: int):
         return dating_view(repo.get_snapshot(sid))
 
+    from backend.runtime_v3.phone_listings import view
+    from typing import Literal
+
+    @app.get(base + "/{app_id}")
+    def listing(sid: int, app_id: Literal["news", "questions", "events", "work"],
+                item: str | None = None, tab: str = "", profile: str | None = None,
+                query: str = "", category: str = "", place: str = "", kind: str = "", date: str = "",
+                cursor: str | None = None, limit: int = Query(20, ge=1, le=50)):
+        before = tuple(map(int, cursor.split(","))) if cursor else None
+        if before and len(before) != 2:
+            raise ValueError("Некорректная страница.")
+        return view(repo.get_snapshot(sid), app_id, item=item, tab=tab, profile=profile, query=query,
+                    category=category, place=place, kind=kind, date=date, cursor=before, limit=limit)
+
     @app.post(base + "/command")
     def control(sid: int, body: Control):
         with repo.connect() as db:

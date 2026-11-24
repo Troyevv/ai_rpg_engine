@@ -389,3 +389,17 @@
   flex-shrink: 0;
   color: var(--accent);
 }
+
+.phone-catalog label, .phone-catalog .listing-preview, .smart-compose fieldset {
+  display: grid;
+  gap: .35rem;
+}
+.phone-catalog .listing-preview {
+  text-align: start;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.phone-catalog .smart-toolbar { flex-wrap: wrap; }
+.phone-catalog input, .phone-catalog select, .smart-compose select { min-width: 0; max-width: 100%; }
+.smart-app dd { margin-inline-start: 0; }
+.smart-app dt { font-weight: 600; }

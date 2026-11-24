@@ -977,14 +977,23 @@ class StatePatch:
         before = assert_world_state_v3_invariants(before)
         digest = sha256(json.dumps(before, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         if digest != self.before_hash:
+            # #276 patches hash the normalized snapshot as it existed then. Only
+            # omit new *empty* defaults when verifying that recorded digest.
+            legacy = dict(before,smartphone=dict(before["smartphone"]))
+            for key in ("articles","questions","listings","vacancies","favorites","applications",
+                        "representatives","invitations","attendance_plans","activity_index"):
+                if not legacy["smartphone"].get(key):
+                    legacy["smartphone"].pop(key,None)
+            digest = sha256(json.dumps(legacy,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        if digest != self.before_hash:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
             if section == 'smartphone':
                 for key,value in records.items():
-                    if key in ('sequence','last_considered'):
+                    if key in ('sequence','last_considered','activity_index'):
                         result[section][key] = value
-                    elif key in ('publications','reactions'):
+                    elif key in ('publications','reactions','articles','questions','listings','vacancies','invitations','attendance_plans'):
                         result[section][key].update(deepcopy(value))
                     else:
                         fatal('неизвестное изменение приложения')

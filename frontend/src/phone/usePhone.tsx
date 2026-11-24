@@ -1,4 +1,5 @@
-import { useDeviceHistory } from './history';
+import { afterDeviceClosed, useDeviceHistory } from './history';
+import { useReadQueue } from './readQueue';
 import { usePhoneNavigation } from './navigation';
 import { useMobile } from '../mobile';
 import { dismissTransient } from '../lib/transientBack';
@@ -43,6 +44,7 @@ export interface PhoneProps {
   onJob: (job: Job) => void;
   job: Job | null;
   recovery?: ReactNode;
+  chooseAction?: (text: string) => void;
   openCharacter: (id: string) => void;
 }
 export function usePhone(
@@ -57,6 +59,7 @@ export function usePhone(
     job: receivedJob,
     recovery,
     openCharacter,
+    chooseAction,
   }: PhoneProps,
   scope: string,
 ) {
@@ -66,6 +69,7 @@ export function usePhone(
       ? null
       : receivedJob;
   const ownerKey = scope;
+  const perceptions = useReadQueue(scope, save, phone.actor_id);
 
   const trigger = useRef<HTMLButtonElement>(null);
   const mobile = useMobile();
@@ -188,8 +192,24 @@ export function usePhone(
     restore();
     return () => observer.disconnect();
   }, [open, phone.events]);
+  const chatOrigin = useRef<string | null>(null);
+  const externalOrigin = useRef<{ from: string; to: string } | null>(null);
+  const visit = (id: string, path: { screen: string; id?: string }) => {
+    if (tab === id) push(path.screen, path.id);
+    else {
+      externalOrigin.current = { from: tab, to: id };
+      navigate(id, path);
+    }
+  };
   const back = () => {
     if (dismissTransient()) return;
+    if (routes.length === 1 && externalOrigin.current?.to === tab) {
+      const from = externalOrigin.current.from;
+      externalOrigin.current = null;
+      pop();
+      navigate(from);
+      return;
+    }
     if (routes.length) {
       pop();
       return;
@@ -220,6 +240,10 @@ export function usePhone(
       setConversation(null);
       setContact(null);
       setRecipient(null);
+      if (chatOrigin.current) {
+        setTab(chatOrigin.current);
+        chatOrigin.current = null;
+      }
     } else if (tab === 'contacts' && detail) {
       setDetail(null);
     } else {
@@ -370,13 +394,16 @@ export function usePhone(
     const owner = ownerKey;
     const key = `phone-request:${owner}`;
     try {
+      const revision = await perceptions.flush((next) => {
+        if (currentOwner.current === ownerKey) onCommit(next);
+      });
       const request = phoneOperation(key, command);
       const payload = request.payload;
       const automatic = ['send', 'call'].includes(String(command.action));
       const response = await api<Save | { save: Save; job: Job }>(
         `/saves/${save.id}/phone${automatic ? '/dispatch' : ''}`,
         {
-          revision: save.revision,
+          revision,
           command: payload,
           ...(automatic ? { config, api_key: apiKey } : {}),
         },
@@ -447,6 +474,7 @@ export function usePhone(
     setTab('messages');
   };
   const openChat = async (c: Conversation) => {
+    chatOrigin.current = tab !== 'messages' && tab !== 'home' ? tab : null;
     returnFocus.current = document.activeElement as HTMLElement;
     focusKey.current = returnFocus.current?.dataset.phoneFocus || null;
     setMembersOpen(false);
@@ -607,10 +635,13 @@ export function usePhone(
     setBusy(true);
     setError('');
     try {
+      const revision = await perceptions.flush((next) => {
+        if (currentOwner.current === ownerKey) onCommit(next);
+      });
       const value = await api<Save | { save: Save; job: Job }>(
         `/saves/${save.id}/apps/${generate ? 'dispatch' : 'command'}`,
         {
-          revision: save.revision,
+          revision,
           command: pending.payload,
           ...(generate ? { config, api_key: apiKey } : {}),
         },
@@ -630,6 +661,34 @@ export function usePhone(
       setBusy(false);
     }
   };
+  useEffect(() => {
+    if (
+      !Object.keys(perceptions.queue).length ||
+      locked ||
+      error ||
+      requestLock.current ||
+      (job?.kind === 'communication' &&
+        job.revision === save.revision &&
+        ['error', 'stopped'].includes(job.status))
+    )
+      return;
+    const timer = setTimeout(async () => {
+      if (requestLock.current) return;
+      requestLock.current = true;
+      setBusy(true);
+      try {
+        await perceptions.flush((next) => {
+          if (currentOwner.current === ownerKey) onCommit(next);
+        });
+      } catch (e) {
+        if (currentOwner.current === ownerKey) setError(String(e));
+      } finally {
+        requestLock.current = false;
+        setBusy(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [perceptions.queue, locked, error, save.revision, job?.status]);
   const lastMarkerAttempt = useRef('');
   const markerKey = 'phone-open-pending:' + scope;
   const [pendingMarkers, setPendingMarkers] = useState<Record<string, number>>(() => {
@@ -721,6 +780,14 @@ export function usePhone(
     disabled,
     displayBadge,
     dossier,
+    visit,
+    propose: (value: string) => {
+      restoreAfterCall.current = false;
+      afterDeviceClosed(() => {
+        if (currentOwner.current === ownerKey) chooseAction?.(value);
+      });
+      setOpen(false);
+    },
     drafts,
     editContact,
     endCall,
@@ -754,6 +821,7 @@ export function usePhone(
     openChat,
     ownerKey,
     perform,
+    observe: perceptions.observe,
     phone,
     push,
     reading,

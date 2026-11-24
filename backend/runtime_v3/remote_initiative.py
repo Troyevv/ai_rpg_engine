@@ -191,8 +191,22 @@ def planning_context(snapshot, options):
             if v["actor_id"] == cid and v["status"] in ("known", "suspected")
         ][:8]
         voice = speaker_context(snapshot, cid, option_audience(state, cid, options))
+        from backend.runtime_v3.phone_listings import thread_listings
+        threads = {state["remote_events"][eid]["conversation_id"] for eid in source_ids
+                   if eid in state["remote_events"] and cid in state["remote_events"][eid]["recipient_ids"] + [state["remote_events"][eid]["sender_id"]]}
+        scoped_applications = [pair for thread in threads for pair in thread_listings(state,thread)]
+        applications = [(a,v) for a,v in scoped_applications if cid in state["remote_events"][a["event_id"]]["read_by"]]
+        dialogue = [e["content"][:800] for e in state["remote_events"].values()
+                    if e["conversation_id"] in threads and (e["sender_id"]==cid or cid in e["read_by"])]
+        if scoped_applications:
+            private_texts = {identity("communicated_text",e["id"]) for e in state["remote_events"].values()
+                             if e["conversation_id"] not in threads}
+            knowledge = [r for r in knowledge if state["knowledge"][r["id"]]["fact_id"] not in private_texts
+                         and (not state["facts"][state["knowledge"][r["id"]]["fact_id"]].get("origin_remote_event_id")
+                              or state["facts"][state["knowledge"][r["id"]]["fact_id"]]["origin_remote_event_id"] in source_ids)]
         data.append(
             dict(
+                **(dict(vacancies=[v for _,v in applications][-3:], recent_dialogue=dialogue[-8:]) if applications else {}),
                 id=cid,
                 name=c["display_name"] or cards.get(cid, {}).get("name", cid),
                 situation=voice["situation"],

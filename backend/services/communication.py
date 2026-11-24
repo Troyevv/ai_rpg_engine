@@ -11,13 +11,22 @@ def execute(storage, job, handle, chat_stream, config):
     journal = json.loads(job["context_json"] or "[]")
     # Pre-stage journals contain decision frames without a stage tag. Normalize
     # metadata only; replay still validates the original response and context.
-    frames = [dict(f, stage="communication") for f in journal
-              if f.get("stage", "communication") == "communication"]
+    original_journal = journal
     captured = []
     # Mark the durable command boundary retryable even if the provider fails
     # before returning any text. No fabricated player utterance is inserted.
     storage.job_progress(job["id"], "generating", complete=True)
-    storage.save_communication_context(job["id"], frames, before)
+    storage.save_communication_context(job["id"], original_journal, before)
+
+    # Keep untouched frames for later recipients/stages until their replacements
+    # are durable. A second interruption during replay must not erase that work.
+    remaining = list(original_journal)
+    def persist(warnings=None):
+        storage.save_communication_context(job["id"], captured + remaining, before, warnings)
+
+    def consume(old):
+        if old is not None:
+            remaining[:] = [f for f in remaining if f is not old]
 
     def generate(index, messages):
         # Keep actual outgoing prompts inside the selected context window. Trim
@@ -40,6 +49,7 @@ def execute(storage, job, handle, chat_stream, config):
                 raise ValueError('Контекст связи не помещается в выбранное окно модели.')
             messages[1]['content'] = json.dumps(data,ensure_ascii=False)
         old = frames[index] if index < len(frames) else None
+        consume(old)
         reusable = False
         if old and "response" in old:
             try:
@@ -58,6 +68,7 @@ def execute(storage, job, handle, chat_stream, config):
             same_context = (same_reaction_context(old.get('messages', []), previous) if group_reaction
                             else old.get('messages', [None,None])[1:] == previous[1:])
         if old and not job["replaces_id"] and same_context and reusable:
+            old.setdefault("stage", "communication")
             captured.append(old)
             return old["response"]  # Retry replays accepted work without another call.
         if index == 0 and old:
@@ -68,11 +79,11 @@ def execute(storage, job, handle, chat_stream, config):
             handle.stream = stream
             if handle.cancelled.is_set():
                 stream.close()
-        frame = dict(stage="communication", messages=messages, contract=VERSION, group_reaction=group_reaction)
+        frame = dict(stage="communication", messages=messages, contract=VERSION, group_reaction=group_reaction, source_event_id=source_id)
         if old:
             frame["previous_attempt"] = old
         captured.append(frame)
-        storage.save_communication_context(job["id"], captured, before)
+        persist()
         response = "".join(tracked_stream(
             storage, chat_stream, job["id"], "remote_initiative", config,
             messages, describe_context(messages), temperature=0.2,
@@ -82,7 +93,7 @@ def execute(storage, job, handle, chat_stream, config):
             response_format={"type": "json_object"},
         ))
         frame["response"] = response
-        storage.save_communication_context(job["id"], captured, before)
+        persist()
         return response
 
     def decision_scope(frame):
@@ -101,7 +112,7 @@ def execute(storage, job, handle, chat_stream, config):
         return parse_decision(response, **decision_scope(frame))[1]
 
     def checkpoint(index, accepted, error=None):
-        frame = [f for f in captured if f['stage'] == 'communication'][index]
+        frame = [f for f in captured[offset:] if f['stage'] == 'communication'][index]
         frame['accepted'] = accepted
         frame['validation_contract'] = frame.get('contract', LEGACY_VERSION)
         if accepted:
@@ -111,7 +122,7 @@ def execute(storage, job, handle, chat_stream, config):
             frame['category'] = 'schema' if hasattr(error,'errors') else 'json' if isinstance(error,json.JSONDecodeError) else 'runtime'
             if hasattr(error,'errors'):
                 frame['validation_errors'] = json.loads(error.json(include_url=False))
-        storage.save_communication_context(job['id'], captured, before)
+        persist()
     def extract(after, source_id, batch, stage='remote_semantics'):
         from backend.runtime_v3.remote_semantics import messages as semantic_messages, resolve as semantic_resolve, same_extraction_context
         prompts = semantic_messages(after, source_id, response_only=stage=='remote_response_semantics')
@@ -122,20 +133,21 @@ def execute(storage, job, handle, chat_stream, config):
         if not prompts:
             return after
         semantic = next((f for f in journal if f.get('stage') == stage), None)
+        consume(semantic)
         semantic_limit = min(1200, config['update_tokens']) if stage=='remote_response_semantics' else config['update_tokens']
         current_policy = config.get('_extraction_contract',1) >= 10
         if estimate(prompts) > config['context_length'] - semantic_limit - 512:
             if current_policy:
                 warning = dict(section=stage,code='extraction_context_limit',action='preserve_exchange')
                 captured.append(dict(stage=stage,accepted=False,deferred=True,warnings=[warning]))
-                storage.save_communication_context(job['id'],captured,before,[warning])
+                persist([warning])
                 return after
             raise ValueError('Контекст телефонных последствий не помещается в окно модели; сообщения сохранены.')
-        frame = dict(stage=stage, messages=prompts, accepted=False)
+        frame = dict(stage=stage, messages=prompts, accepted=False, source_event_id=source_id)
         if semantic:
             frame['previous_attempt'] = semantic
         captured.append(frame)
-        storage.save_communication_context(job['id'], captured, before)
+        persist()
         storage.job_progress(job['id'], 'extracting', complete=True)
         from backend.runtime_v3.remote_semantics import SemanticValidationError
         from backend.services.world_delta_errors import StructuralDeltaError
@@ -158,7 +170,7 @@ def execute(storage, job, handle, chat_stream, config):
             else:
                 response = generate_semantics(stage, prompts)
             frame['response'] = response
-            storage.save_communication_context(job['id'], captured, before)
+            persist()
             if handle.cancelled.is_set(): return
             if stage=='remote_response_semantics':
                 from backend.runtime_v3.raw import RawTurnResult
@@ -186,7 +198,7 @@ def execute(storage, job, handle, chat_stream, config):
                 frame['validation_errors']=rejection.warnings
                 storage.record_repair(job['id'],dict(stage='remote_semantics_repair',repair_error_code='remote_semantic_validation',
                     repair_error_type=type(rejection).__name__,repair_reason=str(rejection)))
-                storage.save_communication_context(job['id'],captured,before)
+                persist()
                 try:
                     repaired=generate_semantics('remote_semantics_repair',repair)
                 except RuntimeError as repair_error:
@@ -196,7 +208,7 @@ def execute(storage, job, handle, chat_stream, config):
                     frame['repair_failure_type'] = type(repair_error).__name__
                     repaired = None
                 frame['repair_response']=repaired
-                storage.save_communication_context(job['id'],captured,before)
+                persist()
                 if handle.cancelled.is_set():return
                 try:
                     if repaired is None:
@@ -237,24 +249,43 @@ def execute(storage, job, handle, chat_stream, config):
                 frame['error'] = str(exc)
                 raise
         finally:
-            storage.save_communication_context(job['id'], captured, before, frame.get('warnings'))
+            persist(frame.get('warnings'))
         return after
 
     def resolve_source(after, source_id, batch):
         return extract(after, source_id, batch, 'remote_response_semantics')
 
-    output = run(before, config["communication"], generate, handle.cancelled, checkpoint=checkpoint, resolve_source=resolve_source,
-        decision_scope=lambda index: decision_scope(captured[index]),
-        legacy_group=bool(frames and not frames[0].get('group_reaction')))
-    if output is None or handle.cancelled.is_set():
-        return
-    after, batch, report = output
-    source=after['world_state']['remote_events'][report['source_event_id']]
-    substantive = 'send' in report['accepted'] or source['operation_id']==config['communication']['request_id']
-    if substantive:
-        after = extract(after, report['source_event_id'], batch)
-        if after is None or handle.cancelled.is_set():
+    from backend.runtime_v3.models import WorldHistoryV3
+    requests = [config["communication"], *config.get("_additional_invitations", [])]
+    first_source = requests[0]["source_event_id"]
+    after = before
+    batch = WorldHistoryV3().to_dict()
+    reports = []
+    # Invitations use ordinary independent direct exchanges. A retry addresses
+    # each recipient's own journal, even when an earlier one chose silence.
+    for request in requests:
+        source_id = request["source_event_id"]
+        journal = [f for f in original_journal if f.get("source_event_id",first_source)==source_id]
+        frames = [f for f in journal if f.get("stage","communication")=="communication"]
+        offset = len(captured)
+        output = run(after, request, generate, handle.cancelled, checkpoint=checkpoint, resolve_source=resolve_source,
+            decision_scope=lambda index: decision_scope(captured[offset+index]),
+            legacy_group=bool(frames and not frames[0].get('group_reaction')))
+        if output is None or handle.cancelled.is_set():
             return
+        after, delta, report = output
+        source = after['world_state']['remote_events'][source_id]
+        if 'send' in report['accepted'] or source['operation_id']==request['request_id']:
+            after = extract(after,source_id,delta)
+            if after is None or handle.cancelled.is_set():
+                return
+        for section, rows in delta.items():
+            batch[section].extend(rows)
+        batch["state_changes"].append(dict(kind="communication_receipt",request_id=request["request_id"],job_id=job["id"]))
+        reports.append(report)
+    report = reports[0]
+    if len(reports)>1:
+        report = dict(report, additional_exchanges=reports[1:])
     # Consume the source and its accepted consequences together. Pacing is a
     # snapshot value, so retry/rollback/variants retain the same boundary.
     group = after['world_state']['conversations'].get(source['conversation_id'])
@@ -271,7 +302,6 @@ def execute(storage, job, handle, chat_stream, config):
             if change.get('kind')=='group_initiative_attempt' and change.get('entity')==group['id']:
                 change['after']=deepcopy(group)
 
-    batch["state_changes"].append(dict(kind="communication_receipt", request_id=config["communication"]["request_id"], job_id=job["id"]))
     labels = {"answered": "Собеседник ответил. Разговор доступен в сцене.", "declined": "Собеседник отклонил вызов.", "missed": "Вызов завершён без ответа."}
     text = labels.get(report["outcome"], "Обработка сообщения завершена. Переписка доступна в телефоне.")
     if any(f.get('deferred') for f in captured):

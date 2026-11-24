@@ -6,6 +6,33 @@ import json
 def response(messages):
     instruction = messages[0]["content"]
     data = json.loads(messages[1]["content"])
+    if instruction.startswith("Phone catalog/1"):
+        place = next(iter(data["places"]), {"id": None, "name": "Город"})
+        now = data["calendar"]["world_time"]
+        n = len(data["news"])+1
+        if "news." in instruction:
+            return dict(articles=[dict(topic=f"investigation-{i}",title=f"Хроника набережной {n}.{i}",summary="Репортаж из "+place["name"],
+                body=(data["recent_events"][-1]["text"] if i==0 and data["recent_events"] else "Издание сообщает о поиске утраченной коллекции."),category="Общество",source="Городской вестник",
+                previous_id=data["news"][0]["id"] if data["news"] else None,
+                event_id=data["recent_events"][-1]["id"] if i==0 and data["recent_events"] else None) for i in range(5)])
+        if "events." in instruction:
+            return dict(events=[dict(listing_key="music-"+str(len(data["events"])+1),title="Вечер музыки "+str(len(data["events"])+1),description="Открытая репетиция",
+                location_id=place["id"],category="Музыка",start=now+1440,end=now+1550)])
+        profession, pay = {"Парусный век":("Парусный мастер","Доля от фрахта"),
+                           "Орбитальная эпоха":("Техник орбитальной верфи","Расчёт в кредитах станции")}.get(
+                               data["world"].get("era"),("Мастер переплёта","Сдельная"))
+        employer = data["organizations"][0] if data["world"].get("era") in ("Парусный век","Орбитальная эпоха") else None
+        return dict(vacancies=[dict(listing_key="restorer-"+str(len(data["vacancies"])+i+1),title=profession+" "+str(len(data["vacancies"])+i+1),description="Работа на верфи" if employer else "Реставрация книг",
+            category="Ремесло",location_id=place["id"],employer=employer["name"] if employer else "Переплётная мастерская",
+            organization_id=employer["id"] if employer else None,employment=k,
+            requirements="Опыт в мастерской" if employer else "Бережное обращение с книгами",schedule="По договорённости",pay=pay) for i,k in enumerate(("gig","permanent"))])
+    if instruction.startswith("Phone questions/1"):
+        return dict(answer="Мне нравится вечерняя музыка.") if data["question"] else dict(question=dict(
+            recipient=data["people"][0],text="Куда пойдём после репетиции?",anonymous=True))
+    if instruction.startswith("Phone employer/1"):
+        fields={k:"Мастер реставрации книг" for k in data["card_fields"]}
+        fields["Возраст"]="45"
+        return dict(name="Марина Волкова",fields=fields)
     if instruction.startswith("Dating search/1"):
         f = data["filters"]
         return dict(

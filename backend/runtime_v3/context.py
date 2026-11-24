@@ -239,6 +239,10 @@ def canonical_slice(state, scope, extraction=False, query=""):
         observer = scope.pov_actor_id or scope.controlled_actor_id
         known = [r for r in state.get('smartphone',{}).get('publications',{}).values()
                  if state['knowledge'].get(str(observer)+':'+identity('public_statement',r['id']),{}).get('status')=='known']
+        known_questions = [state["facts"][fid]["text"][:500] for qid in state.get("smartphone",{}).get("questions",{})
+                           if state["knowledge"].get(str(observer)+":"+(fid:=identity("question_statement",qid)),{}).get("status")=="known"]
+        if known_questions:
+            current["recent_questions"] = known_questions[-3:]
         if known:
             current['public_statements'] = [dict(id=r['id'],author=r['author'],text=r['text'][:600],minute=r['minute'])
                 for r in sorted(known,key=lambda r:(r['author'] in relevant,r['sequence']),reverse=True)[:4]]
@@ -759,6 +763,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     # A compact knowledge-bound projection supplies visible public statements above.
     # Never put the entire set of publication Facts into the general prompt.
     remote_private.update(identity('public_statement',rid) for rid in state.get('smartphone',{}).get('publications',{}))
+    remote_private.update(identity("question_statement",qid) for qid in state.get("smartphone",{}).get("questions",{}))
     private_context_facts = set()
     if camera['mode'] == 'actor':
         # Relevance of a mentioned off-scene NPC does not authorize exposing

@@ -26,6 +26,9 @@ def access(snapshot, app, *, write=False):
         "social": cfg.get("social", cfg.get("preset") == "modern"),
         "dating": cfg.get("dating", cfg.get("preset") == "modern"),
     }
+    from backend.runtime_v3.phone_listings import CATALOGS, available
+    if app in CATALOGS or app == "questions":
+        enabled[app] = available(state, app)
     if cfg["presentation"] != "phone" or not enabled.get(app) or actor not in state["characters"]:
         raise ValueError("Приложение недоступно в этом мире.")
     if write and not capabilities(state, actor)["can_act"]:
@@ -52,7 +55,12 @@ def access(snapshot, app, *, write=False):
 def domain(state):
     if "smartphone" not in state:
         state["smartphone"] = SmartphoneState().model_dump()
-    return state["smartphone"]
+    data = state["smartphone"]
+    # Raw historical snapshots precede these optional collections.
+    for key in ("articles", "questions", "listings", "vacancies", "favorites", "applications", "representatives", "invitations", "attendance_plans"):
+        data.setdefault(key, {})
+    data.setdefault("activity_index", 0)
+    return data
 
 
 def shelf(state, actor):
@@ -74,8 +82,8 @@ def perceive(state, actor, record):
     if fid not in state["facts"]:
         state["facts"][fid] = Fact(
             id=fid,
-            text=f"Публикация {record['author']}: «{record['text']}»",
-            character_ids=[record["author"]],
+            text=f"Публикация {record['author'] or domain(state)['articles'][record['id']]['source']}: «{record['text']}»",
+            character_ids=[record["author"]] if record["author"] else [],
         ).model_dump()
     key = actor + ":" + fid
     if key not in state["knowledge"]:
@@ -109,7 +117,8 @@ def publish(state, actor, kind, rid, *, target=None, text=None, desired=True):
             reply_to=target if parent else None,
         ).model_dump()
         rows[rid] = row
-        perceive(state, actor, row)
+        if actor:
+            perceive(state, actor, row)
     else:
         if kind == "repost" and parent["post_id"]:
             raise ValueError("Репост доступен для исходной публикации.")
@@ -128,14 +137,21 @@ def publish(state, actor, kind, rid, *, target=None, text=None, desired=True):
     return rid if kind in ("post", "comment") else target
 
 
+def external_posts(data):
+    return data["articles"].keys() | {q["publication_id"] for q in data["questions"].values() if q["publication_id"]}
+
+
 def activity(state, actor):
     data = domain(state)
     rows = data["publications"]
+    external = external_posts(data)
     for item in rows.values():
+        if (item["post_id"] or item["id"]) in external:
+            continue
         if item["author"] != actor and (not item["post_id"] or rows[item["reply_to"]]["author"] == actor):
             yield item
     for item in data["reactions"].values():
-        if item["author"] != actor and rows[item["target"]]["author"] == actor:
+        if (rows[item["target"]]["post_id"] or item["target"]) not in external and item["author"] != actor and rows[item["target"]]["author"] == actor:
             yield item
 
 
@@ -151,8 +167,12 @@ def remote_count(state, actor, channel):
 
 def markers(state, actor):
     data = domain(state)
+    from backend.runtime_v3.phone_listings import badge_events, work_notifications
+    counts = {k: max(v, default=0) for k,v in badge_events(state, actor).items()}
+    counts["events"] = sum(e.get("version",1) for e in data["listings"].values())
+    counts["work"] = len(data["vacancies"]) + work_notifications(state, actor)
     return dict(
-        social=data["sequence"],
+        **counts, social=data["sequence"],
         calls=remote_count(state, actor, "VOICE_CALL"),
         messages=remote_count(state, actor, "TEXT_MESSAGE"),
     )
@@ -162,7 +182,11 @@ def badges(state, actor):
     seen = domain(state)["opened"].get(actor, {})
     counts = markers(state, actor)
     counts["social"] = sum(i["sequence"] > seen.get("social", 0) for i in activity(state, actor))
-    for app in ("messages", "calls"):
+    from backend.runtime_v3.phone_listings import badge_events
+    for app, seq in badge_events(state, actor).items():
+        if app not in ("work","events"):
+            counts[app] = sum(n > seen.get(app, 0) for n in seq)
+    for app in ("messages", "calls", "work", "events"):
         counts[app] = max(0, counts[app] - seen.get(app, 0))
     return counts
 
@@ -198,11 +222,13 @@ def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
         if row["post_id"]:
             comments.setdefault(row["post_id"], []).append(row)
 
+    external = external_posts(data)
+
     def card(row):
         key = row["id"]
         return dict(
             **row,
-            subject=subject(snapshot, row["author"]),
+            subject=subject(snapshot, row["author"]) if row["author"] else dict(id="", name=data["articles"][key]["source"], portrait=None, silhouette="neutral"),
             likes=counts.get(("like", key), 0),
             liked=("like", key) in mine,
             reposts=counts.get(("repost", key), 0),
@@ -217,7 +243,7 @@ def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
     entries = [
         (r["minute"], r["sequence"], r["id"], None)
         for r in rows.values()
-        if not r["post_id"] and (not profile or r["author"] == profile)
+        if not r["post_id"] and r["id"] not in external and (not profile or r["author"] == profile)
     ]
     entries.extend(
         (r["minute"], r["sequence"], r["target"], r["author"])
@@ -291,11 +317,11 @@ def narrative_publications(resolver, rows):
 def publication_patch(before, after):
     """Narrative can add posts/reactions and move the scheduling cursor."""
     patch = {}
-    for key in ("sequence", "last_considered"):
-        if after[key] != before[key]:
+    for key in ("sequence", "last_considered", "activity_index"):
+        if after.get(key) != before.get(key):
             patch[key] = after[key]
-    for key in ("publications", "reactions"):
-        added = {k: v for k, v in after[key].items() if before[key].get(k) != v}
+    for key in ("publications", "reactions", "articles", "questions", "listings", "vacancies", "invitations", "attendance_plans"):
+        added = {k: v for k, v in after.get(key, {}).items() if before.get(key, {}).get(k) != v}
         if added:
             patch[key] = added
     return patch
@@ -304,8 +330,10 @@ def publication_patch(before, after):
 def validate_links(state):
     data = state["smartphone"]
     actors, rows = state["characters"], data["publications"]
+    from backend.runtime_v3.phone_listings import validate_links as validate_listings
+    validate_listings(state)
     for key, row in rows.items():
-        if row["author"] not in actors or row["id"] != key or row["sequence"] > data["sequence"]:
+        if (row["author"] not in actors and not (row["author"] is None and key in data["articles"])) or row["id"] != key or row["sequence"] > data["sequence"]:
             raise ValueError("Некорректная ссылка на публикацию.")
         if row["post_id"]:
             post, parent = rows.get(row["post_id"]), rows.get(row["reply_to"])
@@ -366,4 +394,12 @@ def launcher_notices(snapshot, actor, events):
                     label="Реакция · " + subject(snapshot, recent["author"])["name"],
                 )
             )
+    if state["meta"]["communication"].get("social"):
+        data = domain(state)
+        mark = data["opened"].get(actor,{}).get("questions",0)
+        from backend.runtime_v3.phone_listings import question_activity
+        latest = max((r for r in question_activity(data,actor) if r[0]>mark), default=None)
+        if latest:
+            _,qid,label = latest
+            notices.append(dict(app="questions",screen="detail",id=qid,label=label))
     return notices

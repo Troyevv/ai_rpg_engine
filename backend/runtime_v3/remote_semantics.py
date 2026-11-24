@@ -90,6 +90,13 @@ def messages(snapshot, source_id, *, response_only=False):
     # belong to ordinary Narrative Extraction, not phone message consequences.
     schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
     allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')
+    from backend.runtime_v3.phone_listings import thread_listings
+    jobs = [v for _,v in thread_listings(state,state["remote_events"][source_id]["conversation_id"])]
+    if jobs:
+        allowed += ("role_changes","organization_changes")
+        props = schema["properties"]["role_changes"]["items"]["properties"]
+        props.update(vacancy_id=dict(type="string"), offer_event_id=dict(type="string"),
+                     player_source_id=dict(type="string"), effective=dict(enum=["now"]))
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
@@ -140,8 +147,18 @@ def messages(snapshot, source_id, *, response_only=False):
              'not mere delivery. Explicit player-directed feelings must be quoted from the current source_event_id, '
              'not a historical player message. A proposed meeting is never evidence of consent or an occurrence. '
              'Empty changes are valid when no consequences are established.')
+    if jobs:
+        rules += (" Employment: a currently effective hire requires an explicit offer read by the applicant, "
+                  "and the current player-authored message explicitly accepting its terms. Cite vacancy_id, "
+                  "offer_event_id, player_source_id, actor_id, title, effective=now, player_assertion=explicit_choice "
+                  "and the complete player_evidence. Future starts and interviews are commitments. An application "
+                  "is never assent. Do not replace another role. Runtime binds employer organization identity.")
     return [dict(role='system', content=rules), dict(role='user', content=json.dumps(dict(
         pending_group_requests=[dict(event_id=e['id'], **e['response_request']) for e in rows if e.get('response_request')],
+        **(dict(event_invitations=[dict(message_id=e["id"], event=state["smartphone"]["listings"][ref])
+            for e in rows if (ref:=state.get("smartphone",{}).get("invitations",{}).get(e["id"]))]) if any(
+            e["id"] in state.get("smartphone",{}).get("invitations",{}) for e in rows) else {}),
+        **(dict(vacancies=jobs, existing_role_ids=[r["id"] for r in state["roles"].values() if r["actor_id"] in ids][-24:]) if jobs else {}),
         relationship_sources=[e for e in relationship_sources(snapshot) if e['id'] in {r['id'] for r in rows}],
         relationships=state['relationships'], threads=state['threads'],
         existing_secret_facts=[f for f in state['facts'].values() if f.get('story_secret')],
@@ -166,8 +183,11 @@ def resolve(snapshot, source_id, response, diagnostics=None, *, relationship_que
     raw = RawTurnResult.parse(response)
     expected = dict(location_id=state['camera']['location_id'],
                     present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
+    if raw.records["role_changes"] or raw.records["organization_changes"]:
+        from backend.runtime_v3.phone_listings import bind_job_changes
+        bind_job_changes(state,state["remote_events"][source_id],rows,raw)
     if raw.final_scene != expected or raw.choices or any(v for k,v in raw.records.items()
-            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')):
+            if k not in ('role_changes','organization_changes','locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
     actor = state['camera']['controlled_actor_id']
