@@ -38,6 +38,7 @@ export interface PhoneProps {
   save: Save;
   disabled: boolean;
   onCommit: (save: Save) => void;
+  onReceipt?: (save: Save) => void;
   onBusyChange: (busy: boolean) => void;
   config: ModelConfig;
   apiKey: string;
@@ -52,6 +53,7 @@ export function usePhone(
     save,
     disabled,
     onCommit,
+    onReceipt = onCommit,
     onBusyChange,
     config,
     apiKey,
@@ -91,7 +93,7 @@ export function usePhone(
   const commitReceipt = (next: Save) => {
     if (currentOwner.current === ownerKey && next.revision >= currentRevision.current) {
       currentRevision.current = next.revision;
-      onCommit(next);
+      onReceipt(next);
     }
   };
   // Passive receipts share one revision chain without disabling the button under

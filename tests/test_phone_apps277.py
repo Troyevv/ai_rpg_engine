@@ -28,6 +28,22 @@ def fill(app, name, operation, produce=response):
     return get(app, name)["items"]
 
 
+def assert_network_examples(messages):
+    instruction = messages[0]["content"]
+    for example in (
+        "Сегодня привезли шикарные пионы 😍 Кому букет на выходные — пишите!",
+        "Кто-нибудь знает нормальную пиццерию в центре?",
+        "Ну всё, я официально ненавижу понедельники 😂",
+        "Наконец-то дома",
+        "Тимур, ты серьёзно? 🤣",
+        "Пионы раскрывались, будто утро училось дышать",
+        "В конце концов, дорога домой — это всегда путь к себе",
+        "Она замерла у двери, вслушиваясь в тишину квартиры",
+    ):
+        assert example in instruction and example not in messages[1]["content"]
+    assert "Не копируй" in instruction and "только то, что он набрал и отправил" in instruction
+
+
 def test_legacy_worlds_payloads_articles_badges_and_rollback(app):
     repo, client, sid = app
     snap = repo.get_snapshot(sid)
@@ -60,12 +76,16 @@ def test_legacy_worlds_payloads_articles_badges_and_rollback(app):
         after["meta"]["world_time"] == state["meta"]["world_time"]
         and after["meta"]["turn_id"] == state["meta"]["turn_id"]
     )
-    assert (
-        run(
-            app, dispatch(app, "comment", "article-discussion", app_id="news", target=rid, text="Где искать?")
-        )
-        == 1
-    )
+    def discuss(messages):
+        assert_network_examples(messages)
+        payload = json.loads(messages[1]["content"])
+        posts = {row["id"]: row for row in payload["public_posts"]}
+        assert posts[payload["source"]]["reply_to"] == rid
+        assert posts[rid]["text"]
+        return response(messages)
+
+    jid = dispatch(app, "comment", "article-discussion", app_id="news", target=rid, text="Где искать?")
+    assert run(app, jid, discuss) == 1
     assert len(get(app, "social", post=rid)["comments"]) >= 2
     rows2 = fill(app, "news", "next-edition", capture)
     assert len(rows2) == 10 and rows2[0]["previous_id"] in {r["id"] for r in rows}
@@ -89,6 +109,7 @@ def test_anonymous_routes_and_prompt(app):
     assert q["sender"] is None and not get(app, "questions")["items"]
 
     def reply(ms):
+        assert_network_examples(ms)
         payload = json.loads(ms[1]["content"])
         assert payload["question"] == dict(text=q["text"], sender=None) and not payload["people"]
         assert "эмодзи" in ms[0]["content"] and "публичного ответа" in ms[0]["content"]
@@ -415,6 +436,7 @@ def test_private_background_questions_and_invitations_share_one_clock(app):
         if ms[0]["content"].startswith("Phone invitation/1"):
             raw = dict(invitation=dict(event=data["events"][0]["id"], recipient=owner, text="Идём вместе?"))
         elif ms[0]["content"].startswith("Phone questions/1"):
+            assert_network_examples(ms)
             raw = dict(question=dict(recipient=owner, text="Ты уже слышал квартет?", anonymous=True))
         else:
             raw = response(ms)
@@ -780,6 +802,7 @@ def test_public_network_offstage_voice_and_topics_reach_both_generation_paths(ap
         db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
 
     def inspect(messages):
+        assert_network_examples(messages)
         instruction, content = (m["content"] for m in messages)
         payload = json.loads(content)
         assert "эмодзи" in instruction and "мем" in instruction
@@ -837,3 +860,68 @@ def test_phone_reads_leave_legacy_snapshots_unchanged(app):
         assert dating_view(snapshot)["results"] == []
         assert social_prompt(snapshot)[1]
         assert snapshot == before
+
+
+def test_social_writing_reaches_sdk_http_for_turn_refresh_post_and_nested_reply(app, monkeypatch):
+    from test_group_deepseek_http import DeepSeekHTTP, KEY, config, run as run_http
+    from test_narrative_test_world import NARRATIVE
+
+    monkeypatch.setattr("backend.runtime_v3.player_actions.EXTRACTION_VERSION", 11)
+    repo, client, sid = app
+    snapshot = repo.get_snapshot(sid)
+    state = snapshot["world_state"]
+    state["smartphone"]["last_considered"] = state["meta"]["world_time"] - 180
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snapshot), sid))
+
+    cfg = dict(config(), model="deepseek-v4-flash")
+    http = DeepSeekHTTP()
+
+    def answer(body):
+        messages = body["messages"]
+        if messages[0]["content"].startswith("Public social activity/"):
+            return json.dumps(response(messages), ensure_ascii=False)
+        if body.get("response_format"):
+            return json.dumps(dict(scene=dict(elapsed_minutes=1), scene_steps=[]))
+        return NARRATIVE
+
+    http.answer = answer
+
+    def verify(job, cue):
+        start = len(http.requests)
+        run_http(repo, job, http)
+        assert repo.get_job(job)["status"] == "saved", repo.get_job(job)["error"]
+        bodies = [b for b in http.requests[start:] if b["messages"][0]["content"].startswith("Public social activity/")]
+        assert len(bodies) == 1
+        body = bodies[0]
+        assert body["model"] == cfg["model"] and body["response_format"] == {"type": "json_object"}
+        messages = body["messages"]
+        assert [m["role"] for m in messages] == ["system", "user"]
+        assert_network_examples(messages)
+        assert cue in messages[0]["content"]
+        data = json.loads(messages[1]["content"])
+        assert all(a["id"] != "qa_kirill" for a in data["authors"])
+        assert "world_state" not in data
+        return data
+
+    def submit(action, **fields):
+        command = dict(app="social", actor_id="qa_kirill", action=action, operation_id="wire-" + action, **fields)
+        with patch("engine.launch"):
+            result = client.post(f"/api/saves/{sid}/apps/dispatch", json=dict(
+                revision=repo.get_save(sid)["revision"], config=cfg, api_key=KEY, command=command))
+        assert result.is_success, result.text
+        return result.json()["job"]["id"]
+
+    turn = repo.begin_job(sid, "Рассматриваю фотографии.", "turn", cfg)
+    assert verify(turn, "Фоновая активность")["source"] is None
+    assert verify(submit("refresh"), "Игрок обновил ленту")["source"] is None
+    prompt = verify(submit("post", text="Кто на каток?"), "Ответь на source")
+    root = prompt["source"]
+    thread = get(app, "social", post=root)
+    parent = next(c for c in thread["comments"] if c["reply_to"] == root)
+    prompt = verify(submit("comment", target=parent["id"], text="А коньки там дают?"), "Ответь на source")
+    posts = {p["id"]: p for p in prompt["public_posts"]}
+    assert posts[root]["text"] == "Кто на каток?"
+    assert posts[prompt["source"]]["reply_to"] == parent["id"]
+    assert posts[parent["id"]]["text"] == parent["text"]
+    assert any(c["reply_to"] == prompt["source"] for c in get(app, "social", post=root)["comments"])

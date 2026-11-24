@@ -307,3 +307,68 @@ test('nine distinct launcher artworks keep unread counts visible in the active s
   await expect(device.getByRole('button', { name: 'Работа и вакансии' })).toBeInViewport();
   await device.screenshot({ path: info.outputPath('launcher-' + theme + '.png'), animations: 'disabled' });
 });
+
+test('opening receipt cannot interrupt a composed message before dispatch', async ({ page, request }) => {
+  const seed = await (
+    await request.post('/test/phone-seed?smartphone=true&incoming=false&unread=true')
+  ).json();
+  const path = '/api/saves/' + seed.save;
+  const save = await (await request.get(path)).json();
+  const conversation = save.state.phone.events.find((e: { unread: boolean }) => e.unread).conversation_id;
+  const read = await request.post(path + '/phone', {
+    data: {
+      revision: save.revision,
+      command: { action: 'read', conversation_id: conversation, operation_id: 'mark-chat-read' },
+    },
+  });
+  expect(read.ok(), await read.text()).toBe(true);
+  await page.addInitScript((s) => localStorage.setItem('selection', JSON.stringify(s)), seed);
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Телефон/ }).click();
+  const phone = page.getByRole('region', { name: 'Телефон персонажа' });
+  await expect(phone.locator('.app-messages small')).toHaveText('1');
+
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let acknowledge!: () => void;
+  const received = new Promise<void>((resolve) => {
+    acknowledge = resolve;
+  });
+  await page.route('**' + path + '/apps/command', async (route) => {
+    if (route.request().postDataJSON().command.action !== 'open') return route.continue();
+    const response = await route.fetch();
+    acknowledge();
+    await gate;
+    await route.fulfill({ response });
+  });
+  await phone.getByRole('button', { name: 'Чаты', exact: true }).click();
+  await received;
+  await phone.locator('.phone-thread').filter({ hasText: 'Вера работа' }).click();
+  await phone.getByLabel('Сообщение в телефоне').fill('До встречи в архиве');
+  const send = phone.getByRole('button', { name: 'Отправить сообщение' });
+  await expect(send).toBeEnabled();
+
+  // Hold the projection GET after the phone has received its committed revision.
+  let finishGet!: () => void;
+  const holdGet = new Promise<void>((resolve) => {
+    finishGet = resolve;
+  });
+  await page.route('**' + path, async (route) => {
+    await holdGet;
+    await route.continue();
+  });
+  try {
+    const refresh = page.waitForRequest((r) => r.method() === 'GET' && r.url().endsWith(path));
+    release();
+    await refresh;
+    await expect(send).toBeEnabled();
+    const dispatch = page.waitForResponse((r) => r.url().endsWith(path + '/phone/dispatch'));
+    await send.click();
+    expect((await dispatch).ok()).toBe(true);
+  } finally {
+    finishGet();
+    release();
+  }
+});

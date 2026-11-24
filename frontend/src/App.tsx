@@ -135,10 +135,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [world, setWorld] = useState<World | null>(null);
   const [save, setLoadedSave] = useState<Save | null>(null);
-  const setSave=useCallback((next:Save|null)=>{
-    if(next)observeStorySnapshot(next);
-    setLoadedSave(next);
-  },[]);
+  const loadedSave = useRef<Save | null>(null);
   const workspaceViews=useMemo(()=>({calendar:new Map<string,unknown>(),family:new Map<string,unknown>()}),[save?.id,save?.state.controlled_actor_id]);
   useEffect(()=>{setFamilyRoot(undefined);setWorkspace(null)},[save?.id,save?.state.controlled_actor_id]);
   const [selection, setSelection] = useState<{ world?: number; save?: number }>(
@@ -167,6 +164,15 @@ export default function App() {
   }, [profile]);
   const selectedRef = useRef(selection);
   selectedRef.current = selection;
+  const setSave = useCallback((next: Save | null) => {
+    // Phone receipts and foreground actions may refresh the same save concurrently.
+    const current = loadedSave.current;
+    if (next && (next.id !== selectedRef.current.save ||
+        (current?.id === next.id && current.revision > next.revision))) return;
+    loadedSave.current = next;
+    if (next) observeStorySnapshot(next);
+    setLoadedSave(next);
+  }, []);
   const refresh = useCallback(() => {
     if (!selection.world) return;
     return Promise.all([
@@ -182,7 +188,7 @@ export default function App() {
         }
       })
       .catch((e) => { toast.error(e.message); return false; });
-  }, [selection]);
+  }, [selection, setSave]);
   useEffect(() => {
     localStorage.setItem("selection", JSON.stringify(selection));
     setWorld(null);
