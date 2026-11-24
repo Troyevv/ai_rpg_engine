@@ -193,6 +193,11 @@
   color: var(--accent-contrast);
   font-weight: 650;
 }
+#root .phone-device .smart-refresh {
+  min-height: 44px;
+  width: 100%;
+  gap: 9px;
+}
 #root .smart-actions button {
   border: 0;
   background: none;

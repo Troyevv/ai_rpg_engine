@@ -33,6 +33,19 @@ def response(messages):
         fields.update(Характер=c["personality"], Внешность=c["appearance"], Роль=c["occupation"])
         return dict(name=c["name"], birth_date=f"{year:04d}-01-01", fields=fields)
     authors = [a["id"] for a in data["authors"]]
+    if "Игрок обновил ленту" in instruction:
+        batch = max((p["sequence"] for p in data["public_posts"]), default=0) + 1
+        return dict(
+            actions=[
+                dict(
+                    kind="post", author=authors[0], text=f"На набережной расцвела сирень. Зарисовка №{batch}."
+                ),
+                dict(
+                    kind="post", author=authors[-1], text=f"Собираем квартет для репетиции. Афиша №{batch}."
+                ),
+                dict(kind="comment", author=authors[0], target="@2", text="Присоединюсь со скрипкой."),
+            ]
+        )
     first = dict(
         kind="comment" if data["source"] else "post",
         author=authors[0],

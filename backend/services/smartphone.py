@@ -31,7 +31,7 @@ def setting(snapshot):
     )
 
 
-def social_prompt(snapshot, source=None):
+def social_prompt(snapshot, source=None, *, refresh=False, events=()):
     state = snapshot["world_state"]
     data = domain(state)
     owner = state["camera"]["controlled_actor_id"]
@@ -44,11 +44,25 @@ def social_prompt(snapshot, source=None):
     if source and source not in {r["id"] for r in recent}:
         recent.append(data["publications"][source])
     # Only facts shared by the selected authors enter a multi-speaker request.
-    common = [
-        f["text"][:400]
+    common = {
+        fid: f["text"][:400]
         for fid, f in state["facts"].items()
         if f["visibility"] == "public"
+        and not f.get("story_secret")
+        and not f.get("origin_remote_event_id")
         and all(state["knowledge"].get(cid + ":" + fid, {}).get("status") == "known" for cid in authors)
+    }
+    # Only shared, witnessed physical events belong in this multi-author public context.
+    witnessed = [
+        dict(text=e["text"][:400], minute=e.get("minute"), turn=e.get("turn_id"))
+        for e in events
+        if isinstance(e, dict)
+        and isinstance(e.get("text"), str)
+        and e.get("medium") in ("action", "observation")
+        and isinstance(e.get("witnesses"), list)
+        and all(cid in e["witnesses"] for cid in authors)
+        and isinstance(e.get("fact_ids", []), list)
+        and all(isinstance(fid, str) and fid in common for fid in e.get("fact_ids", []))
     ][-6:]
     cast = []
     for cid in authors:
@@ -57,6 +71,7 @@ def social_prompt(snapshot, source=None):
             dict(
                 id=cid,
                 name=state["characters"][cid].get("display_name"),
+                public_bio=data["profiles"].get(cid, "")[:350],
                 voice=voice["legacy_voice"] or str(voice["personality"])[:600],
                 relationships=[
                     dict(target=r["target_id"], dimensions=r["dimensions"]) for r in voice["relationships"]
@@ -68,11 +83,20 @@ def social_prompt(snapshot, source=None):
         "Выбери уместные публикации NPC и реакции друг на друга или на повод. "
         "Пост не подтверждает истинность текста. Не разглашай чужие сведения, не играй за героя. "
         'Для ответа на действие в этом же пакете target="@1" обозначает первую запись. '
-        "Возвращай JSON по схеме. Для like/repost текст не нужен.",
+        "Возвращай JSON по схеме. Для like/repost текст не нужен."
+        + (
+            " Игрок обновил ленту. Напиши 2–4 новых самостоятельных поста. Дай авторам разные голоса и темы: "
+            "личные наблюдения, свои интересы, события и повседневные дела. Персонажи могут откликаться друг "
+            "на друга. Учитывай предыдущие записи, не повторяй их. Герой не обязан быть темой. "
+            "Время остаётся прежним."
+            if refresh
+            else ""
+        ),
         dict(
             **setting(snapshot),
             authors=cast,
-            shared_knowledge=common,
+            shared_knowledge=list(common.values())[-6:],
+            recent_events=witnessed,
             source=source,
             public_posts=[{**r, "text": r["text"][:700]} for r in recent],
             schema=Batch.model_json_schema(),
@@ -80,9 +104,19 @@ def social_prompt(snapshot, source=None):
     ), authors
 
 
-def social_result(state, raw, authors, seed):
+def social_result(state, raw, authors, seed, *, refresh=False):
+    actions = Batch.model_validate_json(raw).actions
+    if refresh:
+        posts = [(a.author, a.text) for a in actions if a.kind == "post"]
+        if not posts:
+            raise ValueError("Провайдер не вернул новых публикаций.")
+        existing = domain(state)["publications"].values()
+        if len(set(posts)) != len(posts) or any(
+            (p["author"], p["text"]) in posts for p in existing if not p["post_id"]
+        ):
+            raise ValueError("Провайдер повторил публикацию.")
     references = []
-    for i, action in enumerate(Batch.model_validate_json(raw).actions):
+    for i, action in enumerate(actions):
         if action.author not in authors or not capabilities(state, action.author)["can_act"]:
             raise ValueError("Неизвестный или недоступный автор публикации.")
         target = action.target
@@ -197,6 +231,14 @@ def execute(repo, job, handle, stream, config):
                 **setting(snap), candidate=brief, card_fields=CARD_FIELDS, calendar_profile=profile_of(state)
             ),
         )
+    elif cmd.action == "refresh":
+        from backend.runtime_v3.repository import read_history
+
+        with repo.connect() as db:
+            history, _ = read_history(db, snap.get("history_head"))
+        prompt, authors = social_prompt(snap, refresh=True, events=history["events"])
+        if not authors:
+            raise ValueError("В этом мире пока некому опубликовать запись.")
     else:
         prompt, authors = social_prompt(snap, identity("publication", cmd.actor_id, cmd.operation_id))
 
@@ -241,7 +283,9 @@ def execute(repo, job, handle, stream, config):
         elif cmd.action == "accept":
             expand(after, cmd, raw, job["id"])
         else:
-            social_result(after["world_state"], raw, authors, cmd.operation_id)
+            social_result(
+                after["world_state"], raw, authors, cmd.operation_id, refresh=cmd.action == "refresh"
+            )
 
     # Journal a validated provider response before the canonical SQLite transaction.
     # A failed projection can then retry without buying or changing the same result.
@@ -278,7 +322,7 @@ def consider(before, snapshot, history, config, generate, cancelled, warnings):
     if now - last < 180 and (now - last < 45 or not history.get("events")):
         return
     data["last_considered"] = now
-    prompt, authors = social_prompt(snapshot)
+    prompt, authors = social_prompt(snapshot, events=history.get("events", []))
     if not prompt:
         return
     try:

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { active, type Job } from '../types';
 import { useDevice } from './usePhone';
@@ -48,19 +48,34 @@ export function useDraft(key: string, fallback = '') {
   ] as const;
 }
 
+export function useGeneration(app: string) {
+  const { job, save } = useDevice();
+  return job?.kind === 'smartphone' &&
+    job.presentation?.app === app &&
+    job.revision === save.revision &&
+    (active(job) || job.status === 'stopped' || job.status === 'error')
+    ? job
+    : null;
+}
+
 export function Generation({ app }: { app: string }) {
-  const { job, save, apiKey, config, onJob, setError } = useDevice();
-  if (job?.kind !== 'smartphone' || job.presentation?.app !== app || job.revision !== save.revision)
-    return null;
+  const { apiKey, config, onJob, setError } = useDevice();
+  const job = useGeneration(app);
+  const retryPending = useRef(false);
+  const [retrying, setRetrying] = useState(false);
+  if (!job) return null;
   const path = '/jobs/' + job.id;
   const running = active(job);
-  const label =
-    job.presentation.action === 'search'
-      ? 'Поиск анкет'
-      : job.presentation.action === 'accept'
-        ? 'Создание карточки'
-        : 'Ответы персонажей';
-  if (!running && !['stopped', 'error'].includes(job.status)) return null;
+  const action = job.presentation?.action;
+  const status = {
+    search: ['Поиск анкет', 'Не удалось подготовить выдачу. Параметры поиска сохранены.'],
+    accept: ['Создание карточки', 'Не удалось завершить карточку. Выбранная анкета сохранена.'],
+    refresh: ['Новые публикации', 'Не удалось обновить ленту.'],
+  };
+  const [label, failure] = status[action as keyof typeof status] ?? [
+    'Ответы персонажей',
+    'Ваша запись сохранена. Не удалось подготовить ответы.',
+  ];
   return (
     <div className="smart-generation" role={running ? 'status' : 'alert'}>
       <strong>{label}</strong>
@@ -69,16 +84,15 @@ export function Generation({ app }: { app: string }) {
       ) : (
         <>
           <p>
-            {job.status === 'stopped'
-              ? 'Генерация остановлена.'
-              : app === 'social'
-                ? 'Ваша запись сохранена. Не удалось подготовить ответы.'
-                : job.presentation.action === 'search'
-                  ? 'Не удалось подготовить выдачу. Параметры поиска сохранены.'
-                  : 'Не удалось завершить карточку. Выбранная анкета сохранена.'}
+            {job.status === 'stopped' ? 'Генерация остановлена.' : failure}
+            {action === 'refresh' && job.status === 'error' && job.error && ' ' + job.error}
           </p>
           <button
+            disabled={retrying}
             onClick={async () => {
+              if (retryPending.current) return;
+              retryPending.current = true;
+              setRetrying(true);
               try {
                 onJob(
                   await api<Job>(path + '/retry', {
@@ -90,6 +104,9 @@ export function Generation({ app }: { app: string }) {
                 );
               } catch (e) {
                 setError(String(e));
+              } finally {
+                retryPending.current = false;
+                setRetrying(false);
               }
             }}
           >

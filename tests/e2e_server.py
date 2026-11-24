@@ -676,11 +676,11 @@ def stream(**kwargs):
     global phone_mode
     if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/1')):
         from smartphone_provider import response
-        if phone_mode == 'app_error_once':
+        if phone_mode in ('app_error_once', 'app_refresh_error_once'):
             time.sleep(2)
-            phone_mode = 'silent'
+            phone_mode = 'app_refresh_slow' if phone_mode == 'app_refresh_error_once' else 'silent'
             raise RuntimeError('Тестовый провайдер прервал ответ.')
-        time.sleep(.2)
+        time.sleep(2 if phone_mode == 'app_refresh_slow' else .2)
         yield json.dumps(response(kwargs['messages']),ensure_ascii=False)
         return
     global scene255_attempts

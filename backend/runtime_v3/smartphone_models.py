@@ -109,7 +109,7 @@ class AppCommand(Record):
     operation_id: Short
     actor_id: Short
     action: Literal[
-        "open", "profile", "post", "comment", "like", "repost", "read", "search", "accept", "skip"
+        "open", "profile", "post", "comment", "like", "repost", "read", "refresh", "search", "accept", "skip"
     ]
     app: Literal["social", "dating", "calls", "messages", "contacts"]
     target: Short | None = None

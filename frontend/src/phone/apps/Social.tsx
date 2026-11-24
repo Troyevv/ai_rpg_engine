@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Heart, Repeat2, MessageCircle, Bell, PenLine, Users, UserRound, Send } from 'lucide-react';
+import {
+  Heart,
+  Repeat2,
+  MessageCircle,
+  Bell,
+  PenLine,
+  Users,
+  UserRound,
+  Send,
+  RefreshCw,
+} from 'lucide-react';
 import { CharacterAvatar, type PortraitSubject } from '../../Portrait';
 import { useDevice } from '../usePhone';
-import { useRecords, useDraft, Generation } from '../data';
+import { useRecords, useDraft, Generation, useGeneration } from '../data';
 
 type Post = {
   id: string;
@@ -101,6 +111,7 @@ function Page({
     'social?' + new URLSearchParams({ ...(profile ? { profile } : {}), ...(cursor ? { cursor } : {}) }),
   );
   const { push, phone, writeTo, dossier } = useDevice();
+  const refresh = useGeneration('social')?.presentation?.action === 'refresh';
   const p = data?.profile;
   return (
     <>
@@ -128,7 +139,7 @@ function Page({
           </div>
         </section>
       )}
-      {data && !cursor && !data.entries.length && (
+      {data && !status && (profile || !refresh) && !cursor && !data.entries.length && (
         <div className="smart-empty">
           <MessageCircle />
           <p>Публикаций пока нет.</p>
@@ -323,10 +334,24 @@ function useVisiblePublications() {
 }
 
 export function Social() {
-  const { route, push, phone } = useDevice();
+  const { route, push, phone, command, locked } = useDevice();
+  const generation = useGeneration('social');
+  const refreshing = generation?.presentation?.action === 'refresh';
   useVisiblePublications();
   return (
     <div className="smart-app">
+      {!route && (
+        <button
+          className="smart-primary smart-refresh"
+          disabled={locked || refreshing}
+          onClick={() => void command('social', 'refresh', {}, true)}
+        >
+          <RefreshCw size={18} aria-hidden="true" />
+          {refreshing && !['error', 'stopped'].includes(generation.status)
+            ? 'Обновляем ленту…'
+            : 'Обновить ленту'}
+        </button>
+      )}
       <Generation app="social" />
       {!route && (
         <nav className="smart-toolbar">

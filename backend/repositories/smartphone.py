@@ -132,7 +132,7 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
 
 
 def register_job(repo, db, save, config, jid):
-    from engine_storage import ExistingJob
+    from engine_storage import ACTIVE, ExistingJob
 
     cmd = AppCommand.model_validate(config["smartphone"])
     snap = json.loads(save["state_json"])
@@ -148,13 +148,19 @@ def register_job(repo, db, save, config, jid):
         if item["skipped"]:
             raise ValueError("Анкета пропущена.")
     for row in db.execute(
-        "SELECT id,config_json FROM game_jobs WHERE save_id=? AND revision=? AND kind='smartphone' ORDER BY rowid DESC",
+        "SELECT id,status,config_json FROM game_jobs WHERE save_id=? AND revision=? AND kind='smartphone' ORDER BY rowid DESC",
         (save["id"], save["revision"]),
     ):
         old = json.loads(row["config_json"])["smartphone"]
         if old["operation_id"] == cmd.operation_id:
             if old != cmd.model_dump():
                 raise ValueError("ID операции уже использован с другими данными.")
+            raise ExistingJob(row["id"])
+        if (
+            cmd.action == old["action"] == "refresh"
+            and row["status"] in ACTIVE
+            and config["expected_revision"] == save["revision"]
+        ):
             raise ExistingJob(row["id"])
         if (
             cmd.action == "accept"
@@ -167,7 +173,7 @@ def register_job(repo, db, save, config, jid):
         apply_command(repo, db, save["id"], config["expected_revision"], cmd, job_id=jid)
         save = db.execute("SELECT * FROM saves WHERE id=?", (save["id"],)).fetchone()
         config["expected_revision"] = save["revision"]
-    elif cmd.action not in ("search", "accept"):
+    elif cmd.action not in ("search", "accept", "refresh"):
         raise ValueError("Для этого действия генерация не требуется.")
     return save
 

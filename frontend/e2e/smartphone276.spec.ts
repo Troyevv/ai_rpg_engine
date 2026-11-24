@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { themes } from '../src/lib/skins';
 
 test('276 shared feed, NPC discussion, dating batch and direct chat survive reload', async ({
   page,
@@ -304,4 +305,155 @@ test('276 five new posts, app badges and drafts are scoped to the actor, save an
   const restored = await (await request.get(`/api/saves/${a.save}/apps/social`)).json();
   expect(restored.entries || []).toHaveLength(0);
   expect(await phone.isVisible()).toBe(false);
+});
+
+test('manual feed refresh uses one durable job, survives closing, retry, reload and rollback', async ({
+  page,
+  request,
+}, info) => {
+  test.setTimeout(120000);
+  const seed = (decision: string) =>
+    request
+      .post('/test/phone-seed?smartphone=true&incoming=false&decision=' + decision)
+      .then((r) => r.json());
+  const other = await seed('silent');
+  const current = await seed('app_refresh_error_once');
+  const path = '/api/saves/' + current.save;
+  const state = () => request.get(path).then((r) => r.json());
+  const clock = async () => (await state()).state.world_clock.projection;
+  const feed = () => request.get(path + '/apps/social').then((r) => r.json());
+  const phone = page.getByRole('region', { name: 'Телефон персонажа' });
+  const btn = (name: string) => phone.getByRole('button', { name, exact: true });
+  const enter = async () => {
+    await page.getByRole('button', { name: /^Телефон/ }).click();
+    await btn('Соцсеть').click();
+  };
+  const select = async (selection: typeof current) => {
+    await page.evaluate((s) => localStorage.setItem('selection', JSON.stringify(s)), selection);
+    await page.reload();
+    await enter();
+  };
+  let dispatches = 0,
+    retries = 0;
+  page.on('request', (r) => {
+    if (r.url().endsWith('/apps/dispatch')) dispatches++;
+    if (r.url().endsWith('/retry')) retries++;
+  });
+  await request.put('/api/worlds/' + current.world + '/presentation', {
+    data: { theme_id: info.project.name === 'mobile' ? 'parchment' : 'neon' },
+  });
+  await page.goto('/');
+  await select(current);
+  const refresh = btn('Обновить ленту');
+  await expect(phone.getByText('Публикаций пока нет.')).toBeVisible();
+  expect(dispatches).toBe(0);
+  await page.screenshot({ path: info.outputPath('refresh-empty.png') });
+  const before = await clock();
+  await refresh.evaluate((el) => {
+    el.click();
+    el.click();
+  });
+  await expect(btn('Обновляем ленту…')).toBeDisabled();
+  expect(dispatches).toBe(1);
+  await expect(phone.getByRole('alert')).toContainText('Тестовый провайдер прервал ответ');
+  await expect(phone.getByText('Публикаций пока нет.')).toHaveCount(0);
+  expect((await feed()).entries).toHaveLength(0);
+  await btn('Повторить генерацию').evaluate((el) => {
+    el.click();
+    el.click();
+  });
+  await expect(btn('Обновляем ленту…')).toBeDisabled();
+  await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
+  await expect(phone).toBeHidden();
+  await expect.poll(async () => (await feed()).entries.length).toBe(2);
+  expect(await clock()).toEqual(before);
+  expect(retries).toBe(1);
+  await page.reload();
+  await enter();
+  await expect(phone.locator('.smart-post')).toHaveCount(2);
+  const first = (await feed()).entries;
+  expect(new Set(first.map((e: any) => e.post.author)).size).toBe(2);
+  expect(first.every((e: any) => e.post.author !== 'qa_kirill')).toBe(true);
+  await expect(refresh).toBeEnabled();
+  await page.screenshot({ path: info.outputPath('refresh-filled.png') });
+  await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
+
+  // An ordinary turn supplies a real undo boundary between the two refreshes.
+  const turn = await request.post(path + '/turns', {
+    data: {
+      kind: 'turn',
+      text: 'Я смотрю на улицу.',
+      revision: (await state()).revision,
+      config: {
+        provider: 'local',
+        model: 'test-model',
+        context_length: 131072,
+        max_tokens: 8000,
+        update_tokens: 8000,
+      },
+    },
+  });
+  expect(turn.ok(), await turn.text()).toBe(true);
+  await expect.poll(async () => (await state()).job?.status).toBe('saved');
+  const secondClock = await clock();
+  await page.reload();
+  await enter();
+  await refresh.click();
+  await expect(phone.locator('.smart-post')).toHaveCount(4);
+  expect(dispatches).toBe(2);
+  expect(await clock()).toEqual(secondClock);
+  const four = (await feed()).entries;
+  expect(four.slice(2)).toEqual(first);
+  expect(new Set(four.map((e: any) => e.post.id)).size).toBe(4);
+  await select(other);
+  await expect(phone.getByText('Публикаций пока нет.')).toBeVisible();
+  await select(current);
+  await expect(phone.locator('.smart-post')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
+  const rollback = await request.post(path + '/rollback', { data: { revision: (await state()).revision } });
+  expect(rollback.ok(), await rollback.text()).toBe(true);
+  await page.reload();
+  await enter();
+  await expect(phone.locator('.smart-post')).toHaveCount(2);
+  expect((await feed()).entries).toEqual(first);
+  expect(dispatches).toBe(2);
+});
+
+test('manual feed refresh control remains visible and usable in every skin', async ({
+  page,
+  request,
+}, info) => {
+  test.setTimeout(120000);
+  const seed = await (await request.post('/test/phone-seed?smartphone=true&incoming=false')).json();
+  await page.addInitScript((s) => localStorage.setItem('selection', JSON.stringify(s)), seed);
+  let dispatches = 0;
+  page.on('request', (r) => {
+    if (r.url().endsWith('/apps/dispatch')) dispatches++;
+  });
+  for (const [i, theme] of themes.entries()) {
+    const res = await request.put('/api/worlds/' + seed.world + '/presentation', {
+      data: { theme_id: theme.id },
+    });
+    expect(res.ok()).toBe(true);
+    if (info.project.name === 'mobile')
+      await page.setViewportSize({ width: [320, 360, 393][i % 3], height: 820 });
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id);
+    await page.getByRole('button', { name: /^Телефон/ }).click();
+    await page.getByRole('button', { name: 'Соцсеть', exact: true }).click();
+    const refresh = page.getByRole('button', { name: 'Обновить ленту', exact: true });
+    await expect(refresh).toBeInViewport({ ratio: 1 });
+    await expect(refresh).toBeEnabled();
+    const fits = await refresh.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return (
+        el.clientWidth >= el.scrollWidth &&
+        el.getBoundingClientRect().height >= 44 &&
+        document.documentElement.scrollWidth <= innerWidth &&
+        style.color !== style.backgroundColor
+      );
+    });
+    expect(fits, theme.name).toBe(true);
+  }
+  expect(dispatches).toBe(0);
 });

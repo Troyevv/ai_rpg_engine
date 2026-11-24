@@ -379,3 +379,116 @@ def test_opening_badge_after_failed_reply_keeps_retry_and_polling_idempotent(app
     assert run(app, jid) == 1
     feed = client.get(f"/api/saves/{sid}/apps/social").json()["entries"]
     assert len(feed) == 2 and feed[0]["post"]["comments"] == 2
+
+
+def test_manual_refresh_on_legacy_save_appends_once_and_preserves_clock_and_branch(app):
+    from backend.runtime_v3.repository import append_history
+    from backend.runtime_v3.models import Fact, Knowledge
+    from backend.repositories.preparation import Repository
+
+    repo, client, sid = app
+    snap = repo.get_snapshot(sid)
+    state = snap["world_state"]
+    state.pop("smartphone", None)
+    state["meta"]["communication"].update(preset="modern")
+    state["meta"]["communication"].pop("social")
+    npc_ids = [cid for cid in state["characters"] if cid != "qa_kirill"]
+    for fid, text, private in [
+        ("opening", "Открылся городской рынок", False),
+        ("secret", "Скрытый мотив", True),
+    ]:
+        state["facts"][fid] = Fact(
+            id=fid, text=text, visibility="secret" if private else "public"
+        ).model_dump()
+        for cid in npc_ids:
+            state["knowledge"][cid + ":" + fid] = Knowledge(actor_id=cid, fact_id=fid).model_dump()
+    event = dict(
+        id="market", text="Установили прилавки", medium="observation", fact_ids=["opening"], witnesses=npc_ids
+    )
+    with repo.connect() as db:
+        snap["history_head"] = append_history(
+            db,
+            snap["history_head"],
+            dict(
+                events=[
+                    event,
+                    dict(event, id="hidden", text="Тайна свидетеля", fact_ids=["secret"]),
+                    dict(event, id="unseen", text="За закрытой дверью", witnesses=[]),
+                    dict(event, id="dm", text="Личное сообщение", medium="message"),
+                ]
+            ),
+        )
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+    url = f"/api/saves/{sid}/apps/social"
+    assert client.get(url).json()["entries"] == []
+    before = repo.get_save(sid)["revision"]
+    jid = dispatch(app, "refresh", "refresh-a")
+    assert request(app, "refresh", "stale-click", generate=True, revision=before - 1).status_code == 409
+    assert dispatch(app, "refresh", "concurrent-click") == jid
+    assert dispatch(app, "refresh", "refresh-a") == jid
+
+    def inspect(messages):
+        data = json.loads(messages[1]["content"])
+        assert data["world"]["setting"] and data["calendar"]["world_time"] == state["meta"]["world_time"]
+        assert data["source"] is None and not data["public_posts"]
+        assert "qa_kirill" not in {a["id"] for a in data["authors"]}
+        assert all("relationships" in a for a in data["authors"])
+        assert "Открылся городской рынок" in data["shared_knowledge"]
+        assert [e["text"] for e in data["recent_events"]] == ["Установили прилавки"]
+        assert all(
+            text not in messages[1]["content"]
+            for text in ("Скрытый мотив", "Тайна свидетеля", "Личное сообщение", "За закрытой дверью")
+        )
+        return response(messages)
+
+    assert run(app, jid, inspect) == 1
+    assert dispatch(app, "refresh", "refresh-a", revision=before) == jid
+    first = client.get(url).json()["entries"]
+    assert len(first) == 2 and all(e["post"]["author"] in npc_ids for e in first)
+    initial_known = {k for k, v in state["knowledge"].items() if v["actor_id"] == "qa_kirill"}
+
+    def player_knowledge(snapshot):
+        return {k for k, v in snapshot["world_state"]["knowledge"].items() if v["actor_id"] == "qa_kirill"}
+
+    assert player_knowledge(repo.get_snapshot(sid)) == initial_known
+    target = first[0]["post"]["id"]
+    assert request(app, "like", "liked-first", target=target).is_success
+    old = client.get(url, params={"post": target}).json()
+    assert old["post"]["likes"] == 1 and old["comments"]
+    first_snapshot = repo.get_snapshot(sid)
+    second = dispatch(app, "refresh", "refresh-b")
+    with patch("backend.repositories.smartphone.project", side_effect=sqlite3.OperationalError("disk full")):
+        assert run(app, second, expect="error") == 1
+    assert repo.get_snapshot(sid) == first_snapshot
+    repo.retry_job(second)
+    assert run(app, second) == 0
+    assert client.get(url, params={"post": target}).json() == old
+    entries = client.get(url).json()["entries"]
+    assert len(entries) == len({e["post"]["id"] for e in entries}) == 4
+    after = Repository(repo.path).get_snapshot(sid)["world_state"]
+    assert after["meta"]["world_time"] == state["meta"]["world_time"]
+    assert after["camera"] == state["camera"]
+    assert after["smartphone"]["last_considered"] is None
+    assert social_view(Repository(repo.path).get_snapshot(sid))["entries"] == entries
+    assert player_knowledge(repo.get_snapshot(sid)) == player_knowledge(first_snapshot)
+
+
+def test_manual_refresh_rejects_empty_or_duplicate_batch_atomically(app):
+    repo, client, sid = app
+    jid = dispatch(app, "refresh", "refresh-retry")
+    assert run(app, jid, lambda _: {"actions": []}, expect="error") == 1
+    assert "не вернул новых публикаций" in repo.get_job(jid)["error"]
+    repo.retry_job(jid)
+    assert run(app, jid) == 1
+    entries = client.get(f"/api/saves/{sid}/apps/social").json()["entries"]
+    source = entries[0]["post"]
+
+    def repeated(messages):
+        batch = response(messages)
+        batch["actions"].append(dict(kind="post", author=source["author"], text=source["text"]))
+        return batch
+
+    jid = dispatch(app, "refresh", "refresh-duplicate")
+    assert run(app, jid, repeated, expect="error") == 1
+    assert "повторил публикацию" in repo.get_job(jid)["error"]
+    assert client.get(f"/api/saves/{sid}/apps/social").json()["entries"] == entries
