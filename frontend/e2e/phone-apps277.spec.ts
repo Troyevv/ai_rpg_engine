@@ -77,6 +77,14 @@ test('277 real phone catalogs, discussions, inbox, plans and applications', asyn
   await expect(page.getByLabel('Своё действие или реплика')).toHaveValue(
     /Сохраняю основной черновик.[\s\S]+Отправляюсь на/,
   );
+  const turns = page.locator('.story-scroll .turn');
+  const turnCount = await turns.count();
+  const composer = page.getByLabel('Своё действие или реплика');
+  await composer.fill((await composer.inputValue()) + ' Беру с собой программу.');
+  await page.getByRole('button', { name: 'Отправить действие', exact: true }).click();
+  await expect(turns).toHaveCount(turnCount + 1);
+  await expect(turns.last()).toContainText('Беру с собой программу.');
+  await expect(composer).toBeEnabled();
   await open();
   await b('Работа и вакансии').click();
   await b('Найти ещё вакансии').click();

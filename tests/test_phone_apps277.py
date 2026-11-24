@@ -580,3 +580,68 @@ def test_archived_save_defaults_story_integrity_and_stale_catalog(app):
     restored = repo.get_snapshot(sid)["world_state"]
     assert not restored.get("smartphone", {}).get("articles")
     assert client.get(f"/api/saves/{sid}/apps/news").status_code == 409
+
+
+def test_employer_reuse_second_owner_and_private_application_context(app, monkeypatch):
+    from phone277_provider import reply
+
+    repo, _, sid = app
+    # The seed was authored on v5. New phone jobs use the current v11 wire policy.
+    monkeypatch.setattr("backend.runtime_v3.player_actions.EXTRACTION_VERSION", 11)
+    first, second = fill(app, "work", "shared-employer")
+    count = len(repo.get_snapshot(sid)["character_cards"])
+    private = "Хочу обсудить особое условие первого кандидата."
+    run(
+        app, dispatch(app, "apply", "first-candidate", app_id="work", target=first["id"], text=private), reply
+    )
+    repo.transition_protagonist(
+        sid, repo.get_save(sid)["revision"], "switch-applicant", "temporary", "qa_vera"
+    )
+    jid = dispatch(
+        app,
+        "apply",
+        "second-candidate",
+        app_id="work",
+        actor="qa_vera",
+        target=second["id"],
+        text="Какой график работы?",
+    )
+
+    def verify(messages):
+        assert private not in str(messages)
+        assert not messages[0]["content"].startswith("Phone employer/1")
+        return reply(messages)
+
+    run(app, jid, verify)
+    state = repo.get_snapshot(sid)["world_state"]
+    assert len(repo.get_snapshot(sid)["character_cards"]) == count + 1
+    apps = list(state["smartphone"]["applications"].values())
+    assert len(apps) == 2 and len({a["actor"] for a in apps}) == 2
+    events = [state["remote_events"][a["event_id"]] for a in apps]
+    assert events[0]["recipient_ids"] == events[1]["recipient_ids"]
+    assert events[0]["conversation_id"] != events[1]["conversation_id"]
+    assert [a["id"] for a in get(app, "work", tab="mine")["items"]] == [second["id"]]
+
+
+def test_bounded_actual_catalog_request_and_reload_without_provider(app):
+    from backend.runtime_v3.models import Fact
+
+    repo, _, sid = app
+    snap = repo.get_snapshot(sid)
+    for n in range(600):
+        fid = f"public_{n}"
+        snap["world_state"]["facts"][fid] = Fact(
+            id=fid, text=(str(n) + " Продолжается ярмарка в порту. ") * 40
+        ).model_dump()
+    with repo.connect() as db:
+        db.execute("UPDATE saves SET state_json=? WHERE id=?", (json.dumps(snap), sid))
+
+    def verify(messages):
+        payload = json.loads(messages[1]["content"])
+        assert len(payload["public_facts"]) == 8
+        assert len(messages[1]["content"]) < 24000
+        return response(messages)
+
+    entries = fill(app, "news", "bounded-news", verify)
+    with patch("engine.chat_stream", side_effect=AssertionError("No provider call on reload")):
+        assert entries == get(app, "news")["items"] == get(app, "news")["items"]

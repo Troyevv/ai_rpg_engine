@@ -121,13 +121,6 @@ def public_context(snapshot, history):
         ids = e.get("fact_ids", [])
         # Use public propositions verbatim, never the private literary scene around them.
         texts = [facts[k] for k in ids if k in facts]
-        if (
-            not texts
-            and people
-            and set(people) <= set(e.get("witnesses", []))
-            and all(i in facts for i in ids)
-        ):
-            texts = [str(e.get("text", ""))[:400]]
         if texts and e.get("id"):
             recent.append(dict(id=e["id"], minute=e.get("minute"), text=" ".join(texts)[:500]))
     cfg = state["meta"]["communication"]
@@ -202,8 +195,18 @@ def public_context(snapshot, history):
             dict(id=k, name=o["name"][:180], locations=o["location_ids"][:6])
             for k, o in list(orgs.items())[:16]
         ],
+        public_roles=[
+            dict(
+                actor_id=role["actor_id"], title=role["title"][:180], organization_id=role["organization_id"]
+            )
+            for role in state["roles"].values()
+            if role["status"] == "active"
+            and role["actor_id"] in people
+            and role.get("fact_id") in facts
+            and (not role["organization_id"] or role["organization_id"] in orgs)
+        ][:12],
         people=[
-            dict(id=k, name=name, public_bio=data["profiles"].get(k, "")[:220])
+            dict(id=k, name=name[:180], public_bio=data["profiles"].get(k, "")[:220])
             for k, name in list(people.items())[:12]
         ],
         public_facts=list(facts.values())[-8:],

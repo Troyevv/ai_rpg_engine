@@ -23,10 +23,10 @@ function Vacancy({ id }: { id: string }) {
       </small>
       <h3>{r.title}</h3>
       <strong>{r.employer}</strong>
-      <p>
-        {r.location} · {employment[r.employment!]}
-      </p>
+      <p>{[r.location, employment[r.employment!]].filter(Boolean).join(' · ')}</p>
       <p>{r.description}</p>
+      {r.expires_at && <p>Срок отклика · {r.expires_at}</p>}
+      {!r.active && <p>Вакансия закрыта</p>}
       <dl>
         {[
           ['Требования', r.requirements],
@@ -77,9 +77,7 @@ function Vacancy({ id }: { id: string }) {
         </>
       ) : r.active ? (
         <button onClick={() => d.push('apply', id)}>Откликнуться</button>
-      ) : (
-        <p>Вакансия закрыта</p>
-      )}
+      ) : null}
       {r.plans?.map((p) => (
         <button key={p.id} onClick={() => d.propose('Отправляюсь на встречу: ' + p.description)}>
           Отправиться · {p.description}

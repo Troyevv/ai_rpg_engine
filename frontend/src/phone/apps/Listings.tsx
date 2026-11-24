@@ -28,6 +28,7 @@ export interface RecordCard {
   favorite?: boolean;
   applied?: boolean;
   conversation_id?: string;
+  expires_at?: string;
   schedule?: string;
   pay?: string;
   requirements?: string;
@@ -62,12 +63,14 @@ export function TextForm({
   draft,
   initial = '',
   submit,
+  disabled = false,
   children,
 }: {
   label: string;
   button: string;
   draft: string;
   initial?: string;
+  disabled?: boolean;
   submit: (text: string) => Promise<boolean>;
   children?: ReactNode;
 }) {
@@ -89,7 +92,7 @@ export function TextForm({
         {label}
         <textarea maxLength={5000} required value={text} onChange={(e) => setText(e.target.value)} />
       </label>
-      <button className="smart-primary" disabled={d.locked || !text.trim()}>
+      <button className="smart-primary" disabled={d.locked || disabled || !text.trim()}>
         {button}
       </button>
     </form>
@@ -225,6 +228,9 @@ export function Catalog({
             <span>
               {r.employer} · {employment[r.employment!]}
             </span>
+          )}
+          {app === 'work' && tab === 'mine' && (
+            <small>{r.reply || (r.conversation_id ? 'Отклик отправлен' : 'Подготовка отправки')}</small>
           )}
           {r.active === false && <small>{r.cancelled ? 'Отменено' : 'Завершено'}</small>}
           {app === 'questions' && (

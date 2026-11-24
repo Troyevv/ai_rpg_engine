@@ -293,11 +293,18 @@ def resolve_optional(snapshot, source_id, response, diagnostics, **resolver_opti
     """
     raw = RawTurnResult.parse(response)
     payload = dict(final_scene=raw.final_scene, choices=raw.choices, **raw.records)
+    from backend.runtime_v3.phone_listings import InvalidEmploymentChange
+    employment_indices = {key: list(range(len(payload[key]))) for key in ("role_changes", "organization_changes")}
     original_indices = list(range(len(payload['scheduled_event_changes'])))
     # Each rejection must remove at least one candidate: bounded, no LLM retries.
     while True:
         try:
             return resolve(snapshot, source_id, payload, diagnostics, **resolver_options)
+        except InvalidEmploymentChange as exc:
+            payload[exc.section].pop(exc.index)
+            original = employment_indices[exc.section].pop(exc.index)
+            diagnostics.append(dict(section=exc.section, index=original, code='remote_employment_evidence',
+                                    action='defer_record', source_event_id=source_id))
         except SemanticValidationError as exc:
             records = payload['scheduled_event_changes']
             indices = {w['index'] for w in exc.warnings

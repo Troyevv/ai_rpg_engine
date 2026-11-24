@@ -381,7 +381,12 @@ def view(
                     and not a
                 ):
                     continue
-                result.update(favorite=key in favorites, applied=bool(a), conversation_id=None)
+                result.update(
+                    favorite=key in favorites,
+                    applied=bool(a),
+                    conversation_id=None,
+                    expires_at=calendar_label(state, row["expires"]) if row["expires"] is not None else None,
+                )
                 if item and a and not a["event_id"]:
                     result["pending_text"] = a["pending_text"]
                 if a and a["event_id"]:
@@ -421,7 +426,9 @@ def view(
                 continue
             records.append(result)
         if app == "work" and tab == "roles":
-            roles = visible_social_state(state, actor, {actor})["roles"]
+            roles = [
+                r for r in visible_social_state(state, actor, {actor})["roles"] if r["kind"] == "employment"
+            ]
             for role in roles:
                 saved = state["roles"][role["id"]]
                 org = state["organizations"].get(saved["organization_id"], {})
@@ -477,18 +484,27 @@ def thread_listings(state, conversation):
     ]
 
 
+class InvalidEmploymentChange(ValueError):
+    def __init__(self, section, index, message):
+        super().__init__(message)
+        self.section = section
+        self.index = index
+
+
 def bind_job_changes(state, source, rows, raw):
     """Extraction identifies an effective hire; Runtime binds fresh assent and a read offer."""
     applications = {v["id"]: (a, v) for a, v in thread_listings(state, source["conversation_id"])}
     by_id = {e["id"]: e for e in rows}
     orgs = {}
     roles = []
-    for change in raw.records["role_changes"]:
+    for index, change in enumerate(raw.records["role_changes"]):
         if not isinstance(change, dict) or not all(
             isinstance(change.get(key), str) and change[key].strip()
             for key in ("vacancy_id", "offer_event_id", "title")
         ):
-            raise ValueError("Нужны идентификаторы вакансии и предложения, а также название роли.")
+            raise InvalidEmploymentChange(
+                "role_changes", index, "Нужны идентификаторы вакансии и предложения, а также название роли."
+            )
         a, vacancy = applications.get(change.get("vacancy_id"), (None, None))
         offer = by_id.get(change.get("offer_event_id"))
         actor = state["camera"]["controlled_actor_id"]
@@ -508,10 +524,13 @@ def bind_job_changes(state, source, rows, raw):
             or change.get("effective") != "now"
             or change.get("actor_id") != actor
             or change.get("status", "active") != "active"
+            or change.get("assertion", "established") != "established"
             or change.get("replaces")
         ):
-            raise ValueError(
-                "Для трудоустройства нужны прочитанное предложение и текущее явное согласие на действующую работу."
+            raise InvalidEmploymentChange(
+                "role_changes",
+                index,
+                "Для трудоустройства нужны прочитанное предложение и текущее явное согласие на действующую работу.",
             )
         org = vacancy["organization_id"]
         if not org:
@@ -547,13 +566,21 @@ def bind_job_changes(state, source, rows, raw):
                 evidence=source["content"],
             )
         )
-    for o in raw.records["organization_changes"]:
+    associated_names = {r["name"] for r in orgs.values()}
+    for role in roles:
+        org = state["organizations"].get(role["organization_id"])
+        if org:
+            associated_names.update([org["name"], *org["aliases"]])
+    for index, o in enumerate(raw.records["organization_changes"]):
         if (
             not isinstance(o, dict)
-            or o.get("name") not in {r["name"] for r in orgs.values()}
+            or not isinstance(o.get("name"), str)
+            or o["name"] not in associated_names
             or o.get("status", "active") != "active"
         ):
-            raise ValueError("Организация не связана с подтверждённой работой.")
+            raise InvalidEmploymentChange(
+                "organization_changes", index, "Организация не связана с подтверждённой работой."
+            )
     raw.records["organization_changes"] = list(orgs.values())
     raw.records["role_changes"] = roles
 

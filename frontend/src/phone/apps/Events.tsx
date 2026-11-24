@@ -9,6 +9,7 @@ function Invite({ item }: { item: RecordCard }) {
   return (
     <TextForm
       label="Приглашение"
+      disabled={ids.length === 0}
       button="Отправить приглашение"
       draft={'invite:' + item.id}
       initial={`Пойдём на «${item.title}»? ${item.time}. ${item.location || ''}`}
