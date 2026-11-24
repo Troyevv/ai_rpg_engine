@@ -103,6 +103,9 @@ def test_anonymous_routes_and_prompt(app):
     assert (
         get(app, "questions")["items"][0]["sender"] is None and not get(app, "questions", tab="sent")["items"]
     )
+    for projection in (client.get(f"/api/jobs/{jid}").json(), client.get(f"/api/saves/{sid}").json()["job"]):
+        assert projection["presentation"].get("actor_id") is None
+        assert not projection.get("user_text") and not projection["presentation"].get("target")
     assert not request(
         app, "answer", "fake-answer", app_id="questions", target=q["id"], text="Второй ответ"
     ).is_success
@@ -645,3 +648,41 @@ def test_bounded_actual_catalog_request_and_reload_without_provider(app):
     entries = fill(app, "news", "bounded-news", verify)
     with patch("engine.chat_stream", side_effect=AssertionError("No provider call on reload")):
         assert entries == get(app, "news")["items"] == get(app, "news")["items"]
+
+
+def test_unanswered_question_pov_history_and_narrative(app):
+    from backend.runtime_v3.context import build_context
+    from backend.runtime_v3.repository import read_history
+
+    repo, client, sid = app
+    phrase = "Какая мелодия звучала во время затмения?"
+    assert request(app, "ask", "private-ask", app_id="questions", target="qa_vera", text=phrase).is_success
+    qid = get(app, "questions", tab="sent")["items"][0]["id"]
+    with repo.connect() as db:
+        history, _ = read_history(db, repo.get_snapshot(sid)["history_head"])
+    receipt = next(r for r in history["state_changes"] if r.get("operation_id") == "private-ask")
+    assert "actor_id" not in receipt and phrase not in str(receipt)
+
+    def switch(actor):
+        repo.transition_protagonist(sid, repo.get_save(sid)["revision"], "to-" + actor, "temporary", actor)
+
+    def narrative():
+        return json.dumps(
+            build_context(
+                repo.get_snapshot(sid), [], "Вспоминаю разговор.", "turn", 32768, 2000, extraction_contract=11
+            ),
+            ensure_ascii=False,
+        )
+
+    switch("qa_vera")
+    assert phrase not in narrative()
+    assert request(
+        app, "read", "read-inbox-question", app_id="questions", actor="qa_vera", ids=[qid]
+    ).is_success
+    context = narrative()
+    assert phrase in context and "Вопрос от Аноним" in context
+    switch("qa_oleg")
+    assert phrase not in narrative()
+    assert phrase not in client.get(f"/api/saves/{sid}").text
+    assert not get(app, "questions", tab="inbox")["items"]
+    assert not client.get(f"/api/saves/{sid}/apps/questions", params={"item": qid}).is_success

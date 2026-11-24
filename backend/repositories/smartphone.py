@@ -154,11 +154,19 @@ def register_job(repo, db, save, config, jid):
     if cmd.action == "apply":
         a = domain(state)["applications"].get(identity("application", actor, cmd.target))
         if a:
-            prior_job = db.execute("SELECT revision,status FROM game_jobs WHERE id=?", (a["job_id"],)).fetchone()
-            if a["event_id"] or prior_job["revision"] == save["revision"] or prior_job["status"] not in ("error","stopped"):
+            prior_job = db.execute(
+                "SELECT revision,status FROM game_jobs WHERE id=? AND save_id=?", (a["job_id"], save["id"])
+            ).fetchone()
+            if a["event_id"] and not prior_job:
+                raise ValueError("Отклик уже отправлен. Переписка доступна в этой вакансии.")
+            if prior_job and (a["event_id"] or prior_job["revision"] == save["revision"]
+                              or prior_job["status"] not in ("error", "stopped")):
                 raise ExistingJob(a["job_id"])
     if previous and previous.get("job_id"):
-        raise ExistingJob(previous["job_id"])
+        if db.execute("SELECT 1 FROM game_jobs WHERE id=? AND save_id=?",
+                      (previous["job_id"], save["id"])).fetchone():
+            raise ExistingJob(previous["job_id"])
+        raise ValueError("Эта операция уже сохранена в истории прохождения.")
     if cmd.action == "accept":
         item = candidate(state, actor, cmd.target)
         if item["character_id"]:

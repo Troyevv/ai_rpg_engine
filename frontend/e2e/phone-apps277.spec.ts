@@ -182,6 +182,17 @@ test('277 anonymous inbox stays private across three owners and a published answ
   await b('Опубликовать ответ').click();
   await expect(phone.getByText('Сыграю вальс!', { exact: true })).toBeVisible();
   await expect(phone.getByText('Аноним', { exact: true })).toBeVisible();
+  if (info.project.name === 'mobile') {
+    for (const width of [320, 360, 393]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(phone.getByLabel('Ваш комментарий')).toBeVisible();
+      expect(
+        await phone.evaluate(
+          (el) => el.scrollWidth <= el.clientWidth && document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  }
   await page.screenshot({ path: info.outputPath('published-answer.png') });
   await switchTo('qa_oleg');
   await page.reload();
