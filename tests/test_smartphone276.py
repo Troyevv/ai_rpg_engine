@@ -89,7 +89,13 @@ def test_two_generations_fence_duplicates_rollback_age_and_retry(app):
     assert not client.get(url).json()["liked"]
     assert repo.get_snapshot(sid)["world_state"]["characters"] == before["world_state"]["characters"]
     repo.retry_job(jid)
-    assert run(app, jid) == 1
+
+    def expand_chosen(messages):
+        result = response(messages)
+        result["fields"]["Роль"] = "Другая профессия"
+        return result
+
+    assert run(app, jid, expand_chosen) == 1
     assert dispatch(app, "accept", "one-like", target=target, revision=revision) == jid
     assert dispatch(app, "accept", "later", target=target) == jid
     assert request(app, "accept", "one-like", target=rows[2]["id"], generate=True).status_code == 409
@@ -102,7 +108,7 @@ def test_two_generations_fence_duplicates_rollback_age_and_retry(app):
     assert cid not in after.get("pending_reviews", {})
     card = next(c for c in repo.get_save(sid)["state"]["characters"] if c["id"] == cid)
     assert int(card["fields"]["Возраст"]) == liked[0]["age"] == rows[1]["age"] + 1
-    assert card["name"] == rows[1]["name"] and card["fields"]["Роль"].startswith(rows[1]["occupation"])
+    assert card["name"] == rows[1]["name"] and card["fields"]["Роль"] == rows[1]["occupation"]
     assert after["world_state"]["characters"][cid]["procedural_portrait"]
     assert len([r for r in repo.request_log(save_id=sid) if r["stage"].startswith("smartphone_")]) == 3
     repo.transition_protagonist(sid, repo.get_save(sid)["revision"], "actor-switch", "temporary", "qa_vera")
@@ -188,6 +194,7 @@ def test_large_public_archive_bounded_context_and_autonomous_batch(app):
     prompt, _ = social_prompt(snap)
     assert len(json.dumps(prompt, ensure_ascii=False)) < 16000
     assert 'item-0"' not in str(prompt) and "qa_private_letter" not in str(prompt)
+    assert client.get(f"/api/saves/{sid}/apps/social", params={"profile": "unknown"}).status_code == 409
     before = deepcopy(snap)
     state["meta"]["world_time"] += 360
     calls = []

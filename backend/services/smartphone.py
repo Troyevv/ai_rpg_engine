@@ -149,7 +149,8 @@ def expand(snapshot, cmd, raw, jid):
     fields["Возраст"] = str(age if age is not None else item["age"])
     for key, brief in [("Роль", "occupation"), ("Внешность", "appearance"), ("Характер", "personality")]:
         if not fields[key].startswith(item[brief]):
-            fields[key] = item[brief] + ". " + fields[key]
+            # Keep the public description if the expansion replaced its identity anchor.
+            fields[key] = item[brief]
     cid = identity("dating_npc", cmd.actor_id, item["id"])
     if cid in state["characters"]:
         raise ValueError("Идентификатор NPC уже занят.")

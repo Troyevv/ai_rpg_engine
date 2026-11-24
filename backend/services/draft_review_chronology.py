@@ -1,7 +1,6 @@
 """Compile one cited family chronology into the existing review proposal and diff."""
 from bisect import bisect_left, bisect_right
 import calendar as gregorian
-import re
 
 from pydantic import BaseModel, ConfigDict, Field
 

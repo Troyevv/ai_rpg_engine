@@ -184,7 +184,7 @@ def subject(snapshot, cid):
 def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
     state = snapshot["world_state"]
     actor = access(snapshot, "social")
-    if profile and not known_birth(state, profile, actor):
+    if profile and (profile not in state["characters"] or not known_birth(state, profile, actor)):
         raise ValueError("Профиль недоступен.")
     data = domain(state)
     rows, reactions = data["publications"], data["reactions"]

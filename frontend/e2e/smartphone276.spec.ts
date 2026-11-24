@@ -47,7 +47,8 @@ test('276 shared feed, NPC discussion, dating batch and direct chat survive relo
   await saved();
   await expect(phone.locator('.smart-post')).toContainText([text]);
   await page.screenshot({ path: info.outputPath('feed.png') });
-  await button('Открыть обсуждение').click();
+  await home();
+  await phone.getByRole('button', { name: /^Реакция · / }).click();
   await expect(phone.getByText('Буду у галереи вечером. Кто ещё идёт?')).toBeVisible();
   await phone.getByLabel('Ваш комментарий').fill('Зайду после шести.');
   await phone.getByLabel('Ваш комментарий').focus();
@@ -83,6 +84,12 @@ test('276 shared feed, NPC discussion, dating batch and direct chat survive relo
   await phone.getByLabel('Публичное описание').fill(bio);
   await button('Сохранить').click();
   await expect(phone.locator('.smart-profile p')).toHaveText(bio);
+  if (info.project.name === 'mobile') {
+    for (const width of [320, 360, 393]) {
+      await page.setViewportSize({ width, height: 820 });
+      await noOverflow();
+    }
+  }
   await noOverflow();
   await page.screenshot({ path: info.outputPath('public-profile.png') });
   await home();
