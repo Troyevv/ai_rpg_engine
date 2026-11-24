@@ -37,5 +37,5 @@ export function Generation({app}:{app:string}){
   if(!running && !['stopped','error'].includes(job.status))return null;
   return <div className="smart-generation" role={running?'status':'alert'}><strong>{label}</strong>
     {running?<button onClick={()=>api(path+'/stop',{}).catch(e=>setError(e.message))}>Остановить</button>:<>
-      <p>{job.error||'Генерация остановлена.'}</p><button onClick={async()=>{try{onJob(await api<Job>(path+'/retry',{revision:job.revision,attempt_epoch:job.attempt_epoch,config,api_key:apiKey}))}catch(e){setError(String(e))}}}>Повторить генерацию</button></>}</div>
+      <p>{job.status==='stopped'?'Генерация остановлена.':app==='social'?'Ваша запись сохранена. Не удалось подготовить ответы.':job.presentation.action==='search'?'Не удалось подготовить выдачу. Параметры поиска сохранены.':'Не удалось завершить карточку. Выбранная анкета сохранена.'}</p><button onClick={async()=>{try{onJob(await api<Job>(path+'/retry',{revision:job.revision,attempt_epoch:job.attempt_epoch,config,api_key:apiKey}))}catch(e){setError(String(e))}}}>Повторить генерацию</button></>}</div>
 }

@@ -65,6 +65,7 @@ class Candidate(Brief):
 
 
 class DatingShelf(Record):
+    searched: bool = False
     filters: SearchFilters = Field(default_factory=SearchFilters)
     candidates: dict[str, Candidate] = Field(default_factory=dict)
     results: list[str] = Field(default_factory=list)

@@ -120,3 +120,43 @@ test('276 failed social reaction can be retried after navigating during generati
   const feed=await(await request.get(`/api/saves/${seed.save}/apps/social`)).json();
   expect(feed.entries).toHaveLength(1);expect(feed.entries[0].post.comments).toBe(2);
 });
+
+test('276 five new posts, app badges and drafts are scoped to the actor, save and branch',async({page,request})=>{
+  test.setTimeout(90000);
+  const seed=async()=>await(await request.post('/test/phone-seed?smartphone=true&incoming=false&unread=true')).json();
+  const a=await seed(),b=await seed();
+  await page.goto('/');
+  const select=async(s:typeof a)=>{await page.evaluate(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.reload()};
+  const state=async()=>await(await request.get(`/api/saves/${a.save}`)).json();
+  const control=async(path:string,body:Record<string,unknown>)=>{
+    const res=await request.post(`/api/saves/${a.save}/${path}`,{data:{revision:(await state()).revision,...body}});
+    expect(res.ok(),await res.text()).toBe(true);
+  };
+  const actor=(id:string)=>control('protagonist',{operation_id:crypto.randomUUID(),operation:'temporary',actor_id:id});
+  await actor('qa_vera');
+  for(let i=0;i<5;i++)await control('apps/command',{command:{app:'social',action:'post',operation_id:'badge-post-'+i,actor_id:'qa_vera',text:'Публичная запись '+i}});
+  await actor('qa_kirill');await select(a);
+  const phone=page.getByRole('region',{name:'Телефон персонажа'});
+  const button=(name:string)=>phone.getByRole('button',{name,exact:true});
+  const open=()=>page.getByRole('button',{name:/^Телефон/}).click();
+  const home=()=>button('Домой').click();
+  const badge=()=>phone.locator('[data-app=social] small');
+  await open();await expect(badge()).toHaveText('5');
+  await button('Контакты').click();await home();await expect(badge()).toHaveText('5');
+  await button('Соцсеть').click();await home();await expect(badge()).toHaveCount(0);
+  await expect(phone.locator('[data-app=messages] small')).toHaveText('1');
+  await page.reload();await open();await expect(badge()).toHaveCount(0);
+  await button('Соцсеть').click();await button('Пост').click();
+  const draft=phone.getByLabel('Текст публикации');
+  await draft.fill('Личный черновик Кирилла');
+  await actor('qa_timur');await page.reload();await open();await expect(badge()).toHaveText('5');
+  await button('Соцсеть').click();await button('Пост').click();await expect(draft).toHaveValue('');
+  await select(b);await open();await expect(badge()).toHaveCount(0);
+  await button('Соцсеть').click();await expect(phone.getByText('Публикаций пока нет.')).toBeVisible();
+  await actor('qa_kirill');await select(a);await open();await button('Соцсеть').click();await button('Пост').click();
+  await expect(draft).toHaveValue('Личный черновик Кирилла');
+  await control('rollback',{});await page.reload();
+  const restored=await(await request.get(`/api/saves/${a.save}/apps/social`)).json();
+  expect(restored.entries||[]).toHaveLength(0);
+  expect(await phone.isVisible()).toBe(false);
+});

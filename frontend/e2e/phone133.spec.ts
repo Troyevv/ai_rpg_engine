@@ -42,6 +42,7 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
    await openDeviceApp(phone,'Контакты');
    await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  } else {
+   await openDeviceApp(phone,'Чаты');
    await phone.getByRole('button',{name:/^Позвонить:/}).click();
  }
  const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();await check();
@@ -52,6 +53,7 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
  await page.getByRole('button',{name:/Вернуться к звонку/}).click();await call.getByRole('button',{name:'Завершить звонок',exact:true}).click();await expect(call).toHaveCount(0);await check();
  await expect(main).toHaveValue('Черновик основной сцены');await capture('return');
  if(!baseline){
+  await page.getByRole('button',{name:'Свернуть телефон'}).click();
   await diagnostics(page);await page.getByRole('tab',{name:'История и восстановление'}).click();
   await expect(page.locator('.diagnostics').getByRole('button',{name:'Контекст / usage',exact:true}).first()).toBeVisible();
   await page.locator('.dialog-content .dialog-close').click();

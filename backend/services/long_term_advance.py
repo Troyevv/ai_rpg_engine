@@ -96,7 +96,13 @@ def execute(storage, job, handle, chat_stream, config):
         def public_activity(stage, messages, limit, temperature, **extra):
             report['llm_calls'] += 1
             return generate(stage, messages, limit, temperature, context_key='social_activity', **extra)
+        sequence = after['world_state']['smartphone']['sequence']
         consider(before, after, batch, config, public_activity, handle.cancelled, social_warnings)
+        if report['status'] in ('calendar_only','quiet') and after['world_state']['smartphone']['sequence'] > sequence:
+            report['status'] = 'developed'
+        for entry in batch['state_changes']:
+            if entry.get('kind') == 'long_term_advance':
+                entry['report'] = dict(report)
     # Zero-budget jobs still have a recorded request/before boundary for regenerate.
     storage.save_context(job["id"], captured, before)
     text = "Длительный переход: " + calendar_label(after["world_state"])

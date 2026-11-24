@@ -20,8 +20,8 @@ def receipt(db, head, operation):
     return json.loads(row[0]) if row else None
 
 
-def check(state, command):
-    actor = access(state,command.app,write=command.action not in ('open','read'))
+def check(snapshot, command):
+    actor = access(snapshot,command.app,write=command.action not in ('open','read'))
     if actor != command.actor_id:
         raise ValueError('Владелец телефона изменился.')
     return actor
@@ -36,8 +36,11 @@ def save_snapshot(db, row, before, after, command, *, job_id=None):
     sid = row['id']
     encoded = json.dumps(after,ensure_ascii=False)
     parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(sid,)).fetchone()
-    db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+    checkpoint = db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
                (sid,row['revision'],row['state_json'],encoded,parent[0] if parent else None))
+    if parent and parent[0]:
+        db.execute("UPDATE response_variants SET payload=json_set(payload,'$.smartphone_checkpoint',?) WHERE id=?",
+                   (checkpoint.lastrowid,parent[0]))
     project(db,sid,after)
     db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(encoded,sid))
 
@@ -56,7 +59,7 @@ def apply_command(repo, db, sid, revision, cmd, *, job_id=None):
     before = json.loads(row['state_json'])
     after = deepcopy(before)
     state = after['world_state']
-    actor = check(state,cmd)
+    actor = check(after,cmd)
     if check_receipt(db,before,cmd):
         return
     repo._assert_idle(db,sid)
@@ -95,7 +98,7 @@ def register_job(repo, db, save, config, jid):
     cmd = AppCommand.model_validate(config['smartphone'])
     snap = json.loads(save['state_json'])
     state = snap['world_state']
-    actor = check(state,cmd)
+    actor = check(snap,cmd)
     previous = check_receipt(db,snap,cmd)
     if previous and previous.get('job_id'):
         raise ExistingJob(previous['job_id'])
@@ -134,7 +137,7 @@ def finish_job(repo, job, command, apply):
             raise ValueError('Сейв изменился во время генерации.')
         before = json.loads(row['state_json'])
         after = deepcopy(before)
-        check(after['world_state'],command)
+        check(after,command)
         apply(after)
         save_snapshot(db,row,before,after,command,job_id=job['id'])
         db.execute("UPDATE game_jobs SET status='saved',error='' WHERE id=?",(job['id'],))

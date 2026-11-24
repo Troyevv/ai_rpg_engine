@@ -22,7 +22,6 @@ def app(tmp_path):
     repo,client,sid=setup(tmp_path)
     snap=repo.get_snapshot(sid)
     snap['world_state']['meta']['communication'].update(dating=True,social=True)
-    snap['world_state']['characters']['qa_kirill']['developmental_stage'] = 'adult'
     with repo.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),sid))
     return repo,client,sid
@@ -91,7 +90,7 @@ def test_two_generations_fence_duplicates_rollback_age_and_retry(app):
     assert after['world_state']['camera']==before['world_state']['camera']
     assert cid not in after.get('pending_reviews',{})
     card=next(c for c in repo.get_save(sid)['state']['characters'] if c['id']==cid)
-    assert int(card['fields']['Возраст'])==liked[0]['age']+1
+    assert int(card['fields']['Возраст'])==liked[0]['age']==rows[1]['age']+1
     assert card['name']==rows[1]['name'] and card['fields']['Роль'].startswith(rows[1]['occupation'])
     assert after['world_state']['characters'][cid]['procedural_portrait']
     assert len([r for r in repo.request_log(save_id=sid) if r['stage'].startswith('smartphone_')])==3
@@ -238,3 +237,57 @@ def test_five_publications_badge_is_per_actor_per_app_and_persists(app):
     request(app,'post','other-post',actor='qa_timur',text='Новая запись')
     repo.transition_protagonist(sid,repo.get_save(sid)['revision'],'return','temporary','qa_kirill')
     assert badge()==1
+
+
+def test_reselect_variant_recovers_its_person_and_original_job_receipts(app):
+    repo,client,sid=app
+    ordinary_job(repo,sid)
+    turn=repo.list_turns(sid)[-1]
+    original=turn['active_variant_id']
+    search=dispatch(app,'search','branch-search',filters={})
+    run(app,search)
+    url=f'/api/saves/{sid}/apps/dating'
+    first=client.get(url).json()['results'][0]
+    accept=dispatch(app,'accept','branch-accept',target=first['id'])
+    run(app,accept)
+    cid=client.get(url).json()['liked'][0]['character_id']
+    assert request(app,'post','branch-post',text='Запись исходной ветки').is_success
+    ordinary_job(repo,sid,'regenerate')
+    sibling=repo.list_turns(sid)[-1]['active_variant_id']
+    assert sibling!=original
+    assert not client.get(url).json()['results']
+    assert cid not in repo.get_snapshot(sid)['world_state']['characters']
+    def select(vid):
+        repo.select_variant(sid,turn['id'],vid,repo.get_save(sid)['revision'])
+    select(original)
+    assert client.get(url).json()['liked'][0]['character_id']==cid
+    assert dispatch(app,'accept','different-operation',target=first['id'])==accept
+    assert client.get(f'/api/saves/{sid}/apps/social').json()['entries'][0]['post']['text']=='Запись исходной ветки'
+    select(sibling)
+    assert not client.get(f'/api/saves/{sid}/apps/social').json()['entries']
+
+
+def test_closed_phone_background_publishes_through_normal_turn_job(app,monkeypatch):
+    monkeypatch.setattr("backend.runtime_v3.player_actions.EXTRACTION_VERSION",11)
+    from test_narrative_test_world import NARRATIVE
+    repo,client,sid=app
+    snap=repo.get_snapshot(sid);state=snap['world_state']
+    state['smartphone']['last_considered']=state['meta']['world_time']-180
+    with repo.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),sid))
+    def stream(**args):
+        if args['messages'][0]['content'].startswith('Public social activity/1'):
+            yield json.dumps(response(args['messages']))
+        else:
+            yield json.dumps(dict(scene=dict(elapsed_minutes=1),scene_steps=[])) if args.get('response_format') else NARRATIVE
+    jid=repo.begin_job(sid,'Рассматриваю фотографии.','turn',CONFIG)
+    with patch('engine.find_loaded_model',return_value={'config':{'context_length':32768}}),patch('engine.chat_stream',side_effect=stream):
+        engine.run_job(repo.path,jid,engine.Worker())
+    assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    assert sum(r['stage']=='social_activity' for r in repo.request_log(job_id=jid))==1
+    url=f'/api/saves/{sid}/apps/social'
+    post=client.get(url).json()['entries'][0]['post']
+    reply=client.get(url,params={'post':post['id']}).json()['comments'][0]
+    assert reply['author']!=post['author'] and reply['reply_to']==post['id']
+    assert post['author']!='qa_kirill' and reply['author']!='qa_kirill'
+    assert repo.get_snapshot(sid)['world_state']['meta']['world_time']==state['meta']['world_time']+1

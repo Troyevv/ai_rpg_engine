@@ -16,8 +16,8 @@ def messages(instruction, payload):
 
 
 def setting(snapshot):
-    campaign = snapshot.get('campaign',{})
-    return dict(world={key:campaign[key] for key in ('name','genre','era','setting') if key in campaign},
+    campaign = snapshot.get('campaign',{}).get('campaign',{})
+    return dict(world={key:str(campaign[key])[:800] for key in ('title','genre','era','setting','public_description') if campaign.get(key)},
                 calendar=current_time(snapshot['world_state']))
 
 
@@ -85,7 +85,7 @@ def search_result(snapshot, cmd, raw):
         cid = identity('candidate',actor,cmd.operation_id,i)
         book['candidates'][cid] = Candidate(**brief.model_dump(),id=cid,search_date=current_time(state)['date']).model_dump()
         results.append(cid)
-    book.update(filters=filters.model_dump(),results=results)
+    book.update(filters=filters.model_dump(),results=results,searched=True)
     book['candidates'] = {cid:c for cid,c in book['candidates'].items() if cid in results or c['character_id']}
 
 

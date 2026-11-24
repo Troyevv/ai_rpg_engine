@@ -1,5 +1,5 @@
 """Explicit smartphone commands and read models. All identities belong to one snapshot."""
-from backend.runtime_v3.calendar import age_on, current_time, profile_of
+from backend.runtime_v3.calendar import age_on, exact_age, current_time, profile_of
 from backend.runtime_v3.kinship import visible_name
 from backend.runtime_v3.reproduction import known_birth
 from backend.runtime_v3.life import capabilities
@@ -8,7 +8,8 @@ from backend.runtime_v3.portraits import projection as portrait
 from backend.runtime_v3.smartphone_models import DatingShelf, Publication, Reaction, SmartphoneState
 
 
-def access(state, app, *, write=False):
+def access(snapshot, app, *, write=False):
+    state = snapshot["world_state"]
     actor = state['camera']['controlled_actor_id']
     cfg = state['meta']['communication']
     enabled = {'calls': cfg['voice_call'], 'messages': cfg['text_message'],
@@ -23,6 +24,10 @@ def access(state, app, *, write=False):
         person = state['characters'][actor]
         age = age_on(person.get('birth_date'), current_time(state)['date'], profile_of(state))
         stage = person.get('developmental_stage')
+        if age is None and stage in ('unknown',None):
+            card = next((c for c in snapshot['character_cards'] if c['id']==actor),None)
+            if card:
+                age = exact_age(card)
         if (age is None and stage != 'adult' or age is not None and age < 18 or stage in ('infant','child','adolescent')):
             raise ValueError('Знакомства доступны взрослым персонажам.')
     return actor
@@ -139,7 +144,7 @@ def subject(snapshot, cid):
 
 def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
     state = snapshot['world_state']
-    actor = access(state,'social')
+    actor = access(snapshot,'social')
     data = domain(state)
     rows, reactions = data['publications'], data['reactions']
     counts, mine, comments = {}, set(), {}
@@ -174,12 +179,19 @@ def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
                 next=f'{page[-1][0]},{page[-1][1]}' if len(entries)>limit else None)
 
 
-def dating_view(state):
-    actor = access(state,'dating')
+def dating_view(snapshot):
+    state = snapshot['world_state']
+    actor = access(snapshot,'dating')
     book = shelf(state,actor)
     def public(c):
-        return {k:v for k,v in c.items() if k != 'job_id'}
-    return dict(filters=book['filters'], results=[public(book['candidates'][cid]) for cid in book['results']],
+        entry = {k:v for k,v in c.items() if k != 'job_id'}
+        if c['character_id']:
+            person = state['characters'][c['character_id']]
+            age = age_on(person.get('birth_date'),current_time(state)['date'],profile_of(state))
+            if age is not None:
+                entry['age'] = age
+        return entry
+    return dict(searched=book.get('searched',bool(book['results'])),filters=book['filters'], results=[public(book['candidates'][cid]) for cid in book['results']],
                 liked=[public(c) for c in book['candidates'].values() if c['character_id']])
 
 

@@ -207,7 +207,10 @@ def test_latest_original_visit_errors_are_not_hidden_by_soft_audit(tmp_path):
     from test_life248_playability import repository_case
     data=json.loads(gzip.decompress((Path(__file__).parent/'fixtures/issue250/berezovsk.json.gz').read_bytes()))['005']
     repo,sid,_=repository_case(tmp_path,'005');before=repo.get_snapshot(sid);old=history(repo,sid)
-    assert before['world_state']==data['before']
+    expected=deepcopy(data['before'])
+    expected['meta']['communication'].update(social=False,dating=False)
+    expected['smartphone']=dict(publications={}, reactions={}, profiles={}, dating={}, opened={}, sequence=0, last_considered=None)
+    assert before['world_state']==expected
     for payload in data['responses']['D']:
         with pytest.raises(StructuralDeltaError) as error:
             StateResolver(data['before'],data['narrative'],data['player_input'],

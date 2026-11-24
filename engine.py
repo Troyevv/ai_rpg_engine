@@ -267,7 +267,7 @@ def run_job(path, job_id, handle):
                     if len(matches)!=1:
                         raise RuntimeError('Не найден однозначный исходный background Narrative для recovery.')
                     return iter([matches[0]['response_text']])
-                if stage in ('remote_initiative', 'remote_group_semantics') or (version >= 10 and stage == 'extraction' and job['attempt_epoch']):
+                if stage in ('remote_initiative', 'remote_group_semantics', 'social_activity') or (version >= 10 and stage == 'extraction' and job['attempt_epoch']):
                     # Reuse a completed source-identical request after a later
                     # provider failure; the existing usage journal owns the text.
                     for attempt in storage.request_log(job_id=job_id):

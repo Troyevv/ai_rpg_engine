@@ -832,7 +832,7 @@ def projection(snapshot):
     cfg = dict(cfg)
     if cfg.get('dating'):
         try:
-            access(state,'dating')
+            access(snapshot,'dating')
         except ValueError:
             cfg['dating'] = False
     return dict(

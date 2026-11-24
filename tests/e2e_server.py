@@ -1193,7 +1193,6 @@ if __name__ == '__main__':
         batch=WorldHistoryV3().to_dict()
         if smartphone:
             snap['world_state']['meta']['communication'].update(social=True,dating=True)
-            snap['world_state']['characters']['qa_kirill']['developmental_stage'] = 'adult'
         if legacy_portraits:
             # Explicit pre-175 save fixture: preserve coverage of the old fallback.
             for actor in snap['world_state']['characters'].values():

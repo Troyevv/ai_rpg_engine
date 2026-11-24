@@ -40,11 +40,10 @@
 .smart-generation{border:1px solid var(--border);border-radius:14px;padding:10px;color:var(--text);background:var(--surface-2)}
 .smart-generation p{width:100%;margin:0}
 .smart-notice,.smart-people button{width:100%;text-align:left;margin-bottom:6px}
-.loaded-page .smart-more{display:none!important}
 .dating-art{position:relative;isolation:isolate;overflow:hidden;min-height:112px;display:grid;place-items:center;background:linear-gradient(120deg,var(--surface-2),color-mix(in srgb,var(--accent) 32%,var(--surface-2)));color:var(--accent)}
 .dating-art::before,.dating-art::after,.dating-art i{content:"";position:absolute;z-index:-1;width:170px;aspect-ratio:1;border-radius:50%;border:1px solid currentColor;opacity:.34;right:-30px;top:-60px}
 .dating-art::after{right:-5px;top:-40px}.dating-art i{left:-60px;top:30px}
-.dating-art span{font:italic 48px/1.1 Georgia,serif;letter-spacing:-.07em}
+.dating-monogram{font:italic 48px/1.1 Georgia,serif;letter-spacing:-.07em}
 .dating-copy{padding:16px}.dating-copy h2{margin:0 0 8px;font-size:1.5rem;line-height:1.15}.dating-place{margin:3px 0;color:var(--text-muted);font-size:.85rem}
 .dating-tags{display:flex;gap:5px;flex-wrap:wrap}.dating-tags span{padding:4px 9px;background:var(--accent-soft);color:var(--text);border-radius:12px;font-size:.8rem}
 .dating-controls{margin-top:12px;display:grid;grid-template-columns:1fr 1fr}
