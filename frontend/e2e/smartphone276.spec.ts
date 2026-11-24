@@ -1,6 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { themes } from '../src/lib/skins';
 import { diagnostics } from './navigation';
+
+// The browser records visible publications while this second API client makes
+// its own explicit move. Retry only a revision mismatch (rejected before commit).
+async function externalCommand(
+  request: APIRequestContext,
+  base: string,
+  path: string,
+  body: Record<string, unknown>,
+) {
+  const submit = async () => {
+    const { revision } = await (await request.get(base)).json();
+    return request.post(base + '/' + path, { data: { ...body, revision } });
+  };
+  let response = await submit();
+  if (response.status() === 409 && /Сейв (уже )?изменился/.test(await response.text()))
+    response = await submit();
+  expect(response.ok(), await response.text()).toBe(true);
+}
 
 test('276 shared feed, NPC discussion, dating batch and direct chat survive reload', async ({
   page,
@@ -240,19 +258,8 @@ test('276 five new posts, app badges and drafts are scoped to the actor, save an
     await page.evaluate((s) => localStorage.setItem('selection', JSON.stringify(s)), s);
     await page.reload();
   };
-  const state = async () => await (await request.get(`/api/saves/${a.save}`)).json();
-  const control = async (path: string, body: Record<string, unknown>) => {
-    const submit = async () => request.post(`/api/saves/${a.save}/${path}`, {
-      data: { revision: (await state()).revision, ...body },
-    });
-    let res = await submit();
-    // This API client switches actors while the browser independently persists
-    // visible Knowledge. Retry only a rejected compare-and-swap, keeping the intent ID.
-    if (path === 'protagonist' && res.status() === 409 && (await res.text()).includes('Сейв изменился')) {
-      res = await submit();
-    }
-    expect(res.ok(), await res.text()).toBe(true);
-  };
+  const control = (path: string, body: Record<string, unknown>) =>
+    externalCommand(request, `/api/saves/${a.save}`, path, body);
   const actor = (id: string) =>
     control('protagonist', { operation_id: crypto.randomUUID(), operation: 'temporary', actor_id: id });
   await actor('qa_vera');
@@ -386,21 +393,17 @@ test('manual feed refresh uses one durable job, survives closing, retry, reload 
   await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
 
   // An ordinary turn supplies a real undo boundary between the two refreshes.
-  const turn = await request.post(path + '/turns', {
-    data: {
-      kind: 'turn',
-      text: 'Я смотрю на улицу.',
-      revision: (await state()).revision,
-      config: {
-        provider: 'local',
-        model: 'test-model',
-        context_length: 131072,
-        max_tokens: 8000,
-        update_tokens: 8000,
-      },
+  await externalCommand(request, path, 'turns', {
+    kind: 'turn',
+    text: 'Я смотрю на улицу.',
+    config: {
+      provider: 'local',
+      model: 'test-model',
+      context_length: 131072,
+      max_tokens: 8000,
+      update_tokens: 8000,
     },
   });
-  expect(turn.ok(), await turn.text()).toBe(true);
   await expect.poll(async () => (await state()).job?.status).toBe('saved');
   const secondClock = await clock();
   await page.reload();
@@ -417,8 +420,7 @@ test('manual feed refresh uses one durable job, survives closing, retry, reload 
   await select(current);
   await expect(phone.locator('.smart-post')).toHaveCount(4);
   await page.getByRole('button', { name: 'Свернуть телефон', exact: true }).click();
-  const rollback = await request.post(path + '/rollback', { data: { revision: (await state()).revision } });
-  expect(rollback.ok(), await rollback.text()).toBe(true);
+  await externalCommand(request, path, 'rollback', {});
   await page.reload();
   await enter();
   await expect(phone.locator('.smart-post')).toHaveCount(2);
