@@ -27,8 +27,7 @@ export function useReadQueue(scope: string, save: Save, actor: string) {
     fresh.forEach((id) => observed.current.add(id));
     update({ ...current.current, [app]: [...new Set([...(current.current[app] || []), ...fresh])] });
   };
-  const flush = async (onSave: (s: Save) => void) => {
-    let revision = save.revision;
+  const flush = async (revision: number, onSave: (s: Save) => void) => {
     for (const app of Object.keys(current.current)) {
       while (current.current[app]?.length) {
         const ids = current.current[app].slice(0, 80);

@@ -78,7 +78,8 @@ export function usePhone(
   const requestLock = useRef(false);
   const autoReadAttempt = useRef<string | null>(null);
   const currentRevision = useRef(save.revision);
-  currentRevision.current = save.revision;
+  currentRevision.current = Math.max(currentRevision.current, save.revision);
+  const receiptTail = useRef(Promise.resolve());
   const currentOwner = useRef(ownerKey);
   currentOwner.current = ownerKey;
   useLayoutEffect(() => {
@@ -87,6 +88,28 @@ export function usePhone(
       currentOwner.current = '';
     };
   }, [ownerKey]);
+  const commitReceipt = (next: Save) => {
+    if (currentOwner.current === ownerKey && next.revision >= currentRevision.current) {
+      currentRevision.current = next.revision;
+      onCommit(next);
+    }
+  };
+  // Passive receipts share one revision chain without disabling the button under
+  // the player's pointer. Foreground commands wait for earlier receipts.
+  const flushReceipts = (afterRead?: (revision: number) => Promise<void>) => {
+    const task = receiptTail.current.then(async () => {
+      if (currentOwner.current !== ownerKey) throw new Error('Владелец телефона изменился.');
+      const revision = await perceptions.flush(currentRevision.current, commitReceipt);
+      if (currentOwner.current !== ownerKey) throw new Error('Владелец телефона изменился.');
+      if (afterRead) await afterRead(revision);
+      return currentRevision.current;
+    });
+    receiptTail.current = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
+  };
   const [membersOpen, setMembersOpen] = useState(false);
   const [away, setAway] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -330,10 +353,13 @@ export function usePhone(
     const owner = ownerKey;
     requestLock.current = true;
     setBusy(true);
-    api<Save>(`/saves/${save.id}/phone`, {
-      revision: save.revision,
-      command: { action: 'read', conversation_id: conversation, operation_id: crypto.randomUUID() },
-    })
+    flushReceipts()
+      .then((revision) =>
+        api<Save>(`/saves/${save.id}/phone`, {
+          revision,
+          command: { action: 'read', conversation_id: conversation, operation_id: crypto.randomUUID() },
+        }),
+      )
       .then((next) => {
         if (currentOwner.current === owner) onCommit(next);
       })
@@ -396,9 +422,7 @@ export function usePhone(
     const owner = ownerKey;
     const key = `phone-request:${owner}`;
     try {
-      const revision = await perceptions.flush((next) => {
-        if (currentOwner.current === ownerKey) onCommit(next);
-      });
+      const revision = await flushReceipts();
       const request = phoneOperation(key, command);
       const payload = request.payload;
       const automatic = ['send', 'call'].includes(String(command.action));
@@ -541,7 +565,7 @@ export function usePhone(
     sessionStorage.setItem(key, requestId);
     try {
       const result = await api<{ job: Job; save: Save }>(`/saves/${save.id}/phone/dispatch`, {
-        revision: save.revision,
+        revision: await flushReceipts(),
         config,
         api_key: apiKey,
         continuation: { source_event_id: event.id, owner_id: phone.actor_id, request_id: requestId },
@@ -579,7 +603,7 @@ export function usePhone(
       if (active(job)) await api(`/jobs/${job.id}/stop`, {});
       const request = phoneOperation(`phone-request:${ownerKey}`, { action: 'end', event_id: call.id });
       const next = await api<Save>(`/saves/${save.id}/phone`, {
-        revision: save.revision,
+        revision: await flushReceipts(),
         command: request.payload,
       });
       request.complete();
@@ -648,9 +672,7 @@ export function usePhone(
     setBusy(true);
     setError('');
     try {
-      const revision = await perceptions.flush((next) => {
-        if (currentOwner.current === ownerKey) onCommit(next);
-      });
+      const revision = await flushReceipts();
       const value = await api<Save | { save: Save; job: Job }>(
         `/saves/${save.id}/apps/${generate ? 'dispatch' : 'command'}`,
         {
@@ -685,20 +707,11 @@ export function usePhone(
         ['error', 'stopped'].includes(job.status))
     )
       return;
-    const timer = setTimeout(async () => {
-      if (requestLock.current) return;
-      requestLock.current = true;
-      setBusy(true);
-      try {
-        await perceptions.flush((next) => {
-          if (currentOwner.current === ownerKey) onCommit(next);
+    const timer = setTimeout(() => {
+      if (!requestLock.current)
+        void flushReceipts().catch((e) => {
+          if (currentOwner.current === ownerKey) setError(String(e));
         });
-      } catch (e) {
-        if (currentOwner.current === ownerKey) setError(String(e));
-      } finally {
-        requestLock.current = false;
-        setBusy(false);
-      }
     }, 250);
     return () => clearTimeout(timer);
   }, [perceptions.queue, locked, error, save.revision, job?.status]);
@@ -749,7 +762,22 @@ export function usePhone(
     const attempt = id + ':' + marker + ':' + save.revision;
     if (lastMarkerAttempt.current === attempt) return;
     lastMarkerAttempt.current = attempt;
-    void command(id, 'open', { marker });
+    void flushReceipts(async (revision) => {
+      const operation = phoneOperation('app-open:' + ownerKey, {
+        app: id,
+        action: 'open',
+        actor_id: phone.actor_id,
+        marker,
+      });
+      const next = await api<Save>(`/saves/${save.id}/apps/command`, {
+        revision,
+        command: operation.payload,
+      });
+      operation.complete();
+      commitReceipt(next);
+    }).catch((e) => {
+      if (currentOwner.current === ownerKey) setError(String(e));
+    });
   }, [pendingMarkers, locked, save.revision, job?.status]);
   const displayBadge = (id: string) => {
     const count = phone.badges?.[id] || 0;

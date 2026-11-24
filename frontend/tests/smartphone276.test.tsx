@@ -159,3 +159,80 @@ it('opens a canonical conversation referenced by a detail ahead of the launcher 
     vi.unstubAllGlobals();
   }
 });
+
+it('submits a foreground action behind an in-flight Knowledge receipt without losing the click', async () => {
+  const { usePhone } = await import('../src/phone/usePhone');
+  const initial = {
+    id: 278,
+    revision: 4,
+    turns: [],
+    state: {
+      characters: [],
+      phone: {
+        actor_id: 'owner',
+        capabilities: { text_message: true, social: true },
+        contacts: [],
+        recipients: [],
+        conversations: [],
+        events: [],
+        emergency: [],
+        badges: {},
+      },
+    },
+  } as unknown as Save;
+  let release!: (response: Response) => void;
+  const receipt = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const payloads: { revision: number; command: { action: string } }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) => {
+      const payload = JSON.parse(options.body);
+      payloads.push(payload);
+      return payload.command.action === 'read'
+        ? receipt
+        : new Response(JSON.stringify({ ...initial, revision: 6 }));
+    }),
+  );
+  let device!: ReturnType<typeof usePhone>;
+  function Harness() {
+    device = usePhone(
+      {
+        save: initial,
+        config: {} as ModelConfig,
+        apiKey: '',
+        job: null,
+        disabled: false,
+        onJob: () => {},
+        onCommit: () => {},
+        onBusyChange: () => {},
+        openCharacter: () => {},
+      },
+      '278:owner',
+    );
+    return null;
+  }
+  const root = createRoot(document.createElement('div'));
+  try {
+    await act(() => root.render(<Harness />));
+    await act(() => device.observe('news', ['article']));
+    await vi.waitFor(() => expect(payloads.map((p) => p.command.action)).toEqual(['read']));
+    expect(device.locked).toBe(false);
+    let submitted!: Promise<boolean>;
+    act(() => {
+      submitted = device.command('questions', 'ask', { target: 'recipient', text: 'Как дела?' });
+    });
+    await act(async () => {
+      release(new Response(JSON.stringify({ ...initial, revision: 5 })));
+      expect(await submitted).toBe(true);
+    });
+    expect(payloads.map((p) => [p.command.action, p.revision])).toEqual([
+      ['read', 4],
+      ['ask', 5],
+    ]);
+  } finally {
+    await act(() => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
