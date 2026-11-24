@@ -1,3 +1,4 @@
+import {useDeviceHistory} from './phone/history';
 import {choiceText, NarrativeChoiceCard} from './NarrativeChoice';
 import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -27,23 +28,13 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
  const {scroll,onScroll,away,jumpToLatest}=useStoryScroll(scope);
  const collapse=()=>{setMinimized(true);sessionStorage.setItem(`call-min:${scope}`,'true');requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.phone-peek')?.focus({preventScroll:true}))};
  const expand=()=>{setMinimized(false);sessionStorage.setItem(`call-min:${scope}`,'false')};
- useEffect(()=>{
-   if(minimized)return;
-   panel.current?.focus();
-   if(history.state?.phoneCall!==scope){
-     const {phoneUI, ...state}=history.state||{};
-     // Hand the phone's existing Back entry to the call; do not leave a ghost
-     // phone screen below the independent call surface.
-     if(phoneUI)history.replaceState({...state,phoneCall:scope},'');
-     else history.pushState({...state,phoneCall:scope},'');
-   }
-   return()=>{if(history.state?.phoneCall===scope&&!history.state?.inspectorOpen)history.back()};
- },[minimized,scope]);
+ useDeviceHistory('phoneCall',scope,!minimized,()=>{collapse();return false});
+ useLayoutEffect(()=>{if(!minimized)panel.current?.focus()},[minimized]);
  useEffect(()=>{
    const show=(event:Event)=>{if((event as CustomEvent).detail===callId)expand()};
    const back=()=>collapse();
-   window.addEventListener('phone-call-open',show);window.addEventListener('popstate',back);window.addEventListener('save-workspace-opened',back);
-   return()=>{window.removeEventListener('phone-call-open',show);window.removeEventListener('popstate',back);window.removeEventListener('save-workspace-opened',back)};
+   window.addEventListener('phone-call-open',show);window.addEventListener('save-workspace-opened',back);
+   return()=>{window.removeEventListener('phone-call-open',show);window.removeEventListener('save-workspace-opened',back)};
  },[callId,scope]);
  useEffect(()=>{if(obscured)collapse()},[obscured]);
  const wasActive=useRef(active);
@@ -97,6 +88,7 @@ export function CallScene({save,disabled,children,choices,submit,end,callId,onSe
          {active?<><form onSubmit={e=>{e.preventDefault();void send()}}><textarea ref={input} rows={1} placeholder="Что ты говоришь?" aria-label={t('input')} value={draft} onChange={e=>{setDraft(e.target.value);sessionStorage.setItem(key,e.target.value)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.stopPropagation();void send()}}}/><button disabled={disabled||!draft.trim()} aria-label={t('send')}><Send size={21}/></button></form></>:<button onClick={()=>onSelect(null)}>{t('close')}</button>}
        </footer>
      </section>
+     <button className="smart-home-key" aria-label="Домой" onClick={()=>{collapse();window.dispatchEvent(new Event("phone-open"))}}>Домой</button>
    </PhoneFrame>
  </>;
 }

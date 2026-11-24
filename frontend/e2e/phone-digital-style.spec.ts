@@ -1,3 +1,4 @@
+import {openDeviceApp} from './navigation';
 import {test,expect} from '@playwright/test';
 
 // Deliberately authored fixture content, NOT a requirement on model output.
@@ -18,12 +19,12 @@ for(const group of [false,true]) {
   await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();
   const phone=page.getByRole('region',{name:'Телефон персонажа'});
   const openHistory=async()=>{
-   await phone.getByRole('button',{name:/^Переписки/}).click();
+   await openDeviceApp(phone,'Чаты');
    await phone.locator('.phone-thread').filter({hasText:group?'Общая переписка':'Вера работа'}).click();
   };
   if(group)await openHistory();
   else {
-   await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+   await openDeviceApp(phone,'Контакты');
    await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
    await phone.getByRole('button',{name:'Написать',exact:true}).click();
   }

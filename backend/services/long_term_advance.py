@@ -90,6 +90,13 @@ def execute(storage, job, handle, chat_stream, config):
     if output is None:
         return
     after, batch, report = output
+    social_warnings = []
+    if config.get('_extraction_contract',1) >= 11 and report['llm_calls'] < report['max_llm_calls']:
+        from backend.services.smartphone import consider
+        def public_activity(stage, messages, limit, temperature, **extra):
+            report['llm_calls'] += 1
+            return generate(stage, messages, limit, temperature, context_key='social_activity', **extra)
+        consider(before, after, batch, config, public_activity, handle.cancelled, social_warnings)
     # Zero-budget jobs still have a recorded request/before boundary for regenerate.
     storage.save_context(job["id"], captured, before)
     text = "Длительный переход: " + calendar_label(after["world_state"])
@@ -119,5 +126,5 @@ def execute(storage, job, handle, chat_stream, config):
     storage.job_progress(job["id"], "validating", narrative=text, complete=True)
     if not handle.cancelled.is_set():
         storage.commit_job(
-            job["id"], after, choices, {"long_term_advance": report, "interpretation_warnings":warnings}, history_batch=batch
+            job["id"], after, choices, {"long_term_advance": report, "interpretation_warnings":warnings+social_warnings}, history_batch=batch
         )

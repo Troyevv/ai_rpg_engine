@@ -673,6 +673,16 @@ def scripted_stream(**kwargs):
 
 
 def stream(**kwargs):
+    global phone_mode
+    if kwargs['messages'][0]['content'].startswith(('Dating search/1','Dating character/1','Public social activity/1')):
+        from smartphone_provider import response
+        if phone_mode == 'app_error_once':
+            time.sleep(2)
+            phone_mode = 'silent'
+            raise RuntimeError('Тестовый провайдер прервал ответ.')
+        time.sleep(.2)
+        yield json.dumps(response(kwargs['messages']),ensure_ascii=False)
+        return
     global scene255_attempts
     if kwargs.get('model') == 'blank263-test':
         from backend.services.provider_attempt import identity
@@ -1166,7 +1176,7 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
+    def phone_seed(smartphone: bool = False, unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
@@ -1181,6 +1191,9 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if smartphone:
+            snap['world_state']['meta']['communication'].update(social=True,dating=True)
+            snap['world_state']['characters']['qa_kirill']['developmental_stage'] = 'adult'
         if legacy_portraits:
             # Explicit pre-175 save fixture: preserve coverage of the old fallback.
             for actor in snap['world_state']['characters'].values():

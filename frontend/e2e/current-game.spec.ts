@@ -125,6 +125,7 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   await expect(device).not.toHaveClass(/is-open/);
   await expect(device).toHaveAttribute("data-identity", "same");
   await page.getByRole("button", { name: /^Телефон/ }).click();
+  await phone.getByRole("button", {name:"Чаты",exact:true}).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
@@ -134,6 +135,7 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   await expect(device).not.toHaveClass(/is-open/);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Телефон/ }).click();
+  await phone.getByRole("button", {name:"Чаты",exact:true}).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );

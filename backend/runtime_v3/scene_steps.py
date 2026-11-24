@@ -223,9 +223,9 @@ def project_schema(schema, *, version=6, camera_mode=None):
 
 
 @lru_cache(maxsize=16)
-def input_schema(version=6, camera_mode=None, *, voice=False):
+def input_schema(version=6, camera_mode=None, *, voice=False, social=False):
     from backend.runtime_v3.raw import prompt_schema
-    return prompt_schema(semantic_slice=True, scene_sequence=True, spatial_version=version, camera_mode=camera_mode, consequence_first=True,
+    return prompt_schema(social=social, semantic_slice=True, scene_sequence=True, spatial_version=version, camera_mode=camera_mode, consequence_first=True,
                          explicit_departures=True, grounded_choices=True, player_agency_required=True,
                          communication=True if voice else None, voice=voice)
 
@@ -234,7 +234,7 @@ def state_input_schema(version, state):
     from backend.runtime_v3.remote import active_call
     camera = state['camera'] if state else {}
     call = active_call(state, camera.get('controlled_actor_id')) if version >= 10 and state else None
-    return input_schema(version, camera.get('mode'), voice=bool(call and call['status'] == 'answered'))
+    return input_schema(version, camera.get('mode'), social=bool(state and state['meta']['communication'].get('social')), voice=bool(call and call['status'] == 'answered'))
 
 
 def decode(payload, *, version=6):

@@ -781,7 +781,11 @@ class SignificantPossession(StrictModel):
     applied: dict[str, str] = Field(default_factory=dict)
 
 
+from backend.runtime_v3.smartphone_models import SmartphoneState
+
+
 class WorldStateV3(StrictModel):
+    smartphone: SmartphoneState = Field(default_factory=SmartphoneState)
     contacts: dict[str, Contact] = Field(default_factory=dict)
     conversations: dict[str, Conversation] = Field(default_factory=dict)
     remote_events: dict[str, RemoteEvent] = Field(default_factory=dict)
@@ -840,6 +844,11 @@ def assert_world_state_v3_invariants(state, before=None):
         meta.pop('narrative_detail', None)
     if meta['current_protagonist_id'] is not None and meta['current_protagonist_id'] not in actors:
         fatal('неизвестный главный герой')
+    from backend.runtime_v3.smartphone import validate_links
+    try:
+        validate_links(value)
+    except ValueError as exc:
+        fatal(str(exc),'smartphone_reference_invalid')
     open_periods = []
     for period in meta['protagonist_periods']:
         if period['actor_id'] not in actors or period['since'] > meta['world_time'] or period['until'] is not None and not period['since'] <= period['until'] <= meta['world_time']:
@@ -971,6 +980,15 @@ class StatePatch:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
+            if section == 'smartphone':
+                for key,value in records.items():
+                    if key in ('sequence','last_considered'):
+                        result[section][key] = value
+                    elif key in ('publications','reactions'):
+                        result[section][key].update(deepcopy(value))
+                    else:
+                        fatal('неизвестное изменение приложения')
+                continue
             if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions', 'possessions', 'contacts', 'conversations', 'remote_events'):
                 fatal('неизвестная секция patch')
             result.setdefault(section, {}).update(deepcopy(records))

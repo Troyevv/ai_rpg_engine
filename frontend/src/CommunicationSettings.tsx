@@ -22,6 +22,7 @@ type Policy = "instant" | "delayed" | "live";
 export type CommunicationProfile = Partial<Record<Channel, boolean>> & {
   profile_version?: 1;
   preset?: string;
+  social?:boolean; dating?:boolean;
   presentation?: "none" | "phone";
   delivery_policy?: Partial<Record<Channel, Policy>>;
   delivery_minutes?: Partial<Record<"letter" | "courier" | "telegram", number>>;
@@ -109,9 +110,13 @@ export function CommunicationSettings({
   const selectPreset = (id:string) => onChange?.(id === 'custom' ? {...v,preset:id} : {...catalog[id],author_note:v.author_note||''});
   const toggle = (c:Channel,checked:boolean) => {
     const next={...v,[c]:checked};
-    change({[c]:checked,presentation:next.text_message||next.voice_call?'phone':'none',
+    change({[c]:checked,presentation:next.text_message||next.voice_call||next.social||next.dating?'phone':'none',
       delivery_policy:{...v.delivery_policy,[c]:v.delivery_policy?.[c]||defaultPolicy(c)}});
   };
+  const applications=<fieldset className="channel-set"><legend>{english?'Phone apps':'Приложения смартфона'}</legend>
+    <div className="chips">{(['social','dating'] as const).map((key,i)=><label key={key} className="channel" data-selected={!!v[key]}>
+      <input type="checkbox" disabled={!onChange||disabled} checked={!!v[key]} onChange={e=>change({[key]:e.target.checked,presentation:e.target.checked||v.text_message||v.voice_call||v[key==='social'?'dating':'social']?'phone':'none'})}/>
+      {english?['Social feed','Dating'][i]:['Соцсеть','Знакомства'][i]}</label>)}</div></fieldset>;
   if(compact&&onChange)return <section className="paper comm-card atelier-communication" aria-label="Технологии связи">
     <header className="card-head comm-head"><div className="title-line"><Radio className="section-icon"/><h2>Технологии связи</h2></div><span className="count-badge" aria-live="polite">{enabled.length} из 7</span></header>
     <fieldset disabled={disabled} className="comm-body"><div className="era"><label htmlFor="atelier-communication-preset">Набор технологий</label>
@@ -121,7 +126,7 @@ export function CommunicationSettings({
       <fieldset className="channel-set"><legend>Доступные каналы</legend><div className="chips">{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className="channel" data-selected={!!v[c]} title={names[i]+' · '+policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
         <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/><Icon size={14}/><span>{names[i]}</span>{v[c]?<Check className="on selection-mark" size={13}/>:<Plus className="off" size={12}/>}
       </label>})}</div></fieldset>
-    </fieldset>
+    {applications}</fieldset>
     <div className="comm-bottom"><span><Info size={14}/>Личные разговоры доступны всегда</span></div>
     <AtelierDisclosure className="comm-disclosure" title={<><NotebookPen size={14}/>Правила и особенности</>}>
      <div className="comm-extra"><div><strong>Доставка</strong>{enabled.length?<ul>{enabled.map(c=><li key={c}>{names[channels.indexOf(c)]}<span>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</span></li>)}</ul>:<p>Удалённые каналы выключены.</p>}
@@ -195,6 +200,7 @@ export function CommunicationSettings({
               </button>
             ))}
           </div>
+          {applications}
           <div className="communication-channels">
             {channels.map((c, i) => (
               <div className="communication-channel" key={c}>

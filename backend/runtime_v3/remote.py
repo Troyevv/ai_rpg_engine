@@ -667,7 +667,7 @@ def projection(snapshot):
     if (
         not actor
         or cfg["presentation"] != "phone"
-        or not (cfg["text_message"] or cfg["voice_call"])
+        or not any(cfg.get(k) for k in ("text_message","voice_call","social","dating"))
     ):
         return None
     from backend.runtime_v3.portraits import projection as portrait
@@ -828,8 +828,18 @@ def projection(snapshot):
                 participants=[subject(a) for a in sorted(visible_members)],
             )
         )
+    from backend.runtime_v3.smartphone import badges, markers, access, launcher_notices
+    cfg = dict(cfg)
+    if cfg.get('dating'):
+        try:
+            access(state,'dating')
+        except ValueError:
+            cfg['dating'] = False
     return dict(
         actor_id=actor,
+        notices=launcher_notices(snapshot,actor,events),
+        opened=state.get('smartphone',{}).get('opened',{}).get(actor,{}),
+        badges=badges(state,actor), markers=markers(state,actor),
         capabilities=cfg,
         contacts=contacts,
         recipients=recipients,

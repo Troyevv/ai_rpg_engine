@@ -7,6 +7,9 @@ def route(snapshot, kind, config=None):
     camera = state.get('camera', {})
     actor = camera.get('controlled_actor_id')
     base = dict(surface='physical', actor_id=actor, call_id=None)
+    if kind == 'smartphone':
+        cmd = (config or {}).get('smartphone',{})
+        return dict(base,surface='phone',app=cmd.get('app'),action=cmd.get('action'),target=cmd.get('target'))
     if kind == 'communication':
         source = state.get('remote_events', {}).get((config or {}).get('communication', {}).get('source_event_id'), {})
         return dict(base, surface='phone', conversation_id=source.get('conversation_id'),

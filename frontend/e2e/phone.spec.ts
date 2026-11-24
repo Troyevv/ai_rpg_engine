@@ -1,3 +1,4 @@
+import {openDeviceApp} from './navigation';
 import {chooseOption} from './choice-navigation';
 import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
@@ -38,7 +39,7 @@ test("phone controls, freeform text, reload and physical scene", async ({
   await page.getByRole('button',{name:/^Телефон/}).click();
   const after = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.scene).toEqual(before.state.scene);
-  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
+  await openDeviceApp(dialog,'Контакты');
   await dialog.getByRole("button", { name: "Вера работа", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Написать", exact: true })
@@ -56,7 +57,7 @@ test("phone controls, freeform text, reload and physical scene", async ({
   await expect(dialog.locator(".choice")).toHaveCount(0);
   await page.reload();
   await page.getByRole("button", { name: "Телефон", exact: true }).click();
-  await dialog.getByRole("button", { name: "Переписки", exact: true }).click();
+  await openDeviceApp(dialog,'Чаты');
   await dialog.getByRole("button").filter({ hasText: "Вера работа" }).click();
   await expect(
     dialog.getByText("Привет! Это мой точный текст.", { exact: true }),
@@ -83,9 +84,9 @@ test("decline and configured in-game emergency log", async ({
     .click();
   const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await dialog.getByRole("button", { name: "Отклонить", exact: true }).click();
-  await dialog.getByRole("button", { name: "Звонки", exact: true }).click();
+  await openDeviceApp(dialog,'Звонки');
   await expect(dialog.getByText(/Входящий · Отклонён/)).toBeVisible();
-  await dialog.getByRole("button", {name:"Контакты",exact:true}).click();
+  await openDeviceApp(dialog,'Контакты');
   await dialog
     .getByRole("button", { name: "Позвонить: Скорая помощь", exact: true })
     .click();
@@ -110,7 +111,7 @@ test("group membership and protagonist-owned contacts", async ({
   await dialog
     .getByRole("button", { name: "Игнорировать", exact: true })
     .click();
-  await dialog.getByRole("button", { name: "Переписки", exact: true }).click();
+  await openDeviceApp(dialog,'Чаты');
   await dialog
     .getByRole("button", { name: "Создать группу", exact: true })
     .click();
@@ -162,7 +163,7 @@ test("group membership and protagonist-owned contacts", async ({
   await page.getByRole("dialog").getByRole("button", { name: "Подтвердить смену" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: /^Телефон/ }).click();
-  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
+  await openDeviceApp(dialog,'Контакты');
   await expect(dialog.getByText("Кирилл", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Мастерская", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText("Новый знакомый", { exact: true })).toHaveCount(
@@ -190,7 +191,7 @@ test("unread text and shared portrait projection", async ({
   ).toHaveCount(0);
   await page.getByRole("button", { name: /^Телефон/ }).click();
   const dialog = page.getByRole("region", {name:"Телефон персонажа"});
-  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
+  await openDeviceApp(dialog,'Контакты');
   const contact = dialog
     .locator("article.phone-row")
     .filter({ hasText: "Вера работа" });
@@ -224,7 +225,7 @@ test("unread text and shared portrait projection", async ({
   expect(uploaded.ok()).toBeTruthy();
   await page.reload();
   await page.getByRole("button", { name: /^Телефон/ }).click();
-  await dialog.getByRole("button",{name:"Контакты",exact:true}).click();
+  await openDeviceApp(dialog,'Контакты');
   await expect(contact.locator("img")).toBeVisible();
   const portrait = await contact.locator("img").getAttribute("src");
   await expect(

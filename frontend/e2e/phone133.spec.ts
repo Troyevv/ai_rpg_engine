@@ -1,3 +1,4 @@
+import {openDeviceApp} from './navigation';
 import {test,expect} from '@playwright/test';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -24,7 +25,7 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
  const capture=async(name:string)=>{const dir=process.env.PHONE133_EVIDENCE;if(!dir)return;mkdirSync(dir,{recursive:true});const prefix=`${baseline?'before':'after'}-${info.project.name}-${theme}-${name}`;await page.screenshot({path:join(dir,prefix+'.png'),animations:'disabled'});const x=await state();writeFileSync(join(dir,prefix+'.json'),JSON.stringify({clock:x.state.world_clock,source:x.physical_choice_source,events:x.state.phone.events,turns:x.turns.map((t:any)=>({id:t.id,kind:t.kind,choices:t.choices,presentation:t.presentation}))},null,2))};
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  await page.getByRole('button',{name:/^Телефон/}).click();
- if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ if(!baseline)await openDeviceApp(phone,'Контакты');
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  for(let i=0;i<2;i++){
   await phone.getByLabel('Сообщение в телефоне').fill(i?'Спасибо. Напишу позже.':'Привет. Ты занята сегодня?');
@@ -38,7 +39,7 @@ for(const theme of ['graphite','parchment'])test(`133 A B E F ${theme}: messages
  await expect(main).toHaveValue('Черновик основной сцены');await capture('choices');
  await page.getByRole('button',{name:/^Телефон/}).click();
  if(baseline){
-   await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+   await openDeviceApp(phone,'Контакты');
    await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
  } else {
    await phone.getByRole('button',{name:/^Позвонить:/}).click();
@@ -68,14 +69,14 @@ test('133 D: semantic failure and Retry preserve one response, one minute and ch
  const state=async()=>await(await request.get(`/api/saves/${s.save}`)).json();const before=await state();
  const phone=page.getByRole('region',{name:'Телефон персонажа'});
  await page.getByRole('button',{name:/^Телефон/}).click();
- if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ if(!baseline)await openDeviceApp(phone,'Контакты');
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Привет. Ты занята сегодня?');await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
  await expect(phone.getByRole('button',{name:'Повторить',exact:true})).toBeVisible();
  const failed=await state();expect(failed.state.world_clock.minute).toBe(before.state.world_clock.minute);expect(failed.physical_choice_source).toEqual(before.physical_choice_source);
  await expect(phone).not.toContainText(/Controlled semantic|remote_semantics|Технические подробности/);
  await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();
- await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.getByRole('button').filter({hasText:'Вера работа'}).click();
+ await openDeviceApp(phone,'Чаты');await phone.getByRole('button').filter({hasText:'Вера работа'}).click();
  await phone.getByRole('button',{name:'Повторить',exact:true}).click();
  await expect.poll(async()=>{const x=await state();return x.job?.status}).toBe('saved');
  const after=await state();expect(after.state.phone.events).toHaveLength(2);expect(after.state.world_clock.minute).toBe(before.state.world_clock.minute+1);expect(after.physical_choice_source).toEqual(before.physical_choice_source);
@@ -91,7 +92,7 @@ test('133 canonical agency repair commits once without narrative confirmation',a
  const state=async()=>await(await request.get(`/api/saves/${s.save}`)).json();
  const before=await state();
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- if(!baseline)await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ if(!baseline)await openDeviceApp(phone,'Контакты');
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  await phone.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
  await expect.poll(async()=>(await state()).job?.status).toBe('saved');

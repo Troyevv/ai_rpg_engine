@@ -6,7 +6,7 @@ import json
 from backend.runtime_v3.models import TemporalValue, fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('information_events','chronology_claims','secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('publications','information_events','chronology_claims','secret_disclosures','group_request_changes','group_response_changes','remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -19,7 +19,7 @@ SECTION_BUDGETS = {'births': (24, 'birth_budget'), 'knowledge_gained': (64, 'kno
        ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas')}}
 
 
-OPTIONAL_SECTIONS = frozenset(('physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences'))
+OPTIONAL_SECTIONS = frozenset(('publications','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences'))
 
 @dataclass
 class RawTurnResult:
@@ -520,6 +520,7 @@ def input_fields():
     """Producer fields plus the conditional phone/LTA extensions of this schema."""
     fields={key:set(value['items'].get('properties',{})) for key,value in extraction_schema()['properties'].items()
             if key in SECTIONS}
+    fields['publications'] = {'author','text','target','player_evidence'}
     fields['events'].add('interaction_channel')
     fields['scheduled_event_changes'].update(('remote_source_ids','remote_time_source_id','player_source_id','call_time_source_id','call_evidence'))
     fields['call_lifecycle_changes']={'call_id','actor_id','assertion','evidence','player_evidence'}
@@ -528,7 +529,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False, spatial_version=6, camera_mode=None):
+def prompt_schema(*, social=False, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False, grounded_choices=False, explicit_departures=False, semantic_slice=False, scene_sequence=False, spatial_version=6, camera_mode=None):
     """Model-facing projection of canonical types, with focused field guidance."""
     def structural(node):
         if isinstance(node, dict):
@@ -678,6 +679,11 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if scene_sequence:
         from backend.runtime_v3.scene_steps import project_schema
         schema = structural(project_schema(schema, version=spatial_version, camera_mode=camera_mode))
+    if social and spatial_version >= 11:
+        schema['properties']['publications'] = dict(type='array', maxItems=8, description='Только реально опубликованный в сцене новый пост или комментарий. target — ID оригинала. Для действия героя нужна цитата команды.',items=dict(
+            type='object',additionalProperties=False,required=['author','text'],properties=dict(
+                author=dict(type='string'),text=dict(type='string',minLength=1,maxLength=5000),
+                target=dict(type='string'),player_evidence=dict(type='string'))))
     return compact_prompt_schema(schema, agency_audit_required=agency_audit_required, scene_sequence=scene_sequence)
 
 
