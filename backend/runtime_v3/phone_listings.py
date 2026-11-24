@@ -108,7 +108,7 @@ def personal_plan(state, actor, listing):
     return next(
         (
             plans[pid]
-            for pid, lid in state["smartphone"]["attendance_plans"].items()
+            for pid, lid in state.get("smartphone", {}).get("attendance_plans", {}).items()
             if lid == listing and plans[pid]["character_ids"] == [actor] and plans[pid]["status"] == "pending"
         ),
         None,
@@ -212,9 +212,9 @@ def invitation_view(snapshot, listing, actor):
     from backend.runtime_v3.smartphone import subject
 
     state = snapshot["world_state"]
-    data = state["smartphone"]
+    data = state.get("smartphone", {})
     result = []
-    for eid, reference in data["invitations"].items():
+    for eid, reference in data.get("invitations", {}).items():
         if reference != listing:
             continue
         source = state["remote_events"][eid]
@@ -248,7 +248,7 @@ def invitation_view(snapshot, listing, actor):
 
 
 def work_threads(state, actor):
-    data = state["smartphone"]
+    data = state.get("smartphone", {})
     result = {}
     for a in data.get("applications", {}).values():
         if a["actor"] != actor or not a["event_id"]:
@@ -280,9 +280,9 @@ def question_activity(data, actor):
 
 
 def badge_events(state, actor):
-    from backend.runtime_v3.smartphone import domain
+    from backend.runtime_v3.smartphone import read_domain
 
-    data = domain(state)
+    data = read_domain(state)
     return dict(
         news=[data["publications"][k]["sequence"] for k in data["articles"]],
         questions=[n for n, _, _ in question_activity(data, actor)],
@@ -314,11 +314,11 @@ def view(
     cursor=None,
     limit=20,
 ):
-    from backend.runtime_v3.smartphone import access, domain
+    from backend.runtime_v3.smartphone import access, read_domain
 
     actor = access(snapshot, app)
     state = snapshot["world_state"]
-    data = domain(state)
+    data = read_domain(state)
     now = state["meta"]["world_time"]
     records = []
     roles = []

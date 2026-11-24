@@ -14,7 +14,7 @@ from backend.runtime_v3.phone_listings import (
     live,
     tick,
 )
-from backend.runtime_v3.smartphone import domain, publish
+from backend.runtime_v3.smartphone import domain, read_domain, publish
 from backend.runtime_v3.smartphone_models import (
     Record,
     Article,
@@ -101,7 +101,7 @@ def public_context(snapshot, history):
     from backend.runtime_v3.birth_identity import is_game_birth
 
     state = snapshot["world_state"]
-    data = domain(state)
+    data = read_domain(state)
     world = setting(snapshot)
     campaign = snapshot.get("campaign", {})
     campaign = campaign.get("campaign", campaign)

@@ -9,7 +9,7 @@ from backend.runtime_v3.calendar import age_on, current_time, date_parts, exact_
 from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.models import assert_world_state_v3_invariants, identity
 from backend.runtime_v3.reproduction import known_birth
-from backend.runtime_v3.smartphone import candidate, domain, external_posts, publish, shelf
+from backend.runtime_v3.smartphone import candidate, domain, external_posts, publish, read_domain, shelf
 from backend.runtime_v3.smartphone_models import AppCommand, Batch, Candidate, PublicAction, SearchResult
 from backend.services.world import CARD_FIELDS
 
@@ -75,13 +75,13 @@ def network_profile(snapshot, cid, audience):
         voice=voice,
         role=fields.get("Роль", "")[:160],
         interests=[fields[k][:160] for k in ("Интересы", "Увлечения") if fields.get(k)],
-        public_bio=domain(state)["profiles"].get(cid, "")[:220],
+        public_bio=read_domain(state)["profiles"].get(cid, "")[:220],
     )
 
 
 def social_prompt(snapshot, source=None, *, refresh=False, events=()):
     state = snapshot["world_state"]
-    data = domain(state)
+    data = read_domain(state)
     owner = state["camera"]["controlled_actor_id"]
     from backend.runtime_v3.birth_identity import is_game_birth
 

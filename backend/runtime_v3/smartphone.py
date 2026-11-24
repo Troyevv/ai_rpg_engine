@@ -53,14 +53,23 @@ def access(snapshot, app, *, write=False):
     return actor
 
 
+def read_domain(state):
+    """A sparse archived phone has empty catalogs in projections only."""
+    data = state.get("smartphone")
+    if data is None:
+        data = SmartphoneState().model_dump()
+    if any(key not in data for key in CATALOG_COLLECTIONS) or "activity_index" not in data:
+        data = dict(data)
+        for key in CATALOG_COLLECTIONS:
+            data.setdefault(key, {})
+        data.setdefault("activity_index", 0)
+    return data
+
+
 def domain(state):
-    if "smartphone" not in state:
-        state["smartphone"] = SmartphoneState().model_dump()
-    data = state["smartphone"]
-    # Raw historical snapshots precede these optional collections.
-    for key in CATALOG_COLLECTIONS:
-        data.setdefault(key, {})
-    data.setdefault("activity_index", 0)
+    """Commands attach defaults to the working snapshot before mutation."""
+    data = read_domain(state)
+    state["smartphone"] = data
     return data
 
 
@@ -94,7 +103,7 @@ def perceive(state, actor, record):
 
 
 def publication(state, rid):
-    row = domain(state)["publications"].get(rid)
+    row = read_domain(state)["publications"].get(rid)
     if not row:
         raise ValueError("Публикация недоступна.")
     return row
@@ -143,7 +152,7 @@ def external_posts(data):
 
 
 def activity(state, actor):
-    data = domain(state)
+    data = read_domain(state)
     rows = data["publications"]
     external = external_posts(data)
     for item in rows.values():
@@ -167,7 +176,7 @@ def remote_count(state, actor, channel):
 
 
 def markers(state, actor):
-    data = domain(state)
+    data = read_domain(state)
     from backend.runtime_v3.phone_listings import badge_events, work_notifications
     counts = {k: max(v, default=0) for k,v in badge_events(state, actor).items()}
     counts["events"] = sum(e.get("version",1) for e in data["listings"].values())
@@ -180,7 +189,7 @@ def markers(state, actor):
 
 
 def badges(state, actor):
-    seen = domain(state)["opened"].get(actor, {})
+    seen = read_domain(state)["opened"].get(actor, {})
     counts = markers(state, actor)
     counts["social"] = sum(i["sequence"] > seen.get("social", 0) for i in activity(state, actor))
     from backend.runtime_v3.phone_listings import badge_events
@@ -211,7 +220,7 @@ def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
     actor = access(snapshot, "social")
     if profile and (profile not in state["characters"] or not known_birth(state, profile, actor)):
         raise ValueError("Профиль недоступен.")
-    data = domain(state)
+    data = read_domain(state)
     rows, reactions = data["publications"], data["reactions"]
     counts, mine, comments = {}, set(), {}
     for reaction in reactions.values():
@@ -270,7 +279,7 @@ def social_view(snapshot, *, profile=None, post=None, before=None, limit=20):
 def dating_view(snapshot):
     state = snapshot["world_state"]
     actor = access(snapshot, "dating")
-    book = shelf(state, actor)
+    book = read_domain(state)["dating"].get(actor) or DatingShelf().model_dump()
 
     def public(c):
         entry = {k: v for k, v in c.items() if k != "job_id"}
@@ -376,7 +385,7 @@ def launcher_notices(snapshot, actor, events):
             )
         )
     if state["meta"]["communication"].get("social"):
-        seen = domain(state)["opened"].get(actor, {}).get("social", 0)
+        seen = read_domain(state)["opened"].get(actor, {}).get("social", 0)
         recent = max(
             (
                 r
@@ -396,7 +405,7 @@ def launcher_notices(snapshot, actor, events):
                 )
             )
     if state["meta"]["communication"].get("social"):
-        data = domain(state)
+        data = read_domain(state)
         mark = data["opened"].get(actor,{}).get("questions",0)
         from backend.runtime_v3.phone_listings import question_activity
         latest = max((r for r in question_activity(data,actor) if r[0]>mark), default=None)

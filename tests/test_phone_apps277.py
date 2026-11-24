@@ -813,3 +813,27 @@ def test_public_network_offstage_voice_and_topics_reach_both_generation_paths(ap
     consider(before, snap, history, CONFIG, generate, threading.Event(), warnings)
     assert calls == ["social_activity"] and not warnings
     assert any(p["text"] == "кто на винил? 🎧" for p in domain(snap["world_state"])["publications"].values())
+
+
+def test_phone_reads_leave_legacy_snapshots_unchanged(app):
+    from backend.runtime_v3.phone_listings import view
+    from backend.runtime_v3.remote import projection
+    from backend.runtime_v3.smartphone import dating_view, social_view
+    from backend.services.smartphone import social_prompt
+
+    repo, _, sid = app
+    snapshot = repo.get_snapshot(sid)
+    for has_phone in (True, False):
+        state = snapshot["world_state"]
+        if has_phone:
+            state["smartphone"].pop("articles", None)
+        else:
+            state.pop("smartphone")
+        before = deepcopy(snapshot)
+        assert projection(snapshot)["badges"]["news"] == 0
+        for app_id in ("news", "questions", "events", "work"):
+            assert view(snapshot, app_id)["items"] == []
+        assert social_view(snapshot)["entries"] == []
+        assert dating_view(snapshot)["results"] == []
+        assert social_prompt(snapshot)[1]
+        assert snapshot == before
