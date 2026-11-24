@@ -275,9 +275,9 @@ def social_result(snapshot, raw, prompt, seed, *, refresh=False, archived_ordina
             is_reply[rid] = action.kind == "comment"
             if action.ref and action.ref not in ambiguous:
                 references[action.ref] = rid
-        if archived_ordinals:
-            # Reapply an already validated v1 response using its original wire positions.
-            references[f"@{i + 1}"] = rid if action.kind in ("post", "comment") else target
+            if archived_ordinals:
+                # Keep the original slot, but a reaction never creates a publication to reply to.
+                references[f"@{i + 1}"] = rid
         plan.append((author, action, rid, target))
 
     if (refresh and not new_posts) or (warnings and not plan):

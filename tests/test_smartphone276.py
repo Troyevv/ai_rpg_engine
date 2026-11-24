@@ -702,5 +702,6 @@ def test_archived_validated_social_response_retries_with_original_ordinals(app):
     reply = saved[identity("social", "pre-upgrade", 2)]
     root = identity("social", "pre-upgrade", 1)
     assert reply["post_id"] == reply["reply_to"] == root
-    assert saved[identity("social", "pre-upgrade", 4)]["reply_to"] == root
+    assert identity("social", "pre-upgrade", 4) not in saved
     assert identity("social", "pre-upgrade", 5) not in saved
+    assert [w["index"] for w in json.loads(repo.get_job(jid)["warnings_json"])] == [4, 5]
