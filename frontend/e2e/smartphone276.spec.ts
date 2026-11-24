@@ -242,9 +242,15 @@ test('276 five new posts, app badges and drafts are scoped to the actor, save an
   };
   const state = async () => await (await request.get(`/api/saves/${a.save}`)).json();
   const control = async (path: string, body: Record<string, unknown>) => {
-    const res = await request.post(`/api/saves/${a.save}/${path}`, {
+    const submit = async () => request.post(`/api/saves/${a.save}/${path}`, {
       data: { revision: (await state()).revision, ...body },
     });
+    let res = await submit();
+    // This API client switches actors while the browser independently persists
+    // visible Knowledge. Retry only a rejected compare-and-swap, keeping the intent ID.
+    if (path === 'protagonist' && res.status() === 409 && (await res.text()).includes('Сейв изменился')) {
+      res = await submit();
+    }
     expect(res.ok(), await res.text()).toBe(true);
   };
   const actor = (id: string) =>
