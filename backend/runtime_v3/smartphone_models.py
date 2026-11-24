@@ -1,4 +1,5 @@
 """Records embedded in a branch's WorldState. Public cards never contain private NPC fields."""
+
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -8,7 +9,7 @@ Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 
 
 class Record(BaseModel):
-    model_config = ConfigDict(extra='forbid', strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class Publication(Record):
@@ -21,33 +22,41 @@ class Publication(Record):
     reply_to: str | None = None
 
 
+class ScenePublication(Record):
+    author: Short
+    text: Text
+    target: Short | None = None
+    player_evidence: str = ""
+    evidence: str = ""  # Normalized by the shared Extraction decoder.
+
+
 class Reaction(Record):
     author: str
     target: str
-    kind: Literal['like', 'repost']
+    kind: Literal["like", "repost"]
     minute: int
     sequence: int
 
 
 class SearchFilters(Record):
-    gender: Literal['any', 'male', 'female'] = 'any'
+    gender: Literal["any", "male", "female"] = "any"
     min_age: int = Field(default=18, ge=18, le=150)
     max_age: int = Field(default=60, ge=18, le=150)
-    location: str = Field(default='', max_length=240)
-    interests: str = Field(default='', max_length=1000)
-    wishes: str = Field(default='', max_length=1500)
+    location: str = Field(default="", max_length=240)
+    interests: str = Field(default="", max_length=1000)
+    wishes: str = Field(default="", max_length=1500)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def ordered(self):
         if self.min_age > self.max_age:
-            raise ValueError('Проверь диапазон возраста.')
+            raise ValueError("Проверь диапазон возраста.")
         return self
 
 
 class Brief(Record):
     name: Short
     age: int = Field(ge=18, le=150)
-    gender: Literal['female','male']
+    gender: Literal["female", "male"]
     occupation: Short
     personality: Short
     appearance: Short
@@ -82,7 +91,7 @@ class SmartphoneState(Record):
 
 
 class PublicAction(Record):
-    kind: Literal['post','comment','like','repost']
+    kind: Literal["post", "comment", "like", "repost"]
     author: Short
     target: str | None = None
     text: Text | None = None
@@ -99,25 +108,27 @@ class SearchResult(Record):
 class AppCommand(Record):
     operation_id: Short
     actor_id: Short
-    action: Literal['open','profile','post','comment','like','repost','read','search','accept','skip']
-    app: Literal['social','dating','calls','messages','contacts']
+    action: Literal[
+        "open", "profile", "post", "comment", "like", "repost", "read", "search", "accept", "skip"
+    ]
+    app: Literal["social", "dating", "calls", "messages", "contacts"]
     target: Short | None = None
-    text: str = Field(default='', max_length=5000)
+    text: str = Field(default="", max_length=5000)
     desired: bool = True
     ids: list[Short] = Field(default_factory=list, max_length=80)
     marker: int | None = Field(default=None, ge=0)
     filters: SearchFilters | None = None
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def valid_app(self):
-        if self.action != 'open':
-            required = 'dating' if self.action in ('search','accept','skip') else 'social'
+        if self.action != "open":
+            required = "dating" if self.action in ("search", "accept", "skip") else "social"
             if self.app != required:
-                raise ValueError('Действие недоступно в этом приложении.')
-        if self.action in ('like','repost','comment','accept','skip') and not self.target:
-            raise ValueError('Выбери запись.')
-        if self.action in ('post','comment') and not self.text.strip():
-            raise ValueError('Введите текст.')
-        if self.action == 'search' and not self.filters:
-            raise ValueError('Задай параметры поиска.')
+                raise ValueError("Действие недоступно в этом приложении.")
+        if self.action in ("like", "repost", "comment", "accept", "skip") and not self.target:
+            raise ValueError("Выбери запись.")
+        if self.action in ("post", "comment") and not self.text.strip():
+            raise ValueError("Введите текст.")
+        if self.action == "search" and not self.filters:
+            raise ValueError("Задай параметры поиска.")
         return self

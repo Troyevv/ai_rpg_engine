@@ -1,5 +1,11 @@
-import type {PortraitSubject} from '../Portrait';
-export type Recipient = { id: string; search_name?: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
+import type { PortraitSubject } from '../Portrait';
+export type Recipient = {
+  id: string;
+  search_name?: string;
+  subject: PortraitSubject;
+  can_send: boolean;
+  can_call: boolean;
+};
 type Contact = {
   can_send?: boolean;
   awaiting_response?: boolean;
@@ -23,7 +29,7 @@ export type Conversation = {
 };
 export type PhoneEvent = {
   id: string;
-  channel: "TEXT_MESSAGE" | "VOICE_CALL";
+  channel: 'TEXT_MESSAGE' | 'VOICE_CALL';
   conversation_id: string | null;
   world_time: number;
   time_label: string;
@@ -40,15 +46,21 @@ export type PhoneEvent = {
 };
 export type PhoneState = {
   actor_id: string;
-  notices?:{app:string;screen:string;id:string;label:string}[];
-  opened?:Record<string,number>;
-  badges?: Record<string,number>;
-  markers?: Record<string,number>;
-  capabilities: { social?:boolean; dating?:boolean; text_message: boolean; voice_call: boolean; ring_timeout_minutes: number };
+  notices?: { app: string; screen: string; id: string; label: string }[];
+  opened?: Record<string, number>;
+  badges?: Record<string, number>;
+  markers?: Record<string, number>;
+  capabilities: {
+    social?: boolean;
+    dating?: boolean;
+    text_message: boolean;
+    voice_call: boolean;
+    ring_timeout_minutes: number;
+  };
   contacts: Contact[];
   recipients?: Recipient[];
   conversations: Conversation[];
   events: PhoneEvent[];
-  focus: "physical" | "call";
+  focus: 'physical' | 'call';
   emergency: { service: string; number: string | null }[];
 };

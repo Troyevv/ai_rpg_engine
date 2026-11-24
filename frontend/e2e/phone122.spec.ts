@@ -54,6 +54,7 @@ for(const theme of ['graphite','parchment']){
     await screen.getByRole('button',{name:'Контакты',exact:true}).click();
     await screen.getByRole('button',{name:'Позвонить',exact:true}).click();
   } else {
+    await screen.getByRole('button',{name:'Чаты',exact:true}).click();
     await screen.getByRole('button',{name:/^Позвонить:/}).click();
   }
   if(baseline){

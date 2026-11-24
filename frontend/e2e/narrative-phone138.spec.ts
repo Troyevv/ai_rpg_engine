@@ -45,7 +45,7 @@ for (const theme of ['graphite','parchment']) {
   expect(ringing.state.world.characters.qa_vera.location_id).toBe(initial.state.world.characters.qa_vera.location_id);
   expect(ringing.state.scene_meta.present_ids).toEqual(initial.state.scene_meta.present_ids);
   await page.getByRole('button',{name:/^Телефон/}).click();
-  await phone.getByRole('button',{name:'К перепискам'}).click();await openDeviceApp(phone,'Звонки');
+  await openDeviceApp(phone,'Звонки');
   await expect(phone.getByRole('button',{name:'Отклонить',exact:true})).toBeVisible();
   await expect(phone.getByRole('button',{name:'Игнорировать',exact:true})).toBeVisible();
   await page.screenshot({path:`test-results/phone138-${theme}-${info.project.name}-ringing.png`,animations:'disabled'});

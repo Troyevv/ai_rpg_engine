@@ -56,6 +56,8 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(call.getByLabel('Реплика в звонке')).toHaveCount(0);
  expect((await state()).state.world_clock.minute).toBe(start+6);
  await call.getByRole('button',{name:'Закрыть разговор',exact:true}).click();
+ await expect(phone.getByRole('heading',{name:'Звонки',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();
  await input.fill('Ответить Виктории.');await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect(story).toContainText('После её стука и требования ответа');await expect(input).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
