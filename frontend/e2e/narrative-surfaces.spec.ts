@@ -129,7 +129,8 @@ test('Narrative panels keep the active toolbar above their own scrolling content
   for (const section of ['Календарь', 'Родословная']) {
     await nav(page, section);
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    const content = page.getByRole('region', { name: section, exact: true });
+    const content = page.locator('.save-workspace');
+    await expect(content).toHaveAccessibleName(section);
     await expect(content).toBeVisible();
     await checkPanel(page.locator('.topbar'), safeTop);
     const header = (await page.locator('.topbar').boundingBox())!;
